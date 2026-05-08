@@ -38,17 +38,17 @@ Goal: create a maintainable project skeleton that can support production-quality
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS00-T01 | P0 | planned | Initialize Go module `github.com/dc-tec/openbao-kubernetes-kms` and `bao-kms-provider` root command. | None |
-| WS00-T02 | P0 | planned | Create internal package layout. | WS00-T01 |
-| WS00-T03 | P0 | planned | Add build, version, and commit metadata. | WS00-T01 |
-| WS00-T04 | P0 | planned | Add local developer commands through Makefile. | WS00-T01 |
-| WS00-T05 | P0 | planned | Add baseline CI for format, vet, unit tests, and race smoke. | WS00-T04 |
-| WS00-T06 | P0 | planned | Add dependency update policy and module hygiene checks. | WS00-T05 |
+| WS00-T01 | P0 | done | Initialize Go module `github.com/dc-tec/openbao-kubernetes-kms` and `bao-kms-provider` root command. | None |
+| WS00-T02 | P0 | done | Create internal package layout. | WS00-T01 |
+| WS00-T03 | P0 | done | Add build, version, and commit metadata. | WS00-T01 |
+| WS00-T04 | P0 | done | Add local developer commands through Makefile. | WS00-T01 |
+| WS00-T05 | P0 | done | Add baseline CI for format, vet, unit tests, and race smoke. | WS00-T04 |
+| WS00-T06 | P0 | done | Add dependency update policy and module hygiene checks. | WS00-T05 |
 | WS00-T07 | P1 | planned | Add release artifact naming and checksums. | WS00-T03 |
 | WS00-T08 | P1 | planned | Add cross-compilation targets for Linux architectures. | WS00-T07 |
-| WS00-T09 | P0 | planned | Add central pinned version policy for OpenBao, Kubernetes, Kind node image, and release-gate rows. | WS00-T04 |
-| WS00-T10 | P0 | planned | Validate strict Go quality gates for gofumpt, staticcheck, govulncheck, `.golangci.yml`, ast-grep structural rules, and Semgrep security/API-misuse rules. | WS00-T05 |
-| WS00-T11 | P0 | planned | Add typed-boundary policy tests or lint exceptions for any unavoidable `any` usage. | WS00-T10 |
+| WS00-T09 | P0 | done | Add central pinned version policy for OpenBao, Kubernetes, Kind node image, and release-gate rows. | WS00-T04 |
+| WS00-T10 | P0 | done | Validate strict Go quality gates for gofumpt, staticcheck, govulncheck, `.golangci.yml`, ast-grep structural rules, and Semgrep security/API-misuse rules. | WS00-T05 |
+| WS00-T11 | P0 | done | Add typed-boundary policy tests or lint exceptions for any unavoidable `any` usage. | WS00-T10 |
 
 Acceptance criteria:
 
@@ -407,7 +407,7 @@ Goal: build confidence through layered tests before production claims.
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS11-T01 | P0 | planned | Create testdata layout. | WS00-T02 |
+| WS11-T01 | P0 | done | Create testdata layout. | WS00-T02 |
 | WS11-T02 | P0 | planned | Implement fake Transit. | WS03-T01 |
 | WS11-T03 | P0 | planned | Implement fake auth/token manager. | WS04-T05 |
 | WS11-T04 | P0 | planned | Build KMS v2 fake conformance suite. | WS05-T02 |
