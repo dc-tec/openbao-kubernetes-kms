@@ -189,18 +189,18 @@ Goal: authenticate to OpenBao through JWT and maintain an in-memory OpenBao toke
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS04-T01 | P0 | planned | Implement JWT file reader. | WS01-T06 |
-| WS04-T02 | P0 | planned | Parse JWT claims locally for expiry and diagnostics. | WS04-T01 |
-| WS04-T03 | P0 | planned | Validate JWT minimum remaining TTL before login. | WS04-T02 |
-| WS04-T04 | P0 | planned | Implement OpenBao JWT login. | WS03-T01 |
-| WS04-T05 | P0 | planned | Store OpenBao token only in memory. | WS04-T04 |
-| WS04-T06 | P0 | planned | Implement token renewal where allowed. | WS04-T05 |
-| WS04-T07 | P0 | planned | Implement re-login before token expiry. | WS04-T05 |
-| WS04-T08 | P0 | planned | Re-read JWT file before re-login. | WS04-T07 |
-| WS04-T09 | P0 | planned | Expose auth state for Status cache and readiness. | WS04-T05 |
-| WS04-T10 | P0 | planned | Add redaction tests for JWT and OpenBao token. | WS04-T01 |
-| WS04-T11 | P1 | planned | Add support for non-renewable tokens. | WS04-T07 |
-| WS04-T12 | P1 | planned | Add clock skew diagnostics. | WS04-T02 |
+| WS04-T01 | P0 | done | Implement JWT file reader. | WS01-T06 |
+| WS04-T02 | P0 | done | Parse JWT claims locally for expiry and diagnostics. | WS04-T01 |
+| WS04-T03 | P0 | done | Validate JWT minimum remaining TTL before login. | WS04-T02 |
+| WS04-T04 | P0 | done | Implement OpenBao JWT login. | WS03-T01 |
+| WS04-T05 | P0 | done | Store OpenBao token only in memory. | WS04-T04 |
+| WS04-T06 | P0 | done | Implement token renewal where allowed. | WS04-T05 |
+| WS04-T07 | P0 | done | Implement re-login before token expiry. | WS04-T05 |
+| WS04-T08 | P0 | done | Re-read JWT file before re-login. | WS04-T07 |
+| WS04-T09 | P0 | done | Expose auth state for Status cache and readiness. | WS04-T05 |
+| WS04-T10 | P0 | done | Add redaction tests for JWT and OpenBao token. | WS04-T01 |
+| WS04-T11 | P1 | done | Add support for non-renewable tokens. | WS04-T07 |
+| WS04-T12 | P1 | done | Add clock skew diagnostics. | WS04-T02 |
 | WS04-T13 | P2 | planned | Add certificate auth as non-default alternative. | WS03-T02 |
 
 Acceptance criteria:
@@ -210,6 +210,8 @@ Acceptance criteria:
 - JWT is re-read before re-login.
 - OpenBao token never touches disk.
 - Logs and command output never include JWT or OpenBao token.
+- JWT `nbf`, `iat`, and `exp` handling respects configured clock skew leeway.
+- Auth refreshes are coalesced and do not hold the manager state lock during OpenBao I/O.
 
 Test requirements:
 

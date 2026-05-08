@@ -95,8 +95,9 @@ Blocking tasks:
 Current status:
 
 - WS03 client work is implemented in `internal/openbao`.
+- WS04 JWT file handling, local claim validation with clock skew leeway, JWT login, in-memory token lifecycle, renewal, re-login, refresh coalescing, and retry backoff are implemented in `internal/auth` and `internal/openbao`.
 - The root Ginkgo E2E suite and ephemeral OpenBao CI lane are in place.
-- Remaining M3 blockers are JWT authentication and OpenBao CI JWT auth bootstrap.
+- Remaining M3 blocker is OpenBao CI JWT auth bootstrap.
 
 Exit criteria:
 
