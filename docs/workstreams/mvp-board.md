@@ -14,6 +14,7 @@ Blocking tasks:
 - WS00-T04 Add local developer commands.
 - WS00-T09 Add central pinned version policy.
 - WS00-T10 Add strict Go quality gates.
+- WS00-T12 Add release-please release PR automation.
 - WS11-T01 Add test harness layout.
 
 Exit criteria:
@@ -24,6 +25,7 @@ Exit criteria:
 - CI does not use floating `latest` inputs.
 - CI rejects forbidden dynamic Go type patterns in production code.
 - Static analysis tooling is pinned or routed through the central tool policy before release gates.
+- release-please owns version proposals and `CHANGELOG.md` without publishing releases.
 
 ## Milestone M1: Key And AAD Contract
 

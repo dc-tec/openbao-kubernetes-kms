@@ -33,12 +33,18 @@ toolchain:
     cliConfig: viper
   qualityTools:
     astGrep: "0.42.1"
-    gofumpt: ""
-    staticcheck: ""
-    govulncheck: ""
+    gofumpt: "0.9.2"
+    staticcheck: "0.7.0"
+    govulncheck: "1.2.0"
     semgrep: "1.157.0"
-    golangciLint: ""
-    pinStatus: pending
+    golangciLint: "2.11.4"
+    pinStatus: pinned
+  githubActions:
+    checkout: de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    createGithubAppToken: 1b10c78c7865c340bc4f6099eb2f838309f1e8c3
+    releasePlease: 45996ed1f6d02564a971a2fa1b5860e934307cf7
+    setupGo: 4b73464bb391d4059bd26b0524d20df3927bd417
+    setupNode: 48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
 validation:
   openbao:
     primary: "2.5.3"
@@ -104,6 +110,21 @@ make ci-core
 - key ID/AAD golden tests,
 - config validation tests,
 - redaction tests.
+
+## Release PR Automation
+
+release-please owns release PR creation, version proposals, and `CHANGELOG.md` updates. It is intentionally separated from publishing:
+
+- release-please may update `.release-please-manifest.json` and `CHANGELOG.md`,
+- release-please must run from a pinned action SHA,
+- release-please uses a GitHub App token when configured,
+- release-please skips GitHub Release creation,
+- artifact builds, checksums, SBOMs, signatures, attestations, and provenance remain release workflow responsibilities.
+
+Required repository secrets for active release PR automation:
+
+- `OPENBAO_KMS_RELEASE_PR_APP_ID`
+- `OPENBAO_KMS_RELEASE_PR_PRIVATE_KEY`
 
 ## CI Lanes
 

@@ -44,11 +44,12 @@ Goal: create a maintainable project skeleton that can support production-quality
 | WS00-T04 | P0 | done | Add local developer commands through Makefile. | WS00-T01 |
 | WS00-T05 | P0 | done | Add baseline CI for format, vet, unit tests, and race smoke. | WS00-T04 |
 | WS00-T06 | P0 | done | Add dependency update policy and module hygiene checks. | WS00-T05 |
-| WS00-T07 | P1 | planned | Add release artifact naming and checksums. | WS00-T03 |
-| WS00-T08 | P1 | planned | Add cross-compilation targets for Linux architectures. | WS00-T07 |
+| WS00-T07 | P1 | done | Add release artifact naming and checksums. | WS00-T03 |
+| WS00-T08 | P1 | done | Add cross-compilation targets for Linux architectures. | WS00-T07 |
 | WS00-T09 | P0 | done | Add central pinned version policy for OpenBao, Kubernetes, Kind node image, and release-gate rows. | WS00-T04 |
 | WS00-T10 | P0 | done | Validate strict Go quality gates for gofumpt, staticcheck, govulncheck, `.golangci.yml`, ast-grep structural rules, and Semgrep security/API-misuse rules. | WS00-T05 |
 | WS00-T11 | P0 | done | Add typed-boundary policy tests or lint exceptions for any unavoidable `any` usage. | WS00-T10 |
+| WS00-T12 | P1 | done | Add release-please release PR automation and changelog ownership. | WS00-T07 |
 
 Acceptance criteria:
 
@@ -59,6 +60,7 @@ Acceptance criteria:
 - CI does not use floating `latest` inputs for validated versions.
 - ast-grep rejects `map[string]any`, `map[string]interface{}`, and broad `any` in production packages.
 - gofumpt, staticcheck, govulncheck, golangci-lint, ast-grep, and Semgrep run in the core quality gate once the module exists.
+- release-please owns version proposals and `CHANGELOG.md` while publishing remains a separate gated workflow.
 
 Implementation notes:
 

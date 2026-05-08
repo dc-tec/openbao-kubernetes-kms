@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap build fmt verify-fmt lint lint-ci test test-race tidy verify-tidy ci-core docs-check versions-check lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
+.PHONY: help bootstrap build build-linux release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race tidy verify-tidy ci-core docs-check versions-check lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
 
 GO_VERSION := $(shell cat .go-version)
 GO ?= go
@@ -15,7 +15,12 @@ SEMGREP_CONFIG_FLAGS ?= --config .semgrep/rules
 SEMGREP_TARGETS ?= cmd internal
 SEMGREP_ARTIFACT_DIR ?= dist/semgrep
 SEMGREP_OUTPUT_JSON ?= $(SEMGREP_ARTIFACT_DIR)/semgrep.json
-BIN ?= bin/bao-kms-provider
+BINARY_NAME ?= bao-kms-provider
+BIN ?= bin/$(BINARY_NAME)
+DIST_DIR ?= dist/release
+CHECKSUM_FILE ?= $(DIST_DIR)/checksums.txt
+CHECKSUM ?= shasum -a 256
+RELEASE_TARGETS ?= linux/amd64 linux/arm64
 VERSION ?= 0.0.0-dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf '%s' unknown)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -31,6 +36,8 @@ help:
 	@printf '%s\n' 'Targets:'
 	@printf '%s\n' '  bootstrap       Prepare local development prerequisites once implementation exists'
 	@printf '%s\n' '  build           Build bao-kms-provider with version metadata'
+	@printf '%s\n' '  build-linux     Cross-compile Linux release artifacts'
+	@printf '%s\n' '  checksums       Generate release artifact checksums'
 	@printf '%s\n' '  fmt             Format Go sources when go.mod exists'
 	@printf '%s\n' '  lint            Run lightweight lint checks'
 	@printf '%s\n' '  lint-ast        Run ast-grep rules when ast-grep and Go code are present'
@@ -61,6 +68,32 @@ install-go-tools:
 build:
 	@mkdir -p "$$(dirname "$(BIN)")"
 	@"$(GO)" build -trimpath -ldflags "$(LDFLAGS)" -o "$(BIN)" ./cmd/bao-kms-provider
+
+build-linux: release-artifacts
+
+release-artifacts: clean-dist
+	@set -eu; \
+	mkdir -p "$(DIST_DIR)"; \
+	for target in $(RELEASE_TARGETS); do \
+		goos="$${target%/*}"; \
+		goarch="$${target#*/}"; \
+		artifact="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
+		printf 'building %s\n' "$$artifact"; \
+		CGO_ENABLED=0 GOOS="$$goos" GOARCH="$$goarch" "$(GO)" build -trimpath -ldflags "$(LDFLAGS)" -o "$$artifact" ./cmd/bao-kms-provider; \
+	done
+	@$(MAKE) checksums
+
+checksums:
+	@set -eu; \
+	artifacts="$$(find "$(DIST_DIR)" -maxdepth 1 -type f -name '$(BINARY_NAME)_$(VERSION)_*' -exec basename {} \; | sort)"; \
+	if [ -z "$$artifacts" ]; then \
+		printf '%s\n' 'No release artifacts found for checksum generation.'; \
+		exit 1; \
+	fi; \
+	cd "$(DIST_DIR)" && $(CHECKSUM) $$artifacts > "$$(basename "$(CHECKSUM_FILE)")"
+
+clean-dist:
+	@rm -rf "$(DIST_DIR)"
 
 fmt:
 	@if find cmd internal -name '*.go' 2>/dev/null | grep -q .; then \
@@ -107,7 +140,7 @@ verify-tidy:
 vulncheck:
 	@if command -v "$(GOVULNCHECK)" >/dev/null 2>&1; then "$(GOVULNCHECK)" ./...; else printf '%s\n' 'govulncheck not installed; skipping govulncheck.'; fi
 
-ci-core: verify-tidy lint vulncheck test test-race build
+ci-core: verify-tidy lint vulncheck test test-race build release-artifacts
 
 docs-check:
 	@! grep -R -n $$(printf '\357\277\274') README.md docs

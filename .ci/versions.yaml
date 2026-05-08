@@ -20,6 +20,8 @@ toolchain:
     pinStatus: pinned
   githubActions:
     checkout: de0fac2e4500dabe0009e67214ff5f5447ce83dd
+    createGithubAppToken: 1b10c78c7865c340bc4f6099eb2f838309f1e8c3
+    releasePlease: 45996ed1f6d02564a971a2fa1b5860e934307cf7
     setupGo: 4b73464bb391d4059bd26b0524d20df3927bd417
     setupNode: 48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
   goDependencies:
@@ -61,6 +63,17 @@ validation:
       exactPinStatus: pending
 
 artifacts:
+  versionSource: release-please
+  releasePleaseConfig: release-please-config.json
+  releasePleaseManifest: .release-please-manifest.json
   imageRepository: ghcr.io/dc-tec/bao-kms-provider
   binaryName: bao-kms-provider
+  distDirectory: dist/release
+  binaryPattern: bao-kms-provider_${VERSION}_${GOOS}_${GOARCH}
   checksumAlgorithm: sha256
+  checksumFile: checksums.txt
+  linuxTargets:
+    - goos: linux
+      goarch: amd64
+    - goos: linux
+      goarch: arm64
