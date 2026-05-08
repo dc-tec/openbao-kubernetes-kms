@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap build build-linux release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race tidy verify-tidy ci-core docs-check versions-check lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
+.PHONY: help bootstrap build build-linux release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci tidy verify-tidy ci-core docs-check versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
 
 GO_VERSION := $(shell cat .go-version)
 GO ?= go
@@ -11,10 +11,20 @@ GOFUMPT ?= gofumpt
 STATICCHECK ?= staticcheck
 GOVULNCHECK ?= govulncheck
 GOLANGCI_LINT ?= golangci-lint
+GINKGO ?= $(if $(wildcard $(GOBIN)/ginkgo),$(GOBIN)/ginkgo,ginkgo)
 SEMGREP_CONFIG_FLAGS ?= --config .semgrep/rules
 SEMGREP_TARGETS ?= cmd internal
 SEMGREP_ARTIFACT_DIR ?= dist/semgrep
 SEMGREP_OUTPUT_JSON ?= $(SEMGREP_ARTIFACT_DIR)/semgrep.json
+E2E_PACKAGE ?= ./test/e2e
+E2E_LABEL_FILTER ?=
+E2E_TIMEOUT ?= 30m
+E2E_ARTIFACT_DIR ?= artifacts/e2e
+E2E_JUNIT_REPORT ?= $(E2E_ARTIFACT_DIR)/junit.xml
+E2E_JSON_REPORT ?= $(E2E_ARTIFACT_DIR)/ginkgo.json
+E2E_PARALLEL_NODES ?= 1
+E2E_GINKGO_EXTRA_ARGS ?=
+E2E_OPENBAO_IMAGE ?= $(shell awk '/^[[:space:]]*image:[[:space:]]*/ { gsub("\"", "", $$2); print $$2; exit }' .ci/versions.yaml)
 BINARY_NAME ?= bao-kms-provider
 BIN ?= bin/$(BINARY_NAME)
 DIST_DIR ?= dist/release
@@ -31,6 +41,7 @@ GOFUMPT_VERSION ?= v0.9.2
 STATICCHECK_VERSION ?= v0.7.0
 GOVULNCHECK_VERSION ?= v1.2.0
 GOLANGCI_LINT_VERSION ?= v2.11.4
+GINKGO_VERSION ?= v2.28.3
 
 help:
 	@printf '%s\n' 'Targets:'
@@ -43,11 +54,14 @@ help:
 	@printf '%s\n' '  lint-ast        Run ast-grep rules when ast-grep and Go code are present'
 	@printf '%s\n' '  test            Run Go tests when go.mod exists'
 	@printf '%s\n' '  test-race       Run race-enabled Go tests'
+	@printf '%s\n' '  test-e2e        Run Ginkgo/Gomega E2E tests'
+	@printf '%s\n' '  test-e2e-openbao Run ephemeral OpenBao CI E2E tests'
 	@printf '%s\n' '  ci-core         Run the local core quality gate'
 	@printf '%s\n' '  docs-check      Check docs for known formatting artifacts'
 	@printf '%s\n' '  install-go-tools Install pinned optional Go quality tools into bin/'
 	@printf '%s\n' '  semgrep-ci      Run Semgrep rule tests and blocking scan when semgrep is available'
 	@printf '%s\n' '  versions-check  Check central version policy exists'
+	@printf '%s\n' '  verify-e2e-manifest Validate the E2E suite manifest'
 
 bootstrap:
 	@printf 'Go toolchain: %s\n' '$(GO_VERSION)'
@@ -64,6 +78,7 @@ install-go-tools:
 	@GOBIN="$(GOBIN)" "$(GO)" install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
 	@GOBIN="$(GOBIN)" "$(GO)" install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	@GOBIN="$(GOBIN)" "$(GO)" install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@GOBIN="$(GOBIN)" "$(GO)" install github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
 
 build:
 	@mkdir -p "$$(dirname "$(BIN)")"
@@ -96,19 +111,19 @@ clean-dist:
 	@rm -rf "$(DIST_DIR)"
 
 fmt:
-	@if find cmd internal -name '*.go' 2>/dev/null | grep -q .; then \
-		gofmt -w $$(find cmd internal -name '*.go'); \
-		if command -v "$(GOFUMPT)" >/dev/null 2>&1; then "$(GOFUMPT)" -w cmd internal; fi; \
+	@if find cmd internal test -name '*.go' 2>/dev/null | grep -q .; then \
+		gofmt -w $$(find cmd internal test -name '*.go'); \
+		if command -v "$(GOFUMPT)" >/dev/null 2>&1; then "$(GOFUMPT)" -w cmd internal test; fi; \
 	else \
 		printf '%s\n' 'No Go files yet; skipping Go formatting.'; \
 	fi
 
 verify-fmt:
-	@if find cmd internal -name '*.go' 2>/dev/null | grep -q .; then \
-		unformatted="$$(gofmt -l $$(find cmd internal -name '*.go'))"; \
+	@if find cmd internal test -name '*.go' 2>/dev/null | grep -q .; then \
+		unformatted="$$(gofmt -l $$(find cmd internal test -name '*.go'))"; \
 		if [ -n "$$unformatted" ]; then printf '%s\n' "$$unformatted"; exit 1; fi; \
 		if command -v "$(GOFUMPT)" >/dev/null 2>&1; then \
-			unformatted="$$("$(GOFUMPT)" -l cmd internal)"; \
+			unformatted="$$("$(GOFUMPT)" -l cmd internal test)"; \
 			if [ -n "$$unformatted" ]; then printf '%s\n' "$$unformatted"; exit 1; fi; \
 		else \
 			printf '%s\n' 'gofumpt not installed; skipping gofumpt verification.'; \
@@ -117,7 +132,7 @@ verify-fmt:
 		printf '%s\n' 'No Go files yet; skipping Go formatting verification.'; \
 	fi
 
-lint: docs-check versions-check verify-fmt test-ast lint-ast semgrep-ci
+lint: docs-check versions-check verify-e2e-manifest verify-fmt test-ast lint-ast semgrep-ci
 	@"$(GO)" vet ./...
 	@if command -v "$(STATICCHECK)" >/dev/null 2>&1; then "$(STATICCHECK)" ./...; else printf '%s\n' 'staticcheck not installed; skipping staticcheck.'; fi
 	@if command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1; then "$(GOLANGCI_LINT)" run; else printf '%s\n' 'golangci-lint not installed; skipping golangci-lint.'; fi
@@ -130,12 +145,41 @@ test:
 test-race:
 	@"$(GO)" test -race ./...
 
+test-e2e: verify-e2e-manifest
+	@mkdir -p "$(E2E_ARTIFACT_DIR)"
+	@if command -v "$(GINKGO)" >/dev/null 2>&1; then \
+		set -- --tags=e2e --timeout="$(E2E_TIMEOUT)" --junit-report="$(E2E_JUNIT_REPORT)" --json-report="$(E2E_JSON_REPORT)"; \
+		if [ "$(E2E_PARALLEL_NODES)" != "1" ]; then set -- "$$@" --procs="$(E2E_PARALLEL_NODES)"; fi; \
+		if [ -n "$(E2E_LABEL_FILTER)" ]; then set -- "$$@" --label-filter="$(E2E_LABEL_FILTER)"; fi; \
+		set -- "$$@" $(E2E_GINKGO_EXTRA_ARGS) "$(E2E_PACKAGE)"; \
+		"$(GINKGO)" "$$@"; \
+	else \
+		if [ -n "$(E2E_LABEL_FILTER)" ]; then \
+			printf '%s\n' 'ginkgo is required when E2E_LABEL_FILTER is set; run make install-go-tools or clear E2E_LABEL_FILTER.'; \
+			exit 1; \
+		fi; \
+		"$(GO)" test -tags=e2e "$(E2E_PACKAGE)" -run '^TestE2E$$' -count=1; \
+	fi
+
+test-e2e-openbao: test-e2e-openbao-ci
+
+test-e2e-openbao-ci: verify-e2e-manifest
+	@if command -v "$(GINKGO)" >/dev/null 2>&1; then \
+		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && transit && ci' E2E_TIMEOUT=2m; \
+	else \
+		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1; \
+	fi
+
 tidy:
 	@"$(GO)" mod tidy
 
 verify-tidy:
-	@"$(GO)" mod tidy
-	@git diff --exit-code -- go.mod go.sum
+	@tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	cp go.mod "$$tmp/go.mod"; \
+	cp go.sum "$$tmp/go.sum"; \
+	"$(GO)" mod tidy; \
+	cmp -s go.mod "$$tmp/go.mod" && cmp -s go.sum "$$tmp/go.sum"
 
 vulncheck:
 	@if command -v "$(GOVULNCHECK)" >/dev/null 2>&1; then "$(GOVULNCHECK)" ./...; else printf '%s\n' 'govulncheck not installed; skipping govulncheck.'; fi
@@ -197,3 +241,6 @@ semgrep-ci: semgrep-rules-test
 versions-check:
 	@test -f .ci/versions.yaml
 	@! grep -R -n 'latest' .ci/versions.yaml
+
+verify-e2e-manifest:
+	@"$(GO)" test ./test/e2e -run '^TestE2EManifest$$' -count=1

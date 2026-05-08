@@ -1,0 +1,59 @@
+version: 1
+
+versionPolicy:
+  source: .ci/versions.yaml
+  openbao: validation.openbao.primary
+  kubernetes: validation.kubernetes
+
+defaults:
+  package: ./test/e2e
+  artifactDir: artifacts/e2e
+  timeout: 30m
+  parallelNodes: 1
+
+lanes:
+  - id: openbao-ci
+    name: OpenBao CI
+    package: ./test/e2e
+    labelFilter: openbao && transit && ci
+    prScope: pr
+    environment: local-openbao
+    isolation: local-container
+    timeout: 2m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
+  - id: kind-smoke
+    name: Kubernetes KMS v2 Kind Smoke
+    package: ./test/e2e
+    labelFilter: kind && kmsv2 && smoke
+    prScope: main
+    environment: kind
+    isolation: local-cluster
+    timeout: 30m
+    parallelNodes: 1
+    versionRefs:
+      - validation.kubernetes.exactVersion
+      - validation.kubernetes.kindNodeImage
+    status: planned
+    reports: true
+
+  - id: release-gate
+    name: v0.1 Release Gate
+    package: ./test/e2e
+    labelFilter: release-gate
+    prScope: release
+    environment: kind
+    isolation: local-cluster
+    timeout: 60m
+    parallelNodes: 1
+    versionRefs:
+      - validation.openbao.primary
+      - validation.kubernetes.exactVersion
+    status: planned
+    reports: true
