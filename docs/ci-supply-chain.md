@@ -1,0 +1,237 @@
+# CI And Supply Chain
+
+This document defines the intended CI, release, and supply-chain posture for the KMS provider.
+
+The design follows the OpenBao Operator CI pattern where it applies:
+
+- local parity through `make` targets,
+- central version policy,
+- no floating `latest` versions in CI or release gates,
+- change-routed test expansion,
+- vendored and deterministic Go builds,
+- pinned GitHub Actions and tool versions,
+- license and vulnerability gates,
+- SBOM generation,
+- provenance and signature evidence,
+- release reproducibility checks before promotion.
+
+## Version Pinning Policy
+
+CI must not use floating `latest` inputs for support claims.
+
+Version policy lives in `.ci/versions.yaml`. CI and release workflows must read support-matrix inputs from that file instead of duplicating version strings in workflow definitions.
+
+```yaml
+version: 1
+project:
+  name: openbao-kubernetes-kms
+  module: github.com/dc-tec/openbao-kubernetes-kms
+  binary: bao-kms-provider
+toolchain:
+  go: "1.26.3"
+  commandFramework:
+    cliConfig: viper
+  qualityTools:
+    astGrep: "0.42.1"
+    gofumpt: ""
+    staticcheck: ""
+    govulncheck: ""
+    semgrep: "1.157.0"
+    golangciLint: ""
+    pinStatus: pending
+validation:
+  openbao:
+    primary: "2.5.3"
+    image: "ghcr.io/openbao/openbao:2.5.3"
+    imageDigest: ""
+    digestStatus: pending
+  kubernetes:
+    minimumLine: "1.34"
+    primaryLine: "1.34"
+    exactVersion: ""
+    kindNodeImageDigest: ""
+    pinStatus: pending
+    futureCandidates:
+      - "1.35"
+      - "1.36"
+```
+
+The concrete Kubernetes patch and Kind node image digest must be selected during CI implementation and committed in this central version policy before any v0.1 support claim is made.
+
+## Initial Validation Matrix
+
+Initial v0.1 validation target:
+
+| Component | Version posture |
+|---|---|
+| OpenBao | `2.5.3` only. |
+| Kubernetes | `1.34` release line only until additional exact-pinned lines are release-gated. |
+| KMS API | Kubernetes KMS v2 only. |
+| OS | Linux control-plane nodes only. |
+
+Kubernetes `1.35` and newer are future candidates, not implicit support claims. Add them only after exact patch versions, Kind node images, kubeadm VM coverage, and release gates are in place.
+
+## Local Parity
+
+Expected local entry points:
+
+```sh
+make bootstrap
+make doctor
+make ci-core
+```
+
+`make ci-core` should cover:
+
+- format,
+- gofumpt,
+- lint,
+- `go vet`,
+- staticcheck,
+- govulncheck,
+- golangci-lint using `.golangci.yml`,
+- ast-grep structural rule tests and scan using `.ast-grep/sgconfig.yml`,
+- Semgrep security/API-misuse rule tests and scan using `.semgrep/rules`,
+- unit tests,
+- race smoke tests,
+- ast-grep forbidden dynamic Go type rules,
+- generated artifact checks,
+- vendored dependency check,
+- license check,
+- static security scan,
+- fuzz smoke,
+- KMS v2 fake conformance,
+- key ID/AAD golden tests,
+- config validation tests,
+- redaction tests.
+
+## CI Lanes
+
+### Pull Requests
+
+Required for every PR:
+
+- core quality gate,
+- strict typed-Go quality gate,
+- ast-grep architecture/runtime-safety scan,
+- Semgrep security/API-misuse scan,
+- KMS v2 fake conformance,
+- key ID/AAD golden tests,
+- redaction tests,
+- config validation tests,
+- vendored dependency verification,
+- license check,
+- vulnerability/static security scan.
+
+Change-routed expansions:
+
+| Changed area | Additional validation |
+|---|---|
+| `internal/kmsv2`, `internal/keyregistry`, `internal/aad` | conformance, fuzz smoke, golden fixtures. |
+| `internal/openbao`, `internal/auth` | OpenBao integration lane. |
+| `internal/socket`, deployment samples | systemd/static-pod smoke checks. |
+| rotation/status code | rotation and failure-injection lanes. |
+| packaging or Dockerfile | image scan, SBOM smoke, reproducibility smoke. |
+| docs only | docs link/build checks. |
+
+### Main Branch
+
+Main should run all PR lanes plus:
+
+- pinned OpenBao `2.5.3` integration tests,
+- pinned Kubernetes `1.34.x` kind e2e,
+- rotation tests,
+- decrypt storm smoke,
+- image scan,
+- SBOM generation.
+
+### Nightly
+
+Nightly should run:
+
+- full pinned `1.34.x` kind e2e,
+- OpenBao `2.5.3` integration tests,
+- failure injection,
+- long-running Status polling,
+- decrypt storm benchmark,
+- supply-chain checks,
+- optional kubeadm VM smoke when infrastructure exists.
+
+### Release Gate
+
+Release gate must run:
+
+- all nightly lanes,
+- kubeadm VM systemd test,
+- kubeadm VM static pod test,
+- OpenBao restore test,
+- etcd/OpenBao paired restore test,
+- upgrade and rollback test,
+- image signing and provenance checks,
+- byte reproducibility check,
+- release evidence generation.
+
+## Supply-Chain Gates
+
+Required before publishing any release artifact:
+
+- pinned GitHub Actions by commit SHA,
+- vendored Go dependencies or an equivalent deterministic module policy,
+- dependency review,
+- license allowlist for shipped dependencies,
+- static security scan,
+- `govulncheck`,
+- filesystem and image vulnerability scans,
+- SBOM for each published binary/image,
+- checksums for release assets,
+- signed images and release checksums,
+- provenance attestations,
+- verification of attestations against expected workflow identity,
+- byte reproducibility check for release images and SBOMs,
+- release provenance index.
+
+## Build Once, Promote By Digest
+
+Release workflows should build immutable artifacts once, capture digests, verify trust evidence, and promote by digest.
+
+Do not rebuild a different subject during publication.
+
+```text
+tag or release ref
+  -> build immutable image/binary artifacts
+  -> capture digests
+  -> verify provenance and reproducibility
+  -> sign and attest
+  -> publish release assets and provenance index
+```
+
+## Release Channels
+
+| Channel | Use | Support expectation |
+|---|---|---|
+| PR | validation only | no public artifacts |
+| edge | main-branch integration signal | not production |
+| nightly | scheduled drift detection | not production |
+| prerelease | release candidate soak | staging/evaluation |
+| stable | supported release line | only after release gates pass |
+
+## Release Evidence
+
+Every stable release should publish or retain:
+
+- workflow run URL,
+- source commit,
+- signed tag,
+- image digests,
+- binary checksums,
+- SBOMs,
+- vulnerability scan result summary,
+- provenance attestations,
+- signature verification output,
+- reproducibility report,
+- release notes,
+- compatibility matrix used for the release.
+
+## Backlog Implications
+
+The CI/supply-chain work is not a final polish task. It affects repository layout, Makefile targets, dependency policy, release artifact names, and version matrix ownership from the beginning.
