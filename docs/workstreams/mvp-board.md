@@ -40,13 +40,22 @@ Blocking tasks:
 - WS02-T05 Implement canonical AAD builder.
 - WS02-T06 Add AAD golden fixtures.
 - WS02-T07 Implement key registry lookup for active and historical snapshots.
+- WS02-T08 Enforce decrypt validation order.
 - WS02-T09 Add fuzz tests for key ID and annotations.
+- WS02-T10 Enforce AAD required mode.
+- WS02-T11 Implement local key registry state file.
+- WS02-T12 Add registry state recovery checks.
+- WS02-T13 Add rollback/replay detection.
+- WS02-T14 Add compatibility-mode rejection tests.
 
 Exit criteria:
 
 - Golden fixtures prove deterministic key ID and AAD output.
 - Malformed annotations never panic.
 - Unknown key IDs never proceed to Transit in tests.
+- Registry state reloads active and historical snapshots after restart.
+- Missing registry state can be rebuilt from safe metadata.
+- Replayed or rolled-back registry state is rejected.
 
 ## Milestone M2: KMS v2 Fake Conformance
 

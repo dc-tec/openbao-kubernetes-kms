@@ -42,7 +42,14 @@ var (
 	ErrInvalidAnnotations = errors.New("annotations invalid")
 	// ErrAnnotationMismatch identifies annotations that do not match the key snapshot.
 	ErrAnnotationMismatch = errors.New("annotations do not match key snapshot")
+	// ErrAADRequired identifies snapshots that are not in the v0.1 required-AAD mode.
+	ErrAADRequired = errors.New("AAD required")
 )
+
+// SnapshotLookup resolves Kubernetes key_id values before decrypt attempts reach Transit.
+type SnapshotLookup interface {
+	Lookup(keyID string) (keyregistry.KeySnapshot, error)
+}
 
 // ParsedAnnotations contains the validated values from the KMS annotation map.
 type ParsedAnnotations struct {
@@ -68,6 +75,14 @@ type aadEnvelopeV1 struct {
 	KeyVersion          string `json:"key_version"`
 }
 
+// DecryptAAD contains the validated snapshot and AAD bytes needed for Transit decrypt.
+type DecryptAAD struct {
+	Snapshot              keyregistry.KeySnapshot
+	Annotations           ParsedAnnotations
+	Canonical             []byte
+	TransitAssociatedData string
+}
+
 // BuildAnnotations returns the required non-secret KMS v2 annotations for a snapshot.
 func BuildAnnotations(snapshot keyregistry.KeySnapshot, pluginVersion string) (map[string]string, error) {
 	if pluginVersion == "" {
@@ -76,6 +91,9 @@ func BuildAnnotations(snapshot keyregistry.KeySnapshot, pluginVersion string) (m
 
 	normalized, err := snapshot.Normalize()
 	if err != nil {
+		return nil, err
+	}
+	if err := RequireAADMode(normalized); err != nil {
 		return nil, err
 	}
 
@@ -159,6 +177,9 @@ func ValidateForSnapshot(snapshot keyregistry.KeySnapshot, annotations ParsedAnn
 	if err != nil {
 		return err
 	}
+	if err := RequireAADMode(normalized); err != nil {
+		return err
+	}
 
 	if annotations.Provider != ProviderValue {
 		return fmt.Errorf("%w: provider marker mismatch", ErrAnnotationMismatch)
@@ -192,6 +213,49 @@ func BuildCanonical(snapshot keyregistry.KeySnapshot, annotations map[string]str
 		return nil, err
 	}
 
+	return buildCanonicalFromParsed(snapshot, parsed)
+}
+
+// PrepareDecrypt validates key_id, registry membership, annotations, and AAD before Transit decrypt.
+func PrepareDecrypt(registry SnapshotLookup, keyID string, annotations map[string]string) (DecryptAAD, error) {
+	snapshot, err := registry.Lookup(keyID)
+	if err != nil {
+		return DecryptAAD{}, err
+	}
+	if err := RequireAADMode(snapshot); err != nil {
+		return DecryptAAD{}, err
+	}
+
+	parsed, err := ParseAnnotations(annotations)
+	if err != nil {
+		return DecryptAAD{}, err
+	}
+	if err := ValidateForSnapshot(snapshot, parsed); err != nil {
+		return DecryptAAD{}, err
+	}
+
+	canonical, err := buildCanonicalFromParsed(snapshot, parsed)
+	if err != nil {
+		return DecryptAAD{}, err
+	}
+
+	return DecryptAAD{
+		Snapshot:              snapshot,
+		Annotations:           parsed,
+		Canonical:             canonical,
+		TransitAssociatedData: EncodeForTransit(canonical),
+	}, nil
+}
+
+// RequireAADMode enforces the v0.1 policy that all snapshots use associated data.
+func RequireAADMode(snapshot keyregistry.KeySnapshot) error {
+	if snapshot.AADMode != keyregistry.AADModeRequired {
+		return fmt.Errorf("%w: snapshot mode %q is not supported", ErrAADRequired, snapshot.AADMode)
+	}
+	return nil
+}
+
+func buildCanonicalFromParsed(snapshot keyregistry.KeySnapshot, parsed ParsedAnnotations) ([]byte, error) {
 	normalized, err := snapshot.Normalize()
 	if err != nil {
 		return nil, err

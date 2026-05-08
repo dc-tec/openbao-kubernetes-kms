@@ -129,6 +129,82 @@ func TestAnnotationMismatchFails(t *testing.T) {
 	}
 }
 
+func TestPrepareDecryptBuildsGoldenAAD(t *testing.T) {
+	fixture := loadGoldenFixture(t)
+	registry := newRegistry(t, fixture.Snapshot.keySnapshot())
+
+	result, err := aad.PrepareDecrypt(registry, fixture.ExpectedKeyID, fixture.ExpectedAnnotations)
+	if err != nil {
+		t.Fatalf("prepare decrypt: %v", err)
+	}
+	if result.Snapshot.KubernetesKeyID != fixture.ExpectedKeyID {
+		t.Fatalf("unexpected snapshot key ID: %s", result.Snapshot.KubernetesKeyID)
+	}
+	if string(result.Canonical) != fixture.ExpectedCanonicalAAD {
+		t.Fatalf("canonical AAD mismatch:\nwant %s\ngot  %s", fixture.ExpectedCanonicalAAD, string(result.Canonical))
+	}
+	if result.TransitAssociatedData != fixture.ExpectedTransitAAD {
+		t.Fatalf("Transit AAD mismatch:\nwant %s\ngot  %s", fixture.ExpectedTransitAAD, result.TransitAssociatedData)
+	}
+}
+
+func TestPrepareDecryptRejectsMalformedKeyIDBeforeAnnotations(t *testing.T) {
+	fixture := loadGoldenFixture(t)
+	registry := newRegistry(t, fixture.Snapshot.keySnapshot())
+
+	_, err := aad.PrepareDecrypt(registry, "not-a-key-id", nil)
+	if !errors.Is(err, keyregistry.ErrMalformedKeyID) {
+		t.Fatalf("expected malformed key ID before annotation validation, got %v", err)
+	}
+}
+
+func TestPrepareDecryptRejectsUnknownKeyIDBeforeAnnotations(t *testing.T) {
+	fixture := loadGoldenFixture(t)
+	active := fixture.Snapshot.keySnapshot()
+	registry := newRegistry(t, active)
+	unknown := active
+	unknown.TransitVersion++
+	unknown.KubernetesKeyID = ""
+	unknownKeyID, err := keyregistry.DeriveKeyID(unknown)
+	if err != nil {
+		t.Fatalf("derive unknown key ID: %v", err)
+	}
+
+	_, err = aad.PrepareDecrypt(registry, unknownKeyID, nil)
+	if !errors.Is(err, keyregistry.ErrUnknownKeyID) {
+		t.Fatalf("expected unknown key ID before annotation validation, got %v", err)
+	}
+}
+
+func TestAADRequiredModeRejectsCompatibilityModes(t *testing.T) {
+	fixture := loadGoldenFixture(t)
+	for _, mode := range []keyregistry.AADMode{
+		keyregistry.AADModeOptionalRead,
+		keyregistry.AADModeDisabled,
+	} {
+		t.Run(string(mode), func(t *testing.T) {
+			snapshot := fixture.Snapshot.keySnapshot()
+			snapshot.AADMode = mode
+
+			if _, err := aad.BuildAnnotations(snapshot, fixture.PluginVersion); !errors.Is(err, aad.ErrAADRequired) {
+				t.Fatalf("expected BuildAnnotations to reject mode %q, got %v", mode, err)
+			}
+			if _, err := aad.BuildCanonical(snapshot, fixture.ExpectedAnnotations); !errors.Is(err, aad.ErrAADRequired) {
+				t.Fatalf("expected BuildCanonical to reject mode %q, got %v", mode, err)
+			}
+
+			registry := newRegistry(t, snapshot)
+			keyID, err := keyregistry.DeriveKeyID(snapshot)
+			if err != nil {
+				t.Fatalf("derive key ID: %v", err)
+			}
+			if _, err := aad.PrepareDecrypt(registry, keyID, fixture.ExpectedAnnotations); !errors.Is(err, aad.ErrAADRequired) {
+				t.Fatalf("expected PrepareDecrypt to reject mode %q, got %v", mode, err)
+			}
+		})
+	}
+}
+
 func TestAnnotationsAndAADDoNotExposeRawTopology(t *testing.T) {
 	fixture := loadGoldenFixture(t)
 	snapshot := fixture.Snapshot.keySnapshot()
@@ -185,6 +261,16 @@ func FuzzParseAnnotations(f *testing.F) {
 			return
 		}
 	})
+}
+
+func newRegistry(t testing.TB, active keyregistry.KeySnapshot) keyregistry.Registry {
+	t.Helper()
+
+	registry, err := keyregistry.NewRegistry(active, nil)
+	if err != nil {
+		t.Fatalf("new registry: %v", err)
+	}
+	return registry
 }
 
 func loadGoldenFixture(t testing.TB) goldenFixture {

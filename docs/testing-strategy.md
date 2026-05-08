@@ -686,7 +686,7 @@ rotation state does not accidentally re-promote an old version
 The local registry state file should live under:
 
 ```text
-/var/lib/openbao-kms/key-registry.json
+/var/lib/openbao-kms/state/key-registry.json
 ```
 
 That file needs tests for permissions, corruption handling, rebuild-from-metadata behavior, backup/restore, and rollback detection.

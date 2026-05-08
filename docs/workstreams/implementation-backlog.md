@@ -115,13 +115,13 @@ Goal: implement the compatibility-sensitive metadata layer before any real KMS t
 | WS02-T05 | P0 | done | Implement canonical AAD builder. | WS02-T04 |
 | WS02-T06 | P0 | done | Add AAD golden fixtures. | WS02-T05 |
 | WS02-T07 | P0 | done | Implement key registry lookup for active and historical snapshots. | WS02-T01 |
-| WS02-T08 | P0 | planned | Enforce decrypt validation order. | WS02-T04, WS02-T07 |
+| WS02-T08 | P0 | done | Enforce decrypt validation order. | WS02-T04, WS02-T07 |
 | WS02-T09 | P0 | done | Add fuzz tests for key ID and annotations. | WS02-T02, WS02-T04 |
-| WS02-T10 | P0 | planned | Enforce AAD required mode for v0.1. | WS02-T05 |
-| WS02-T11 | P0 | planned | Implement hybrid local key registry state file for observed/promoted snapshots. | WS02-T07, WS06-T03 |
-| WS02-T12 | P0 | planned | Add registry permissions, corruption handling, and rebuild-from-metadata behavior. | WS02-T11 |
-| WS02-T13 | P0 | planned | Add rollback/replay detection for registry state. | WS02-T12 |
-| WS02-T14 | P1 | planned | Add future compatibility-mode tests for annotation/AAD schema versions. | WS02-T10 |
+| WS02-T10 | P0 | done | Enforce AAD required mode for v0.1. | WS02-T05 |
+| WS02-T11 | P0 | done | Implement hybrid local key registry state file for observed/promoted snapshots. | WS02-T07, WS06-T03 |
+| WS02-T12 | P0 | done | Add registry permissions, corruption handling, and rebuild-from-metadata behavior. | WS02-T11 |
+| WS02-T13 | P0 | done | Add rollback/replay detection for registry state. | WS02-T12 |
+| WS02-T14 | P1 | done | Add future compatibility-mode tests for annotation/AAD schema versions. | WS02-T10 |
 
 Acceptance criteria:
 

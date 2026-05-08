@@ -151,6 +151,34 @@ Compatibility modes must be:
 
 Unknown `key_id` values must fail before step 6.
 
+The implementation exposes a decrypt preflight helper that returns the resolved snapshot, parsed annotations, canonical AAD bytes, and Transit `associated_data` only after steps 1-5 have passed.
+
+For v0.1, snapshots must use `aad.required`. `aad.optional-read` and `aad.disabled` remain modeled as future compatibility modes, but encrypt and decrypt preparation reject them.
+
+## Local Registry State
+
+The local registry state is a non-secret JSON file that records:
+
+- schema version,
+- monotonic generation,
+- previous and current state hashes,
+- active Kubernetes `key_id`,
+- observed and promoted key snapshots.
+
+The file is used to preserve rotation decisions across restart and to keep historical snapshots lookupable before Transit decrypt is attempted. It does not contain key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths.
+
+State-file checks:
+
+- file must be regular and must not be a symlink,
+- file mode must not allow group write, execute bits, or world access,
+- parent directory must not be group/world writable,
+- JSON is decoded with unknown-field rejection,
+- current hash must match the typed state body,
+- generation and hash expectations can reject replayed state,
+- active Transit version must not move backwards during normal promotion.
+
+If the state file is missing, it can be rebuilt from trusted config plus current and historical Transit metadata when the caller can prove that the metadata set is complete enough for the recovery operation.
+
 ## Golden Fixtures
 
 Implementation must keep golden fixtures for:

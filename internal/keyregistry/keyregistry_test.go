@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -206,6 +207,147 @@ func TestNormalizeRejectsMismatchedKeyID(t *testing.T) {
 	}
 }
 
+func TestStateFileRoundTrip(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	historical := historicalSnapshot(active)
+	state, err := keyregistry.NewStateFile(active, []keyregistry.KeySnapshot{historical}, 1, "")
+	if err != nil {
+		t.Fatalf("new state file: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "key-registry.json")
+	if err := keyregistry.SaveStateFile(path, state); err != nil {
+		t.Fatalf("save state file: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat state file: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o640 {
+		t.Fatalf("unexpected state file mode: %04o", got)
+	}
+
+	loaded, registry, err := keyregistry.LoadStateFile(path, keyregistry.StateLoadOptions{})
+	if err != nil {
+		t.Fatalf("load state file: %v", err)
+	}
+	if loaded.CurrentHash != state.CurrentHash {
+		t.Fatalf("state hash changed across round trip: %s != %s", loaded.CurrentHash, state.CurrentHash)
+	}
+
+	activeSnapshot, ok := registry.Active()
+	if !ok {
+		t.Fatal("active snapshot missing")
+	}
+	if activeSnapshot.KubernetesKeyID != state.ActiveKeyID {
+		t.Fatalf("unexpected active key ID: %s", activeSnapshot.KubernetesKeyID)
+	}
+	historicalKeyID, err := keyregistry.DeriveKeyID(historical)
+	if err != nil {
+		t.Fatalf("derive historical key ID: %v", err)
+	}
+	if _, err := registry.Lookup(historicalKeyID); err != nil {
+		t.Fatalf("lookup historical key ID after reload: %v", err)
+	}
+}
+
+func TestMissingStateFileCanBeRebuiltFromMetadata(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	historical := historicalSnapshot(active)
+
+	_, _, err := keyregistry.LoadStateFile(filepath.Join(t.TempDir(), "missing.json"), keyregistry.StateLoadOptions{})
+	if !errors.Is(err, keyregistry.ErrStateNotFound) {
+		t.Fatalf("expected missing state error, got %v", err)
+	}
+
+	state, err := keyregistry.RebuildStateFromMetadata(active, []keyregistry.KeySnapshot{historical})
+	if err != nil {
+		t.Fatalf("rebuild state from metadata: %v", err)
+	}
+	registry, err := state.Registry()
+	if err != nil {
+		t.Fatalf("registry from rebuilt state: %v", err)
+	}
+	if _, ok := registry.Active(); !ok {
+		t.Fatal("rebuilt registry missing active snapshot")
+	}
+}
+
+func TestLoadStateFileRejectsUnsafePermissions(t *testing.T) {
+	path := saveValidStateFile(t)
+	// #nosec G302 -- this test intentionally creates unsafe state-file permissions.
+	if err := os.Chmod(path, 0o666); err != nil {
+		t.Fatalf("chmod state file: %v", err)
+	}
+
+	_, _, err := keyregistry.LoadStateFile(path, keyregistry.StateLoadOptions{})
+	if !errors.Is(err, keyregistry.ErrStatePermission) {
+		t.Fatalf("expected state permission error, got %v", err)
+	}
+}
+
+func TestLoadStateFileRejectsCorruption(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "key-registry.json")
+	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
+		t.Fatalf("write corrupt state: %v", err)
+	}
+
+	_, _, err := keyregistry.LoadStateFile(path, keyregistry.StateLoadOptions{})
+	if !errors.Is(err, keyregistry.ErrStateCorrupt) {
+		t.Fatalf("expected corrupt state error, got %v", err)
+	}
+}
+
+func TestLoadStateFileRejectsHashMismatch(t *testing.T) {
+	path := saveValidStateFile(t)
+	// #nosec G304 -- test reads the local temp state file it just created.
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read state file: %v", err)
+	}
+	var state keyregistry.StateFile
+	if err := json.Unmarshal(content, &state); err != nil {
+		t.Fatalf("decode state file: %v", err)
+	}
+	state.CurrentHash = "krs1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	reencoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("encode tampered state: %v", err)
+	}
+	if err := os.WriteFile(path, reencoded, 0o600); err != nil {
+		t.Fatalf("write tampered state: %v", err)
+	}
+
+	_, _, err = keyregistry.LoadStateFile(path, keyregistry.StateLoadOptions{})
+	if !errors.Is(err, keyregistry.ErrStateCorrupt) {
+		t.Fatalf("expected corrupt state error, got %v", err)
+	}
+}
+
+func TestStateReplayAndRollbackDetection(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	previous, err := keyregistry.NewStateFile(active, nil, 1, "")
+	if err != nil {
+		t.Fatalf("new previous state: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "key-registry.json")
+	if err := keyregistry.SaveStateFile(path, previous); err != nil {
+		t.Fatalf("save previous state: %v", err)
+	}
+	_, _, err = keyregistry.LoadStateFile(path, keyregistry.StateLoadOptions{MinimumGeneration: 2})
+	if !errors.Is(err, keyregistry.ErrStateRollback) {
+		t.Fatalf("expected replay rollback error, got %v", err)
+	}
+
+	lower := historicalSnapshot(active)
+	lower.State = keyregistry.StateActive
+	if _, err := keyregistry.PromoteState(previous, lower, nil); !errors.Is(err, keyregistry.ErrStateRollback) {
+		t.Fatalf("expected active version rollback error, got %v", err)
+	}
+}
+
 func FuzzParseKeyID(f *testing.F) {
 	fixture := loadGoldenFixture(f)
 	f.Add(fixture.ExpectedKeyID)
@@ -226,6 +368,30 @@ func FuzzParseKeyID(f *testing.F) {
 			t.Fatalf("parsed key ID is not stable: %v", err)
 		}
 	})
+}
+
+func saveValidStateFile(t *testing.T) string {
+	t.Helper()
+
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	state, err := keyregistry.NewStateFile(active, nil, 1, "")
+	if err != nil {
+		t.Fatalf("new state file: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "key-registry.json")
+	if err := keyregistry.SaveStateFile(path, state); err != nil {
+		t.Fatalf("save state file: %v", err)
+	}
+	return path
+}
+
+func historicalSnapshot(active keyregistry.KeySnapshot) keyregistry.KeySnapshot {
+	historical := active
+	historical.TransitVersion = active.TransitVersion - 1
+	historical.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(-time.Hour)
+	historical.KubernetesKeyID = ""
+	historical.State = keyregistry.StateRetired
+	return historical
 }
 
 func loadGoldenFixture(t testing.TB) goldenFixture {
