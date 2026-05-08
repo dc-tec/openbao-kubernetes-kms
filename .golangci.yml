@@ -1,9 +1,12 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
-  modules-download-mode: readonly
+  allow-parallel-runners: true
 
 linters:
+  default: none
   enable:
     - bodyclose
     - errcheck
@@ -17,20 +20,24 @@ linters:
     - unparam
     - unused
 
-linters-settings:
-  forbidigo:
-    forbid:
-      - pattern: 'map\[string\]any'
-        msg: use a typed struct or a narrow boundary DTO
-      - pattern: 'map\[string\]interface\{\}'
-        msg: use a typed struct or a narrow boundary DTO
-      - pattern: '\bany\b'
-        msg: broad any is not allowed in production code without a reviewed boundary adapter
-      - pattern: 'interface\{\}'
-        msg: broad interface{} is not allowed in production code without a reviewed boundary adapter
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: 'map\[string\]any'
+          msg: use a typed struct or a narrow boundary DTO
+        - pattern: 'map\[string\]interface\{\}'
+          msg: use a typed struct or a narrow boundary DTO
+        - pattern: '\bany\b'
+          msg: broad any is not allowed in production code without a reviewed boundary adapter
+        - pattern: 'interface\{\}'
+          msg: broad interface{} is not allowed in production code without a reviewed boundary adapter
 
-issues:
-  exclude-rules:
-    - path: '(.+)_test\.go'
-      linters:
-        - forbidigo
+  exclusions:
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofmt

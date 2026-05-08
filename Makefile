@@ -1,24 +1,44 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap fmt lint test ci-core docs-check versions-check lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci
+.PHONY: help bootstrap build fmt verify-fmt lint lint-ci test test-race tidy verify-tidy ci-core docs-check versions-check lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
 
 GO_VERSION := $(shell cat .go-version)
+GO ?= go
+GOBIN ?= $(CURDIR)/bin
 AST_GREP ?= .github/tools/node_modules/.bin/ast-grep
 SEMGREP ?= semgrep
+GOFUMPT ?= gofumpt
+STATICCHECK ?= staticcheck
+GOVULNCHECK ?= govulncheck
+GOLANGCI_LINT ?= golangci-lint
 SEMGREP_CONFIG_FLAGS ?= --config .semgrep/rules
 SEMGREP_TARGETS ?= cmd internal
 SEMGREP_ARTIFACT_DIR ?= dist/semgrep
 SEMGREP_OUTPUT_JSON ?= $(SEMGREP_ARTIFACT_DIR)/semgrep.json
+BIN ?= bin/bao-kms-provider
+VERSION ?= 0.0.0-dev
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf '%s' unknown)
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+DIRTY ?= $(shell if [ -n "$$(git status --porcelain 2>/dev/null)" ]; then printf '%s' true; else printf '%s' false; fi)
+VERSION_PKG := github.com/dc-tec/openbao-kubernetes-kms/internal/version
+LDFLAGS := -s -w -X $(VERSION_PKG).version=$(VERSION) -X $(VERSION_PKG).commit=$(COMMIT) -X $(VERSION_PKG).buildDate=$(BUILD_DATE) -X $(VERSION_PKG).dirty=$(DIRTY)
+GOFUMPT_VERSION ?= v0.9.2
+STATICCHECK_VERSION ?= v0.7.0
+GOVULNCHECK_VERSION ?= v1.2.0
+GOLANGCI_LINT_VERSION ?= v2.11.4
 
 help:
 	@printf '%s\n' 'Targets:'
 	@printf '%s\n' '  bootstrap       Prepare local development prerequisites once implementation exists'
+	@printf '%s\n' '  build           Build bao-kms-provider with version metadata'
 	@printf '%s\n' '  fmt             Format Go sources when go.mod exists'
 	@printf '%s\n' '  lint            Run lightweight lint checks'
 	@printf '%s\n' '  lint-ast        Run ast-grep rules when ast-grep and Go code are present'
 	@printf '%s\n' '  test            Run Go tests when go.mod exists'
+	@printf '%s\n' '  test-race       Run race-enabled Go tests'
 	@printf '%s\n' '  ci-core         Run the local core quality gate'
 	@printf '%s\n' '  docs-check      Check docs for known formatting artifacts'
+	@printf '%s\n' '  install-go-tools Install pinned optional Go quality tools into bin/'
 	@printf '%s\n' '  semgrep-ci      Run Semgrep rule tests and blocking scan when semgrep is available'
 	@printf '%s\n' '  versions-check  Check central version policy exists'
 
@@ -29,20 +49,65 @@ bootstrap:
 	else \
 		printf '%s\n' 'npm not found; skipping ast-grep tool install.'; \
 	fi
-	@if [ ! -f go.mod ]; then \
-		printf '%s\n' 'go.mod does not exist yet; run M0 module initialization first.'; \
-	fi
+	@$(MAKE) install-go-tools
+
+install-go-tools:
+	@mkdir -p "$(GOBIN)"
+	@GOBIN="$(GOBIN)" "$(GO)" install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+	@GOBIN="$(GOBIN)" "$(GO)" install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
+	@GOBIN="$(GOBIN)" "$(GO)" install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	@GOBIN="$(GOBIN)" "$(GO)" install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+build:
+	@mkdir -p "$$(dirname "$(BIN)")"
+	@"$(GO)" build -trimpath -ldflags "$(LDFLAGS)" -o "$(BIN)" ./cmd/bao-kms-provider
 
 fmt:
-	@if [ -f go.mod ]; then gofmt -w $$(find . -name '*.go' -not -path './vendor/*'); else printf '%s\n' 'No go.mod yet; skipping Go formatting.'; fi
+	@if find cmd internal -name '*.go' 2>/dev/null | grep -q .; then \
+		gofmt -w $$(find cmd internal -name '*.go'); \
+		if command -v "$(GOFUMPT)" >/dev/null 2>&1; then "$(GOFUMPT)" -w cmd internal; fi; \
+	else \
+		printf '%s\n' 'No Go files yet; skipping Go formatting.'; \
+	fi
 
-lint: docs-check versions-check test-ast lint-ast semgrep-ci
-	@if [ -f go.mod ]; then go vet ./...; else printf '%s\n' 'No go.mod yet; skipping Go lint.'; fi
+verify-fmt:
+	@if find cmd internal -name '*.go' 2>/dev/null | grep -q .; then \
+		unformatted="$$(gofmt -l $$(find cmd internal -name '*.go'))"; \
+		if [ -n "$$unformatted" ]; then printf '%s\n' "$$unformatted"; exit 1; fi; \
+		if command -v "$(GOFUMPT)" >/dev/null 2>&1; then \
+			unformatted="$$("$(GOFUMPT)" -l cmd internal)"; \
+			if [ -n "$$unformatted" ]; then printf '%s\n' "$$unformatted"; exit 1; fi; \
+		else \
+			printf '%s\n' 'gofumpt not installed; skipping gofumpt verification.'; \
+		fi; \
+	else \
+		printf '%s\n' 'No Go files yet; skipping Go formatting verification.'; \
+	fi
+
+lint: docs-check versions-check verify-fmt test-ast lint-ast semgrep-ci
+	@"$(GO)" vet ./...
+	@if command -v "$(STATICCHECK)" >/dev/null 2>&1; then "$(STATICCHECK)" ./...; else printf '%s\n' 'staticcheck not installed; skipping staticcheck.'; fi
+	@if command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1; then "$(GOLANGCI_LINT)" run; else printf '%s\n' 'golangci-lint not installed; skipping golangci-lint.'; fi
+
+lint-ci: lint vulncheck
 
 test:
-	@if [ -f go.mod ]; then go test ./...; else printf '%s\n' 'No go.mod yet; skipping Go tests.'; fi
+	@"$(GO)" test ./...
 
-ci-core: lint test
+test-race:
+	@"$(GO)" test -race ./...
+
+tidy:
+	@"$(GO)" mod tidy
+
+verify-tidy:
+	@"$(GO)" mod tidy
+	@git diff --exit-code -- go.mod go.sum
+
+vulncheck:
+	@if command -v "$(GOVULNCHECK)" >/dev/null 2>&1; then "$(GOVULNCHECK)" ./...; else printf '%s\n' 'govulncheck not installed; skipping govulncheck.'; fi
+
+ci-core: verify-tidy lint vulncheck test test-race build
 
 docs-check:
 	@! grep -R -n $$(printf '\357\277\274') README.md docs
@@ -75,7 +140,7 @@ semgrep-rules-test:
 
 semgrep-scan:
 	@targets=""; for d in $(SEMGREP_TARGETS); do [ -e "$$d" ] && targets="$$targets $$d"; done; \
-	if [ -z "$$targets" ] || ! find $$targets \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' \) 2>/dev/null | grep -q .; then \
+	if [ -z "$$targets" ] || ! find $$targets -name '*.go' 2>/dev/null | grep -q .; then \
 		printf '%s\n' 'No Semgrep targets yet; skipping Semgrep scan.'; \
 	elif command -v "$(SEMGREP)" >/dev/null 2>&1; then \
 		"$(SEMGREP)" scan --metrics=off --no-git-ignore $(SEMGREP_CONFIG_FLAGS) $$targets; \
@@ -86,7 +151,7 @@ semgrep-scan:
 
 semgrep-ci: semgrep-rules-test
 	@targets=""; for d in $(SEMGREP_TARGETS); do [ -e "$$d" ] && targets="$$targets $$d"; done; \
-	if [ -z "$$targets" ] || ! find $$targets \( -name '*.go' -o -name '*.yml' -o -name '*.yaml' \) 2>/dev/null | grep -q .; then \
+	if [ -z "$$targets" ] || ! find $$targets -name '*.go' 2>/dev/null | grep -q .; then \
 		printf '%s\n' 'No Semgrep targets yet; skipping Semgrep CI scan.'; \
 	elif command -v "$(SEMGREP)" >/dev/null 2>&1; then \
 		mkdir -p "$(SEMGREP_ARTIFACT_DIR)"; \
