@@ -1,0 +1,57 @@
+version: 1
+
+project:
+  name: openbao-kubernetes-kms
+  module: github.com/dc-tec/openbao-kubernetes-kms
+  binary: bao-kms-provider
+
+toolchain:
+  go: "1.26.3"
+  commandFramework:
+    cliConfig: viper
+  taskRunner: make
+  qualityTools:
+    astGrep: "0.42.1"
+    gofumpt: ""
+    staticcheck: ""
+    govulncheck: ""
+    semgrep: "1.157.0"
+    golangciLint: ""
+    pinStatus: pending
+
+policy:
+  floatingLatestAllowed: false
+  supportClaimsRequireExactPins: true
+  buildOncePromoteByDigest: true
+
+validation:
+  openbao:
+    primary: "2.5.3"
+    image: ghcr.io/openbao/openbao:2.5.3
+    imageDigest: ""
+    digestStatus: pending
+  kubernetes:
+    minimumLine: "1.34"
+    primaryLine: "1.34"
+    exactVersion: ""
+    kindNodeImage: ""
+    kindNodeImageDigest: ""
+    pinStatus: pending
+    futureCandidates:
+      - "1.35"
+      - "1.36"
+  releaseGateRows:
+    - name: openbao-2.5.3
+      component: openbao
+      version: "2.5.3"
+      requiredFor: v0.1
+    - name: kubernetes-1.34
+      component: kubernetes
+      version: "1.34.x"
+      requiredFor: v0.1
+      exactPinStatus: pending
+
+artifacts:
+  imageRepository: ghcr.io/dc-tec/bao-kms-provider
+  binaryName: bao-kms-provider
+  checksumAlgorithm: sha256
