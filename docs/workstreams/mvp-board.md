@@ -39,7 +39,8 @@ Blocking tasks:
 - WS02-T04 Implement annotation builder/parser.
 - WS02-T05 Implement canonical AAD builder.
 - WS02-T06 Add AAD golden fixtures.
-- WS02-T07 Add fuzz targets for key ID and annotations.
+- WS02-T07 Implement key registry lookup for active and historical snapshots.
+- WS02-T09 Add fuzz tests for key ID and annotations.
 
 Exit criteria:
 

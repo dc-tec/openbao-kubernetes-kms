@@ -108,15 +108,15 @@ Goal: implement the compatibility-sensitive metadata layer before any real KMS t
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS02-T01 | P0 | planned | Define `KeySnapshot` model. | WS01-T01 |
-| WS02-T02 | P0 | planned | Implement opaque Kubernetes key ID derivation. | WS02-T01 |
-| WS02-T03 | P0 | planned | Add key ID golden fixtures. | WS02-T02 |
-| WS02-T04 | P0 | planned | Implement annotation builder and parser. | WS02-T01 |
-| WS02-T05 | P0 | planned | Implement canonical AAD builder. | WS02-T04 |
-| WS02-T06 | P0 | planned | Add AAD golden fixtures. | WS02-T05 |
-| WS02-T07 | P0 | planned | Implement key registry lookup for active and historical snapshots. | WS02-T01 |
+| WS02-T01 | P0 | done | Define `KeySnapshot` model. | WS01-T01 |
+| WS02-T02 | P0 | done | Implement opaque Kubernetes key ID derivation. | WS02-T01 |
+| WS02-T03 | P0 | done | Add key ID golden fixtures. | WS02-T02 |
+| WS02-T04 | P0 | done | Implement annotation builder and parser. | WS02-T01 |
+| WS02-T05 | P0 | done | Implement canonical AAD builder. | WS02-T04 |
+| WS02-T06 | P0 | done | Add AAD golden fixtures. | WS02-T05 |
+| WS02-T07 | P0 | done | Implement key registry lookup for active and historical snapshots. | WS02-T01 |
 | WS02-T08 | P0 | planned | Enforce decrypt validation order. | WS02-T04, WS02-T07 |
-| WS02-T09 | P0 | planned | Add fuzz tests for key ID and annotations. | WS02-T08 |
+| WS02-T09 | P0 | done | Add fuzz tests for key ID and annotations. | WS02-T02, WS02-T04 |
 | WS02-T10 | P0 | planned | Enforce AAD required mode for v0.1. | WS02-T05 |
 | WS02-T11 | P0 | planned | Implement hybrid local key registry state file for observed/promoted snapshots. | WS02-T07, WS06-T03 |
 | WS02-T12 | P0 | planned | Add registry permissions, corruption handling, and rebuild-from-metadata behavior. | WS02-T11 |

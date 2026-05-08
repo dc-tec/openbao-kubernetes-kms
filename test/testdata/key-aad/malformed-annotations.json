@@ -1,0 +1,49 @@
+[
+  {
+    "name": "missing provider",
+    "annotations": {
+      "kms.openbao.org/key-id-hash": "MFY-fdnn3o0Tkx3NGLEANm6lO7z4dH6Ot_Ps8AGry3k",
+      "kms.openbao.org/transit-key-version": "3",
+      "kms.openbao.org/transit-mount-hash": "rXiCr_lOjsbykm0mDHAvUcVxQl_XcVnT61MesgcPnzc",
+      "kms.openbao.org/transit-key-hash": "SwWS38Td_yyFNHaECzzHQP3CHFg60mklwtqYUwkx_IA",
+      "kms.openbao.org/plugin-version": "v0.1.0",
+      "kms.openbao.org/aad-version": "v1"
+    }
+  },
+  {
+    "name": "bad key hash",
+    "annotations": {
+      "kms.openbao.org/provider": "openbao-transit",
+      "kms.openbao.org/key-id-hash": "not-base64url-sha256",
+      "kms.openbao.org/transit-key-version": "3",
+      "kms.openbao.org/transit-mount-hash": "rXiCr_lOjsbykm0mDHAvUcVxQl_XcVnT61MesgcPnzc",
+      "kms.openbao.org/transit-key-hash": "SwWS38Td_yyFNHaECzzHQP3CHFg60mklwtqYUwkx_IA",
+      "kms.openbao.org/plugin-version": "v0.1.0",
+      "kms.openbao.org/aad-version": "v1"
+    }
+  },
+  {
+    "name": "unsupported aad version",
+    "annotations": {
+      "kms.openbao.org/provider": "openbao-transit",
+      "kms.openbao.org/key-id-hash": "MFY-fdnn3o0Tkx3NGLEANm6lO7z4dH6Ot_Ps8AGry3k",
+      "kms.openbao.org/transit-key-version": "3",
+      "kms.openbao.org/transit-mount-hash": "rXiCr_lOjsbykm0mDHAvUcVxQl_XcVnT61MesgcPnzc",
+      "kms.openbao.org/transit-key-hash": "SwWS38Td_yyFNHaECzzHQP3CHFg60mklwtqYUwkx_IA",
+      "kms.openbao.org/plugin-version": "v0.1.0",
+      "kms.openbao.org/aad-version": "v2"
+    }
+  },
+  {
+    "name": "malformed annotation key",
+    "annotations": {
+      "provider": "openbao-transit",
+      "kms.openbao.org/key-id-hash": "MFY-fdnn3o0Tkx3NGLEANm6lO7z4dH6Ot_Ps8AGry3k",
+      "kms.openbao.org/transit-key-version": "3",
+      "kms.openbao.org/transit-mount-hash": "rXiCr_lOjsbykm0mDHAvUcVxQl_XcVnT61MesgcPnzc",
+      "kms.openbao.org/transit-key-hash": "SwWS38Td_yyFNHaECzzHQP3CHFg60mklwtqYUwkx_IA",
+      "kms.openbao.org/plugin-version": "v0.1.0",
+      "kms.openbao.org/aad-version": "v1"
+    }
+  }
+]
