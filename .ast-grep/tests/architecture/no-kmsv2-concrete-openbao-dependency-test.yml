@@ -1,0 +1,19 @@
+id: no-kmsv2-concrete-openbao-dependency
+valid:
+  - |
+    package p
+
+    type Transit interface {
+      Encrypt() error
+    }
+
+    func use(t Transit) error {
+      return t.Encrypt()
+    }
+invalid:
+  - |
+    package p
+
+    import "github.com/dc-tec/openbao-kubernetes-kms/internal/transit"
+
+    func use(c transit.Client) {}

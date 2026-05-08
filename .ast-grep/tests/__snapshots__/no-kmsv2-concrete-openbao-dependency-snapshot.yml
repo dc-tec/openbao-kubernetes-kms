@@ -1,0 +1,13 @@
+id: no-kmsv2-concrete-openbao-dependency
+snapshots:
+  ? |
+    package p
+
+    import "github.com/dc-tec/openbao-kubernetes-kms/internal/transit"
+
+    func use(c transit.Client) {}
+  : labels:
+    - source: import "github.com/dc-tec/openbao-kubernetes-kms/internal/transit"
+      style: primary
+      start: 11
+      end: 77

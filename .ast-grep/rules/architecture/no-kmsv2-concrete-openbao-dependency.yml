@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ast-grep/ast-grep/main/schemas/rule.json
+
+id: no-kmsv2-concrete-openbao-dependency
+message: KMS v2 protocol code must not import concrete OpenBao or Transit clients; depend on narrow interfaces.
+severity: error
+language: Go
+files:
+  - internal/kmsv2/**/*.go
+ignores:
+  - '**/*_test.go'
+rule:
+  any:
+    - pattern: import "github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
+    - pattern: import "github.com/dc-tec/openbao-kubernetes-kms/internal/transit"
+note: Decrypt validation and Status/encrypt invariants should be testable with fake clients before real OpenBao integration.

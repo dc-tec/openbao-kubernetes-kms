@@ -1,0 +1,8 @@
+{
+  "name": "openbao-kubernetes-kms-ci-tools",
+  "private": true,
+  "description": "Pinned CI tooling for OpenBao Kubernetes KMS workflows.",
+  "devDependencies": {
+    "@ast-grep/cli": "0.42.1"
+  }
+}
