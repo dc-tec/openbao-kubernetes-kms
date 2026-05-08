@@ -6,6 +6,7 @@ This repository is currently documentation-first. The goal is to define enough i
 
 - [Design](design.md): Full technical design and rationale.
 - [Testing strategy](testing-strategy.md): Required test layers and validation strategy.
+- [E2E framework](e2e-framework.md): Ginkgo/Gomega suite layout, manifest routing, labels, and reports.
 - [Research notes](research-notes.md): Upstream Kubernetes and OpenBao facts verified for the docs.
 
 ## Implementation Contracts

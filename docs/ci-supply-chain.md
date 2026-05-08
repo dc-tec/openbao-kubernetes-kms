@@ -10,6 +10,8 @@ The design follows the OpenBao Operator CI pattern where it applies:
 - change-routed test expansion,
 - vendored and deterministic Go builds,
 - pinned GitHub Actions and tool versions,
+- pinned Ginkgo/Gomega e2e framework versions,
+- validated `test/e2e/suites.yaml` e2e lane manifest,
 - license and vulnerability gates,
 - SBOM generation,
 - provenance and signature evidence,
@@ -45,12 +47,22 @@ toolchain:
     releasePlease: 45996ed1f6d02564a971a2fa1b5860e934307cf7
     setupGo: 4b73464bb391d4059bd26b0524d20df3927bd417
     setupNode: 48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+  goDependencies:
+    ginkgo: "2.28.3"
+    gomega: "1.40.0"
+  testFrameworks:
+    e2e: ginkgo
+    assertions: gomega
+    suiteManifest: test/e2e/suites.yaml
+    reportFormats:
+      - ginkgo-json
+      - junit
 validation:
   openbao:
     primary: "2.5.3"
     image: "ghcr.io/openbao/openbao:2.5.3"
-    imageDigest: ""
-    digestStatus: pending
+    imageDigest: "sha256:fdc6da21ca6963560c32336fd7feb9cf2d5e52668f1a1647205a4b41171f0806"
+    digestStatus: pinned
   kubernetes:
     minimumLine: "1.34"
     primaryLine: "1.34"
@@ -102,6 +114,7 @@ make ci-core
 - race smoke tests,
 - ast-grep forbidden dynamic Go type rules,
 - generated artifact checks,
+- E2E suite manifest validation,
 - vendored dependency check,
 - license check,
 - static security scan,
@@ -149,7 +162,7 @@ Change-routed expansions:
 | Changed area | Additional validation |
 |---|---|
 | `internal/kmsv2`, `internal/keyregistry`, `internal/aad` | conformance, fuzz smoke, golden fixtures. |
-| `internal/openbao`, `internal/auth` | OpenBao integration lane. |
+| `internal/openbao`, `internal/auth` | Hermetic OpenBao client integration lane. |
 | `internal/socket`, deployment samples | systemd/static-pod smoke checks. |
 | rotation/status code | rotation and failure-injection lanes. |
 | packaging or Dockerfile | image scan, SBOM smoke, reproducibility smoke. |
@@ -159,19 +172,27 @@ Change-routed expansions:
 
 Main should run all PR lanes plus:
 
-- pinned OpenBao `2.5.3` integration tests,
+- pinned OpenBao `2.5.3` CI e2e tests,
 - pinned Kubernetes `1.34.x` kind e2e,
 - rotation tests,
 - decrypt storm smoke,
 - image scan,
 - SBOM generation.
 
+E2E lane selection should come from `test/e2e/suites.yaml`; concrete OpenBao and Kubernetes pins should continue to come from `.ci/versions.yaml`.
+
+The OpenBao PR E2E lane should use the ephemeral CI target:
+
+```sh
+make test-e2e-openbao-ci
+```
+
 ### Nightly
 
 Nightly should run:
 
 - full pinned `1.34.x` kind e2e,
-- OpenBao `2.5.3` integration tests,
+- OpenBao `2.5.3` CI e2e tests,
 - failure injection,
 - long-running Status polling,
 - decrypt storm benchmark,

@@ -4,7 +4,7 @@ This document defines expectations for implementation work.
 
 ## Current State
 
-The repository is documentation-first. Implementation should start only after the contract docs are accepted.
+The repository is in implementation. Workstreams should still update the contract docs, ADRs, and backlog in the same change when behavior changes.
 
 ## M0 Foundation Decisions
 
@@ -20,21 +20,25 @@ The repository is documentation-first. Implementation should start only after th
 
 ## Suggested Package Boundaries
 
-Initial Go package layout:
+Current Go package layout:
 
 ```text
 cmd/bao-kms-provider
 internal/aad
-internal/auth/jwt
 internal/config
 internal/keyregistry
+internal/openbao
+internal/version
+```
+
+Planned package boundaries:
+
+```text
+internal/auth/jwt
 internal/kmsv2
 internal/logging
-internal/openbao
 internal/socket
 internal/status
-internal/transit
-internal/version
 test/e2e
 test/integration
 test/kmsconformance
@@ -76,6 +80,34 @@ Once packages exist, add:
 - config validation tests,
 - fuzz smoke tests,
 - key ID/AAD golden tests.
+
+### OpenBao Integration Tests
+
+OpenBao integration tests are build-tagged and must stay hermetic. They use in-process HTTPS fakes for OpenBao response shapes and must not depend on external OpenBao credentials:
+
+```sh
+go test -tags=integration ./internal/openbao -run TestOpenBaoTransitIntegration -count=1
+```
+
+### OpenBao E2E Tests
+
+OpenBao E2E validation uses the ephemeral CI lane. E2E specs use Ginkgo v2 and Gomega, pinned in `.ci/versions.yaml`, with lanes described in `test/e2e/suites.yaml`:
+
+```sh
+make test-e2e-openbao-ci
+```
+
+Optional environment:
+
+| Variable | Default |
+|---|---|
+| `E2E_OPENBAO_IMAGE` | `.ci/versions.yaml` `validation.openbao.image` |
+| `DOCKER` | `docker` |
+| `E2E_SKIP_CLEANUP` | `false` |
+
+The OpenBao CI and release-gate e2e lanes must use OpenBao `2.5.3`, matching `.ci/versions.yaml`.
+
+See [E2E framework](e2e-framework.md) for labels, artifact paths, report variables, and suite manifest rules.
 
 ## Go Code Quality
 

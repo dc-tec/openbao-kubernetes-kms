@@ -90,11 +90,18 @@ Blocking tasks:
 - WS04-T01 Implement JWT file reader.
 - WS04-T02 Implement JWT login.
 - WS04-T03 Implement token lifecycle.
-- WS11-T05 Add OpenBao integration test container.
+- WS11-T05 Extend OpenBao `2.5.3` CI e2e environment with JWT auth bootstrap.
+
+Current status:
+
+- WS03 client work is implemented in `internal/openbao`.
+- The root Ginkgo E2E suite and ephemeral OpenBao CI lane are in place.
+- Remaining M3 blockers are JWT authentication and OpenBao CI JWT auth bootstrap.
 
 Exit criteria:
 
-- Integration tests pass against OpenBao `2.5.3`.
+- Hermetic OpenBao client integration tests pass.
+- E2E tests pass against OpenBao `2.5.3`.
 - Encrypt sends explicit `key_version`.
 - AAD mismatch fails.
 - Policy-denied and missing-key errors are classified.

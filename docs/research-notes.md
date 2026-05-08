@@ -98,7 +98,7 @@ Design impact:
 Verified from the local OpenBao Operator repository:
 
 - CI uses local `make` targets for parity with workflow gates.
-- E2E versions are centralized in a suite manifest instead of duplicated across workflows.
+- E2E lane metadata is centralized in a suite manifest instead of duplicated across workflows.
 - OpenBao and Kubernetes validation versions are pinned, not floating `latest`.
 - The operator uses explicit CI lanes, nightly profiles, and release-gate profiles.
 - Supply-chain controls include vendored Go builds, license checks, static security scans, image scans, SBOMs, provenance, signing, and reproducibility checks.

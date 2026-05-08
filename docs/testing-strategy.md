@@ -211,11 +211,11 @@ This is one of the most important tests in the whole project.
 
 ---
 
-### Layer 3: OpenBao integration tests
+### Layer 3: OpenBao client integration tests
 
-These should run against a real OpenBao server, ideally in containerized CI.
+These should be hermetic. They should run against in-process HTTPS fakes that model OpenBao Transit response shapes, TLS behavior, error bodies, and policy capability responses. They must not require external OpenBao credentials.
 
-Test against the supported OpenBao versions, starting with the current stable versions we intend to document.
+Exact-version OpenBao validation belongs in the e2e lane. PR and release-gate validation should own an ephemeral OpenBao CI environment.
 
 Important OpenBao tests:
 
@@ -231,11 +231,14 @@ token cannot backup key
 token cannot delete key
 Transit key metadata is parsed correctly
 explicit key_version is sent on encrypt
+empty associated_data is rejected by the client
 associated_data decrypt succeeds with matching AAD
 associated_data decrypt fails with changed AAD
+batch decrypt preserves per-item associated_data and reference values
 min_encryption_version blocks old encrypt version
 min_decryption_version blocks old decrypt version
 disable_upsert prevents accidental key creation
+capabilities-self results are parsed for policy diagnostics
 
 OpenBao Transit supports explicit key_version on encrypt, and if it is omitted Transit uses the latest version. Our design intentionally does not want implicit latest-version behavior in the hot path.
 
@@ -248,6 +251,10 @@ For disable_upsert, OpenBao documents a Transit keys configuration that disables
 ### Layer 4: Kubernetes API server e2e tests
 
 This is where we prove the plugin works with a real API server.
+
+E2E suites should use Ginkgo v2 for spec structure, labels, timeouts, reports, and suite-level setup, with Gomega for assertions.
+
+The suite should live under one root `test/e2e` package with shared helpers in `test/e2e/framework`. Suite lanes are declared in `test/e2e/suites.yaml`; concrete OpenBao and Kubernetes versions stay in `.ci/versions.yaml` and are referenced by the manifest instead of duplicated. See [E2E framework](e2e-framework.md).
 
 I would use two e2e tracks:
 
@@ -522,7 +529,7 @@ Main branch / nightly
 
 Heavier tests:
 
-OpenBao integration tests
+OpenBao client integration tests
 kind e2e tests
 rotation tests
 failure injection tests
@@ -598,8 +605,8 @@ The exact Kubernetes patch version and Kind node image digest should live in a c
 For v0.1, I would make these blocking:
 
 1. KMS v2 fake conformance suite passes.
-2. Real OpenBao 2.5.3 integration suite passes.
-3. Pinned Kubernetes 1.34.x kind e2e proves Secret encryption/decryption works.
+2. Hermetic OpenBao client integration suite passes.
+3. Pinned OpenBao `2.5.3` plus Kubernetes 1.34.x kind e2e proves Secret encryption/decryption works.
 4. Kube-apiserver restart with encrypted Secret works.
 5. Status.key_id == EncryptResponse.key_id invariant is tested.
 6. Unknown key_id decrypt is rejected before Transit call.
@@ -700,7 +707,7 @@ Before writing production code, create the test harness first:
 1. Fake Transit implementation.
 2. KMS v2 gRPC client test helper.
 3. Key ID/AAD golden tests.
-4. OpenBao integration test container.
+4. Hermetic OpenBao client integration harness.
 5. Minimal kind e2e.
 
 Then implement enough plugin code to satisfy the tests.

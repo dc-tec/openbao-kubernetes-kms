@@ -7,24 +7,25 @@ This document turns the testing strategy into release criteria.
 Required before a v0.1 engineering-preview release:
 
 1. KMS v2 fake conformance suite passes.
-2. Real OpenBao `2.5.3` integration suite passes.
-3. Pinned Kubernetes `1.34.x` kind e2e proves Secret encryption/decryption works.
-4. kube-apiserver restart with encrypted Secret works.
-5. `Status.key_id == EncryptResponse.key_id` invariant is tested.
-6. Unknown `key_id` decrypt is rejected before Transit call.
-7. AAD mismatch decrypt is rejected.
-8. Transit encrypt uses explicit `key_version`.
-9. Rotation from Transit version 1 to 2 works without key ID flip-flop.
-10. Old ciphertext remains decryptable after rotation.
-11. JWT expiry and re-login path works.
-12. OpenBao outage fails closed.
-13. `doctor` catches bad socket, bad JWT, bad policy, and bad Transit key config.
-14. Logs and metrics redaction tests pass.
-15. Static pod manifest does not rely on API objects.
-16. systemd unit starts plugin before kubelet in kubeadm-style test.
-17. Decrypt micro-batching is implemented behind config and benchmarked against the direct path.
-18. Central CI version manifest pins OpenBao and Kubernetes test versions.
-19. SBOM, vulnerability scan, license check, and vendored dependency policy pass.
+2. Hermetic OpenBao client integration suite passes.
+3. Ephemeral OpenBao `2.5.3` CI e2e suite passes.
+4. Pinned Kubernetes `1.34.x` kind e2e proves Secret encryption/decryption works.
+5. kube-apiserver restart with encrypted Secret works.
+6. `Status.key_id == EncryptResponse.key_id` invariant is tested.
+7. Unknown `key_id` decrypt is rejected before Transit call.
+8. AAD mismatch decrypt is rejected.
+9. Transit encrypt uses explicit `key_version`.
+10. Rotation from Transit version 1 to 2 works without key ID flip-flop.
+11. Old ciphertext remains decryptable after rotation.
+12. JWT expiry and re-login path works.
+13. OpenBao outage fails closed.
+14. `doctor` catches bad socket, bad JWT, bad policy, and bad Transit key config.
+15. Logs and metrics redaction tests pass.
+16. Static pod manifest does not rely on API objects.
+17. systemd unit starts plugin before kubelet in kubeadm-style test.
+18. Decrypt micro-batching is implemented behind config and benchmarked against the direct path.
+19. Central CI version manifest pins OpenBao and Kubernetes test versions.
+20. SBOM, vulnerability scan, license check, and vendored dependency policy pass.
 
 v0.1 must be described as engineering preview, not production-ready.
 
@@ -70,7 +71,7 @@ Target: under 10 minutes.
 
 ### Main Branch Or Nightly
 
-- OpenBao `2.5.3` integration tests,
+- OpenBao `2.5.3` CI e2e tests,
 - pinned Kubernetes `1.34.x` kind e2e,
 - rotation tests,
 - failure injection tests,

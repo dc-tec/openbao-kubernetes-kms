@@ -27,7 +27,7 @@ v0.1 can ship only after [Release gates](release-gates.md) are satisfied.
 v0.1 must not claim production readiness. It should be suitable for engineering evaluation and lab validation of:
 
 - KMS v2 protocol behavior,
-- OpenBao `2.5.3` integration,
+- OpenBao `2.5.3` CI e2e validation,
 - Kubernetes `1.34` release-line e2e,
 - rotation behavior,
 - bootstrap and recovery runbooks,

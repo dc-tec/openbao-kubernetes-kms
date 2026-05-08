@@ -148,24 +148,24 @@ Goal: provide a minimal, testable OpenBao client for Transit metadata, encrypt, 
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS03-T01 | P0 | planned | Define OpenBao client interfaces. | WS00-T02 |
-| WS03-T02 | P0 | planned | Implement TLS configuration with CA and server name validation. | WS01-T01 |
-| WS03-T03 | P0 | planned | Implement Transit key metadata read. | WS03-T01 |
-| WS03-T04 | P0 | planned | Parse Transit key metadata into internal key profile. | WS03-T03 |
-| WS03-T05 | P0 | planned | Implement Transit encrypt with explicit `key_version`. | WS03-T01, WS02-T05 |
-| WS03-T06 | P0 | planned | Implement Transit decrypt with required v0.1 AAD and future compatibility hooks. | WS03-T01, WS02-T05 |
-| WS03-T07 | P0 | planned | Implement OpenBao error classification. | WS03-T03 |
-| WS03-T08 | P0 | planned | Ensure HTTP client redacts request/response logging. | WS03-T01 |
-| WS03-T09 | P0 | planned | Implement probe encrypt/decrypt with non-secret random data. | WS03-T05, WS03-T06 |
-| WS03-T10 | P0 | planned | Implement `disable_upsert` read for `doctor`. | WS03-T03 |
-| WS03-T11 | P1 | planned | Implement capability checks for policy diagnostics. | WS03-T01 |
-| WS03-T12 | P0 | planned | Add decrypt micro-batching support behind disabled-by-default config. | WS03-T06 |
-| WS03-T13 | P2 | planned | Add namespace support tests. | WS03-T01 |
+| WS03-T01 | P0 | done | Define OpenBao client interfaces. | WS00-T02 |
+| WS03-T02 | P0 | done | Implement TLS configuration with CA and server name validation. | WS01-T01 |
+| WS03-T03 | P0 | done | Implement Transit key metadata read. | WS03-T01 |
+| WS03-T04 | P0 | done | Parse Transit key metadata into internal key profile. | WS03-T03 |
+| WS03-T05 | P0 | done | Implement Transit encrypt with explicit `key_version`. | WS03-T01, WS02-T05 |
+| WS03-T06 | P0 | done | Implement Transit decrypt with required v0.1 AAD and future compatibility hooks. | WS03-T01, WS02-T05 |
+| WS03-T07 | P0 | done | Implement OpenBao error classification. | WS03-T03 |
+| WS03-T08 | P0 | done | Ensure HTTP client redacts request/response logging. | WS03-T01 |
+| WS03-T09 | P0 | done | Implement probe encrypt/decrypt with non-secret random data. | WS03-T05, WS03-T06 |
+| WS03-T10 | P0 | done | Implement `disable_upsert` read for `doctor`. | WS03-T03 |
+| WS03-T11 | P1 | done | Implement capability checks for policy diagnostics. | WS03-T01 |
+| WS03-T12 | P0 | done | Add decrypt micro-batching support behind disabled-by-default config. | WS03-T06 |
+| WS03-T13 | P2 | done | Add namespace support tests. | WS03-T01 |
 
 Acceptance criteria:
 
 - Encrypt always sends explicit `key_version`.
-- AAD mismatch fails in real OpenBao integration tests.
+- AAD mismatch fails in hermetic OpenBao client integration tests.
 - Metadata parser detects exportable, plaintext backup, deletion allowed, derived, convergent, and version restrictions.
 - Errors are mapped to stable classes without leaking tokens or payloads.
 - TLS server name mismatch fails.
@@ -174,8 +174,14 @@ Acceptance criteria:
 Test requirements:
 
 - Unit tests with fake HTTP server.
-- Integration tests with real OpenBao.
+- Hermetic integration tests with in-process OpenBao-compatible HTTPS fakes.
 - Redaction tests for request failures.
+
+Implementation notes:
+
+- `internal/openbao` owns the typed Transit HTTP client, TLS construction, error classes, key profile parsing, encrypt/decrypt, batch decrypt, capability checks, `disable_upsert`, and probe behavior.
+- Unit tests cover explicit key versions, required AAD, namespace headers, redacted errors, metadata findings, and batch decrypt request/response shape.
+- A build-tagged integration test exercises the Transit shape without external OpenBao credentials; ephemeral OpenBao validation is isolated under the e2e test tag.
 
 ## WS04: JWT Authentication And Token Lifecycle
 
@@ -410,10 +416,12 @@ Goal: build confidence through layered tests before production claims.
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
 | WS11-T01 | P0 | done | Create testdata layout. | WS00-T02 |
+| WS11-T01A | P0 | done | Establish root Ginkgo E2E suite, suite manifest, report targets, and ephemeral OpenBao CI lane. | WS03-T05 |
 | WS11-T02 | P0 | planned | Implement fake Transit. | WS03-T01 |
 | WS11-T03 | P0 | planned | Implement fake auth/token manager. | WS04-T05 |
 | WS11-T04 | P0 | planned | Build KMS v2 fake conformance suite. | WS05-T02 |
-| WS11-T05 | P0 | planned | Add OpenBao `2.5.3` integration test container. | WS03-T05, WS04-T04 |
+| WS11-T05 | P0 | done | Add OpenBao `2.5.3` CI e2e environment. | WS03-T05 |
+| WS11-T05A | P0 | planned | Extend OpenBao CI environment with JWT auth role bootstrap after WS04 lands. | WS04-T04, WS11-T05 |
 | WS11-T06 | P0 | planned | Add minimal pinned Kubernetes `1.34.x` kind e2e. | WS10-T02, WS00-T09 |
 | WS11-T07 | P0 | planned | Add failure injection tests. | WS06-T02 |
 | WS11-T08 | P0 | planned | Add rotation tests. | WS06-T03 |
@@ -430,13 +438,15 @@ Acceptance criteria:
 
 - v0.1 release gates pass.
 - Every PR runs fast tests.
-- Nightly runs OpenBao `2.5.3` integration and pinned Kubernetes `1.34.x` kind e2e.
+- Nightly runs OpenBao `2.5.3` CI e2e and pinned Kubernetes `1.34.x` kind e2e.
 - Release candidate runs exact-pinned matrix and DR tests.
+- E2E lanes are declared in `test/e2e/suites.yaml` and report as Ginkgo JSON plus JUnit.
 
 Test requirements:
 
 - See [Testing strategy](../testing-strategy.md).
 - See [Release gates](../release-gates.md).
+- See [E2E framework](../e2e-framework.md).
 
 ## WS12: Security Hardening And Supply Chain
 
@@ -542,7 +552,8 @@ This checklist duplicates the release gates in implementation terms:
 
 - WS02 key ID/AAD golden tests pass.
 - WS05 KMS v2 fake conformance suite passes.
-- WS03/WS04 real OpenBao `2.5.3` integration suite passes.
+- WS03/WS04 hermetic OpenBao client integration suite passes.
+- WS11 ephemeral OpenBao `2.5.3` CI e2e suite passes.
 - WS11 pinned Kubernetes `1.34.x` kind e2e proves Secret encryption/decryption.
 - API server restart with encrypted Secret works.
 - Status key ID equals encrypt response key ID.
