@@ -1,0 +1,52 @@
+configVersion: v1alpha1
+server:
+  socketPath: /run/openbao-kms/kms.sock
+  socketMode: "0660"
+  socketGroup: kube-apiserver
+  metricsAddress: "127.0.0.1:8081"
+  healthAddress: "127.0.0.1:8082"
+  adminAddress: ""
+  unsafeDebugEndpoints: false
+openbao:
+  address: https://bao.example.internal:8200
+  namespace: ""
+  caCertFile: /etc/openbao-kms/tls/ca.crt
+  tlsServerName: bao.example.internal
+  timeout: 2s
+  instanceId: bao-prod-a
+auth:
+  method: jwt
+  mountPath: auth/k8s-workload-a-jwt
+  role: openbao-kms-control-plane
+  jwtFile: /var/lib/openbao-kms/identity.jwt
+  minJwtRemainingTtl: 2m
+  loginBeforeTokenExpiry: 5m
+  tokenStorage: memory
+transit:
+  mountPath: transit
+  keyName: k8s-workload-a-etcd
+  keyIdScope:
+    providerName: openbao-kms-workload-a
+    clusterId: workload-a
+    transitMountId: transit-prod-primary
+    keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
+  useAssociatedData: true
+status:
+  probeInterval: 30s
+  deepProbeInterval: 5m
+  statusMaxStaleness: 2m
+rotation:
+  mode: observed
+  activationDelay: 2m
+  requireStableObservationCount: 3
+  rejectVersionRollback: true
+performance:
+  decryptMicroBatching:
+    enabled: false
+    maxBatchSize: 32
+    maxWait: 2ms
+logging:
+  level: info
+  format: json
+  redactOpenBaoPaths: true
+  logOpenBaoRequestIDs: true

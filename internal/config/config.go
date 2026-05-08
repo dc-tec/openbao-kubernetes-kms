@@ -6,17 +6,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 const (
+	defaultConfigVersion        = "v1alpha1"
 	defaultSocketPath           = "/run/openbao-kms/kms.sock"
 	defaultSocketMode           = "0660"
 	defaultMetricsAddress       = "127.0.0.1:8081"
 	defaultHealthAddress        = "127.0.0.1:8082"
+	defaultOpenBaoTimeout       = 2 * time.Second
 	defaultAuthMethod           = "jwt"
 	defaultTokenStorage         = "memory"
+	defaultMinJWTRemainingTTL   = 2 * time.Minute
+	defaultLoginBeforeExpiry    = 5 * time.Minute
 	defaultProbeInterval        = 30 * time.Second
 	defaultDeepProbeInterval    = 5 * time.Minute
 	defaultStatusMaxStaleness   = 2 * time.Minute
@@ -43,97 +48,98 @@ type LoadOptions struct {
 
 // Config is the typed provider configuration model.
 type Config struct {
-	Server      ServerConfig
-	OpenBao     OpenBaoConfig
-	Auth        AuthConfig
-	Transit     TransitConfig
-	Status      StatusConfig
-	Rotation    RotationConfig
-	Performance PerformanceConfig
-	Logging     LoggingConfig
+	ConfigVersion string            `mapstructure:"configVersion"`
+	Server        ServerConfig      `mapstructure:"server"`
+	OpenBao       OpenBaoConfig     `mapstructure:"openbao"`
+	Auth          AuthConfig        `mapstructure:"auth"`
+	Transit       TransitConfig     `mapstructure:"transit"`
+	Status        StatusConfig      `mapstructure:"status"`
+	Rotation      RotationConfig    `mapstructure:"rotation"`
+	Performance   PerformanceConfig `mapstructure:"performance"`
+	Logging       LoggingConfig     `mapstructure:"logging"`
 }
 
 // ServerConfig contains local listener and socket settings.
 type ServerConfig struct {
-	SocketPath           string
-	SocketMode           string
-	SocketGroup          string
-	MetricsAddress       string
-	HealthAddress        string
-	AdminAddress         string
-	UnsafeDebugEndpoints bool
+	SocketPath           string `mapstructure:"socketPath"`
+	SocketMode           string `mapstructure:"socketMode"`
+	SocketGroup          string `mapstructure:"socketGroup"`
+	MetricsAddress       string `mapstructure:"metricsAddress"`
+	HealthAddress        string `mapstructure:"healthAddress"`
+	AdminAddress         string `mapstructure:"adminAddress"`
+	UnsafeDebugEndpoints bool   `mapstructure:"unsafeDebugEndpoints"`
 }
 
 // OpenBaoConfig contains OpenBao client settings.
 type OpenBaoConfig struct {
-	Address       string
-	Namespace     string
-	CACertFile    string
-	TLSServerName string
-	Timeout       time.Duration
-	InstanceID    string
+	Address       string        `mapstructure:"address"`
+	Namespace     string        `mapstructure:"namespace"`
+	CACertFile    string        `mapstructure:"caCertFile"`
+	TLSServerName string        `mapstructure:"tlsServerName"`
+	Timeout       time.Duration `mapstructure:"timeout"`
+	InstanceID    string        `mapstructure:"instanceId"`
 }
 
 // AuthConfig contains OpenBao authentication settings.
 type AuthConfig struct {
-	Method                 string
-	MountPath              string
-	Role                   string
-	JWTFile                string
-	MinJWTRemainingTTL     time.Duration
-	LoginBeforeTokenExpiry time.Duration
-	TokenStorage           string
+	Method                 string        `mapstructure:"method"`
+	MountPath              string        `mapstructure:"mountPath"`
+	Role                   string        `mapstructure:"role"`
+	JWTFile                string        `mapstructure:"jwtFile"`
+	MinJWTRemainingTTL     time.Duration `mapstructure:"minJwtRemainingTtl"`
+	LoginBeforeTokenExpiry time.Duration `mapstructure:"loginBeforeTokenExpiry"`
+	TokenStorage           string        `mapstructure:"tokenStorage"`
 }
 
 // TransitConfig contains Transit key and AAD settings.
 type TransitConfig struct {
-	MountPath         string
-	KeyName           string
-	KeyIDScope        KeyIDScopeConfig
-	UseAssociatedData bool
+	MountPath         string           `mapstructure:"mountPath"`
+	KeyName           string           `mapstructure:"keyName"`
+	KeyIDScope        KeyIDScopeConfig `mapstructure:"keyIdScope"`
+	UseAssociatedData bool             `mapstructure:"useAssociatedData"`
 }
 
 // KeyIDScopeConfig contains identity-bearing key ID scope settings.
 type KeyIDScopeConfig struct {
-	ProviderName   string
-	ClusterID      string
-	TransitMountID string
-	KeyLineageID   string
+	ProviderName   string `mapstructure:"providerName"`
+	ClusterID      string `mapstructure:"clusterId"`
+	TransitMountID string `mapstructure:"transitMountId"`
+	KeyLineageID   string `mapstructure:"keyLineageId"`
 }
 
 // StatusConfig contains status probe timing settings.
 type StatusConfig struct {
-	ProbeInterval      time.Duration
-	DeepProbeInterval  time.Duration
-	StatusMaxStaleness time.Duration
+	ProbeInterval      time.Duration `mapstructure:"probeInterval"`
+	DeepProbeInterval  time.Duration `mapstructure:"deepProbeInterval"`
+	StatusMaxStaleness time.Duration `mapstructure:"statusMaxStaleness"`
 }
 
 // RotationConfig contains key version observation and promotion settings.
 type RotationConfig struct {
-	Mode                          string
-	ActivationDelay               time.Duration
-	RequireStableObservationCount int
-	RejectVersionRollback         bool
+	Mode                          string        `mapstructure:"mode"`
+	ActivationDelay               time.Duration `mapstructure:"activationDelay"`
+	RequireStableObservationCount int           `mapstructure:"requireStableObservationCount"`
+	RejectVersionRollback         bool          `mapstructure:"rejectVersionRollback"`
 }
 
 // PerformanceConfig contains optional performance feature settings.
 type PerformanceConfig struct {
-	DecryptMicroBatching DecryptMicroBatchingConfig
+	DecryptMicroBatching DecryptMicroBatchingConfig `mapstructure:"decryptMicroBatching"`
 }
 
 // DecryptMicroBatchingConfig contains decrypt batch tuning.
 type DecryptMicroBatchingConfig struct {
-	Enabled      bool
-	MaxBatchSize int
-	MaxWait      time.Duration
+	Enabled      bool          `mapstructure:"enabled"`
+	MaxBatchSize int           `mapstructure:"maxBatchSize"`
+	MaxWait      time.Duration `mapstructure:"maxWait"`
 }
 
 // LoggingConfig contains structured logging settings.
 type LoggingConfig struct {
-	Level                string
-	Format               string
-	RedactOpenBaoPaths   bool
-	LogOpenBaoRequestIDs bool
+	Level                string `mapstructure:"level"`
+	Format               string `mapstructure:"format"`
+	RedactOpenBaoPaths   bool   `mapstructure:"redactOpenBaoPaths"`
+	LogOpenBaoRequestIDs bool   `mapstructure:"logOpenBaoRequestIDs"`
 }
 
 // NewRuntime returns a config runtime with project defaults.
@@ -154,7 +160,6 @@ func BindRootFlags(runtime *Runtime, flags *pflag.FlagSet) error {
 		key  string
 		name string
 	}{
-		{key: "config", name: "config"},
 		{key: "logging.level", name: "log-level"},
 		{key: "server.metricsAddress", name: "metrics-address"},
 		{key: "server.healthAddress", name: "health-address"},
@@ -182,7 +187,7 @@ func Load(runtime *Runtime, opts LoadOptions) (Config, error) {
 	}
 
 	var cfg Config
-	if err := runtime.v.Unmarshal(&cfg); err != nil {
+	if err := runtime.v.UnmarshalExact(&cfg, viper.DecodeHook(mapstructure.StringToTimeDurationHookFunc())); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
 
@@ -190,13 +195,17 @@ func Load(runtime *Runtime, opts LoadOptions) (Config, error) {
 }
 
 func applyDefaults(runtime *Runtime) {
+	runtime.v.SetDefault("configVersion", defaultConfigVersion)
 	runtime.v.SetDefault("server.socketPath", defaultSocketPath)
 	runtime.v.SetDefault("server.socketMode", defaultSocketMode)
 	runtime.v.SetDefault("server.metricsAddress", defaultMetricsAddress)
 	runtime.v.SetDefault("server.healthAddress", defaultHealthAddress)
 	runtime.v.SetDefault("server.unsafeDebugEndpoints", false)
+	runtime.v.SetDefault("openbao.timeout", defaultOpenBaoTimeout)
 	runtime.v.SetDefault("auth.method", defaultAuthMethod)
 	runtime.v.SetDefault("auth.tokenStorage", defaultTokenStorage)
+	runtime.v.SetDefault("auth.minJwtRemainingTtl", defaultMinJWTRemainingTTL)
+	runtime.v.SetDefault("auth.loginBeforeTokenExpiry", defaultLoginBeforeExpiry)
 	runtime.v.SetDefault("transit.useAssociatedData", true)
 	runtime.v.SetDefault("status.probeInterval", defaultProbeInterval)
 	runtime.v.SetDefault("status.deepProbeInterval", defaultDeepProbeInterval)

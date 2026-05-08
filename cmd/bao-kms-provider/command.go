@@ -65,7 +65,7 @@ func newVersionCommand(info version.Info) *cobra.Command {
 }
 
 func newConfigCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Inspect typed configuration defaults",
 		Args:  cobra.NoArgs,
@@ -76,6 +76,20 @@ func newConfigCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.
 			}
 			printConfigSummary(cmd.OutOrStdout(), loaded)
 			return nil
+		},
+	}
+	cmd.AddCommand(newConfigSchemaCommand())
+	return cmd
+}
+
+func newConfigSchemaCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "schema",
+		Short: "Print configuration JSON Schema",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := cmd.OutOrStdout().Write(config.SchemaJSON())
+			return err
 		},
 	}
 }
@@ -99,9 +113,13 @@ func printVersion(out io.Writer, info version.Info) {
 }
 
 func printConfigSummary(out io.Writer, cfg config.Config) {
+	_, _ = fmt.Fprintf(out, "configVersion: %s\n", cfg.ConfigVersion)
 	_, _ = fmt.Fprintf(out, "socketPath: %s\n", cfg.Server.SocketPath)
 	_, _ = fmt.Fprintf(out, "metricsAddress: %s\n", cfg.Server.MetricsAddress)
 	_, _ = fmt.Fprintf(out, "healthAddress: %s\n", cfg.Server.HealthAddress)
 	_, _ = fmt.Fprintf(out, "authMethod: %s\n", cfg.Auth.Method)
 	_, _ = fmt.Fprintf(out, "transitAssociatedData: %t\n", cfg.Transit.UseAssociatedData)
+	if fingerprint, err := config.IdentityFingerprint(cfg); err == nil {
+		_, _ = fmt.Fprintf(out, "identityFingerprint: %s\n", fingerprint)
+	}
 }

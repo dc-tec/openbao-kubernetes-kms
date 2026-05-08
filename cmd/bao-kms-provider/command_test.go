@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -61,6 +62,23 @@ func TestVersionCommand(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("version output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestConfigSchemaCommand(t *testing.T) {
+	output, err := executeCommand(t, "config", "schema")
+	if err != nil {
+		t.Fatalf("expected config schema command to succeed: %v", err)
+	}
+
+	var schema struct {
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal([]byte(output), &schema); err != nil {
+		t.Fatalf("schema output is not JSON: %v", err)
+	}
+	if schema.Title == "" {
+		t.Fatal("schema title is empty")
 	}
 }
 

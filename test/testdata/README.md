@@ -1,3 +1,3 @@
 # Test Data
 
-Golden fixtures for config, key IDs, annotations, and AAD will live here.
+Golden fixtures for config, Kubernetes encryption config, key IDs, annotations, and AAD live here.

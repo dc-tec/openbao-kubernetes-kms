@@ -1023,6 +1023,7 @@ Transit rewrap can upgrade Transit ciphertexts without exposing plaintext to the
 ### 15.1 Full example
 
 ```yaml
+configVersion: v1alpha1
 server:
   socketPath: /run/openbao-kms/kms.sock
   socketMode: "0660"

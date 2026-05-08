@@ -77,16 +77,16 @@ Goal: implement strict config loading, identity-bearing field handling, and loca
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS01-T01 | P0 | planned | Define config structs matching [Configuration](../configuration.md). | WS00-T01 |
-| WS01-T02 | P0 | planned | Implement YAML config loader with duration parsing. | WS01-T01 |
-| WS01-T03 | P0 | planned | Implement required field validation. | WS01-T02 |
-| WS01-T04 | P0 | planned | Implement identity-bearing field validation and config fingerprinting. | WS01-T03 |
-| WS01-T05 | P0 | planned | Validate socket path, mode, group, and parent directory policy. | WS01-T03 |
-| WS01-T06 | P0 | planned | Validate config file, JWT file, and CA bundle permissions. | WS01-T03 |
-| WS01-T07 | P0 | planned | Implement Kubernetes `EncryptionConfiguration` parser for `doctor`. | WS01-T02 |
-| WS01-T08 | P0 | planned | Validate provider name, endpoint, API version, and identity fallback state. | WS01-T07 |
-| WS01-T09 | P1 | planned | Add config schema export for documentation and tooling. | WS01-T01 |
-| WS01-T10 | P1 | planned | Add config compatibility tests for older config versions. | WS01-T01 |
+| WS01-T01 | P0 | done | Define config structs matching [Configuration](../configuration.md). | WS00-T01 |
+| WS01-T02 | P0 | done | Implement YAML config loader with duration parsing. | WS01-T01 |
+| WS01-T03 | P0 | done | Implement required field validation. | WS01-T02 |
+| WS01-T04 | P0 | done | Implement identity-bearing field validation and config fingerprinting. | WS01-T03 |
+| WS01-T05 | P0 | done | Validate socket path, mode, group, and parent directory policy. | WS01-T03 |
+| WS01-T06 | P0 | done | Validate config file, JWT file, and CA bundle permissions. | WS01-T03 |
+| WS01-T07 | P0 | done | Implement Kubernetes `EncryptionConfiguration` parser for `doctor`. | WS01-T02 |
+| WS01-T08 | P0 | done | Validate provider name, endpoint, API version, and identity fallback state. | WS01-T07 |
+| WS01-T09 | P1 | done | Add config schema export for documentation and tooling. | WS01-T01 |
+| WS01-T10 | P1 | done | Add config compatibility tests for older config versions. | WS01-T01 |
 
 Acceptance criteria:
 

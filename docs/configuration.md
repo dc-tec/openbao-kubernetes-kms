@@ -5,6 +5,7 @@ This document defines the intended plugin configuration model. The exact parser 
 ## Example
 
 ```yaml
+configVersion: v1alpha1
 server:
   socketPath: /run/openbao-kms/kms.sock
   socketMode: "0660"
@@ -69,6 +70,7 @@ logging:
 
 Required for MVP:
 
+- `configVersion` when authoring new configs; omitted legacy configs default to `v1alpha1`
 - `server.socketPath`
 - `server.socketMode`
 - `server.socketGroup`
@@ -91,23 +93,33 @@ Required for MVP:
 
 | Field | Default |
 |---|---|
+| `configVersion` | `v1alpha1` |
 | `server.socketPath` | `/run/openbao-kms/kms.sock` |
 | `server.socketMode` | `"0660"` |
 | `server.metricsAddress` | `127.0.0.1:8081` |
 | `server.healthAddress` | `127.0.0.1:8082` |
 | `server.adminAddress` | empty |
 | `server.unsafeDebugEndpoints` | `false` |
+| `openbao.timeout` | `2s` |
 | `auth.method` | `jwt` |
+| `auth.minJwtRemainingTtl` | `2m` |
+| `auth.loginBeforeTokenExpiry` | `5m` |
 | `auth.tokenStorage` | `memory` |
 | `transit.useAssociatedData` | `true` |
 | `status.probeInterval` | `30s` |
 | `status.deepProbeInterval` | `5m` |
 | `status.statusMaxStaleness` | `2m` |
 | `rotation.mode` | `observed` |
+| `rotation.activationDelay` | `2m` |
+| `rotation.requireStableObservationCount` | `3` |
 | `rotation.rejectVersionRollback` | `true` |
 | `performance.decryptMicroBatching.enabled` | `false` |
+| `performance.decryptMicroBatching.maxBatchSize` | `32` |
+| `performance.decryptMicroBatching.maxWait` | `2ms` |
+| `logging.level` | `info` |
 | `logging.format` | `json` |
 | `logging.redactOpenBaoPaths` | `true` |
+| `logging.logOpenBaoRequestIDs` | `true` |
 
 ## Identity-Bearing Fields
 
@@ -123,6 +135,8 @@ Changing these fields after encryption begins can make existing data unreadable 
 - Kubernetes `EncryptionConfiguration` provider name
 
 Treat these values as immutable. Any change requires a documented migration plan.
+
+The implementation exposes an identity fingerprint for these fields. Operators can record it during rollout and compare it during troubleshooting without exposing raw cluster, OpenBao, or Transit topology values.
 
 ## Validation
 
@@ -185,6 +199,16 @@ Allowed environment overrides should be limited to:
 - log level,
 - listen addresses for metrics/health,
 - feature flags used only in tests.
+
+## Schema Export
+
+The CLI can print the JSON Schema used by documentation and tooling:
+
+```sh
+bao-kms-provider config schema
+```
+
+The schema rejects unknown top-level and nested fields, reserves `configVersion: v1alpha1`, and documents the supported v0.1 surface.
 
 ## Source References
 

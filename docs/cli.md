@@ -144,3 +144,21 @@ Recommended flags:
 
 JSON output should be stable enough for automation once the CLI reaches beta.
 
+## config
+
+Inspect the typed configuration after defaults, file config, environment overrides, and supported root flag overrides are applied.
+
+```sh
+bao-kms-provider config \
+  --config /etc/openbao-kms/config.yaml
+```
+
+The output includes the derived identity fingerprint when all identity-bearing fields are present.
+
+## config schema
+
+Print the configuration JSON Schema for documentation and tooling.
+
+```sh
+bao-kms-provider config schema
+```
