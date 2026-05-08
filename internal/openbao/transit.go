@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -372,7 +373,7 @@ func (c *Client) Capabilities(ctx context.Context, paths []string) (Capabilities
 	}
 	result := make(map[string][]string, len(paths))
 	for _, capabilityPath := range paths {
-		result[capabilityPath] = copyStrings(response.Data[capabilityPath])
+		result[capabilityPath] = slices.Clone(response.Data[capabilityPath])
 	}
 	return CapabilitiesResult{ByPath: result}, nil
 }
@@ -572,13 +573,4 @@ func requireAssociatedData(value []byte) error {
 		return fmt.Errorf("transit associated data is required")
 	}
 	return nil
-}
-
-func copyStrings(source []string) []string {
-	if len(source) == 0 {
-		return nil
-	}
-	copied := make([]string, len(source))
-	copy(copied, source)
-	return copied
 }

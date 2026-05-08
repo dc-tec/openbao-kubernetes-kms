@@ -60,6 +60,8 @@ func TestNewClientRejectsUnsafeAddresses(t *testing.T) {
 		"http://bao.example.internal:8200",
 		"https://",
 		"https://user:pass@bao.example.internal:8200",
+		"https://bao.example.internal:8200?token=test-token",
+		"https://bao.example.internal:8200#fragment",
 	} {
 		t.Run(address, func(t *testing.T) {
 			_, err := NewClientWithHTTPClient(ClientConfig{
@@ -154,10 +156,8 @@ func TestClientRequestFailureIsRedacted(t *testing.T) {
 	if got := openBaoErr.Error(); strings.Contains(got, testToken) || strings.Contains(got, testKeyName) {
 		t.Fatalf("error was not redacted: %q", got)
 	}
-	messages := openBaoErr.Messages()
-	messages[0] = "modified"
-	if openBaoErr.Messages()[0] == "modified" {
-		t.Fatal("expected Messages to return a copy")
+	if strings.Contains(openBaoErr.Error(), "permission denied") {
+		t.Fatalf("error exposed raw OpenBao message: %q", openBaoErr.Error())
 	}
 }
 

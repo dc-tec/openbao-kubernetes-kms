@@ -47,16 +47,6 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("openbao %s failed: %s (status %d)", e.Operation, e.Class, e.StatusCode)
 }
 
-// Messages returns a copy of server-supplied error messages for controlled diagnostics.
-func (e *Error) Messages() []string {
-	if e == nil || len(e.messages) == 0 {
-		return nil
-	}
-	copied := make([]string, len(e.messages))
-	copy(copied, e.messages)
-	return copied
-}
-
 // Is reports equality by error class.
 func (e *Error) Is(target error) bool {
 	var targetError *Error

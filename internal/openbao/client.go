@@ -53,12 +53,28 @@ type ClientConfig struct {
 	TokenSource   TokenSource
 }
 
+// AuthClientConfig contains OpenBao auth client construction settings.
+type AuthClientConfig struct {
+	Address       string
+	Namespace     string
+	CACertFile    string
+	TLSServerName string
+	Timeout       time.Duration
+}
+
 // Client is a narrow OpenBao API client for Transit and diagnostics.
 type Client struct {
 	baseURL     *url.URL
 	namespace   string
 	tokenSource TokenSource
 	httpClient  *http.Client
+}
+
+// AuthClient is a narrow OpenBao API client for JWT login and token renewal.
+type AuthClient struct {
+	baseURL    *url.URL
+	namespace  string
+	httpClient *http.Client
 }
 
 // NewClient builds an OpenBao client with pinned CA roots and server-name validation.
@@ -87,6 +103,31 @@ func NewClientWithHTTPClient(cfg ClientConfig, httpClient *http.Client) (*Client
 		namespace:   cfg.Namespace,
 		tokenSource: cfg.TokenSource,
 		httpClient:  httpClient,
+	}, nil
+}
+
+// NewAuthClient builds an OpenBao auth client with pinned CA roots and server-name validation.
+func NewAuthClient(cfg AuthClientConfig) (*AuthClient, error) {
+	httpClient, err := NewHTTPClient(cfg.CACertFile, cfg.TLSServerName, cfg.Timeout)
+	if err != nil {
+		return nil, err
+	}
+	return NewAuthClientWithHTTPClient(cfg, httpClient)
+}
+
+// NewAuthClientWithHTTPClient builds an auth client with an injected HTTP client for tests.
+func NewAuthClientWithHTTPClient(cfg AuthClientConfig, httpClient *http.Client) (*AuthClient, error) {
+	if httpClient == nil {
+		return nil, fmt.Errorf("http client is required")
+	}
+	baseURL, err := parseAddress(cfg.Address)
+	if err != nil {
+		return nil, err
+	}
+	return &AuthClient{
+		baseURL:    baseURL,
+		namespace:  cfg.Namespace,
+		httpClient: httpClient,
 	}, nil
 }
 
@@ -141,6 +182,88 @@ func (c *Client) do(
 	requestBody requestPayload,
 	response responsePayload,
 ) error {
+	token, err := c.tokenSource.Token(ctx)
+	if err != nil {
+		return err
+	}
+	return doOpenBao(
+		ctx,
+		c.httpClient,
+		c.baseURL,
+		c.namespace,
+		operation,
+		method,
+		apiPath,
+		requestBody,
+		response,
+		token,
+		true,
+	)
+}
+
+func (c *AuthClient) doUnauthenticated(
+	ctx context.Context,
+	operation string,
+	method string,
+	apiPath string,
+	requestBody requestPayload,
+	response responsePayload,
+) error {
+	return doOpenBao(
+		ctx,
+		c.httpClient,
+		c.baseURL,
+		c.namespace,
+		operation,
+		method,
+		apiPath,
+		requestBody,
+		response,
+		"",
+		false,
+	)
+}
+
+func (c *AuthClient) doWithToken(
+	ctx context.Context,
+	operation string,
+	method string,
+	apiPath string,
+	requestBody requestPayload,
+	response responsePayload,
+	token string,
+) error {
+	if token == "" {
+		return fmt.Errorf("openbao token is required")
+	}
+	return doOpenBao(
+		ctx,
+		c.httpClient,
+		c.baseURL,
+		c.namespace,
+		operation,
+		method,
+		apiPath,
+		requestBody,
+		response,
+		token,
+		true,
+	)
+}
+
+func doOpenBao(
+	ctx context.Context,
+	httpClient *http.Client,
+	baseURL *url.URL,
+	namespace string,
+	operation string,
+	method string,
+	apiPath string,
+	requestBody requestPayload,
+	response responsePayload,
+	token string,
+	includeToken bool,
+) error {
 	var body io.Reader
 	if requestBody != nil {
 		encoded, err := json.Marshal(requestBody)
@@ -150,7 +273,7 @@ func (c *Client) do(
 		body = bytes.NewReader(encoded)
 	}
 
-	requestURL := c.resolve(apiPath)
+	requestURL := resolveOpenBao(baseURL, apiPath)
 	req, err := http.NewRequestWithContext(ctx, method, requestURL, body)
 	if err != nil {
 		return fmt.Errorf("build OpenBao %s request: %w", operation, err)
@@ -158,16 +281,14 @@ func (c *Client) do(
 	if requestBody != nil {
 		req.Header.Set(contentTypeHeader, contentTypeJSON)
 	}
-	token, err := c.tokenSource.Token(ctx)
-	if err != nil {
-		return err
+	if includeToken {
+		req.Header.Set(vaultTokenHeader, token)
 	}
-	req.Header.Set(vaultTokenHeader, token)
-	if c.namespace != "" {
-		req.Header.Set(vaultNamespaceHeader, c.namespace)
+	if namespace != "" {
+		req.Header.Set(vaultNamespaceHeader, namespace)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return &Error{Class: ErrorClassUnavailable, Operation: operation}
 	}
@@ -190,8 +311,12 @@ func (c *Client) do(
 }
 
 func (c *Client) resolve(apiPath string) string {
-	resolved := *c.baseURL
-	resolved.Path = path.Join(c.baseURL.Path, openBaoAPIVersion, apiPath)
+	return resolveOpenBao(c.baseURL, apiPath)
+}
+
+func resolveOpenBao(baseURL *url.URL, apiPath string) string {
+	resolved := *baseURL
+	resolved.Path = path.Join(baseURL.Path, openBaoAPIVersion, apiPath)
 	return resolved.String()
 }
 
@@ -225,8 +350,12 @@ func parseAddress(address string) (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse OpenBao address: %w", err)
 	}
-	if parsed.Scheme != addressSchemeHTTPS || parsed.Host == "" || parsed.User != nil {
-		return nil, fmt.Errorf("OpenBao address must be an https URL with no user info")
+	if parsed.Scheme != addressSchemeHTTPS ||
+		parsed.Host == "" ||
+		parsed.User != nil ||
+		parsed.RawQuery != "" ||
+		parsed.Fragment != "" {
+		return nil, fmt.Errorf("OpenBao address must be an https URL with no user info, query, or fragment")
 	}
 	return parsed, nil
 }
