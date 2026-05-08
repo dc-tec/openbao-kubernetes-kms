@@ -21,6 +21,7 @@ const (
 	defaultAuthMethod           = "jwt"
 	defaultTokenStorage         = "memory"
 	defaultMinJWTRemainingTTL   = 2 * time.Minute
+	defaultClockSkewLeeway      = 30 * time.Second
 	defaultLoginBeforeExpiry    = 5 * time.Minute
 	defaultProbeInterval        = 30 * time.Second
 	defaultDeepProbeInterval    = 5 * time.Minute
@@ -87,6 +88,7 @@ type AuthConfig struct {
 	Role                   string        `mapstructure:"role"`
 	JWTFile                string        `mapstructure:"jwtFile"`
 	MinJWTRemainingTTL     time.Duration `mapstructure:"minJwtRemainingTtl"`
+	ClockSkewLeeway        time.Duration `mapstructure:"clockSkewLeeway"`
 	LoginBeforeTokenExpiry time.Duration `mapstructure:"loginBeforeTokenExpiry"`
 	TokenStorage           string        `mapstructure:"tokenStorage"`
 }
@@ -205,6 +207,7 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("auth.method", defaultAuthMethod)
 	runtime.v.SetDefault("auth.tokenStorage", defaultTokenStorage)
 	runtime.v.SetDefault("auth.minJwtRemainingTtl", defaultMinJWTRemainingTTL)
+	runtime.v.SetDefault("auth.clockSkewLeeway", defaultClockSkewLeeway)
 	runtime.v.SetDefault("auth.loginBeforeTokenExpiry", defaultLoginBeforeExpiry)
 	runtime.v.SetDefault("transit.useAssociatedData", true)
 	runtime.v.SetDefault("status.probeInterval", defaultProbeInterval)

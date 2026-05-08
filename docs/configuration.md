@@ -29,6 +29,7 @@ auth:
   role: openbao-kms-control-plane
   jwtFile: /var/lib/openbao-kms/identity.jwt
   minJwtRemainingTtl: 2m
+  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
   tokenStorage: memory
 
@@ -103,6 +104,7 @@ Required for MVP:
 | `openbao.timeout` | `2s` |
 | `auth.method` | `jwt` |
 | `auth.minJwtRemainingTtl` | `2m` |
+| `auth.clockSkewLeeway` | `30s` |
 | `auth.loginBeforeTokenExpiry` | `5m` |
 | `auth.tokenStorage` | `memory` |
 | `transit.useAssociatedData` | `true` |
@@ -148,9 +150,11 @@ Startup must fail closed when:
 - socket path is a symlink or regular file,
 - JWT file is unreadable,
 - JWT is expired or too close to expiry,
+- JWT `nbf` or `iat` claims are outside configured clock skew leeway,
 - CA file is missing,
-- OpenBao address is invalid,
+- OpenBao address is invalid or includes user info, query, or fragment data,
 - TLS server name is empty,
+- auth role or identity fields contain surrounding whitespace or control characters,
 - provider name is empty,
 - cluster ID is empty,
 - OpenBao instance ID is empty,

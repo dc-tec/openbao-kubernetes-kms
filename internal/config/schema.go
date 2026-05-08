@@ -51,6 +51,7 @@ const configSchemaJSON = `{
         "role": {"type": "string", "minLength": 1},
         "jwtFile": {"type": "string", "minLength": 1},
         "minJwtRemainingTtl": {"type": "string"},
+        "clockSkewLeeway": {"type": "string"},
         "loginBeforeTokenExpiry": {"type": "string"},
         "tokenStorage": {"type": "string", "const": "memory"}
       }

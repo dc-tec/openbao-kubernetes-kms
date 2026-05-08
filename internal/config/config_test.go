@@ -31,6 +31,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.OpenBao.Timeout != 2*time.Second {
 		t.Fatalf("unexpected OpenBao timeout: %s", cfg.OpenBao.Timeout)
 	}
+	if cfg.Auth.ClockSkewLeeway != 30*time.Second {
+		t.Fatalf("unexpected auth clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
+	}
 }
 
 func TestLoadConfigFile(t *testing.T) {
@@ -51,6 +54,7 @@ auth:
   mountPath: auth/k8s-workload-a-jwt
   role: openbao-kms-control-plane
   jwtFile: /var/lib/openbao-kms/identity.jwt
+  clockSkewLeeway: 45s
 transit:
   mountPath: transit
   keyName: k8s-workload-a-etcd
@@ -83,6 +87,9 @@ status:
 	}
 	if cfg.Status.ProbeInterval != 45*time.Second {
 		t.Fatalf("unexpected probe interval: %s", cfg.Status.ProbeInterval)
+	}
+	if cfg.Auth.ClockSkewLeeway != 45*time.Second {
+		t.Fatalf("unexpected clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
 	}
 }
 
@@ -164,10 +171,38 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			},
 		},
 		{
+			name:  "OpenBao address with query",
+			field: "openbao.address",
+			mutate: func(cfg *Config) {
+				cfg.OpenBao.Address = "https://bao.example.internal:8200?token=secret"
+			},
+		},
+		{
 			name:  "invalid duration",
 			field: "openbao.timeout",
 			mutate: func(cfg *Config) {
 				cfg.OpenBao.Timeout = 0
+			},
+		},
+		{
+			name:  "negative auth clock skew leeway",
+			field: "auth.clockSkewLeeway",
+			mutate: func(cfg *Config) {
+				cfg.Auth.ClockSkewLeeway = -time.Second
+			},
+		},
+		{
+			name:  "auth role with surrounding whitespace",
+			field: "auth.role",
+			mutate: func(cfg *Config) {
+				cfg.Auth.Role = " openbao-kms-control-plane"
+			},
+		},
+		{
+			name:  "auth mount with surrounding whitespace",
+			field: "auth.mountPath",
+			mutate: func(cfg *Config) {
+				cfg.Auth.MountPath = " auth/k8s-workload-a-jwt"
 			},
 		},
 		{

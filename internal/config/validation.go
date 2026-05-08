@@ -178,6 +178,7 @@ func validateValues(cfg Config) []ValidationProblem {
 		validateAddress(&problems, "server.adminAddress", cfg.Server.AdminAddress)
 	}
 	validateMountPath(&problems, "auth.mountPath", cfg.Auth.MountPath)
+	validateIdentifier(&problems, "auth.role", cfg.Auth.Role)
 	validateMountPath(&problems, "transit.mountPath", cfg.Transit.MountPath)
 	validateIdentifier(&problems, "transit.keyName", cfg.Transit.KeyName)
 	validateIdentifier(&problems, "transit.keyIdScope.providerName", cfg.Transit.KeyIDScope.ProviderName)
@@ -200,6 +201,7 @@ func validateValues(cfg Config) []ValidationProblem {
 	}
 	validatePositiveDuration(&problems, "openbao.timeout", cfg.OpenBao.Timeout)
 	validatePositiveDuration(&problems, "auth.minJwtRemainingTtl", cfg.Auth.MinJWTRemainingTTL)
+	validateNonNegativeDuration(&problems, "auth.clockSkewLeeway", cfg.Auth.ClockSkewLeeway)
 	validatePositiveDuration(&problems, "auth.loginBeforeTokenExpiry", cfg.Auth.LoginBeforeTokenExpiry)
 	validatePositiveDuration(&problems, "status.probeInterval", cfg.Status.ProbeInterval)
 	validatePositiveDuration(&problems, "status.deepProbeInterval", cfg.Status.DeepProbeInterval)
@@ -271,8 +273,13 @@ func appendProblem(problems *[]ValidationProblem, field string, message string) 
 
 func validateOpenBaoAddress(problems *[]ValidationProblem, value string) {
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
-		appendProblem(problems, "openbao.address", "must be an https URL with a host and no user info")
+	if err != nil ||
+		parsed.Scheme != "https" ||
+		parsed.Host == "" ||
+		parsed.User != nil ||
+		parsed.RawQuery != "" ||
+		parsed.Fragment != "" {
+		appendProblem(problems, "openbao.address", "must be an https URL with a host and no user info, query, or fragment")
 	}
 }
 
@@ -287,6 +294,10 @@ func validateAddress(problems *[]ValidationProblem, field string, value string) 
 
 func validateMountPath(problems *[]ValidationProblem, field string, value string) {
 	if value == "" {
+		return
+	}
+	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t") {
+		appendProblem(problems, field, "must not contain control characters or surrounding whitespace")
 		return
 	}
 	if strings.HasPrefix(value, "/") || strings.Contains(value, "//") {
@@ -313,6 +324,12 @@ func validateIdentifier(problems *[]ValidationProblem, field string, value strin
 func validatePositiveDuration(problems *[]ValidationProblem, field string, value time.Duration) {
 	if value <= 0 {
 		appendProblem(problems, field, "must be positive")
+	}
+}
+
+func validateNonNegativeDuration(problems *[]ValidationProblem, field string, value time.Duration) {
+	if value < 0 {
+		appendProblem(problems, field, "must not be negative")
 	}
 }
 

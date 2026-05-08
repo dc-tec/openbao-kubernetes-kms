@@ -450,6 +450,7 @@ auth:
   role: openbao-kms-control-plane
   jwtFile: /var/lib/openbao-kms/identity.jwt
   minJwtRemainingTtl: 2m
+  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
   tokenStorage: memory
 ```
@@ -1045,6 +1046,7 @@ auth:
   role: openbao-kms-control-plane
   jwtFile: /var/lib/openbao-kms/identity.jwt
   minJwtRemainingTtl: 2m
+  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
   tokenStorage: memory
 transit:
@@ -1959,6 +1961,7 @@ auth:
   role: openbao-kms-control-plane
   jwtFile: /var/lib/openbao-kms/identity.jwt
   minJwtRemainingTtl: 2m
+  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
   tokenStorage: memory
 transit:
