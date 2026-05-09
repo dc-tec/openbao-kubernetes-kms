@@ -468,19 +468,25 @@ Goal: build confidence through layered tests before production claims.
 |---|---|---|---|---|
 | WS11-T01 | P0 | done | Create testdata layout. | WS00-T02 |
 | WS11-T01A | P0 | done | Establish root Ginkgo E2E suite, suite manifest, report targets, and ephemeral OpenBao CI lane. | WS03-T05 |
-| WS11-T02 | P0 | planned | Implement fake Transit. | WS03-T01 |
-| WS11-T03 | P0 | planned | Implement fake auth/token manager. | WS04-T05 |
-| WS11-T04 | P0 | planned | Build KMS v2 fake conformance suite. | WS05-T02 |
+| WS11-T02 | P0 | done | Implement fake Transit. | WS03-T01 |
+| WS11-T03 | P0 | done | Implement fake auth/token manager. | WS04-T05 |
+| WS11-T04 | P0 | done | Build KMS v2 fake conformance suite. | WS05-T02 |
 | WS11-T05 | P0 | done | Add OpenBao `2.5.3` CI e2e environment. | WS03-T05 |
-| WS11-T05A | P0 | planned | Extend OpenBao CI environment with JWT auth role bootstrap after WS04 lands. | WS04-T04, WS11-T05 |
-| WS11-T06 | P0 | planned | Add minimal pinned Kubernetes `1.34.x` kind e2e. | WS10-T02, WS00-T09 |
-| WS11-T07 | P0 | planned | Add failure injection tests. | WS06-T02 |
+| WS11-T05A | P0 | done | Extend OpenBao CI environment with JWT auth role bootstrap after WS04 lands. | WS04-T04, WS11-T05 |
+| WS11-T05B | P0 | done | Add containerized provider full-stack OpenBao/KMS v2 socket e2e without a Kubernetes API server. | WS05-T02, WS07-T01, WS10-T05, WS11-T05A |
+| WS11-T06 | P0 | done | Add minimal pinned Kubernetes `1.34.3` Kind e2e. | WS10-T02, WS00-T09 |
+| WS11-T06B | P0 | done | Add public-CI portable Kind multi-control-plane convergence e2e. | WS11-T06 |
+| WS11-T06C | P0 | done | Add public-CI portable Kind static-pod upgrade/rollback e2e. | WS11-T06 |
+| WS11-T07 | P0 | done | Add failure injection tests. | WS06-T02 |
 | WS11-T08 | P0 | planned | Add rotation tests. | WS06-T03 |
-| WS11-T09 | P0 | planned | Add decrypt storm performance smoke test. | WS05-T05 |
+| WS11-T09 | P0 | done | Add decrypt storm performance smoke test. | WS05-T05 |
 | WS11-T10 | P1 | planned | Add kubeadm VM e2e. | WS10-T01, WS10-T02 |
+| WS11-T10A | P0 | done | Add systemd and static-pod install script staging checks. | WS10-T07 |
 | WS11-T11 | P1 | planned | Add OpenBao HA failover tests. | WS03-T01 |
+| WS11-T11A | P0 | done | Add portable provider backend replacement e2e against OpenBao integrated raft storage. | WS11-T05B |
 | WS11-T12 | P1 | planned | Add DR restore tests. | WS10-T07 |
-| WS11-T13 | P0 | planned | Add exact-pinned Kubernetes `1.34.x` release-gate matrix row. | WS11-T06 |
+| WS11-T12A | P0 | done | Add containerized OpenBao integrated raft snapshot restore e2e. | WS11-T11A |
+| WS11-T13 | P0 | planned | Add exact-pinned Kubernetes `1.34.3` release-gate matrix row. | WS11-T06 |
 | WS11-T14 | P0 | planned | Add exact-pinned OpenBao `2.5.3` release-gate matrix row. | WS11-T05 |
 | WS11-T15 | P1 | planned | Add long-running Status polling test. | WS06-T02 |
 | WS11-T16 | P1 | planned | Add future-candidate Kubernetes lanes only after exact versions are approved. | WS11-T13 |
@@ -489,7 +495,7 @@ Acceptance criteria:
 
 - v0.1 release gates pass.
 - Every PR runs fast tests.
-- Nightly runs OpenBao `2.5.3` CI e2e and pinned Kubernetes `1.34.x` kind e2e.
+- Nightly runs OpenBao `2.5.3` CI e2e and pinned Kubernetes `1.34.3` Kind e2e.
 - Release candidate runs exact-pinned matrix and DR tests.
 - E2E lanes are declared in `test/e2e/suites.yaml` and report as Ginkgo JSON plus JUnit.
 
@@ -498,6 +504,21 @@ Test requirements:
 - See [Testing strategy](../testing-strategy.md).
 - See [Release gates](../release-gates.md).
 - See [E2E framework](../e2e-framework.md).
+
+Implementation notes:
+
+- `test/fakes` owns reusable KMS v2 fake Transit, fake Status cache, and fake OpenBao auth/token clients for cross-package validation.
+- `test/kmsconformance` starts the real KMS v2 gRPC service over a filesystem Unix socket and exercises it through the Kubernetes KMS v2 protobuf client.
+- The KMS conformance suite verifies cached Status behavior, Status no-Transit-call behavior, `EncryptResponse.key_id == Status.key_id`, decrypt of encrypt output, and invalid decrypt rejection before Transit.
+- The OpenBao CI e2e environment bootstraps Transit, `disable_upsert`, a least-privilege provider policy, JWT auth with a generated RS256 test issuer, and a role exercised by the real auth manager.
+- `test/e2e` has a containerized full-stack test that builds/runs the provider image against real OpenBao and validates KMS v2 Status, Encrypt, Decrypt, unknown-key rejection, and annotation tamper rejection from a second container over the shared Unix socket volume.
+- `test/e2e` has provider/OpenBao failure-mode tests for OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
+- `test/e2e` has a provider/OpenBao decrypt storm smoke test that performs concurrent KMS v2 Decrypt calls through the real provider image against real OpenBao.
+- `test/e2e` has a pinned Kind smoke lane for Kubernetes `1.34.3` that deploys the provider as a static pod, enables kube-apiserver KMS v2 encryption, verifies Secret create/read, verifies raw etcd storage uses the `k8s:enc:kms:v2:` envelope without plaintext, restarts kube-apiserver, and reads the Secret again.
+- `test/e2e` has a pinned Kind multi-control-plane convergence lane that runs three control-plane nodes, stages the provider on each node, verifies each stacked etcd member stores the Secret with a KMS v2 envelope, proves each kube-apiserver can decrypt while it is the only serving API endpoint, and then restarts every kube-apiserver with readback.
+- `test/e2e` has a provider/OpenBao backend replacement and restore lane that runs OpenBao with integrated raft storage, verifies fail-closed behavior while the backend is down, restarts the backend under the same Docker network name, saves a raft snapshot, restores it into a fresh storage volume, and decrypts ciphertext created before the outage or restore.
+- `test/e2e` has a pinned Kind static-pod upgrade/rollback lane that mutates the provider static pod manifest, waits for kubelet restart, verifies old and new Secret readback, restores the previous manifest, and verifies readback after provider and kube-apiserver restart.
+- `test/deployment` stages the systemd and static-pod lab install scripts into temporary roots and verifies expected files, directories, modes, and setgid socket directory behavior without requiring host root privileges.
 
 ## WS12: Security Hardening And Supply Chain
 
@@ -584,7 +605,7 @@ Parallelizable early work:
 |---|---|---|
 | RD-01 | Historical key IDs are derived from config plus Transit metadata, with a non-secret local registry for observed/promoted snapshots and rotation decisions. | [ADR 0006](../adr/0006-hybrid-key-registry.md) |
 | RD-02 | Initial OpenBao validation target is `2.5.3`. | [ADR 0007](../adr/0007-pinned-ci-version-matrix.md) |
-| RD-03 | Initial Kubernetes validation target is the `1.34` release line with exact patch/image digest pinned in CI. | [ADR 0007](../adr/0007-pinned-ci-version-matrix.md) |
+| RD-03 | Initial Kubernetes validation target is the `1.34` release line; the Kind lane pins `1.34.3` by image digest while tracking upstream `1.34.7` as latest patch. | [ADR 0007](../adr/0007-pinned-ci-version-matrix.md) |
 | RD-04 | AAD is enabled and required for v0.1. | [ADR 0008](../adr/0008-aad-required-for-mvp.md) |
 | RD-05 | Decrypt micro-batching is included in v0.1 behind disabled-by-default config. | [ADR 0009](../adr/0009-include-decrypt-microbatching.md) |
 | RD-06 | Project name, binary name, Go version, Viper, Makefile, and version policy path are fixed for M0. | [ADR 0010](../adr/0010-project-naming-and-m0-foundation.md) |
@@ -595,7 +616,7 @@ Parallelizable early work:
 | ID | Question | Needed by | Owner |
 |---|---|---|---|
 | OQ-01 | Resolved: use `openbao-kms`, `openbao-kms`, and `openbao-kms-socket` with numeric GID support for static pods. | WS10-T06 | [ADR 0012](../adr/0012-deployment-identity-and-image.md) |
-| OQ-02 | Which exact Kubernetes 1.34 patch and Kind node image digest will be pinned for v0.1? | WS00-T09 | Release lead |
+| OQ-02 | Resolved: upstream latest is `1.34.7`; the initial Kind lane pins `kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48` because newer official Kind `1.34` node images are unavailable. | WS11-T06 | [ADR 0007](../adr/0007-pinned-ci-version-matrix.md) |
 
 ## v0.1 Blocking Checklist
 
@@ -605,14 +626,14 @@ This checklist duplicates the release gates in implementation terms:
 - WS05 KMS v2 fake conformance suite passes.
 - WS03/WS04 hermetic OpenBao client integration suite passes.
 - WS11 ephemeral OpenBao `2.5.3` CI e2e suite passes.
-- WS11 pinned Kubernetes `1.34.x` kind e2e proves Secret encryption/decryption.
+- WS11 pinned Kubernetes `1.34.3` Kind e2e proves Secret encryption/decryption.
 - API server restart with encrypted Secret works.
 - Status key ID equals encrypt response key ID.
 - Unknown key ID decrypt is rejected before Transit call.
 - AAD mismatch decrypt is rejected.
 - AAD is required for v0.1 objects.
 - Transit encrypt uses explicit `key_version`.
-- Decrypt micro-batching is implemented behind disabled-by-default config and benchmarked.
+- Decrypt storm smoke coverage passes; decrypt micro-batching remains disabled by default until benchmarking justifies enabling it.
 - Rotation v1 to v2 works without key ID flip-flop.
 - Old ciphertext remains decryptable after rotation.
 - JWT expiry/re-login path works.

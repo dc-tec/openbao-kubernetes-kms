@@ -28,7 +28,7 @@ v0.1 must not claim production readiness. It should be suitable for engineering 
 
 - KMS v2 protocol behavior,
 - OpenBao `2.5.3` CI e2e validation,
-- Kubernetes `1.34` release-line e2e,
+- Kubernetes `1.34.3` Kind e2e for the initial release-line lane,
 - rotation behavior,
 - bootstrap and recovery runbooks,
 - CI/supply-chain evidence.

@@ -74,6 +74,7 @@ Blocking tasks:
 Current status:
 
 - `internal/kmsv2` implements the KMS v2 gRPC service, cached Status reads, Encrypt, Decrypt, timeout/cancellation handling, graceful request drain through the WS07 runtime, redacted panic recovery, and the Status/encrypt key ID invariant behind narrow fakeable interfaces.
+- `test/fakes` provides reusable KMS v2 fake Transit, fake Status cache, and fake OpenBao auth/token clients for protocol and lifecycle tests.
 - `test/kmsconformance` starts the KMS v2 service over a Unix socket and exercises it with the real Kubernetes KMS v2 protobuf client.
 - Production status cache, runtime lifecycle, structured logging, and bounded metrics are implemented in WS06, WS07, and WS09.
 
@@ -98,18 +99,19 @@ Blocking tasks:
 - WS04-T02 Implement JWT login.
 - WS04-T03 Implement token lifecycle.
 - WS11-T05 Extend OpenBao `2.5.3` CI e2e environment with JWT auth bootstrap.
+- WS11-T05B Add containerized provider full-stack OpenBao/KMS v2 socket e2e without a Kubernetes API server.
 
 Current status:
 
 - WS03 client work is implemented in `internal/openbao`.
 - WS04 JWT file handling, local claim validation with clock skew leeway, JWT login, in-memory token lifecycle, renewal, re-login, refresh coalescing, and retry backoff are implemented in `internal/auth` and `internal/openbao`.
-- The root Ginkgo E2E suite and ephemeral OpenBao CI lane are in place.
-- Remaining M3 blocker is OpenBao CI JWT auth bootstrap.
+- The root Ginkgo E2E suite and ephemeral OpenBao CI lane are in place, including Transit setup, JWT auth bootstrap, a real auth-manager-backed Transit validation path, and containerized provider full-stack KMS v2 socket coverage against real OpenBao.
 
 Exit criteria:
 
 - Hermetic OpenBao client integration tests pass.
 - E2E tests pass against OpenBao `2.5.3`.
+- Provider full-stack OpenBao/KMS v2 socket e2e passes.
 - Encrypt sends explicit `key_version`.
 - AAD mismatch fails.
 - Policy-denied and missing-key errors are classified.
@@ -160,12 +162,19 @@ Current status:
 - `doctor` provides redacted preflight checks for local config/JWT/socket state, OpenBao auth/TLS, Transit policy and metadata, probe encrypt/decrypt, deterministic key ID derivation, Status/encrypt consistency, and optional Kubernetes `EncryptionConfiguration` validation.
 - `verify-key`, `benchmark`, `rotation-plan`, and `verify-rotation` are implemented as initial operational commands with stable text output and stable command exit codes.
 - WS10 deployment artifacts are implemented under `deploy/`: systemd unit, static pod manifest, provider configs, Kubernetes `EncryptionConfiguration`, Linux package snippets, distroless non-root Dockerfile, kubeadm lab scripts, OpenTofu skeleton, and OpenBao policy generation.
+- WS11-T06 Kind smoke coverage is implemented through `make test-e2e-kind-smoke` using pinned Kubernetes `1.34.3`; it verifies Secret create/read, raw etcd KMS v2 envelope storage, API-server restart, and readback.
+- WS11-T06B Kind multi-control-plane convergence coverage is implemented through `make test-e2e-kind-convergence` using pinned Kubernetes `1.34.3`; it verifies per-node provider staging, per-member etcd envelope storage, per-API-server decrypt convergence, and API-server restart readback.
+- WS11-T06C Kind static-pod upgrade/rollback coverage is implemented through `make test-e2e-kind-upgrade-rollback` using pinned Kubernetes `1.34.3`; it verifies provider static-pod restart, rollback, and Secret readback before and after kube-apiserver restart.
+- WS11-T07 provider failure coverage is implemented through `make test-e2e-provider-failure-openbao-ci`; it covers OpenBao down, OpenBao sealed, reduced policy, expired JWT startup failure, JWT file rotation, missing Transit key startup failure, Status staleness, and stale socket reclamation.
+- WS11-T09 decrypt storm smoke coverage is implemented through `make test-e2e-provider-decrypt-storm-openbao-ci` with concurrent KMS v2 Decrypt calls through the real provider image against real OpenBao.
+- WS11-T10A install script staging checks are implemented in `test/deployment`; they stage systemd and static-pod lab install outputs into temporary roots and verify paths, modes, and setgid socket directory behavior.
+- WS11-T11A and WS11-T12A portable backend replacement and DR restore coverage is implemented through `make test-e2e-provider-restore-openbao-ci`; it uses OpenBao integrated raft storage and raft snapshots without enabling Transit plaintext backup.
 - Stable JSON output and explicit completion-generation UX remain WS08 P1 follow-ups.
 
 Exit criteria:
 
 - `doctor` catches bad JWT, bad socket, bad policy, and dangerous Transit key settings.
-- pinned Kubernetes `1.34.x` kind e2e proves Secret create/read/restart/read.
+- pinned Kubernetes `1.34.3` Kind e2e proves Secret create/read/restart/read and multi-control-plane decrypt convergence.
 - Deployment samples match docs.
 
 ## Milestone M6: v0.1 Engineering Preview
@@ -175,7 +184,6 @@ Goal: satisfy [Release gates](../release-gates.md) for an engineering preview.
 Blocking tasks:
 
 - All M0-M5 exit criteria.
-- WS11-T07 Add failure injection tests.
 - WS11-T08 Add rotation tests.
 - WS12-T01 Add static security checks.
 - WS12-T02 Add SBOM generation.

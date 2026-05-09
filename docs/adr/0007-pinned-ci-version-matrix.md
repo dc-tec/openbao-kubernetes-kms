@@ -17,7 +17,8 @@ CI and release gates must use exact-pinned versions, not floating `latest`.
 Initial v0.1 matrix:
 
 - OpenBao `2.5.3`.
-- Kubernetes `1.34` release line, with exact patch and Kind node image digest pinned in the future version policy file.
+- Kubernetes `1.34.3` for the initial Kind lane, pinned by Kind node image digest in `.ci/versions.yaml`.
+- Kubernetes `1.34.7` tracked as the latest upstream `1.34` patch, but not claimed until a runnable exact-pinned lane exists for that patch.
 
 Kubernetes `1.35+` may be added only after exact-pinned release-gate lanes exist.
 
@@ -27,4 +28,3 @@ Kubernetes `1.35+` may be added only after exact-pinned release-gate lanes exist
 - CI needs a central version manifest.
 - Workflows must not repeat concrete versions.
 - Release evidence must include the exact versions and image digests used.
-

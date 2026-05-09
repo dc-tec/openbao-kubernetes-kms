@@ -22,7 +22,8 @@ Validation baseline:
 | Version | Status |
 |---|---|
 | `< 1.34` | Not targeted for v0.1. |
-| `1.34.x` | Initial v0.1 validation line. Exact patch and Kind image digest must be pinned in CI. |
+| `1.34.3` | Initial Kind e2e target pinned by image digest in `.ci/versions.yaml`. |
+| `1.34.4`-`1.34.7` | Tracked as part of the upstream `1.34` line, but not validated by Kind until a runnable exact-pinned lane exists. |
 | `1.35.x` | Future candidate. Not a v0.1 support claim until release-gated. |
 | `1.36.x` | Future candidate. Not a v0.1 support claim until release-gated. |
 

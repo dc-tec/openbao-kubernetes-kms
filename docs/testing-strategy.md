@@ -573,8 +573,9 @@ The initial matrix should be exact-pinned and should not use floating `latest` i
 ```yaml
 kubernetes:
   required:
-    - "1.34.x"
+    - "1.34.3"
   futureCandidates:
+    - "1.34.7"
     - "1.35.x"
     - "1.36.x"
 openbao:
@@ -596,7 +597,7 @@ transit:
   - decrypt-microbatching-enabled-benchmark
 ```
 
-The exact Kubernetes patch version and Kind node image digest should live in a central CI version policy. Additional Kubernetes or OpenBao versions should be future candidates until exact-pinned release-gate lanes exist.
+The exact Kubernetes patch version and Kind node image digest live in the central CI version policy. Upstream `1.34.7` is tracked as the latest `1.34` patch, but the initial Kind lane pins `1.34.3` because newer official Kind node images are unavailable. Additional Kubernetes or OpenBao versions should be future candidates until exact-pinned release-gate lanes exist.
 
 ---
 
@@ -606,7 +607,7 @@ For v0.1, I would make these blocking:
 
 1. KMS v2 fake conformance suite passes.
 2. Hermetic OpenBao client integration suite passes.
-3. Pinned OpenBao `2.5.3` plus Kubernetes 1.34.x kind e2e proves Secret encryption/decryption works.
+3. Pinned OpenBao `2.5.3` plus Kubernetes `1.34.3` kind e2e proves Secret encryption/decryption works.
 4. Kube-apiserver restart with encrypted Secret works.
 5. Status.key_id == EncryptResponse.key_id invariant is tested.
 6. Unknown key_id decrypt is rejected before Transit call.

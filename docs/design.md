@@ -20,7 +20,7 @@ flowchart LR
 
 The plugin does not encrypt etcd disk blocks, application volumes, node filesystems, or arbitrary Kubernetes traffic. It participates in Kubernetes envelope encryption for selected API resources before persistence to etcd. Kubernetes documentation describes this feature as encryption of API resource data at rest, and explicitly distinguishes it from encrypting container-level filesystems or volumes.
 
-The design is KMS v2-first. Kubernetes KMS v2 is stable as of Kubernetes v1.29, while KMS v1 has been deprecated since v1.28 and disabled by default as of v1.29. The v0.1 validation target for this project is the Kubernetes 1.34 release line, with exact patch version and test image digest pinned in CI.
+The design is KMS v2-first. Kubernetes KMS v2 is stable as of Kubernetes v1.29, while KMS v1 has been deprecated since v1.28 and disabled by default as of v1.29. The v0.1 validation target for this project is the Kubernetes 1.34 release line. CI tracks upstream `1.34.7` as the latest patch and pins the initial Kind lane to `1.34.3` by node image digest.
 
 The primary differentiators from existing Vault Transit KMS plugins are:
 
@@ -61,7 +61,7 @@ The design problem is therefore not just “call Transit from Kubernetes.” The
 | Area | Requirement |
 | --- | --- |
 | Kubernetes API | Implement Kubernetes KMS v2 as the primary and default API. |
-| Kubernetes version | Target Kubernetes 1.34 release line for v0.1 validation; add newer lines only after exact-pinned release-gate coverage. |
+| Kubernetes version | Target Kubernetes 1.34 release line for v0.1 validation; the initial Kind lane pins `1.34.3` by image digest and newer lines are added only after exact-pinned release-gate coverage. |
 | Transport | Expose gRPC over a local Unix domain socket. |
 | OpenBao integration | Use OpenBao Transit encrypt/decrypt APIs over HTTPS. |
 | Authentication | Support OpenBao JWT auth from a host-mounted JWT file as the default authentication mode. |
@@ -545,7 +545,7 @@ xchacha20-poly1305 may be offered as an optional non-FIPS hardened mode for envi
 
 ### 10.4 Recommended policy
 
-The plugin token should have only the capabilities needed for Transit encrypt, decrypt, and key metadata read.
+The plugin token should have only the capabilities needed for Transit encrypt, decrypt, key metadata read, and self-capability diagnostics.
 
 ```hcl
 path "transit/encrypt/k8s-workload-a-etcd" {
@@ -556,6 +556,9 @@ path "transit/decrypt/k8s-workload-a-etcd" {
 }
 path "transit/keys/k8s-workload-a-etcd" {
   capabilities = ["read"]
+}
+path "sys/capabilities-self" {
+  capabilities = ["update"]
 }
 ```
 
@@ -860,16 +863,16 @@ Annotations must be non-secret and fully qualified.
 Recommended annotations:
 
 ```yaml
-kms.openbao.org/provider: "openbao-transit"
-kms.openbao.org/key-id-hash: "<base64url-sha256-key-id>"
-kms.openbao.org/transit-key-version: "2"
-kms.openbao.org/transit-mount-hash: "<base64url-sha256-mount-id>"
-kms.openbao.org/transit-key-hash: "<base64url-sha256-key-lineage-or-name>"
-kms.openbao.org/plugin-version: "v0.1.0"
-kms.openbao.org/aad-version: "v1"
+provider.kms.openbao.org: "openbao-transit"
+key-id-hash.kms.openbao.org: "<base64url-sha256-key-id>"
+transit-key-version.kms.openbao.org: "2"
+transit-mount-hash.kms.openbao.org: "<base64url-sha256-mount-id>"
+transit-key-hash.kms.openbao.org: "<base64url-sha256-key-lineage-or-name>"
+plugin-version.kms.openbao.org: "v0.1.0"
+aad-version.kms.openbao.org: "v1"
 ```
 
-Annotations are plaintext metadata stored in etcd, so they must not contain secrets, tokens, raw key names, raw mount paths, full OpenBao namespaces, or internal topology details. Kubernetes KMS v2 annotation metadata is stored with the encrypted object and must use fully qualified keys.
+Annotations are plaintext metadata stored in etcd, so they must not contain secrets, tokens, raw key names, raw mount paths, full OpenBao namespaces, or internal topology details. Kubernetes KMS v2 annotation metadata is stored with the encrypted object and must use fully qualified domain-name keys, not Kubernetes annotation `domain/name` keys.
 
 ### 12.6 OpenBao request IDs
 
@@ -1714,7 +1717,8 @@ Run against OpenBao test instances:
 
 Test against exact-pinned supported Kubernetes releases:
 
-* v1.34.x for v0.1,
+* v1.34.3 in Kind for the initial v0.1 lane,
+* later v1.34 patches only after an exact-pinned runnable lane exists,
 * newer lines only after explicit release-gate expansion.
 
 Test cases:
@@ -1872,6 +1876,9 @@ path "transit/decrypt/k8s-workload-a-etcd" {
 }
 path "transit/keys/k8s-workload-a-etcd" {
   capabilities = ["read"]
+}
+path "sys/capabilities-self" {
+  capabilities = ["update"]
 }
 # Optional only if token renewal is enabled and the JWT role disables default policy.
 path "auth/token/lookup-self" {

@@ -38,4 +38,4 @@ Supporting planning docs:
 
 ## Version Policy
 
-Workstreams must use exact-pinned validation versions. Initial v0.1 targets are OpenBao `2.5.3` and the Kubernetes `1.34` release line with exact patch and image digest pinned in the future CI version manifest.
+Workstreams must use exact-pinned validation versions. Initial v0.1 targets are OpenBao `2.5.3` and the Kubernetes `1.34` release line. The Kind lane currently pins `kindest/node:v1.34.3` by digest in `.ci/versions.yaml` while tracking upstream `1.34.7` as the latest patch.

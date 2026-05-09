@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci tidy verify-tidy ci-core docs-check versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
+.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback tidy verify-tidy ci-core docs-check versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
 
 GO_VERSION := $(shell cat .go-version)
 GO ?= go
@@ -25,6 +25,9 @@ E2E_JSON_REPORT ?= $(E2E_ARTIFACT_DIR)/ginkgo.json
 E2E_PARALLEL_NODES ?= 1
 E2E_GINKGO_EXTRA_ARGS ?=
 E2E_OPENBAO_IMAGE ?= $(shell awk '/^[[:space:]]*image:[[:space:]]*/ { gsub("\"", "", $$2); print $$2; exit }' .ci/versions.yaml)
+E2E_PROVIDER_IMAGE ?= $(IMAGE_REPOSITORY):e2e-$(COMMIT)
+E2E_PROVIDER_BUILD ?= true
+E2E_KIND_NODE_IMAGE ?= $(shell awk '/^[[:space:]]*kindNodeImage:[[:space:]]*/ { print $$2; exit }' .ci/versions.yaml)
 BINARY_NAME ?= bao-kms-provider
 BIN ?= bin/$(BINARY_NAME)
 DOCKER ?= docker
@@ -64,6 +67,13 @@ help:
 	@printf '%s\n' '  test-race       Run race-enabled Go tests'
 	@printf '%s\n' '  test-e2e        Run Ginkgo/Gomega E2E tests'
 	@printf '%s\n' '  test-e2e-openbao Run ephemeral OpenBao CI E2E tests'
+	@printf '%s\n' '  test-e2e-provider-openbao-ci Run containerized provider/OpenBao KMS v2 E2E tests'
+	@printf '%s\n' '  test-e2e-provider-failure-openbao-ci Run provider/OpenBao failure-mode E2E tests'
+	@printf '%s\n' '  test-e2e-provider-decrypt-storm-openbao-ci Run provider/OpenBao decrypt storm smoke E2E tests'
+	@printf '%s\n' '  test-e2e-provider-restore-openbao-ci Run provider/OpenBao backend replacement and restore E2E tests'
+	@printf '%s\n' '  test-e2e-kind-smoke Run pinned Kind Kubernetes KMS v2 smoke tests'
+	@printf '%s\n' '  test-e2e-kind-convergence Run pinned Kind multi-control-plane convergence tests'
+	@printf '%s\n' '  test-e2e-kind-upgrade-rollback Run pinned Kind static-pod upgrade/rollback tests'
 	@printf '%s\n' '  ci-core         Run the local core quality gate'
 	@printf '%s\n' '  docs-check      Check docs for known formatting artifacts'
 	@printf '%s\n' '  install-go-tools Install pinned optional Go quality tools into bin/'
@@ -190,10 +200,39 @@ test-e2e-openbao: test-e2e-openbao-ci
 
 test-e2e-openbao-ci: verify-e2e-manifest
 	@if command -v "$(GINKGO)" >/dev/null 2>&1; then \
-		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && transit && ci' E2E_TIMEOUT=2m; \
+		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && transit && ci' E2E_TIMEOUT=4m; \
 	else \
 		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1; \
 	fi
+	@$(MAKE) test-e2e-provider-openbao-ci
+
+test-e2e-provider-openbao-ci: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderContainerFullStackE2E$$' -count=1 -timeout=4m
+
+test-e2e-provider-failure-openbao-ci: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|ExpiredJWTFailsClosed|JWTFileRotation|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$$' -count=1 -timeout=8m
+
+test-e2e-provider-decrypt-storm-openbao-ci: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderDecryptStormSmokeE2E$$' -count=1 -timeout=5m
+
+test-e2e-provider-restore-openbao-ci: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProvider(OpenBaoBackendReplacement|ContainerizedDRRestore)E2E$$' -count=1 -timeout=8m
+
+test-e2e-kind-smoke: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
+	@E2E_KIND_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" E2E_KIND_NODE_IMAGE="$(E2E_KIND_NODE_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestKindKMSV2SmokeE2E$$' -count=1 -timeout=30m
+
+test-e2e-kind-convergence: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
+	@E2E_KIND_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" E2E_KIND_NODE_IMAGE="$(E2E_KIND_NODE_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestKindMultiControlPlaneConvergenceE2E$$' -count=1 -timeout=45m
+
+test-e2e-kind-upgrade-rollback: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
+	@E2E_KIND_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" E2E_KIND_NODE_IMAGE="$(E2E_KIND_NODE_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestKindStaticPodUpgradeRollbackE2E$$' -count=1 -timeout=30m
 
 tidy:
 	@"$(GO)" mod tidy

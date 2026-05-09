@@ -29,4 +29,4 @@ The repository was renamed before implementation starts. M0 needs stable names a
 - Operators still see explicit OpenBao KMS paths during incidents and runbooks.
 - M0 must initialize `go.mod` with the accepted module path and toolchain.
 - CI and release workflows must read validation versions from `.ci/versions.yaml` instead of duplicating them.
-- Exact Kubernetes `1.34.x` patch and Kind node image digest remain pending until the M0 version-policy task resolves them.
+- Exact Kubernetes Kind validation is pinned in `.ci/versions.yaml`; the initial Kind lane uses `kindest/node:v1.34.3` by digest while tracking upstream `1.34.7` as the latest patch.

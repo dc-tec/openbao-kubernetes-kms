@@ -66,15 +66,17 @@ validation:
   kubernetes:
     minimumLine: "1.34"
     primaryLine: "1.34"
-    exactVersion: ""
-    kindNodeImageDigest: ""
-    pinStatus: pending
+    upstreamPatch: "1.34.7"
+    exactVersion: "1.34.3"
+    kindNodeImage: "kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
+    kindNodeImageDigest: "sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48"
+    pinStatus: pinned-kind-node
     futureCandidates:
       - "1.35"
       - "1.36"
 ```
 
-The concrete Kubernetes patch and Kind node image digest must be selected during CI implementation and committed in this central version policy before any v0.1 support claim is made.
+Kubernetes upstream currently lists `1.34.7` as the latest `1.34` patch. The Kind e2e lane pins `kindest/node:v1.34.3` by digest because that is the newest official Kind node image available for the `1.34` line. Do not treat `1.34.7` as validated until an exact-pinned runnable Kubernetes lane exists for that patch.
 
 ## Initial Validation Matrix
 
@@ -83,7 +85,7 @@ Initial v0.1 validation target:
 | Component | Version posture |
 |---|---|
 | OpenBao | `2.5.3` only. |
-| Kubernetes | `1.34` release line only until additional exact-pinned lines are release-gated. |
+| Kubernetes | `1.34.3` in Kind for the initial e2e lane; `1.34.7` tracked as latest upstream patch, not validated. |
 | KMS API | Kubernetes KMS v2 only. |
 | OS | Linux control-plane nodes only. |
 
@@ -175,7 +177,7 @@ The WS10 Dockerfile pins both the Go builder image and distroless non-root runti
 Main should run all PR lanes plus:
 
 - pinned OpenBao `2.5.3` CI e2e tests,
-- pinned Kubernetes `1.34.x` kind e2e,
+- pinned Kubernetes `1.34.3` Kind e2e,
 - rotation tests,
 - decrypt storm smoke,
 - image scan,
@@ -193,7 +195,7 @@ make test-e2e-openbao-ci
 
 Nightly should run:
 
-- full pinned `1.34.x` kind e2e,
+- full pinned `1.34.3` Kind e2e,
 - OpenBao `2.5.3` CI e2e tests,
 - failure injection,
 - long-running Status polling,

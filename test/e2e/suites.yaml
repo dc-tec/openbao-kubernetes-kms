@@ -19,7 +19,7 @@ lanes:
     prScope: pr
     environment: local-openbao
     isolation: local-container
-    timeout: 2m
+    timeout: 4m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
     versionRefs:
@@ -40,7 +40,85 @@ lanes:
     versionRefs:
       - validation.kubernetes.exactVersion
       - validation.kubernetes.kindNodeImage
-    status: planned
+    status: active
+    reports: true
+
+  - id: kind-convergence
+    name: Kubernetes KMS v2 Kind Multi-Control-Plane Convergence
+    package: ./test/e2e
+    labelFilter: kind && kmsv2 && convergence
+    prScope: main
+    environment: kind
+    isolation: local-cluster
+    timeout: 45m
+    parallelNodes: 1
+    versionRefs:
+      - validation.kubernetes.exactVersion
+      - validation.kubernetes.kindNodeImage
+    status: active
+    reports: true
+
+  - id: openbao-failure-ci
+    name: OpenBao Failure CI
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && failure && ci
+    prScope: main
+    environment: local-openbao
+    isolation: local-container
+    timeout: 5m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
+  - id: openbao-decrypt-storm-ci
+    name: OpenBao Decrypt Storm CI
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && performance && ci
+    prScope: main
+    environment: local-openbao
+    isolation: local-container
+    timeout: 5m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
+  - id: openbao-restore-ci
+    name: OpenBao Backend Replacement And Raft Restore CI
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && restore && ci
+    prScope: main
+    environment: local-openbao
+    isolation: local-container
+    timeout: 8m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
+  - id: kind-upgrade-rollback
+    name: Kubernetes KMS v2 Kind Static-Pod Upgrade Rollback
+    package: ./test/e2e
+    labelFilter: kind && kmsv2 && upgrade && rollback
+    prScope: main
+    environment: kind
+    isolation: local-cluster
+    timeout: 30m
+    parallelNodes: 1
+    versionRefs:
+      - validation.kubernetes.exactVersion
+      - validation.kubernetes.kindNodeImage
+    status: active
     reports: true
 
   - id: release-gate

@@ -9,7 +9,7 @@ Required before a v0.1 engineering-preview release:
 1. KMS v2 fake conformance suite passes.
 2. Hermetic OpenBao client integration suite passes.
 3. Ephemeral OpenBao `2.5.3` CI e2e suite passes.
-4. Pinned Kubernetes `1.34.x` kind e2e proves Secret encryption/decryption works.
+4. Pinned Kubernetes `1.34.3` kind e2e proves Secret encryption/decryption works.
 5. kube-apiserver restart with encrypted Secret works.
 6. `Status.key_id == EncryptResponse.key_id` invariant is tested.
 7. Unknown `key_id` decrypt is rejected before Transit call.
@@ -19,13 +19,18 @@ Required before a v0.1 engineering-preview release:
 11. Old ciphertext remains decryptable after rotation.
 12. JWT expiry and re-login path works.
 13. OpenBao outage fails closed.
-14. `doctor` catches bad socket, bad JWT, bad policy, and bad Transit key config.
-15. Logs and metrics redaction tests pass.
-16. Static pod manifest does not rely on API objects.
-17. systemd unit starts plugin before kubelet in kubeadm-style test.
-18. Decrypt micro-batching is implemented behind config and benchmarked against the direct path.
-19. Central CI version manifest pins OpenBao and Kubernetes test versions.
-20. SBOM, vulnerability scan, license check, and vendored dependency policy pass.
+14. Provider backend replacement under a stable OpenBao endpoint fails closed during outage and decrypts existing ciphertext after recovery.
+15. Containerized OpenBao integrated raft snapshot restore decrypts ciphertext created before restore.
+16. Kind multi-control-plane convergence proves each API server can decrypt through its node-local provider.
+17. Kind static-pod upgrade and rollback preserve decrypt compatibility.
+18. systemd and static-pod install scripts stage expected files and permissions.
+19. `doctor` catches bad socket, bad JWT, bad policy, and bad Transit key config.
+20. Logs and metrics redaction tests pass.
+21. Static pod manifest does not rely on API objects.
+22. systemd unit starts plugin before kubelet in kubeadm-style test.
+23. Decrypt micro-batching is implemented behind config and benchmarked against the direct path.
+24. Central CI version manifest pins OpenBao and Kubernetes test versions.
+25. SBOM, vulnerability scan, license check, and vendored dependency policy pass.
 
 v0.1 must be described as engineering preview, not production-ready.
 
@@ -72,9 +77,12 @@ Target: under 10 minutes.
 ### Main Branch Or Nightly
 
 - OpenBao `2.5.3` CI e2e tests,
-- pinned Kubernetes `1.34.x` kind e2e,
+- pinned Kubernetes `1.34.3` kind e2e,
+- pinned Kubernetes `1.34.3` kind convergence e2e,
+- pinned Kubernetes `1.34.3` static-pod upgrade/rollback e2e,
 - rotation tests,
 - failure injection tests,
+- OpenBao backend replacement and raft restore tests,
 - performance smoke tests,
 - container image scan,
 - SBOM generation,

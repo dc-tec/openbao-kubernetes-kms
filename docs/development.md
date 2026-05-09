@@ -27,20 +27,25 @@ cmd/bao-kms-provider
 internal/aad
 internal/auth
 internal/config
+internal/health
 internal/keyregistry
 internal/kmsv2
+internal/logging
+internal/metrics
 internal/openbao
+internal/runtime
+internal/socket
+internal/status
 internal/version
 test/e2e
+test/fakes
 test/kmsconformance
+test/deployment
 ```
 
 Planned package boundaries:
 
 ```text
-internal/logging
-internal/socket
-internal/status
 test/integration
 ```
 
@@ -50,7 +55,7 @@ Recommended order:
 
 1. Config loader and validation.
 2. Key ID and AAD golden tests.
-3. Fake Transit implementation.
+3. Fake Transit implementation and shared test fakes.
 4. KMS v2 protobuf server/client test harness.
 5. KMS v2 conformance tests.
 6. OpenBao client and integration tests.
@@ -96,6 +101,8 @@ OpenBao E2E validation uses the ephemeral CI lane. E2E specs use Ginkgo v2 and G
 ```sh
 make test-e2e-openbao-ci
 ```
+
+The OpenBao CI target also runs the provider full-stack slice under the `e2e` build tag. That test builds the provider image, starts real OpenBao, boots JWT auth, runs the provider container, and exercises the Unix socket from a second container with the Kubernetes KMS v2 protobuf client.
 
 Optional environment:
 
