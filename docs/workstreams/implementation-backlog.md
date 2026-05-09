@@ -235,7 +235,7 @@ Goal: implement Kubernetes KMS v2 gRPC behavior exactly enough for kube-apiserve
 | WS05-T07 | P0 | planned | Propagate request UID only to safe logs/traces. | WS09-T01 |
 | WS05-T08 | P0 | done | Add timeout and context cancellation handling. | WS03-T01 |
 | WS05-T09 | P0 | done | Add panic recovery with redacted errors. | WS05-T02 |
-| WS05-T10 | P1 | planned | Add graceful shutdown behavior. | WS07-T04 |
+| WS05-T10 | P1 | done | Add graceful shutdown behavior. | WS07-T04 |
 
 Acceptance criteria:
 
@@ -257,7 +257,8 @@ Implementation notes:
 
 - `internal/kmsv2` owns the protocol server and depends on narrow `StatusCache` and `Transit` interfaces.
 - WS06 still owns the production background status cache implementation behind the `StatusCache` interface.
-- WS07 still owns production Unix socket lifecycle and graceful process shutdown.
+- WS05-T10 is covered by a runtime-backed KMS RPC drain test: the WS07 runtime uses gRPC graceful shutdown while KMS v2 handlers propagate request contexts into cached Status and Transit operations.
+- WS07 owns production Unix socket lifecycle and process shutdown primitives.
 - WS09 still owns structured logging and any safe request UID propagation.
 
 ## WS06: Status Cache, Health, And Rotation Watcher
@@ -345,16 +346,16 @@ Goal: provide operational commands required by the design.
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS08-T01 | P0 | planned | Implement `serve`. | WS05-T02, WS07-T02 |
-| WS08-T02 | P0 | planned | Implement `doctor` framework. | WS01-T03 |
-| WS08-T03 | P0 | planned | Add `doctor` OpenBao TLS/auth checks. | WS03-T02, WS04-T04 |
-| WS08-T04 | P0 | planned | Add `doctor` Transit key and policy checks. | WS03-T04, WS03-T10 |
-| WS08-T05 | P0 | planned | Add `doctor` socket checks. | WS07-T01 |
-| WS08-T06 | P0 | planned | Add `doctor` EncryptionConfiguration checks. | WS01-T08 |
-| WS08-T07 | P0 | planned | Implement `verify-key`. | WS03-T04 |
-| WS08-T08 | P0 | planned | Implement `benchmark` smoke mode. | WS03-T09 |
-| WS08-T09 | P0 | planned | Implement `rotation-plan`. | WS06-T03 |
-| WS08-T10 | P0 | planned | Implement `verify-rotation` initial confidence report. | WS06-T03 |
+| WS08-T01 | P0 | done | Implement `serve`. | WS05-T02, WS07-T02 |
+| WS08-T02 | P0 | done | Implement `doctor` framework. | WS01-T03 |
+| WS08-T03 | P0 | done | Add `doctor` OpenBao TLS/auth checks. | WS03-T02, WS04-T04 |
+| WS08-T04 | P0 | done | Add `doctor` Transit key and policy checks. | WS03-T04, WS03-T10 |
+| WS08-T05 | P0 | done | Add `doctor` socket checks. | WS07-T01 |
+| WS08-T06 | P0 | done | Add `doctor` EncryptionConfiguration checks. | WS01-T08 |
+| WS08-T07 | P0 | done | Implement `verify-key`. | WS03-T04 |
+| WS08-T08 | P0 | done | Implement `benchmark` smoke mode. | WS03-T09 |
+| WS08-T09 | P0 | done | Implement `rotation-plan`. | WS06-T03 |
+| WS08-T10 | P0 | done | Implement `verify-rotation` initial confidence report. | WS06-T03 |
 | WS08-T11 | P1 | planned | Add stable JSON output for automation. | WS08-T02 |
 | WS08-T12 | P1 | planned | Add shell completion generation. | WS08-T01 |
 
@@ -371,6 +372,15 @@ Test requirements:
 - Redaction tests.
 - Fake OpenBao diagnostics tests.
 - Integration tests for `doctor` against real OpenBao.
+
+Implementation notes:
+
+- `cmd/bao-kms-provider` now wires `serve`, `doctor`, `verify-key`, `benchmark`, `rotation-plan`, and `verify-rotation` through typed config loading and stable command exit codes.
+- `serve` composes JWT auth, the OpenBao Transit client adapter, status store/controller/scheduler, KMS v2 gRPC, Unix socket runtime, and optional HTTP health readiness.
+- `doctor` emits redacted text checks for local config/JWT/socket state, OpenBao TLS and JWT auth, Transit capabilities, key metadata, `disable_upsert`, key profile hazards, non-secret probe encrypt/decrypt, deterministic key ID derivation, and the Status/encrypt key ID invariant. `--encryption-config` validates Kubernetes KMS v2 provider identity and reports identity fallback as a warning.
+- `verify-key` reuses Transit metadata/profile checks and validates local registry state against `min_available_version`, `min_encryption_version`, and `min_decryption_version` when state exists.
+- `benchmark` is an intentionally narrow redacted smoke benchmark for Transit encrypt/decrypt latency. Full decrypt-storm and micro-batching comparisons remain release-gate performance work.
+- `rotation-plan` and `verify-rotation` report local registry/Transit rotation state using key ID hashes only. `verify-rotation` is explicitly a limited confidence report until later Kubernetes or etcd inspection support exists.
 
 ## WS09: Observability And Redaction
 

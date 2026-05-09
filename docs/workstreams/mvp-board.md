@@ -73,9 +73,9 @@ Blocking tasks:
 
 Current status:
 
-- `internal/kmsv2` implements the KMS v2 gRPC service, cached Status reads, Encrypt, Decrypt, timeout/cancellation handling, redacted panic recovery, and the Status/encrypt key ID invariant behind narrow fakeable interfaces.
+- `internal/kmsv2` implements the KMS v2 gRPC service, cached Status reads, Encrypt, Decrypt, timeout/cancellation handling, graceful request drain through the WS07 runtime, redacted panic recovery, and the Status/encrypt key ID invariant behind narrow fakeable interfaces.
 - `test/kmsconformance` starts the KMS v2 service over a Unix socket and exercises it with the real Kubernetes KMS v2 protobuf client.
-- Production status cache, socket lifecycle, graceful shutdown, and structured logging remain in WS06, WS07, and WS09.
+- Production status cache and runtime lifecycle are implemented in WS06 and WS07. Structured logging remains in WS09.
 
 Exit criteria:
 
@@ -150,13 +150,16 @@ Goal: give operators enough tooling to install and diagnose the provider in lab 
 
 Blocking tasks:
 
-- WS08-T01 Implement `serve`.
-- WS08-T02 Implement `doctor`.
-- WS08-T03 Implement `verify-key`.
-- WS08-T04 Implement `benchmark` smoke mode.
 - WS10-T01 Add sample systemd unit.
 - WS10-T02 Add sample static pod manifest.
 - WS11-T06 Add kind e2e.
+
+Current status:
+
+- `bao-kms-provider serve` composes typed config, JWT auth, OpenBao Transit, status probes, KMS v2 gRPC, Unix socket runtime, and optional health readiness.
+- `doctor` provides redacted preflight checks for local config/JWT/socket state, OpenBao auth/TLS, Transit policy and metadata, probe encrypt/decrypt, deterministic key ID derivation, Status/encrypt consistency, and optional Kubernetes `EncryptionConfiguration` validation.
+- `verify-key`, `benchmark`, `rotation-plan`, and `verify-rotation` are implemented as initial operational commands with stable text output and stable command exit codes.
+- Stable JSON output and explicit completion-generation UX remain WS08 P1 follow-ups.
 
 Exit criteria:
 

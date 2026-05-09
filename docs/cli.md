@@ -19,7 +19,9 @@ Responsibilities:
 - create Unix socket safely,
 - serve KMS v2 gRPC,
 - start background probes,
-- expose metrics and health endpoints.
+- expose health endpoints when configured.
+
+Prometheus metrics are wired in WS09; `server.metricsAddress` is parsed and validated before then but does not start a metrics listener yet.
 
 ## doctor
 
@@ -49,6 +51,7 @@ Checks:
 - identity fallback status.
 
 `doctor` must not print plaintext, JWTs, OpenBao tokens, or full ciphertext.
+It prints a text report with stable check IDs and exits non-zero when any check fails.
 
 ## verify-key
 
@@ -77,19 +80,18 @@ Measure performance.
 
 ```sh
 bao-kms-provider benchmark \
-  --config /etc/openbao-kms/config.yaml
+  --config /etc/openbao-kms/config.yaml \
+  --iterations 5
 ```
 
 Measures:
 
 - Transit encrypt latency,
 - Transit decrypt latency,
-- local KMS gRPC latency,
-- API server-style decrypt storm,
-- token renewal/re-login latency,
-- optional micro-batching impact.
+- non-secret Transit round-trip smoke behavior.
 
 Output must redact sensitive data.
+Expanded local KMS gRPC, decrypt storm, token lifecycle, and micro-batching comparisons are still release-gate benchmark work.
 
 ## rotation-plan
 
@@ -143,6 +145,19 @@ Recommended flags:
 ```
 
 JSON output should be stable enough for automation once the CLI reaches beta.
+
+## Exit Codes
+
+Implemented stable exit codes:
+
+| Code | Meaning |
+|---:|---|
+| 0 | success |
+| 1 | unclassified command error |
+| 2 | command usage error emitted by implemented command validation |
+| 3 | configuration load or validation error |
+| 4 | diagnostic/check failure |
+| 5 | provider runtime failure |
 
 ## config
 
