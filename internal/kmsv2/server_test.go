@@ -12,6 +12,7 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/aad"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
+	"github.com/dc-tec/openbao-kubernetes-kms/test/fakes"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	kmsapi "k8s.io/kms/apis/v2"
@@ -20,10 +21,6 @@ import (
 const (
 	concurrentRequestCount  = 25
 	concurrentPayloadFormat = "payload-%d"
-	fakeAADMismatchError    = "message authentication failed"
-	fakePanicMessage        = "panic with sensitive payload"
-	fakeTransitCiphertext   = "vault:v%d:test-ciphertext-%d"
-	fakeUnknownCiphertext   = "unknown ciphertext"
 	malformedKeyID          = "not-a-key-id"
 	mismatchedKeyIDSeed     = "different-key-id"
 	pluginVersion           = "v0.1.0-test"
@@ -52,11 +49,11 @@ func TestStatusReturnsCachedActiveKeyIDWithoutTransit(t *testing.T) {
 		}
 	}
 
-	if cache.calls() != 5 {
-		t.Fatalf("expected status cache to be read 5 times, got %d", cache.calls())
+	if cache.Calls() != 5 {
+		t.Fatalf("expected status cache to be read 5 times, got %d", cache.Calls())
 	}
-	if transit.encryptCalls() != 0 || transit.decryptCalls() != 0 {
-		t.Fatalf("status called transit: encrypt=%d decrypt=%d", transit.encryptCalls(), transit.decryptCalls())
+	if transit.EncryptCalls() != 0 || transit.DecryptCalls() != 0 {
+		t.Fatalf("status called transit: encrypt=%d decrypt=%d", transit.EncryptCalls(), transit.DecryptCalls())
 	}
 }
 
@@ -81,7 +78,7 @@ func TestEncryptReturnsStatusKeyIDAndExplicitTransitVersion(t *testing.T) {
 		t.Fatal("encrypt returned no annotations")
 	}
 
-	lastEncrypt := transit.lastEncrypt()
+	lastEncrypt := transit.LastEncrypt()
 	if lastEncrypt.KeyVersion != active.TransitVersion {
 		t.Fatalf("encrypt used key version %d, want %d", lastEncrypt.KeyVersion, active.TransitVersion)
 	}
@@ -136,8 +133,8 @@ func TestDecryptRejectsUnknownKeyIDBeforeTransit(t *testing.T) {
 		Annotations: nil,
 	})
 	assertCode(t, err, codes.NotFound)
-	if transit.decryptCalls() != 0 {
-		t.Fatalf("unknown key_id reached transit decrypt %d times", transit.decryptCalls())
+	if transit.DecryptCalls() != 0 {
+		t.Fatalf("unknown key_id reached transit decrypt %d times", transit.DecryptCalls())
 	}
 }
 
@@ -182,8 +179,8 @@ func TestDecryptRejectsMalformedKeyIDBeforeTransit(t *testing.T) {
 		Annotations: nil,
 	})
 	assertCode(t, err, codes.InvalidArgument)
-	if transit.decryptCalls() != 0 {
-		t.Fatalf("malformed key_id reached transit decrypt %d times", transit.decryptCalls())
+	if transit.DecryptCalls() != 0 {
+		t.Fatalf("malformed key_id reached transit decrypt %d times", transit.DecryptCalls())
 	}
 }
 
@@ -194,14 +191,14 @@ func TestDecryptRejectsMissingAndMismatchedAnnotationsBeforeTransit(t *testing.T
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	before := transit.decryptCalls()
+	before := transit.DecryptCalls()
 	_, err = server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
 		Ciphertext:  encrypted.GetCiphertext(),
 		KeyId:       encrypted.GetKeyId(),
 		Annotations: nil,
 	})
 	assertCode(t, err, codes.InvalidArgument)
-	if transit.decryptCalls() != before {
+	if transit.DecryptCalls() != before {
 		t.Fatalf("missing annotations reached transit")
 	}
 
@@ -213,14 +210,14 @@ func TestDecryptRejectsMissingAndMismatchedAnnotationsBeforeTransit(t *testing.T
 		Annotations: modified,
 	})
 	assertCode(t, err, codes.InvalidArgument)
-	if transit.decryptCalls() != before {
+	if transit.DecryptCalls() != before {
 		t.Fatalf("mismatched annotations reached transit")
 	}
 }
 
 func TestEncryptFailsClosedWithoutHealthyActiveStatus(t *testing.T) {
 	server, cache, _, active := newTestServer(t)
-	cache.set(kmsv2.CachedStatus{
+	cache.Set(kmsv2.CachedStatus{
 		Healthz: kmsv2.HealthUnhealthy,
 		KeyID:   active.KubernetesKeyID,
 		Active:  active,
@@ -240,7 +237,7 @@ func TestEncryptFailsClosedWithoutHealthyActiveStatus(t *testing.T) {
 
 func TestStartupWithNoActiveSnapshotFailsClosed(t *testing.T) {
 	server, cache, transit, _ := newTestServer(t)
-	cache.set(kmsv2.CachedStatus{Healthz: kmsv2.HealthOK})
+	cache.Set(kmsv2.CachedStatus{Healthz: kmsv2.HealthOK})
 
 	statusResponse, err := server.Status(context.Background(), &kmsapi.StatusRequest{})
 	if err != nil {
@@ -255,14 +252,14 @@ func TestStartupWithNoActiveSnapshotFailsClosed(t *testing.T) {
 
 	_, err = server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
 	assertCode(t, err, codes.FailedPrecondition)
-	if transit.encryptCalls() != 0 {
+	if transit.EncryptCalls() != 0 {
 		t.Fatalf("encrypt without active snapshot reached transit")
 	}
 }
 
 func TestStatusReportsUnhealthyWhenCacheCannotLoad(t *testing.T) {
 	server, cache, _, _ := newTestServer(t)
-	cache.setError(errors.New(statusCacheError))
+	cache.SetError(errors.New(statusCacheError))
 
 	response, err := server.Status(context.Background(), &kmsapi.StatusRequest{})
 	if err != nil {
@@ -278,18 +275,18 @@ func TestStatusReportsUnhealthyWhenCacheCannotLoad(t *testing.T) {
 
 func TestRequestTimeoutCancelsTransitCall(t *testing.T) {
 	server, _, transit, _ := newTestServerWithOptions(t, kmsv2.Options{RequestTimeout: 5 * time.Millisecond})
-	transit.blockEncrypt = true
+	transit.SetBlockEncrypt(true)
 
 	_, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
 	assertCode(t, err, codes.DeadlineExceeded)
-	if transit.encryptCalls() != 1 {
-		t.Fatalf("expected one transit encrypt call, got %d", transit.encryptCalls())
+	if transit.EncryptCalls() != 1 {
+		t.Fatalf("expected one transit encrypt call, got %d", transit.EncryptCalls())
 	}
 }
 
 func TestPanicRecoveryReturnsRedactedInternalError(t *testing.T) {
 	server, _, transit, _ := newTestServer(t)
-	transit.panicEncrypt = true
+	transit.SetPanicEncrypt(true)
 
 	_, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
 	assertCode(t, err, codes.Internal)
@@ -329,7 +326,7 @@ func TestConcurrentEncryptDecrypt(t *testing.T) {
 	wg.Wait()
 }
 
-func newTestServer(t *testing.T) (*kmsv2.Server, *fakeStatusCache, *fakeTransit, keyregistry.KeySnapshot) {
+func newTestServer(t *testing.T) (*kmsv2.Server, *fakes.StatusCache, *fakes.KMSTransit, keyregistry.KeySnapshot) {
 	t.Helper()
 	return newTestServerWithOptions(t, kmsv2.Options{})
 }
@@ -337,7 +334,7 @@ func newTestServer(t *testing.T) (*kmsv2.Server, *fakeStatusCache, *fakeTransit,
 func newTestServerWithOptions(
 	t *testing.T,
 	overrides kmsv2.Options,
-) (*kmsv2.Server, *fakeStatusCache, *fakeTransit, keyregistry.KeySnapshot) {
+) (*kmsv2.Server, *fakes.StatusCache, *fakes.KMSTransit, keyregistry.KeySnapshot) {
 	t.Helper()
 
 	active := testSnapshot(t)
@@ -345,14 +342,12 @@ func newTestServerWithOptions(
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
 	}
-	cache := &fakeStatusCache{
-		current: kmsv2.CachedStatus{
-			Healthz: kmsv2.HealthOK,
-			KeyID:   active.KubernetesKeyID,
-			Active:  active,
-		},
-	}
-	transit := newFakeTransit()
+	cache := fakes.NewStatusCache(kmsv2.CachedStatus{
+		Healthz: kmsv2.HealthOK,
+		KeyID:   active.KubernetesKeyID,
+		Active:  active,
+	})
+	transit := fakes.NewKMSTransit()
 	options := kmsv2.Options{
 		StatusCache:    cache,
 		Registry:       registry,
@@ -423,149 +418,6 @@ func cloneProtoAnnotations(annotations map[string][]byte) map[string][]byte {
 		cloned[key] = bytes.Clone(value)
 	}
 	return cloned
-}
-
-type fakeStatusCache struct {
-	mu      sync.Mutex
-	current kmsv2.CachedStatus
-	err     error
-	count   int
-}
-
-func (f *fakeStatusCache) Current(context.Context) (kmsv2.CachedStatus, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.count++
-	return f.current, f.err
-}
-
-func (f *fakeStatusCache) set(status kmsv2.CachedStatus) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.current = status
-	f.err = nil
-}
-
-func (f *fakeStatusCache) setError(err error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.err = err
-}
-
-func (f *fakeStatusCache) calls() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return f.count
-}
-
-type fakeTransit struct {
-	mu           sync.Mutex
-	records      map[string]transitRecord
-	encryptCount int
-	decryptCount int
-	lastEnc      kmsv2.TransitEncryptRequest
-	blockEncrypt bool
-	panicEncrypt bool
-}
-
-type transitRecord struct {
-	plaintext      []byte
-	associatedData []byte
-	keyVersion     int
-}
-
-func newFakeTransit() *fakeTransit {
-	return &fakeTransit{records: make(map[string]transitRecord)}
-}
-
-func (f *fakeTransit) Encrypt(
-	ctx context.Context,
-	request kmsv2.TransitEncryptRequest,
-) (kmsv2.TransitEncryptResponse, error) {
-	f.mu.Lock()
-	if f.panicEncrypt {
-		f.mu.Unlock()
-		panic(fakePanicMessage)
-	}
-	f.encryptCount++
-	f.lastEnc = kmsv2.TransitEncryptRequest{
-		Plaintext:      bytes.Clone(request.Plaintext),
-		AssociatedData: bytes.Clone(request.AssociatedData),
-		KeyVersion:     request.KeyVersion,
-	}
-	block := f.blockEncrypt
-	index := f.encryptCount
-	f.mu.Unlock()
-
-	if block {
-		<-ctx.Done()
-		return kmsv2.TransitEncryptResponse{}, ctx.Err()
-	}
-
-	ciphertext := []byte(fmt.Sprintf(fakeTransitCiphertext, request.KeyVersion, index))
-	f.mu.Lock()
-	f.records[string(ciphertext)] = transitRecord{
-		plaintext:      bytes.Clone(request.Plaintext),
-		associatedData: bytes.Clone(request.AssociatedData),
-		keyVersion:     request.KeyVersion,
-	}
-	f.mu.Unlock()
-
-	return kmsv2.TransitEncryptResponse{
-		Ciphertext: ciphertext,
-		KeyVersion: request.KeyVersion,
-	}, nil
-}
-
-func (f *fakeTransit) Decrypt(
-	ctx context.Context,
-	request kmsv2.TransitDecryptRequest,
-) (kmsv2.TransitDecryptResponse, error) {
-	if err := ctx.Err(); err != nil {
-		return kmsv2.TransitDecryptResponse{}, err
-	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.decryptCount++
-	record, ok := f.records[string(request.Ciphertext)]
-	if !ok {
-		return kmsv2.TransitDecryptResponse{}, errors.New(fakeUnknownCiphertext)
-	}
-	if !bytes.Equal(record.associatedData, request.AssociatedData) {
-		return kmsv2.TransitDecryptResponse{}, errors.New(fakeAADMismatchError)
-	}
-	return kmsv2.TransitDecryptResponse{Plaintext: bytes.Clone(record.plaintext)}, nil
-}
-
-func (f *fakeTransit) encryptCalls() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return f.encryptCount
-}
-
-func (f *fakeTransit) decryptCalls() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return f.decryptCount
-}
-
-func (f *fakeTransit) lastEncrypt() kmsv2.TransitEncryptRequest {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return kmsv2.TransitEncryptRequest{
-		Plaintext:      bytes.Clone(f.lastEnc.Plaintext),
-		AssociatedData: bytes.Clone(f.lastEnc.AssociatedData),
-		KeyVersion:     f.lastEnc.KeyVersion,
-	}
 }
 
 type fakeObserver struct {

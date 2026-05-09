@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
+	"github.com/dc-tec/openbao-kubernetes-kms/test/fakes"
 )
 
 const (
@@ -25,8 +26,8 @@ const (
 func TestManagerLogsInAndReturnsToken(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	client := &fakeOpenBaoAuthClient{
-		loginResponses: []openbao.AuthToken{{
+	client := &fakes.OpenBaoAuthClient{
+		LoginResponses: []openbao.AuthToken{{
 			ClientToken:   testBaoToken1,
 			LeaseDuration: time.Minute,
 			Renewable:     true,
@@ -41,7 +42,8 @@ func TestManagerLogsInAndReturnsToken(t *testing.T) {
 	if token != testBaoToken1 {
 		t.Fatalf("unexpected token")
 	}
-	if len(client.logins) != 1 || client.logins[0].JWT != loadJWTFixture(t, validJWTFixture) {
+	logins := client.Logins()
+	if len(logins) != 1 || logins[0].JWT != loadJWTFixture(t, validJWTFixture) {
 		t.Fatalf("expected login with JWT fixture")
 	}
 	state := manager.State()
@@ -53,7 +55,7 @@ func TestManagerLogsInAndReturnsToken(t *testing.T) {
 func TestManagerStateBeforeLoginHasZeroTTLs(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	manager := newTestManager(t, jwtPath, &fakeOpenBaoAuthClient{}, clock, false)
+	manager := newTestManager(t, jwtPath, &fakes.OpenBaoAuthClient{}, clock, false)
 
 	state := manager.State()
 	if state.Status != StatusUnknown {
@@ -67,14 +69,14 @@ func TestManagerStateBeforeLoginHasZeroTTLs(t *testing.T) {
 func TestManagerRejectsNearExpiryJWTBeforeLogin(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(1778281950, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, nearExpiryJWTFixture))
-	client := &fakeOpenBaoAuthClient{}
+	client := &fakes.OpenBaoAuthClient{}
 	manager := newTestManager(t, jwtPath, client, clock, false)
 
 	_, err := manager.Token(context.Background())
 	if !errors.Is(err, ErrJWTNearExpiry) {
 		t.Fatalf("expected near-expiry JWT error, got %v", err)
 	}
-	if len(client.logins) != 0 {
+	if len(client.Logins()) != 0 {
 		t.Fatal("near-expiry JWT should fail before OpenBao login")
 	}
 }
@@ -82,8 +84,8 @@ func TestManagerRejectsNearExpiryJWTBeforeLogin(t *testing.T) {
 func TestManagerReReadsJWTBeforeReLogin(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	client := &fakeOpenBaoAuthClient{
-		loginResponses: []openbao.AuthToken{
+	client := &fakes.OpenBaoAuthClient{
+		LoginResponses: []openbao.AuthToken{
 			{ClientToken: testBaoToken1, LeaseDuration: time.Minute},
 			{ClientToken: testBaoToken2, LeaseDuration: time.Minute},
 		},
@@ -109,10 +111,11 @@ func TestManagerReReadsJWTBeforeReLogin(t *testing.T) {
 	if second != testBaoToken2 {
 		t.Fatalf("unexpected second token")
 	}
-	if len(client.logins) != 2 {
-		t.Fatalf("expected two logins, got %d", len(client.logins))
+	logins := client.Logins()
+	if len(logins) != 2 {
+		t.Fatalf("expected two logins, got %d", len(logins))
 	}
-	if client.logins[1].JWT != loadJWTFixture(t, rotatedJWTFixture) {
+	if logins[1].JWT != loadJWTFixture(t, rotatedJWTFixture) {
 		t.Fatal("manager did not re-read JWT file before re-login")
 	}
 }
@@ -120,13 +123,13 @@ func TestManagerReReadsJWTBeforeReLogin(t *testing.T) {
 func TestManagerRenewsWhenEnabledAndRenewable(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	client := &fakeOpenBaoAuthClient{
-		loginResponses: []openbao.AuthToken{{
+	client := &fakes.OpenBaoAuthClient{
+		LoginResponses: []openbao.AuthToken{{
 			ClientToken:   testBaoToken1,
 			LeaseDuration: time.Minute,
 			Renewable:     true,
 		}},
-		renewResponses: []openbao.AuthToken{{
+		RenewResponses: []openbao.AuthToken{{
 			LeaseDuration: 2 * time.Minute,
 			Renewable:     true,
 		}},
@@ -144,23 +147,25 @@ func TestManagerRenewsWhenEnabledAndRenewable(t *testing.T) {
 	if renewed != testBaoToken1 {
 		t.Fatalf("renewal should retain token when response omits a token")
 	}
-	if len(client.logins) != 1 || len(client.renewals) != 1 {
-		t.Fatalf("expected one login and one renewal, got %d/%d", len(client.logins), len(client.renewals))
+	logins := client.Logins()
+	renewals := client.Renewals()
+	if len(logins) != 1 || len(renewals) != 1 {
+		t.Fatalf("expected one login and one renewal, got %d/%d", len(logins), len(renewals))
 	}
-	if client.renewals[0].increment != testLoginBeforeExpiry {
-		t.Fatalf("unexpected renewal increment: %s", client.renewals[0].increment)
+	if renewals[0].Increment != testLoginBeforeExpiry {
+		t.Fatalf("unexpected renewal increment: %s", renewals[0].Increment)
 	}
 }
 
 func TestManagerRecordsRenewalFailureWhenReloginSucceeds(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	client := &fakeOpenBaoAuthClient{
-		loginResponses: []openbao.AuthToken{
+	client := &fakes.OpenBaoAuthClient{
+		LoginResponses: []openbao.AuthToken{
 			{ClientToken: testBaoToken1, LeaseDuration: time.Minute, Renewable: true},
 			{ClientToken: testBaoToken2, LeaseDuration: time.Minute, Renewable: true},
 		},
-		renewErr: errors.New("renew unavailable"),
+		RenewErr: errors.New("renew unavailable"),
 	}
 	manager := newTestManager(t, jwtPath, client, clock, true)
 
@@ -184,8 +189,8 @@ func TestManagerRecordsRenewalFailureWhenReloginSucceeds(t *testing.T) {
 func TestManagerRejectsUnusableShortTokenLease(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	client := &fakeOpenBaoAuthClient{
-		loginResponses: []openbao.AuthToken{{
+	client := &fakes.OpenBaoAuthClient{
+		LoginResponses: []openbao.AuthToken{{
 			ClientToken:   testBaoToken1,
 			LeaseDuration: testLoginBeforeExpiry,
 		}},
@@ -201,8 +206,8 @@ func TestManagerRejectsUnusableShortTokenLease(t *testing.T) {
 func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	client := &fakeOpenBaoAuthClient{
-		loginResponses: []openbao.AuthToken{{
+	client := &fakes.OpenBaoAuthClient{
+		LoginResponses: []openbao.AuthToken{{
 			ClientToken:   testBaoToken1,
 			LeaseDuration: time.Minute,
 		}},
@@ -224,7 +229,7 @@ func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 	if _, err := manager.Token(context.Background()); err != nil {
 		t.Fatalf("initial token: %v", err)
 	}
-	client.loginErr = errors.New("login endpoint unavailable")
+	client.LoginErr = errors.New("login endpoint unavailable")
 	clock.advance(40 * time.Second)
 
 	token, err := manager.Token(context.Background())
@@ -234,8 +239,9 @@ func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 	if token != testBaoToken1 {
 		t.Fatalf("unexpected token during failed refresh")
 	}
-	if len(client.logins) != 2 {
-		t.Fatalf("expected one failed refresh attempt, got %d logins", len(client.logins))
+	logins := client.Logins()
+	if len(logins) != 2 {
+		t.Fatalf("expected one failed refresh attempt, got %d logins", len(logins))
 	}
 	state := manager.State()
 	if state.Status != StatusUnhealthy || state.LastError == "" || state.NextRetryAt.IsZero() {
@@ -249,18 +255,19 @@ func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 	if token != testBaoToken1 {
 		t.Fatalf("unexpected token during retry backoff")
 	}
-	if len(client.logins) != 2 {
-		t.Fatalf("retry backoff should suppress another login, got %d logins", len(client.logins))
+	logins = client.Logins()
+	if len(logins) != 2 {
+		t.Fatalf("retry backoff should suppress another login, got %d logins", len(logins))
 	}
 }
 
 func TestManagerCoalescesConcurrentInitialLogins(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	client := &blockingOpenBaoAuthClient{
-		started: make(chan struct{}),
-		release: make(chan struct{}),
-	}
+	client := fakes.NewBlockingOpenBaoAuthClient(openbao.AuthToken{
+		ClientToken:   testBaoToken1,
+		LeaseDuration: time.Minute,
+	})
 	manager := newTestManager(t, jwtPath, client, clock, false)
 
 	const callers = 8
@@ -281,8 +288,8 @@ func TestManagerCoalescesConcurrentInitialLogins(t *testing.T) {
 		}()
 	}
 
-	<-client.started
-	close(client.release)
+	<-client.Started()
+	client.Release()
 	wg.Wait()
 	close(errs)
 	for err := range errs {
@@ -290,15 +297,15 @@ func TestManagerCoalescesConcurrentInitialLogins(t *testing.T) {
 			t.Fatalf("concurrent token call failed: %v", err)
 		}
 	}
-	if client.loginCount() != 1 {
-		t.Fatalf("expected one coalesced login, got %d", client.loginCount())
+	if client.LoginCount() != 1 {
+		t.Fatalf("expected one coalesced login, got %d", client.LoginCount())
 	}
 }
 
 func TestManagerStateRedactsUnexpectedErrors(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
-	client := &fakeOpenBaoAuthClient{loginErr: errors.New("leaked token value")}
+	client := &fakes.OpenBaoAuthClient{LoginErr: errors.New("leaked token value")}
 	manager := newTestManager(t, jwtPath, client, clock, false)
 
 	_, err := manager.Token(context.Background())
@@ -312,94 +319,6 @@ func TestManagerStateRedactsUnexpectedErrors(t *testing.T) {
 	if strings.Contains(state.LastError, "leaked") || strings.Contains(state.LastError, "token value") {
 		t.Fatalf("state error leaked sensitive content: %q", state.LastError)
 	}
-}
-
-type fakeOpenBaoAuthClient struct {
-	logins         []openbao.JWTLoginRequest
-	renewals       []renewalCall
-	loginResponses []openbao.AuthToken
-	renewResponses []openbao.AuthToken
-	loginErr       error
-	renewErr       error
-}
-
-type blockingOpenBaoAuthClient struct {
-	started chan struct{}
-	release chan struct{}
-	once    sync.Once
-	mu      sync.Mutex
-	logins  int
-}
-
-type renewalCall struct {
-	token     string
-	increment time.Duration
-}
-
-func (f *fakeOpenBaoAuthClient) LoginJWT(_ context.Context, req openbao.JWTLoginRequest) (openbao.AuthToken, error) {
-	f.logins = append(f.logins, req)
-	if f.loginErr != nil {
-		return openbao.AuthToken{}, f.loginErr
-	}
-	if len(f.loginResponses) == 0 {
-		return openbao.AuthToken{}, errors.New("missing fake login response")
-	}
-	response := f.loginResponses[0]
-	f.loginResponses = f.loginResponses[1:]
-	return response, nil
-}
-
-func (f *fakeOpenBaoAuthClient) RenewSelfToken(
-	_ context.Context,
-	token string,
-	increment time.Duration,
-) (openbao.AuthToken, error) {
-	f.renewals = append(f.renewals, renewalCall{token: token, increment: increment})
-	if f.renewErr != nil {
-		return openbao.AuthToken{}, f.renewErr
-	}
-	if len(f.renewResponses) == 0 {
-		return openbao.AuthToken{}, errors.New("missing fake renew response")
-	}
-	response := f.renewResponses[0]
-	f.renewResponses = f.renewResponses[1:]
-	return response, nil
-}
-
-func (b *blockingOpenBaoAuthClient) LoginJWT(
-	ctx context.Context,
-	_ openbao.JWTLoginRequest,
-) (openbao.AuthToken, error) {
-	b.mu.Lock()
-	b.logins++
-	b.once.Do(func() {
-		close(b.started)
-	})
-	b.mu.Unlock()
-
-	select {
-	case <-b.release:
-	case <-ctx.Done():
-		return openbao.AuthToken{}, ctx.Err()
-	}
-	return openbao.AuthToken{
-		ClientToken:   testBaoToken1,
-		LeaseDuration: time.Minute,
-	}, nil
-}
-
-func (b *blockingOpenBaoAuthClient) RenewSelfToken(
-	_ context.Context,
-	_ string,
-	_ time.Duration,
-) (openbao.AuthToken, error) {
-	return openbao.AuthToken{}, errors.New("renew should not be called")
-}
-
-func (b *blockingOpenBaoAuthClient) loginCount() int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.logins
 }
 
 func newTestManager(
