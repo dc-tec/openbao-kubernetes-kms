@@ -41,6 +41,7 @@ These documents should be treated as implementation contracts:
 ## Security And Maintenance
 
 - [Threat model](security/threat-model.md)
+- [WS12 implementation security review](security/reviews/ws12-implementation-security-review.md)
 - [Hardening](security/hardening.md)
 - [Observability](observability.md)
 - [CLI reference](cli.md)

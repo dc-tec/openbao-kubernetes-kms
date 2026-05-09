@@ -539,10 +539,10 @@ Goal: reduce operational and supply-chain risk before broader use.
 | WS12-T04 | P0 | planned | Add dependency license check. | WS00-T06 |
 | WS12-T05 | P0 | planned | Add artifact signing. | WS00-T07 |
 | WS12-T06 | P0 | planned | Add provenance generation and verification. | WS12-T05 |
-| WS12-T07 | P1 | planned | Perform security review of key ID/AAD. | WS02-T06 |
-| WS12-T08 | P1 | planned | Perform security review of socket handling. | WS07-T03 |
-| WS12-T09 | P1 | planned | Perform security review of JWT/token lifecycle. | WS04-T10 |
-| WS12-T10 | P1 | planned | Perform threat model review with implementation evidence. | WS11-T07 |
+| WS12-T07 | P1 | done | Perform security review of key ID/AAD. | WS02-T06 |
+| WS12-T08 | P1 | done | Perform security review of socket handling. | WS07-T03 |
+| WS12-T09 | P1 | done | Perform security review of JWT/token lifecycle. | WS04-T10 |
+| WS12-T10 | P1 | done | Perform threat model review with implementation evidence. | WS11-T07 |
 | WS12-T11 | P1 | planned | Add fuzzing to CI or scheduled job. | WS02-T09 |
 | WS12-T12 | P0 | planned | Add release byte reproducibility check. | WS00-T08, WS12-T02 |
 | WS12-T13 | P0 | planned | Add release evidence pack and provenance index. | WS12-T06 |
@@ -557,6 +557,13 @@ Acceptance criteria:
 - Release images and SBOMs pass byte reproducibility checks.
 - Redaction tests are blocking.
 - Security review findings are tracked before production-ready claims.
+
+Implementation notes:
+
+- `WS12-T07` through `WS12-T10` are recorded in [WS12 implementation security review](../security/reviews/ws12-implementation-security-review.md).
+- The review found and remediated `WS12-SR-001`: `/run/openbao-kms` must not be group-writable because the socket access group should connect to `kms.sock`, not replace the socket path.
+- Secondary review remediated `WS12-SR-002` through `WS12-SR-007` across renewal increment, bootstrap probe grace, auth retry backoff, local JWT claim expectations, auth login timeout, and refresh-wait cancellation coverage.
+- `WS12-SR-008` remains a deferred low-severity OpenBao client-resilience follow-up for opt-in HTTP retry on transient upstream errors.
 
 ## WS13: Documentation, Examples, And Release Process
 
