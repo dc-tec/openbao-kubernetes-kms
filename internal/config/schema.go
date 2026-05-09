@@ -86,6 +86,13 @@ const configSchemaJSON = `{
         "statusMaxStaleness": {"type": "string"}
       }
     },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string"}
+      }
+    },
     "rotation": {
       "type": "object",
       "additionalProperties": false,

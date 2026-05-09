@@ -26,6 +26,7 @@ const (
 	defaultProbeInterval        = 30 * time.Second
 	defaultDeepProbeInterval    = 5 * time.Minute
 	defaultStatusMaxStaleness   = 2 * time.Minute
+	defaultStatePath            = "/var/lib/openbao-kms/state/key-registry.json"
 	defaultRotationMode         = "observed"
 	defaultActivationDelay      = 2 * time.Minute
 	defaultStableObservation    = 3
@@ -55,6 +56,7 @@ type Config struct {
 	Auth          AuthConfig        `mapstructure:"auth"`
 	Transit       TransitConfig     `mapstructure:"transit"`
 	Status        StatusConfig      `mapstructure:"status"`
+	State         StateConfig       `mapstructure:"state"`
 	Rotation      RotationConfig    `mapstructure:"rotation"`
 	Performance   PerformanceConfig `mapstructure:"performance"`
 	Logging       LoggingConfig     `mapstructure:"logging"`
@@ -114,6 +116,11 @@ type StatusConfig struct {
 	ProbeInterval      time.Duration `mapstructure:"probeInterval"`
 	DeepProbeInterval  time.Duration `mapstructure:"deepProbeInterval"`
 	StatusMaxStaleness time.Duration `mapstructure:"statusMaxStaleness"`
+}
+
+// StateConfig contains local non-secret state file settings.
+type StateConfig struct {
+	Path string `mapstructure:"path"`
 }
 
 // RotationConfig contains key version observation and promotion settings.
@@ -213,6 +220,7 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("status.probeInterval", defaultProbeInterval)
 	runtime.v.SetDefault("status.deepProbeInterval", defaultDeepProbeInterval)
 	runtime.v.SetDefault("status.statusMaxStaleness", defaultStatusMaxStaleness)
+	runtime.v.SetDefault("state.path", defaultStatePath)
 	runtime.v.SetDefault("rotation.mode", defaultRotationMode)
 	runtime.v.SetDefault("rotation.activationDelay", defaultActivationDelay)
 	runtime.v.SetDefault("rotation.requireStableObservationCount", defaultStableObservation)

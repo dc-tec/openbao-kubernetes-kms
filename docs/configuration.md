@@ -48,6 +48,9 @@ status:
   deepProbeInterval: 5m
   statusMaxStaleness: 2m
 
+state:
+  path: /var/lib/openbao-kms/state/key-registry.json
+
 rotation:
   mode: observed
   activationDelay: 2m
@@ -111,6 +114,7 @@ Required for MVP:
 | `status.probeInterval` | `30s` |
 | `status.deepProbeInterval` | `5m` |
 | `status.statusMaxStaleness` | `2m` |
+| `state.path` | `/var/lib/openbao-kms/state/key-registry.json` |
 | `rotation.mode` | `observed` |
 | `rotation.activationDelay` | `2m` |
 | `rotation.requireStableObservationCount` | `3` |
@@ -148,6 +152,7 @@ Startup must fail closed when:
 - socket path is outside an approved runtime directory,
 - socket parent directory is unsafe,
 - socket path is a symlink or regular file,
+- state path is not absolute,
 - JWT file is unreadable,
 - JWT is expired or too close to expiry,
 - JWT `nbf` or `iat` claims are outside configured clock skew leeway,

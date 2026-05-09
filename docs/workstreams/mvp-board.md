@@ -128,6 +128,12 @@ Blocking tasks:
 - WS09-T01 Add structured logs.
 - WS09-T03 Add Prometheus metrics.
 
+Current status:
+
+- `internal/status` implements the cached Status view, staleness policy, background probe scheduler, Transit metadata rotation observer, stable observation count, activation delay, rollback rejection, and persisted pending-rotation state.
+- The status store implements both the KMS v2 Status cache and decrypt snapshot lookup, keeping pending and rejected observations out of decryptable registry state.
+- Runtime socket lifecycle and observability wiring remain in WS07 and WS09.
+
 Exit criteria:
 
 - Status remains cheap under polling.

@@ -273,6 +273,58 @@ func TestMissingStateFileCanBeRebuiltFromMetadata(t *testing.T) {
 	}
 }
 
+func TestStateFileFromRecordsPreservesRotationObservationState(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	normalized, err := active.Normalize()
+	if err != nil {
+		t.Fatalf("normalize active: %v", err)
+	}
+	record := keyregistry.SnapshotStateRecordFromSnapshot(normalized)
+	record.ObservedAtUnix = 1_700_000_000
+	record.StableObservationCount = 3
+	record.StableAtUnix = 1_700_000_060
+	record.PromotedAtUnix = 1_700_000_120
+
+	state, err := keyregistry.NewStateFileFromRecords(
+		normalized.KubernetesKeyID,
+		[]keyregistry.SnapshotStateRecord{record},
+		7,
+		"",
+	)
+	if err != nil {
+		t.Fatalf("new state from records: %v", err)
+	}
+	if got := state.Snapshots[0].StableObservationCount; got != 3 {
+		t.Fatalf("stable observation count was not preserved: %d", got)
+	}
+	if got := state.Snapshots[0].StableAtUnix; got != record.StableAtUnix {
+		t.Fatalf("stable time was not preserved: %d", got)
+	}
+	if got := state.Snapshots[0].PromotedAtUnix; got != record.PromotedAtUnix {
+		t.Fatalf("promoted time was not preserved: %d", got)
+	}
+}
+
+func TestStateFileFromRecordsRejectsInvalidRotationObservationState(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	normalized, err := active.Normalize()
+	if err != nil {
+		t.Fatalf("normalize active: %v", err)
+	}
+	record := keyregistry.SnapshotStateRecordFromSnapshot(normalized)
+	record.StableObservationCount = 1
+
+	_, err = keyregistry.NewStateFileFromRecords(
+		normalized.KubernetesKeyID,
+		[]keyregistry.SnapshotStateRecord{record},
+		7,
+		"",
+	)
+	if !errors.Is(err, keyregistry.ErrStateCorrupt) {
+		t.Fatalf("expected corrupt observation metadata error, got %v", err)
+	}
+}
+
 func TestLoadStateFileRejectsUnsafePermissions(t *testing.T) {
 	path := saveValidStateFile(t)
 	// #nosec G302 -- this test intentionally creates unsafe state-file permissions.

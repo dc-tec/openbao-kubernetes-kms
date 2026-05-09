@@ -206,6 +206,7 @@ func validateValues(cfg Config) []ValidationProblem {
 	validatePositiveDuration(&problems, "status.probeInterval", cfg.Status.ProbeInterval)
 	validatePositiveDuration(&problems, "status.deepProbeInterval", cfg.Status.DeepProbeInterval)
 	validatePositiveDuration(&problems, "status.statusMaxStaleness", cfg.Status.StatusMaxStaleness)
+	validateAbsolutePath(&problems, "state.path", cfg.State.Path)
 	validatePositiveDuration(&problems, "rotation.activationDelay", cfg.Rotation.ActivationDelay)
 	validatePositiveDuration(
 		&problems,
@@ -318,6 +319,15 @@ func validateIdentifier(problems *[]ValidationProblem, field string, value strin
 	}
 	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t") {
 		appendProblem(problems, field, "must not contain control characters or surrounding whitespace")
+	}
+}
+
+func validateAbsolutePath(problems *[]ValidationProblem, field string, value string) {
+	if value == "" {
+		return
+	}
+	if !filepath.IsAbs(value) {
+		appendProblem(problems, field, "must be an absolute path")
 	}
 }
 

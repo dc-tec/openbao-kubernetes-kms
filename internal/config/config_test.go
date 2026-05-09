@@ -31,6 +31,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.OpenBao.Timeout != 2*time.Second {
 		t.Fatalf("unexpected OpenBao timeout: %s", cfg.OpenBao.Timeout)
 	}
+	if cfg.State.Path != "/var/lib/openbao-kms/state/key-registry.json" {
+		t.Fatalf("unexpected state path: %q", cfg.State.Path)
+	}
 	if cfg.Auth.ClockSkewLeeway != 30*time.Second {
 		t.Fatalf("unexpected auth clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
 	}
@@ -66,6 +69,8 @@ transit:
   useAssociatedData: true
 status:
   probeInterval: 45s
+state:
+  path: /var/lib/openbao-kms/state/custom-key-registry.json
 `)
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatalf("write config fixture: %v", err)
@@ -87,6 +92,9 @@ status:
 	}
 	if cfg.Status.ProbeInterval != 45*time.Second {
 		t.Fatalf("unexpected probe interval: %s", cfg.Status.ProbeInterval)
+	}
+	if cfg.State.Path != "/var/lib/openbao-kms/state/custom-key-registry.json" {
+		t.Fatalf("unexpected state path: %q", cfg.State.Path)
 	}
 	if cfg.Auth.ClockSkewLeeway != 45*time.Second {
 		t.Fatalf("unexpected clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
@@ -224,6 +232,13 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			field: "transit.useAssociatedData",
 			mutate: func(cfg *Config) {
 				cfg.Transit.UseAssociatedData = false
+			},
+		},
+		{
+			name:  "relative state path",
+			field: "state.path",
+			mutate: func(cfg *Config) {
+				cfg.State.Path = "key-registry.json"
 			},
 		},
 	}

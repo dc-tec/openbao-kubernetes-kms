@@ -1062,6 +1062,8 @@ status:
   probeInterval: 30s
   deepProbeInterval: 5m
   statusMaxStaleness: 2m
+state:
+  path: /var/lib/openbao-kms/state/key-registry.json
 rotation:
   mode: observed
   activationDelay: 2m
@@ -1977,6 +1979,8 @@ status:
   probeInterval: 30s
   deepProbeInterval: 5m
   statusMaxStaleness: 2m
+state:
+  path: /var/lib/openbao-kms/state/key-registry.json
 rotation:
   mode: observed
   activationDelay: 2m

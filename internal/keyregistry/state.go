@@ -55,6 +55,8 @@ type SnapshotStateRecord struct {
 	State                       string `json:"state"`
 	AADMode                     string `json:"aadMode"`
 	ObservedAtUnix              int64  `json:"observedAtUnix,omitempty"`
+	StableObservationCount      int    `json:"stableObservationCount,omitempty"`
+	StableAtUnix                int64  `json:"stableAtUnix,omitempty"`
 	PromotedAtUnix              int64  `json:"promotedAtUnix,omitempty"`
 }
 
@@ -111,6 +113,50 @@ func NewStateFile(
 	return state, nil
 }
 
+// NewStateFileFromRecords builds a validated state file from pre-normalized records.
+func NewStateFileFromRecords(
+	activeKeyID string,
+	records []SnapshotStateRecord,
+	generation uint64,
+	previousHash string,
+) (StateFile, error) {
+	if generation == 0 {
+		return StateFile{}, fmt.Errorf("state generation must be positive")
+	}
+	if activeKeyID == "" {
+		return StateFile{}, fmt.Errorf("active key_id is required")
+	}
+	if len(records) == 0 {
+		return StateFile{}, fmt.Errorf("state records are required")
+	}
+
+	normalizedRecords := make([]SnapshotStateRecord, 0, len(records))
+	for _, record := range records {
+		normalized, err := normalizeStateRecord(record)
+		if err != nil {
+			return StateFile{}, err
+		}
+		normalizedRecords = append(normalizedRecords, normalized)
+	}
+
+	state := StateFile{
+		SchemaVersion: stateFileVersion,
+		Generation:    generation,
+		PreviousHash:  previousHash,
+		ActiveKeyID:   activeKeyID,
+		Snapshots:     normalizedRecords,
+	}
+	hash, err := state.computeHash()
+	if err != nil {
+		return StateFile{}, err
+	}
+	state.CurrentHash = hash
+	if err := state.Validate(); err != nil {
+		return StateFile{}, err
+	}
+	return state, nil
+}
+
 // RebuildStateFromMetadata creates a restart-safe state from config and Transit metadata when no state exists.
 func RebuildStateFromMetadata(active KeySnapshot, historical []KeySnapshot) (StateFile, error) {
 	return NewStateFile(active, historical, 1, "")
@@ -148,8 +194,30 @@ func SnapshotStateRecordFromSnapshot(snapshot KeySnapshot) SnapshotStateRecord {
 	}
 }
 
+func normalizeStateRecord(record SnapshotStateRecord) (SnapshotStateRecord, error) {
+	snapshot, err := record.Snapshot()
+	if err != nil {
+		return SnapshotStateRecord{}, err
+	}
+	record.ProviderName = snapshot.ProviderName
+	record.ClusterID = snapshot.ClusterID
+	record.OpenBaoInstanceID = snapshot.OpenBaoInstanceID
+	record.TransitMountID = snapshot.TransitMountID
+	record.TransitKeyLineageID = snapshot.TransitKeyLineageID
+	record.TransitVersion = snapshot.TransitVersion
+	record.TransitVersionCreatedAtUnix = snapshot.TransitVersionCreatedAt.Unix()
+	record.KeyEpoch = snapshot.KeyEpoch
+	record.KubernetesKeyID = snapshot.KubernetesKeyID
+	record.State = string(snapshot.State)
+	record.AADMode = string(snapshot.AADMode)
+	return record, nil
+}
+
 // Snapshot returns the runtime snapshot represented by the record.
 func (r SnapshotStateRecord) Snapshot() (KeySnapshot, error) {
+	if err := validateObservationMetadata(r); err != nil {
+		return KeySnapshot{}, err
+	}
 	snapshot := KeySnapshot{
 		ProviderName:            r.ProviderName,
 		ClusterID:               r.ClusterID,
@@ -164,6 +232,34 @@ func (r SnapshotStateRecord) Snapshot() (KeySnapshot, error) {
 		AADMode:                 AADMode(r.AADMode),
 	}
 	return snapshot.Normalize()
+}
+
+func validateObservationMetadata(record SnapshotStateRecord) error {
+	if record.ObservedAtUnix < 0 {
+		return fmt.Errorf("%w: observed time must not be negative", ErrStateCorrupt)
+	}
+	if record.StableObservationCount < 0 {
+		return fmt.Errorf("%w: stable observation count must not be negative", ErrStateCorrupt)
+	}
+	if record.StableAtUnix < 0 {
+		return fmt.Errorf("%w: stable time must not be negative", ErrStateCorrupt)
+	}
+	if record.PromotedAtUnix < 0 {
+		return fmt.Errorf("%w: promoted time must not be negative", ErrStateCorrupt)
+	}
+	if record.StableObservationCount > 0 && record.ObservedAtUnix == 0 {
+		return fmt.Errorf("%w: observed time is required with stable observations", ErrStateCorrupt)
+	}
+	if record.StableAtUnix != 0 && record.StableObservationCount == 0 {
+		return fmt.Errorf("%w: stable observations are required with stable time", ErrStateCorrupt)
+	}
+	if record.StableAtUnix != 0 && record.ObservedAtUnix != 0 && record.StableAtUnix < record.ObservedAtUnix {
+		return fmt.Errorf("%w: stable time precedes observed time", ErrStateCorrupt)
+	}
+	if record.PromotedAtUnix != 0 && record.ObservedAtUnix != 0 && record.PromotedAtUnix < record.ObservedAtUnix {
+		return fmt.Errorf("%w: promoted time precedes observed time", ErrStateCorrupt)
+	}
+	return nil
 }
 
 // Validate verifies state schema, content, active snapshot, and current hash.

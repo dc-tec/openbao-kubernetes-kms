@@ -266,14 +266,14 @@ Goal: keep Kubernetes Status cheap while background probes maintain OpenBao and 
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS06-T01 | P0 | planned | Implement background probe scheduler. | WS03-T03, WS04-T09 |
-| WS06-T02 | P0 | planned | Implement Status cache with staleness policy. | WS06-T01 |
-| WS06-T03 | P0 | planned | Implement rotation observation state machine. | WS02-T07, WS03-T04 |
-| WS06-T04 | P0 | planned | Enforce stable observation count. | WS06-T03 |
-| WS06-T05 | P0 | planned | Enforce activation delay. | WS06-T03 |
-| WS06-T06 | P0 | planned | Reject Transit version rollback by default. | WS06-T03 |
+| WS06-T01 | P0 | done | Implement background probe scheduler. | WS03-T03, WS04-T09 |
+| WS06-T02 | P0 | done | Implement Status cache with staleness policy. | WS06-T01 |
+| WS06-T03 | P0 | done | Implement rotation observation state machine. | WS02-T07, WS03-T04 |
+| WS06-T04 | P0 | done | Enforce stable observation count. | WS06-T03 |
+| WS06-T05 | P0 | done | Enforce activation delay. | WS06-T03 |
+| WS06-T06 | P0 | done | Reject Transit version rollback by default. | WS06-T03 |
 | WS06-T07 | P0 | planned | Add multi-node consistency diagnostics. | WS09-T03 |
-| WS06-T08 | P0 | planned | Integrate persisted registry state into rotation promotion and restart behavior. | WS02-T12 |
+| WS06-T08 | P0 | done | Integrate persisted registry state into rotation promotion and restart behavior. | WS02-T12 |
 | WS06-T09 | P1 | planned | Add circuit breaker for repeated OpenBao failures. | WS03-T07 |
 | WS06-T10 | P1 | planned | Add OpenBao HA failover behavior tests. | WS11-T07 |
 
@@ -291,6 +291,13 @@ Test requirements:
 - Rotation state machine unit tests.
 - Failure injection around metadata read errors.
 - Concurrency tests for active snapshot updates.
+
+Implementation notes:
+
+- `internal/status` owns the production cache behind the `kmsv2.StatusCache` interface and also implements key snapshot lookup for decrypt.
+- Background probes refresh auth, read Transit metadata, update persisted registry state, and publish health without logging sensitive request material.
+- Pending Transit versions are persisted with observation count and activation timing, but pending and rejected snapshots are not exposed for decrypt lookup.
+- WS06-T07 remains planned until WS09 adds the metrics/logging surface for multi-node consistency diagnostics.
 
 ## WS07: Socket And Runtime Service Behavior
 
