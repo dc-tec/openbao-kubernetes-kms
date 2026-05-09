@@ -428,16 +428,16 @@ Goal: provide installable artifacts and tested deployment examples.
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS10-T01 | P0 | planned | Add sample systemd unit. | WS07-T02 |
-| WS10-T02 | P0 | planned | Add sample static pod manifest. | WS07-T02 |
-| WS10-T03 | P0 | planned | Add sample plugin config. | WS01-T01 |
-| WS10-T04 | P0 | planned | Add sample Kubernetes `EncryptionConfiguration`. | WS01-T07 |
-| WS10-T05 | P0 | planned | Add container image build. | WS00-T07 |
-| WS10-T06 | P1 | planned | Add package install layout for Linux using the resolved identity model. | WS00-T07 |
-| WS10-T07 | P1 | planned | Add kubeadm lab deployment scripts. | WS11-T06 |
-| WS10-T08 | P1 | planned | Add upgrade and rollback scripts for lab use. | WS10-T06 |
-| WS10-T09 | P2 | planned | Add OpenTofu module skeleton. | WS03-T10 |
-| WS10-T10 | P2 | planned | Add OpenBao policy generator. | WS08-T02 |
+| WS10-T01 | P0 | done | Add sample systemd unit. | WS07-T02 |
+| WS10-T02 | P0 | done | Add sample static pod manifest. | WS07-T02 |
+| WS10-T03 | P0 | done | Add sample plugin config. | WS01-T01 |
+| WS10-T04 | P0 | done | Add sample Kubernetes `EncryptionConfiguration`. | WS01-T07 |
+| WS10-T05 | P0 | done | Add container image build. | WS00-T07 |
+| WS10-T06 | P1 | done | Add package install layout for Linux using the resolved identity model. | WS00-T07 |
+| WS10-T07 | P1 | done | Add kubeadm lab deployment scripts. | WS11-T06 |
+| WS10-T08 | P1 | done | Add upgrade and rollback scripts for lab use. | WS10-T06 |
+| WS10-T09 | P2 | done | Add OpenTofu module skeleton. | WS03-T10 |
+| WS10-T10 | P2 | done | Add OpenBao policy generator. | WS08-T02 |
 
 Acceptance criteria:
 
@@ -445,6 +445,13 @@ Acceptance criteria:
 - Static pod manifest does not reference ConfigMaps, Secrets, or ServiceAccounts.
 - Container image runs as non-root where feasible.
 - Install layout matches [Install](../install.md).
+
+Implementation notes:
+
+- Deployment samples live under `deploy/`.
+- The container image uses a pinned distroless non-root runtime base and runs as `65532:65532`.
+- `server.socketGroup` accepts a group name or decimal GID; static pod samples use a numeric GID to avoid host group-name dependencies inside the image.
+- Linux package snippets use separate `openbao-kms` and `openbao-kms-socket` groups per [ADR 0012](../adr/0012-deployment-identity-and-image.md).
 
 Test requirements:
 
@@ -587,7 +594,7 @@ Parallelizable early work:
 
 | ID | Question | Needed by | Owner |
 |---|---|---|---|
-| OQ-01 | What exact Linux user/group model should packaged systemd deployments use? | WS10-T06 | Packaging lead |
+| OQ-01 | Resolved: use `openbao-kms`, `openbao-kms`, and `openbao-kms-socket` with numeric GID support for static pods. | WS10-T06 | [ADR 0012](../adr/0012-deployment-identity-and-image.md) |
 | OQ-02 | Which exact Kubernetes 1.34 patch and Kind node image digest will be pinned for v0.1? | WS00-T09 | Release lead |
 
 ## v0.1 Blocking Checklist

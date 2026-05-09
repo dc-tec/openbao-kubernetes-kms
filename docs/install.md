@@ -1,17 +1,18 @@
 # Install
 
-This document defines the expected installation model. It is a planning document until implementation artifacts exist.
+This document defines the expected installation model and points at the WS10 sample artifacts.
 
 ## Status
 
-No installable release exists yet. The intended artifacts are:
+No published release exists yet. The repository now includes sample build and deployment artifacts:
 
-- `bao-kms-provider` binary,
-- container image for static pod deployments,
-- sample config,
-- sample systemd unit,
-- sample static pod manifest,
-- sample Kubernetes `EncryptionConfiguration`.
+- `Dockerfile` for the `bao-kms-provider` container image,
+- `deploy/config/provider-systemd.yaml`,
+- `deploy/config/provider-static-pod.yaml`,
+- `deploy/systemd/bao-kms-provider.service`,
+- `deploy/static-pod/bao-kms-provider.yaml`,
+- `deploy/kubernetes/encryption-config.yaml`,
+- `deploy/package/linux` package layout snippets.
 
 ## Host Layout
 
@@ -39,6 +40,8 @@ Recommended ownership:
 ```
 
 The actual service user/group names may vary by distribution. The API server must be able to connect to the socket; it does not need access to the JWT file.
+
+Static pod mode should use a numeric `server.socketGroup` value that matches the host socket group GID. The container image runs as distroless non-root `65532:65532`.
 
 ## Prerequisites
 
@@ -74,6 +77,14 @@ Recommended:
 11. Verify encrypted resource creation and reads.
 12. Migrate existing resources.
 13. Remove `identity` fallback after migration verification.
+
+For local image builds:
+
+```sh
+make image-smoke
+```
+
+The image build uses a pinned Go builder base and a pinned distroless non-root runtime base from `.ci/versions.yaml`.
 
 ## Bootstrap Check
 

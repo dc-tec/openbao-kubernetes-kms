@@ -1,6 +1,6 @@
 # Documentation Index
 
-This repository is currently documentation-first. The goal is to define enough implementation, operational, and security behavior that coding can start without leaving critical KMS decisions implicit.
+This repository is in the v0.1 engineering-preview implementation track. The docs remain the implementation contract for behavior, operations, and security-sensitive decisions.
 
 ## Source Design
 
@@ -28,6 +28,7 @@ These documents should be treated as implementation contracts:
 ## Operator Guides
 
 - [Install](install.md)
+- [Deployment artifacts](../deploy/README.md)
 - [Kubernetes encryption config](kubernetes-encryption-config.md)
 - [systemd deployment](deployment/systemd.md)
 - [Static pod deployment](deployment/static-pod.md)

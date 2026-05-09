@@ -1,6 +1,6 @@
 # Linux Identity Model
 
-This document captures the systemd packaging user/group decision that still needs final confirmation.
+This document captures the systemd packaging and static pod identity model accepted in [ADR 0012](../adr/0012-deployment-identity-and-image.md).
 
 ## Goals
 
@@ -11,9 +11,9 @@ This document captures the systemd packaging user/group decision that still need
 - Avoid making the provider primary group equal to the kube-apiserver group.
 - Keep the model workable for kubeadm static-pod API servers and host-service API servers.
 
-## Candidate Model
+## Selected Model
 
-Recommended candidate:
+Use:
 
 ```text
 user:  openbao-kms
@@ -42,6 +42,13 @@ SupplementaryGroups=openbao-kms-socket
 ```
 
 The local kube-apiserver identity should be allowed to connect through the socket group. On hosts where kube-apiserver runs as root, root can connect regardless, but the group model still provides a non-root packaging path.
+
+Static pod mode should use the numeric host GID for `openbao-kms-socket` in both:
+
+- `spec.securityContext.supplementalGroups`,
+- `server.socketGroup` in provider config.
+
+This avoids depending on host group names inside the distroless non-root image.
 
 ## Runtime Directory Creation
 
@@ -96,9 +103,6 @@ Cons:
 - less portable to hardened API server services,
 - can hide permission problems until deployment hardening.
 
-## Open Decision
+## Decision
 
-Default to the separate socket group unless implementation or distro packaging tests show it is impractical.
-
-This decision should become an ADR before packaging artifacts are considered stable.
-
+The separate socket group is the default packaging model. Distro packaging may choose different names, but it must preserve the same privilege split: provider JWT access is separate from kube-apiserver socket access.

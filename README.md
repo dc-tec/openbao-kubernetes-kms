@@ -1,8 +1,8 @@
 # OpenBao Kubernetes KMS
 
-Design-stage OpenBao-native Kubernetes KMS v2 provider for encrypting selected Kubernetes API resources at rest in etcd using the OpenBao Transit secrets engine.
+OpenBao-native Kubernetes KMS v2 provider for encrypting selected Kubernetes API resources at rest in etcd using the OpenBao Transit secrets engine.
 
-This repository currently contains design and planning documentation. It is not yet a production implementation.
+This repository is in the v0.1 engineering-preview implementation track. It is not production-ready until the release gates pass.
 
 ## Scope
 
@@ -23,9 +23,9 @@ This plugin is for Kubernetes encryption-at-rest of selected API resources. It d
 
 ## Current Status
 
-Status: design and documentation phase.
+Status: implementation in progress for v0.1 engineering preview.
 
-No implementation, binary, image, Helm chart, or release artifact should be assumed to exist yet. The documents in this repository define the expected behavior before implementation starts.
+The Go binary, deployment samples, and local container image build exist. No published release artifact, support claim, or production-ready deployment should be assumed yet.
 
 ## Design Direction
 

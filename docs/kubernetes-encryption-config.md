@@ -26,6 +26,8 @@ resources:
       - identity: {}
 ```
 
+The maintained sample lives at [`deploy/kubernetes/encryption-config.yaml`](../deploy/kubernetes/encryption-config.yaml).
+
 The `identity` fallback allows reads of existing plaintext data during initial migration. It should be removed after all targeted resources have been rewritten and verified.
 
 ## Provider Name
@@ -149,4 +151,3 @@ Use reload carefully. Socket path, provider name, and provider ordering mistakes
 
 - [Kubernetes encryption at rest documentation](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
-

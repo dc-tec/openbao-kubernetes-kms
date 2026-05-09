@@ -75,7 +75,14 @@ Store it in platform configuration management and in the plugin config. If the T
 
 ## Policy
 
-Example least-privilege policy:
+Generate a least-privilege policy from the provider config:
+
+```sh
+bao-kms-provider policy openbao \
+  --config /etc/openbao-kms/config.yaml
+```
+
+Example output:
 
 ```hcl
 # Read Transit key metadata.
@@ -93,7 +100,7 @@ path "transit/decrypt/k8s-workload-a-etcd" {
   capabilities = ["update"]
 }
 
-# Optional: inspect global Transit key config for disable_upsert.
+# Inspect Transit disable_upsert.
 path "transit/config/keys" {
   capabilities = ["read"]
 }
@@ -173,4 +180,3 @@ Transit key rotation is an operator/platform action, not a hot-path plugin actio
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
 - [OpenBao Transit documentation](https://openbao.org/docs/secrets/transit/)
 - [OpenBao JWT auth](https://openbao.org/docs/2.4.x/auth/jwt/)
-

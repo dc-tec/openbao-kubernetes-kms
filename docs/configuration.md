@@ -203,6 +203,8 @@ Recommended local permissions:
 
 The JWT file should be readable only by the plugin process. The socket should be readable/writable only by the plugin and the local API server identity.
 
+`server.socketGroup` may be either a local group name or a decimal numeric GID. Use a group name for systemd or host-binary deployments. Use a numeric GID in static pod mode so the distroless non-root container does not depend on host group names being present inside the image.
+
 ## Unsafe Options
 
 The following should not be enabled in production without a written exception:

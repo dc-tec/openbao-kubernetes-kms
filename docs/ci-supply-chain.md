@@ -168,6 +168,8 @@ Change-routed expansions:
 | packaging or Dockerfile | image scan, SBOM smoke, reproducibility smoke. |
 | docs only | docs link/build checks. |
 
+The WS10 Dockerfile pins both the Go builder image and distroless non-root runtime image by digest. The pinned values are recorded in `.ci/versions.yaml`; release workflows must update both places together.
+
 ### Main Branch
 
 Main should run all PR lanes plus:

@@ -2060,18 +2060,17 @@ After=network-online.target
 Before=kubelet.service
 ConditionPathExists=/etc/openbao-kms/config.yaml
 ConditionPathExists=/var/lib/openbao-kms/identity.jwt
+ConditionPathIsDirectory=/run/openbao-kms
 [Service]
 Type=exec
 User=openbao-kms
 Group=openbao-kms
-SupplementaryGroups=kube-apiserver
+SupplementaryGroups=openbao-kms-socket
 ExecStart=/usr/local/bin/bao-kms-provider serve --config /etc/openbao-kms/config.yaml
 Restart=always
 RestartSec=5s
 StartLimitIntervalSec=60
 StartLimitBurst=10
-RuntimeDirectory=openbao-kms
-RuntimeDirectoryMode=0750
 StateDirectory=openbao-kms
 StateDirectoryMode=0750
 ConfigurationDirectory=openbao-kms
@@ -2092,7 +2091,7 @@ SystemCallArchitectures=native
 CapabilityBoundingSet=
 AmbientCapabilities=
 ReadOnlyPaths=/etc/openbao-kms
-ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms
+ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 [Install]
 WantedBy=multi-user.target
@@ -2117,48 +2116,53 @@ metadata:
   namespace: kube-system
   labels:
     app.kubernetes.io/name: bao-kms-provider
+    app.kubernetes.io/component: kms-provider
 spec:
   hostNetwork: true
   priorityClassName: system-node-critical
   automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    supplementalGroups:
+    - 1234
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: bao-kms-provider
-    image: registry.example.internal/bao-kms-provider:v0.1.0
+    image: ghcr.io/dc-tec/bao-kms-provider@sha256:0000000000000000000000000000000000000000000000000000000000000000
     imagePullPolicy: IfNotPresent
     args:
     - serve
-    - --config
-    - /etc/openbao-kms/config.yaml
+    - --config=/etc/openbao-kms/config.yaml
     ports:
     - name: metrics
       containerPort: 8081
-      hostPort: 8081
       protocol: TCP
     - name: health
       containerPort: 8082
-      hostPort: 8082
       protocol: TCP
     securityContext:
-      runAsNonRoot: true
-      runAsUser: 65532
-      runAsGroup: 65532
-      readOnlyRootFilesystem: true
       allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
       capabilities:
         drop:
         - ALL
-      seccompProfile:
-        type: RuntimeDefault
     volumeMounts:
-    - name: run-openbao-kms
-      mountPath: /run/openbao-kms
-      readOnly: false
     - name: config
-      mountPath: /etc/openbao-kms
+      mountPath: /etc/openbao-kms/config.yaml
       readOnly: true
-    - name: identity
-      mountPath: /var/lib/openbao-kms
+    - name: tls
+      mountPath: /etc/openbao-kms/tls
       readOnly: true
+    - name: jwt
+      mountPath: /var/lib/openbao-kms/identity.jwt
+      readOnly: true
+    - name: run
+      mountPath: /run/openbao-kms
+    - name: state
+      mountPath: /var/lib/openbao-kms/state
     livenessProbe:
       httpGet:
         host: 127.0.0.1
@@ -2174,17 +2178,25 @@ spec:
       initialDelaySeconds: 5
       periodSeconds: 10
   volumes:
-  - name: run-openbao-kms
-    hostPath:
-      path: /run/openbao-kms
-      type: DirectoryOrCreate
   - name: config
     hostPath:
-      path: /etc/openbao-kms
-      type: Directory
-  - name: identity
+      path: /etc/openbao-kms/config.yaml
+      type: File
+  - name: tls
     hostPath:
-      path: /var/lib/openbao-kms
+      path: /etc/openbao-kms/tls
+      type: Directory
+  - name: jwt
+    hostPath:
+      path: /var/lib/openbao-kms/identity.jwt
+      type: File
+  - name: run
+    hostPath:
+      path: /run/openbao-kms
+      type: Directory
+  - name: state
+    hostPath:
+      path: /var/lib/openbao-kms/state
       type: Directory
 ```
 

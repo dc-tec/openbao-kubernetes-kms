@@ -8,40 +8,57 @@ systemd avoids depending on kubelet, the container runtime, or the Kubernetes AP
 
 ## Recommended Unit
 
-Candidate unit. The Linux identity model is still under discussion; see [Linux identity model](linux-identity-model.md).
+The maintained sample unit lives at [`deploy/systemd/bao-kms-provider.service`](../../deploy/systemd/bao-kms-provider.service). It uses the resolved identity model from [Linux identity model](linux-identity-model.md).
 
 ```ini
 [Unit]
-Description=OpenBao Kubernetes KMS Provider
-Documentation=https://github.com/openbao/openbao
+Description=OpenBao Kubernetes KMS v2 Provider
+Documentation=https://github.com/dc-tec/openbao-kubernetes-kms
 Wants=network-online.target
 After=network-online.target
 Before=kubelet.service
+ConditionPathExists=/etc/openbao-kms/config.yaml
+ConditionPathExists=/var/lib/openbao-kms/identity.jwt
+ConditionPathIsDirectory=/run/openbao-kms
 
 [Service]
-Type=simple
+Type=exec
 User=openbao-kms
 Group=openbao-kms
 SupplementaryGroups=openbao-kms-socket
 ExecStart=/usr/local/bin/bao-kms-provider serve --config /etc/openbao-kms/config.yaml
 Restart=always
-RestartSec=2s
+RestartSec=5s
+StartLimitIntervalSec=60
+StartLimitBurst=10
+UMask=0027
 
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+SystemCallArchitectures=native
 ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state
 ReadOnlyPaths=/etc/openbao-kms
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=true
 MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 [Install]
 WantedBy=multi-user.target
 ```
 
 The exact ordering depends on the Kubernetes distribution. For kubeadm-style hosts, the goal is that the plugin socket is available before kubelet starts the static pod API server.
+
+Use [`deploy/config/provider-systemd.yaml`](../../deploy/config/provider-systemd.yaml) as the starting provider config for host-service deployments.
 
 ## Directory Setup
 
@@ -57,7 +74,7 @@ install -d -o openbao-kms -g openbao-kms-socket -m 2770 /run/openbao-kms
 
 The service should verify `/run/openbao-kms` at startup. Packaging should create it through `tmpfiles.d` or an equivalent root-owned install step so the group is `openbao-kms-socket` and the setgid bit preserves the socket access group.
 
-Example `tmpfiles.d` entry:
+Sample `tmpfiles.d` entries live under [`deploy/package/linux/tmpfiles.d/openbao-kms.conf`](../../deploy/package/linux/tmpfiles.d/openbao-kms.conf). The runtime-only entry is:
 
 ```text
 d /run/openbao-kms 2770 openbao-kms openbao-kms-socket -

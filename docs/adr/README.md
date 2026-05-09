@@ -15,3 +15,4 @@ Current ADRs:
 - [0009: Include decrypt micro-batching behind config](0009-include-decrypt-microbatching.md)
 - [0010: Project naming and M0 foundation](0010-project-naming-and-m0-foundation.md)
 - [0011: Strict typed idiomatic Go](0011-strict-typed-idiomatic-go.md)
+- [0012: Deployment identity and container image](0012-deployment-identity-and-image.md)

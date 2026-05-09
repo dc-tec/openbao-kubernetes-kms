@@ -38,7 +38,7 @@ Required:
 Recommended:
 
 - systemd sandboxing where systemd mode is used,
-- read-only container filesystem where static pod mode is used,
+- distroless non-root image and read-only container filesystem where static pod mode is used,
 - immutable image digests,
 - host audit for config and JWT changes,
 - one-node-at-a-time upgrades.

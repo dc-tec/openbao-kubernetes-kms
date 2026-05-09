@@ -16,7 +16,7 @@ Therefore the plugin static pod must mount all required files from the host:
 
 ## Example Manifest
 
-Example planning manifest:
+The maintained sample manifest lives at [`deploy/static-pod/bao-kms-provider.yaml`](../../deploy/static-pod/bao-kms-provider.yaml). Replace the image digest and supplemental group GID before deploying.
 
 ```yaml
 apiVersion: v1
@@ -32,10 +32,10 @@ spec:
     runAsUser: 65532
     runAsGroup: 65532
     supplementalGroups:
-      - 1234 # replace with the host GID allowed to write /run/openbao-kms
+      - 1234
   containers:
     - name: bao-kms-provider
-      image: ghcr.io/example/bao-kms-provider:v0.1.0
+      image: ghcr.io/dc-tec/bao-kms-provider@sha256:0000000000000000000000000000000000000000000000000000000000000000
       imagePullPolicy: IfNotPresent
       args:
         - serve
@@ -73,14 +73,14 @@ spec:
     - name: run
       hostPath:
         path: /run/openbao-kms
-        type: DirectoryOrCreate
+        type: Directory
     - name: state
       hostPath:
         path: /var/lib/openbao-kms/state
         type: Directory
 ```
 
-The final manifest will depend on image UID/GID, host permissions, and distribution-specific API server user/group behavior.
+The final manifest depends on the host socket group GID and the released image digest. The sample uses UID/GID `65532:65532`, matching the distroless non-root image user.
 
 ## Image Availability
 
@@ -107,6 +107,7 @@ Every control-plane node must have:
 
 The API server must be able to access the socket created under `/run/openbao-kms`.
 The container user or one of its supplemental groups must be able to create the socket in that directory.
+The provider config used by the static pod should set `server.socketGroup` to the same numeric host GID listed in `supplementalGroups`; see [`deploy/config/provider-static-pod.yaml`](../../deploy/config/provider-static-pod.yaml).
 
 ## kubeadm Placement
 

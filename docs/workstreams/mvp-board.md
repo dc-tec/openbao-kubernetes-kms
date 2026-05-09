@@ -159,6 +159,7 @@ Current status:
 - `bao-kms-provider serve` composes typed config, JWT auth, OpenBao Transit, status probes, KMS v2 gRPC, Unix socket runtime, and optional health readiness.
 - `doctor` provides redacted preflight checks for local config/JWT/socket state, OpenBao auth/TLS, Transit policy and metadata, probe encrypt/decrypt, deterministic key ID derivation, Status/encrypt consistency, and optional Kubernetes `EncryptionConfiguration` validation.
 - `verify-key`, `benchmark`, `rotation-plan`, and `verify-rotation` are implemented as initial operational commands with stable text output and stable command exit codes.
+- WS10 deployment artifacts are implemented under `deploy/`: systemd unit, static pod manifest, provider configs, Kubernetes `EncryptionConfiguration`, Linux package snippets, distroless non-root Dockerfile, kubeadm lab scripts, OpenTofu skeleton, and OpenBao policy generation.
 - Stable JSON output and explicit completion-generation UX remain WS08 P1 follow-ups.
 
 Exit criteria:
