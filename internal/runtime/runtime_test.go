@@ -25,6 +25,7 @@ import (
 
 const (
 	pluginVersion       = "v0.1.0-runtime-test"
+	runtimeCiphertext   = "runtime-test-ciphertext"
 	socketBaseName      = "kms.sock"
 	parentMode          = os.FileMode(0o750)
 	socketMode          = os.FileMode(0o660)
@@ -231,6 +232,93 @@ func TestRunReturnsWhenGRPCServerStopsUnexpectedly(t *testing.T) {
 	}
 }
 
+func TestRunDrainsInFlightKMSRequestOnShutdown(t *testing.T) {
+	dir := shortTempDir(t)
+	if err := os.Chmod(dir, parentMode); err != nil {
+		t.Fatalf("chmod parent: %v", err)
+	}
+	socketPath := filepath.Join(dir, socketBaseName)
+
+	active := testSnapshot(t)
+	cache := &fakeStatusCache{current: kmsv2.CachedStatus{
+		Healthz: kmsv2.HealthOK,
+		KeyID:   active.KubernetesKeyID,
+		Active:  active,
+	}}
+	registry := mustRegistry(t, active)
+	transit := &fakeTransit{
+		encryptStarted: make(chan struct{}, 1),
+		releaseEncrypt: make(chan struct{}),
+	}
+	kmsServer := mustKMSServerWithTransit(t, cache, registry, transit)
+
+	grpcServer := grpc.NewServer()
+	kmsv2.Register(grpcServer, kmsServer)
+
+	rt, err := runtime.New(runtime.Options{
+		Socket: socket.Options{
+			Path: socketPath,
+			Mode: socketMode,
+			GID:  -1,
+		},
+		GRPCServer:      grpcServer,
+		ShutdownTimeout: shutdownDeadline,
+	})
+	if err != nil {
+		t.Fatalf("runtime.New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- rt.Run(ctx) }()
+
+	client := newKMSClient(t, socketPath)
+	waitForKMSStatus(t, client, active.KubernetesKeyID)
+
+	encryptErr := make(chan error, 1)
+	go func() {
+		_, err := client.Encrypt(context.Background(), &kmsapi.EncryptRequest{
+			Plaintext: []byte("payload that should drain before shutdown"),
+		})
+		encryptErr <- err
+	}()
+
+	select {
+	case <-transit.encryptStarted:
+	case <-time.After(dialDeadline):
+		t.Fatal("encrypt did not reach Transit")
+	}
+
+	cancel()
+	select {
+	case err := <-runErr:
+		t.Fatalf("Run returned before in-flight encrypt drained: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(transit.releaseEncrypt)
+
+	select {
+	case err := <-encryptErr:
+		if err != nil {
+			t.Fatalf("in-flight encrypt returned: %v", err)
+		}
+	case <-time.After(shutdownDeadline + time.Second):
+		t.Fatal("in-flight encrypt did not drain")
+	}
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run returned: %v", err)
+		}
+	case <-time.After(shutdownDeadline + time.Second):
+		t.Fatal("Run did not return after in-flight encrypt drained")
+	}
+}
+
 func TestNewRejectsNilGRPCServer(t *testing.T) {
 	dir := shortTempDir(t)
 	if err := os.Chmod(dir, parentMode); err != nil {
@@ -323,6 +411,13 @@ func TestRunWithoutHealthAddress(t *testing.T) {
 func dialKMSAndCallStatus(t *testing.T, socketPath, expectedKeyID string) {
 	t.Helper()
 
+	client := newKMSClient(t, socketPath)
+	waitForKMSStatus(t, client, expectedKeyID)
+}
+
+func newKMSClient(t *testing.T, socketPath string) kmsapi.KeyManagementServiceClient {
+	t.Helper()
+
 	conn, err := grpc.NewClient(
 		"unix://"+socketPath,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -332,7 +427,12 @@ func dialKMSAndCallStatus(t *testing.T, socketPath, expectedKeyID string) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	client := kmsapi.NewKeyManagementServiceClient(conn)
+	return kmsapi.NewKeyManagementServiceClient(conn)
+}
+
+func waitForKMSStatus(t *testing.T, client kmsapi.KeyManagementServiceClient, expectedKeyID string) {
+	t.Helper()
+
 	deadline := time.Now().Add(dialDeadline)
 	var lastErr error
 	for time.Now().Before(deadline) {
@@ -393,10 +493,20 @@ func shortTempDir(t *testing.T) string {
 
 func mustKMSServer(t *testing.T, cache kmsv2.StatusCache, registry keyregistry.Registry) *kmsv2.Server {
 	t.Helper()
+	return mustKMSServerWithTransit(t, cache, registry, &fakeTransit{})
+}
+
+func mustKMSServerWithTransit(
+	t *testing.T,
+	cache kmsv2.StatusCache,
+	registry keyregistry.Registry,
+	transit kmsv2.Transit,
+) *kmsv2.Server {
+	t.Helper()
 	server, err := kmsv2.NewServer(kmsv2.Options{
 		StatusCache:   cache,
 		Registry:      registry,
-		Transit:       &fakeTransit{},
+		Transit:       transit,
 		PluginVersion: pluginVersion,
 	})
 	if err != nil {
@@ -449,16 +559,38 @@ func (f *fakeReady) Ready(_ context.Context) (status.Diagnostics, error) {
 	return f.diagnostics, nil
 }
 
-type fakeTransit struct{}
-
-func (fakeTransit) Encrypt(
-	_ context.Context,
-	_ kmsv2.TransitEncryptRequest,
-) (kmsv2.TransitEncryptResponse, error) {
-	return kmsv2.TransitEncryptResponse{}, errors.New("transit not exercised in this test")
+type fakeTransit struct {
+	encryptStarted chan struct{}
+	releaseEncrypt chan struct{}
 }
 
-func (fakeTransit) Decrypt(
+func (f *fakeTransit) Encrypt(
+	ctx context.Context,
+	request kmsv2.TransitEncryptRequest,
+) (kmsv2.TransitEncryptResponse, error) {
+	if f.encryptStarted == nil && f.releaseEncrypt == nil {
+		return kmsv2.TransitEncryptResponse{}, errors.New("transit not exercised in this test")
+	}
+	if f.encryptStarted != nil {
+		select {
+		case f.encryptStarted <- struct{}{}:
+		default:
+		}
+	}
+	if f.releaseEncrypt != nil {
+		select {
+		case <-f.releaseEncrypt:
+		case <-ctx.Done():
+			return kmsv2.TransitEncryptResponse{}, ctx.Err()
+		}
+	}
+	return kmsv2.TransitEncryptResponse{
+		Ciphertext: []byte(runtimeCiphertext),
+		KeyVersion: request.KeyVersion,
+	}, nil
+}
+
+func (*fakeTransit) Decrypt(
 	_ context.Context,
 	_ kmsv2.TransitDecryptRequest,
 ) (kmsv2.TransitDecryptResponse, error) {
