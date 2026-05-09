@@ -29,6 +29,7 @@ type Store struct {
 	registry     keyregistry.Registry
 	active       keyregistry.KeySnapshot
 	hasState     bool
+	breaker      CircuitBreakerSnapshot
 }
 
 // NewStore creates an initially unhealthy status cache.
@@ -118,9 +119,7 @@ func (s *Store) Current(ctx context.Context) (kmsv2.CachedStatus, error) {
 	}
 
 	healthz := s.healthz
-	if healthz == "" {
-		healthz = kmsv2.HealthUnhealthy
-	}
+	healthz = normalizedHealth(healthz)
 	if healthz == kmsv2.HealthOK && s.staleLocked(s.clock.Now()) {
 		healthz = kmsv2.HealthUnhealthy
 	}
@@ -164,6 +163,35 @@ func (s *Store) Active() (keyregistry.KeySnapshot, bool) {
 	defer s.mu.RUnlock()
 
 	return s.active, s.hasState
+}
+
+// UpdateCircuitBreaker publishes the current circuit breaker state to diagnostics.
+func (s *Store) UpdateCircuitBreaker(snapshot CircuitBreakerSnapshot) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.breaker = snapshot
+}
+
+// Diagnostics returns a redacted local view for readiness, metrics, and node comparison.
+func (s *Store) Diagnostics(ctx context.Context) (Diagnostics, error) {
+	if err := contextErr(ctx); err != nil {
+		return Diagnostics{}, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return diagnosticsForState(
+		s.state,
+		s.hasState,
+		s.active,
+		s.healthz,
+		s.updatedAt,
+		s.clock.Now(),
+		s.maxStaleness,
+		s.breaker,
+	), nil
 }
 
 func (s *Store) staleLocked(now time.Time) bool {

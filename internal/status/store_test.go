@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/aad"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
@@ -66,6 +67,52 @@ func TestStoreLookupExcludesPendingSnapshots(t *testing.T) {
 	_, err = store.Lookup(pendingKeyID)
 	if !errors.Is(err, keyregistry.ErrUnknownKeyID) {
 		t.Fatalf("expected pending key ID to be unavailable for decrypt, got %v", err)
+	}
+}
+
+func TestStoreDiagnosticsExposeRedactedConsistencyState(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, 2*time.Minute)
+	state := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
+	result, err := observer.Observe(state, profileForLatest(2, clock.Now()), clock.Now())
+	if err != nil {
+		t.Fatalf("observe pending rotation: %v", err)
+	}
+	active, err := result.State.ActiveSnapshot()
+	if err != nil {
+		t.Fatalf("active snapshot: %v", err)
+	}
+	pendingID := pendingKeyID(t, result.State)
+	store := newTestStore(t, clock)
+	if err := store.PublishHealthy(result.State, clock.Now()); err != nil {
+		t.Fatalf("publish pending state: %v", err)
+	}
+	store.UpdateCircuitBreaker(status.CircuitBreakerSnapshot{
+		State:               status.CircuitBreakerOpen,
+		ConsecutiveFailures: 2,
+	})
+
+	diagnostics, err := store.Diagnostics(context.Background())
+	if err != nil {
+		t.Fatalf("diagnostics: %v", err)
+	}
+	if diagnostics.ActiveKeyIDHash != aad.HashValue(active.KubernetesKeyID) {
+		t.Fatalf("unexpected active key ID hash: %s", diagnostics.ActiveKeyIDHash)
+	}
+	if diagnostics.ActiveKeyIDHash == active.KubernetesKeyID {
+		t.Fatal("diagnostics exposed raw active key ID")
+	}
+	if diagnostics.PendingKeyIDHash != aad.HashValue(pendingID) {
+		t.Fatalf("unexpected pending key ID hash: %s", diagnostics.PendingKeyIDHash)
+	}
+	if diagnostics.RotationState != status.RotationStatePending {
+		t.Fatalf("expected pending rotation state, got %s", diagnostics.RotationState)
+	}
+	if diagnostics.PendingStableObservationCount != 1 {
+		t.Fatalf("unexpected pending observation count: %d", diagnostics.PendingStableObservationCount)
+	}
+	if diagnostics.CircuitBreaker.State != status.CircuitBreakerOpen {
+		t.Fatalf("expected open circuit breaker, got %s", diagnostics.CircuitBreaker.State)
 	}
 }
 

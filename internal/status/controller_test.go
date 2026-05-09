@@ -95,6 +95,68 @@ func TestControllerMetadataFailureMarksUnhealthyWithoutPromoting(t *testing.T) {
 	}
 }
 
+func TestControllerCircuitBreakerSkipsProbesWhileOpen(t *testing.T) {
+	clock := newFakeClock()
+	store := newTestStore(t, clock)
+	observer := newTestObserver(t, clock, 1, 0)
+	auth := &fakeAuth{}
+	transit := &fakeTransit{
+		profile: profileForLatest(1, clock.Now()),
+		readErr: errors.New("metadata unavailable"),
+	}
+	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+	controller := newTestControllerWithOptions(t, status.ControllerOptions{
+		Clock:      clock,
+		Store:      store,
+		Observer:   observer,
+		Auth:       auth,
+		Transit:    transit,
+		StateStore: stateStore,
+		MountPath:  "transit",
+		KeyName:    "k8s-workload-a-etcd",
+		Breaker: status.CircuitBreakerOptions{
+			FailureThreshold: 2,
+			OpenDuration:     time.Minute,
+		},
+	})
+
+	for i := 0; i < 2; i++ {
+		if err := controller.ProbeOnce(context.Background()); !errors.Is(err, status.ErrProbeFailed) {
+			t.Fatalf("expected probe failure %d, got %v", i+1, err)
+		}
+	}
+	if auth.refreshCalls != 2 || transit.readCalls != 2 {
+		t.Fatalf("expected two attempted probes, got auth=%d read=%d", auth.refreshCalls, transit.readCalls)
+	}
+
+	if err := controller.ProbeOnce(context.Background()); !errors.Is(err, status.ErrCircuitBreakerOpen) {
+		t.Fatalf("expected open circuit breaker, got %v", err)
+	}
+	if auth.refreshCalls != 2 || transit.readCalls != 2 {
+		t.Fatalf("open circuit breaker should skip probe, got auth=%d read=%d", auth.refreshCalls, transit.readCalls)
+	}
+	diagnostics, err := store.Diagnostics(context.Background())
+	if err != nil {
+		t.Fatalf("diagnostics: %v", err)
+	}
+	if diagnostics.CircuitBreaker.State != status.CircuitBreakerOpen {
+		t.Fatalf("expected open circuit breaker diagnostics, got %s", diagnostics.CircuitBreaker.State)
+	}
+
+	clock.Advance(time.Minute)
+	transit.readErr = nil
+	if err := controller.ProbeOnce(context.Background()); err != nil {
+		t.Fatalf("expected probe after breaker window to succeed, got %v", err)
+	}
+	diagnostics, err = store.Diagnostics(context.Background())
+	if err != nil {
+		t.Fatalf("diagnostics after recovery: %v", err)
+	}
+	if diagnostics.CircuitBreaker.State != status.CircuitBreakerClosed {
+		t.Fatalf("expected closed circuit breaker after success, got %s", diagnostics.CircuitBreaker.State)
+	}
+}
+
 func TestControllerLoadsPersistedPendingState(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 2, time.Minute)
@@ -134,7 +196,7 @@ func newTestController(
 ) *status.Controller {
 	t.Helper()
 
-	controller, err := status.NewController(status.ControllerOptions{
+	return newTestControllerWithOptions(t, status.ControllerOptions{
 		Clock:      clock,
 		Store:      store,
 		Observer:   observer,
@@ -144,6 +206,12 @@ func newTestController(
 		MountPath:  "transit",
 		KeyName:    "k8s-workload-a-etcd",
 	})
+}
+
+func newTestControllerWithOptions(t *testing.T, opts status.ControllerOptions) *status.Controller {
+	t.Helper()
+
+	controller, err := status.NewController(opts)
 	if err != nil {
 		t.Fatalf("new controller: %v", err)
 	}
@@ -164,11 +232,13 @@ type fakeTransit struct {
 	profile        openbao.KeyProfile
 	readErr        error
 	deepProbeErr   error
+	readCalls      int
 	deepProbeCalls int
 	lastProbe      openbao.ProbeRequest
 }
 
 func (f *fakeTransit) ReadKeyProfile(context.Context, string, string) (openbao.KeyProfile, error) {
+	f.readCalls++
 	if f.readErr != nil {
 		return openbao.KeyProfile{}, f.readErr
 	}

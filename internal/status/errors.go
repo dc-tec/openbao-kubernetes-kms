@@ -7,6 +7,8 @@ var (
 	ErrConfigInvalid = errors.New("status config invalid")
 	// ErrProbeFailed identifies a failed background status probe.
 	ErrProbeFailed = errors.New("status probe failed")
+	// ErrCircuitBreakerOpen identifies probes skipped after repeated dependency failures.
+	ErrCircuitBreakerOpen = errors.New("status circuit breaker open")
 	// ErrStateUnavailable identifies missing local registry state.
 	ErrStateUnavailable = errors.New("status state unavailable")
 	// ErrTransitMetadataInvalid identifies malformed or incomplete Transit metadata.

@@ -272,9 +272,9 @@ Goal: keep Kubernetes Status cheap while background probes maintain OpenBao and 
 | WS06-T04 | P0 | done | Enforce stable observation count. | WS06-T03 |
 | WS06-T05 | P0 | done | Enforce activation delay. | WS06-T03 |
 | WS06-T06 | P0 | done | Reject Transit version rollback by default. | WS06-T03 |
-| WS06-T07 | P0 | planned | Add multi-node consistency diagnostics. | WS09-T03 |
+| WS06-T07 | P0 | done | Add local multi-node consistency diagnostic surface. | WS06-T02, WS06-T08 |
 | WS06-T08 | P0 | done | Integrate persisted registry state into rotation promotion and restart behavior. | WS02-T12 |
-| WS06-T09 | P1 | planned | Add circuit breaker for repeated OpenBao failures. | WS03-T07 |
+| WS06-T09 | P1 | done | Add circuit breaker for repeated OpenBao failures. | WS03-T07 |
 | WS06-T10 | P1 | planned | Add OpenBao HA failover behavior tests. | WS11-T07 |
 
 Acceptance criteria:
@@ -297,7 +297,8 @@ Implementation notes:
 - `internal/status` owns the production cache behind the `kmsv2.StatusCache` interface and also implements key snapshot lookup for decrypt.
 - Background probes refresh auth, read Transit metadata, update persisted registry state, and publish health without logging sensitive request material.
 - Pending Transit versions are persisted with observation count and activation timing, but pending and rejected snapshots are not exposed for decrypt lookup.
-- WS06-T07 remains planned until WS09 adds the metrics/logging surface for multi-node consistency diagnostics.
+- Local diagnostics expose redacted active/pending key hashes, Transit versions, state generation, rotation state, cache staleness, and circuit breaker state for later WS09 metrics/logging.
+- WS06-T10 remains planned until WS11 failure-injection and OpenBao HA test support lands.
 
 ## WS07: Socket And Runtime Service Behavior
 

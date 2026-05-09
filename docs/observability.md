@@ -34,6 +34,8 @@ openbao_kms_aad_validation_errors_total{reason}
 openbao_kms_decrypt_key_id_errors_total{reason}
 ```
 
+The status runtime exposes a local redacted diagnostic snapshot with active and pending key ID hashes, Transit versions, state generation, rotation state, cache age, staleness, and circuit breaker state. Metrics and logs should consume that snapshot rather than recomputing or exposing raw key IDs.
+
 Label rules:
 
 - Use bounded values.
@@ -150,4 +152,3 @@ Debug correlation mode should be:
 - time-limited,
 - documented in incident notes,
 - verified not to log secrets.
-

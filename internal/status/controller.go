@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
@@ -14,6 +16,7 @@ const (
 
 	messageAuthRefreshFailed     = "auth refresh failed"
 	messageContextRequired       = "context is required"
+	messageCircuitBreakerOpen    = "probe skipped while circuit breaker is open"
 	messageDeepProbeFailed       = "Transit deep probe failed"
 	messageRegistryStateSave     = "save registry state"
 	messageTransitMetadataFailed = "Transit metadata read failed"
@@ -40,6 +43,7 @@ type ControllerOptions struct {
 	StateStore StateStore
 	MountPath  string
 	KeyName    string
+	Breaker    CircuitBreakerOptions
 }
 
 // Controller runs one-shot status probes used by the scheduler and tests.
@@ -52,6 +56,8 @@ type Controller struct {
 	stateStore StateStore
 	mountPath  string
 	keyName    string
+	breakerMu  sync.Mutex
+	breaker    circuitBreaker
 }
 
 // NewController builds a status probe controller and loads persisted registry state when available.
@@ -80,7 +86,9 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		stateStore: opts.StateStore,
 		mountPath:  opts.MountPath,
 		keyName:    opts.KeyName,
+		breaker:    newCircuitBreaker(opts.Breaker),
 	}
+	controller.store.UpdateCircuitBreaker(controller.breaker.snapshot())
 	if opts.StateStore != nil {
 		if err := controller.loadState(); err != nil {
 			return nil, err
@@ -95,14 +103,21 @@ func (c *Controller) ProbeOnce(ctx context.Context) error {
 		return err
 	}
 	now := c.clock.Now()
+	if !c.allowProbe(now) {
+		c.store.PublishUnhealthy(now)
+		c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+		return fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen)
+	}
 	if err := c.auth.Refresh(ctx); err != nil {
 		c.store.PublishUnhealthy(now)
+		c.recordProbeFailure(now)
 		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageAuthRefreshFailed, err)
 	}
 
 	profile, err := c.transit.ReadKeyProfile(ctx, c.mountPath, c.keyName)
 	if err != nil {
 		c.store.PublishUnhealthy(now)
+		c.recordProbeFailure(now)
 		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageTransitMetadataFailed, err)
 	}
 
@@ -130,6 +145,7 @@ func (c *Controller) ProbeOnce(ctx context.Context) error {
 		c.store.PublishUnhealthy(now)
 		return err
 	}
+	c.recordProbeSuccess()
 	return nil
 }
 
@@ -139,6 +155,11 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) error {
 		return err
 	}
 	now := c.clock.Now()
+	if !c.allowProbe(now) {
+		c.store.PublishUnhealthy(now)
+		c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+		return fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen)
+	}
 	active, ok := c.store.Active()
 	if !ok {
 		c.store.PublishUnhealthy(now)
@@ -151,9 +172,36 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) error {
 		AssociatedData: []byte(probeAssociatedDataValue),
 	}); err != nil {
 		c.store.PublishUnhealthy(now)
+		c.recordProbeFailure(now)
 		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageDeepProbeFailed, err)
 	}
+	c.recordProbeSuccess()
 	return nil
+}
+
+func (c *Controller) allowProbe(now time.Time) bool {
+	c.breakerMu.Lock()
+	defer c.breakerMu.Unlock()
+
+	allowed := c.breaker.allow(now)
+	c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+	return allowed
+}
+
+func (c *Controller) recordProbeFailure(now time.Time) {
+	c.breakerMu.Lock()
+	defer c.breakerMu.Unlock()
+
+	c.breaker.recordFailure(now)
+	c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+}
+
+func (c *Controller) recordProbeSuccess() {
+	c.breakerMu.Lock()
+	defer c.breakerMu.Unlock()
+
+	c.breaker.recordSuccess()
+	c.store.UpdateCircuitBreaker(c.breaker.snapshot())
 }
 
 func (c *Controller) loadState() error {

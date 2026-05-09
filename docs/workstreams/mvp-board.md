@@ -130,9 +130,9 @@ Blocking tasks:
 
 Current status:
 
-- `internal/status` implements the cached Status view, staleness policy, background probe scheduler, Transit metadata rotation observer, stable observation count, activation delay, rollback rejection, and persisted pending-rotation state.
+- `internal/status` implements the cached Status view, staleness policy, background probe scheduler, Transit metadata rotation observer, stable observation count, activation delay, rollback rejection, persisted pending-rotation state, circuit breaker behavior, and local redacted diagnostics.
 - The status store implements both the KMS v2 Status cache and decrypt snapshot lookup, keeping pending and rejected observations out of decryptable registry state.
-- Runtime socket lifecycle and observability wiring remain in WS07 and WS09.
+- Runtime socket lifecycle remains in WS07. WS09 still owns metrics/log emission from the local diagnostics surface.
 
 Exit criteria:
 
