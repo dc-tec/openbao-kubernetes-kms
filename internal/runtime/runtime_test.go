@@ -32,6 +32,7 @@ const (
 	dialDeadline        = 2 * time.Second
 	shutdownDeadline    = 3 * time.Second
 	healthLocalAddress  = "127.0.0.1:0"
+	metricsLocalAddress = "127.0.0.1:0"
 	healthCacheAge      = 5 * time.Second
 	transitVersionFixed = 3
 )
@@ -169,6 +170,68 @@ func TestRunReadyReturns503AfterStartedButReadinessProbeStale(t *testing.T) {
 	cancel()
 	select {
 	case <-runErr:
+	case <-time.After(shutdownDeadline + time.Second):
+		t.Fatal("Run did not return within shutdown deadline")
+	}
+}
+
+func TestRunServesMetricsAndShutsDownCleanly(t *testing.T) {
+	dir := shortTempDir(t)
+	if err := os.Chmod(dir, parentMode); err != nil {
+		t.Fatalf("chmod parent: %v", err)
+	}
+	socketPath := filepath.Join(dir, socketBaseName)
+
+	active := testSnapshot(t)
+	cache := &fakeStatusCache{current: kmsv2.CachedStatus{
+		Healthz: kmsv2.HealthOK,
+		KeyID:   active.KubernetesKeyID,
+		Active:  active,
+	}}
+	registry := mustRegistry(t, active)
+	kmsServer := mustKMSServer(t, cache, registry)
+
+	grpcServer := grpc.NewServer()
+	kmsv2.Register(grpcServer, kmsServer)
+
+	metricsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/metrics" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("openbao_kms_test_metric 1\n"))
+	})
+	rt, err := runtime.New(runtime.Options{
+		Socket: socket.Options{
+			Path: socketPath,
+			Mode: socketMode,
+			GID:  -1,
+		},
+		GRPCServer:      grpcServer,
+		MetricsAddress:  metricsLocalAddress,
+		MetricsHandler:  metricsHandler,
+		ShutdownTimeout: shutdownDeadline,
+	})
+	if err != nil {
+		t.Fatalf("runtime.New: %v", err)
+	}
+	if rt.MetricsAddr() == nil {
+		t.Fatal("expected metrics listener address")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() { runErr <- rt.Run(ctx) }()
+
+	dialKMSAndCallStatus(t, socketPath, active.KubernetesKeyID)
+	checkHTTPEndpoint(t, rt.MetricsAddr(), "/metrics", http.StatusOK)
+
+	cancel()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run returned: %v", err)
+		}
 	case <-time.After(shutdownDeadline + time.Second):
 		t.Fatal("Run did not return within shutdown deadline")
 	}
@@ -347,6 +410,21 @@ func TestNewRejectsHealthAddressWithoutReadiness(t *testing.T) {
 	}
 }
 
+func TestNewRejectsMetricsAddressWithoutHandler(t *testing.T) {
+	dir := shortTempDir(t)
+	if err := os.Chmod(dir, parentMode); err != nil {
+		t.Fatalf("chmod parent: %v", err)
+	}
+	_, err := runtime.New(runtime.Options{
+		Socket:         socket.Options{Path: filepath.Join(dir, socketBaseName), Mode: socketMode, GID: -1},
+		GRPCServer:     grpc.NewServer(),
+		MetricsAddress: metricsLocalAddress,
+	})
+	if !errors.Is(err, runtime.ErrInvalidConfig) {
+		t.Fatalf("want ErrInvalidConfig, got %v", err)
+	}
+}
+
 func TestNewPropagatesSocketErrors(t *testing.T) {
 	_, err := runtime.New(runtime.Options{
 		Socket:     socket.Options{Path: "kms.sock", Mode: socketMode, GID: -1},
@@ -456,6 +534,14 @@ func checkHealthEndpoint(t *testing.T, addr net.Addr, path string, wantCode int)
 	t.Helper()
 	if addr == nil {
 		t.Fatal("nil health address")
+	}
+	checkHTTPEndpoint(t, addr, path, wantCode)
+}
+
+func checkHTTPEndpoint(t *testing.T, addr net.Addr, path string, wantCode int) {
+	t.Helper()
+	if addr == nil {
+		t.Fatal("nil HTTP address")
 	}
 	url := "http://" + addr.String() + path
 	deadline := time.Now().Add(dialDeadline)

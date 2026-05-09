@@ -12,7 +12,9 @@ This document defines logs, metrics, and health endpoints.
 
 ## Metrics
 
-Recommended Prometheus metrics:
+Prometheus metrics are served by `bao-kms-provider serve` on `server.metricsAddress` at `/metrics`.
+
+Implemented Prometheus metrics:
 
 ```text
 openbao_kms_grpc_requests_total{method,status}
@@ -35,6 +37,7 @@ openbao_kms_decrypt_key_id_errors_total{reason}
 ```
 
 The status runtime exposes a local redacted diagnostic snapshot with active and pending key ID hashes, Transit versions, state generation, rotation state, cache age, staleness, and circuit breaker state. Metrics and logs should consume that snapshot rather than recomputing or exposing raw key IDs.
+`openbao_kms_status_key_id_hash{hash}` exports only the current key ID hash with value `1`.
 
 Label rules:
 
@@ -49,6 +52,7 @@ Label rules:
 ## Logs
 
 Use JSON logs.
+`bao-kms-provider serve` defaults to JSON logs using `logging.format: json`; successful high-frequency KMS and OpenBao request logs are emitted at debug level, while failures are warning-level events.
 
 Example:
 
@@ -121,9 +125,9 @@ Recommended endpoints:
 - active key snapshot available,
 - cached KMS Status fresh.
 
-`/metrics` should expose Prometheus metrics.
+`/metrics` exposes Prometheus metrics on `server.metricsAddress`.
 
-Bind health and metrics to localhost by default.
+Bind health and metrics to localhost by default. Health and metrics bind separately: `/live` and `/ready` use `server.healthAddress`, while `/metrics` uses `server.metricsAddress`.
 
 ## Alerts
 
@@ -142,13 +146,37 @@ Recommended alerts:
 - Plugin restart loop.
 - Socket restart or stale socket detection.
 
+Example Prometheus alerting rules are maintained in [`operations/prometheus-alerts.yaml`](operations/prometheus-alerts.yaml). Treat them as starting points: tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
+
 ## Correlation With OpenBao
 
 OpenBao request IDs may be logged when available and safe. They should not be stored in KMS annotations by default.
 
-Debug correlation mode should be:
+Debug correlation mode is disabled by default. When enabled, it temporarily adds safe correlation fields to debug logs:
+
+- `request_uid_hash` on KMS request logs,
+- `openbao_request_id` on OpenBao request logs when OpenBao returned a safe request ID,
+- `debug_correlation_incident`,
+- `debug_correlation_expires_at`.
+
+Strict guardrails:
 
 - disabled by default,
-- time-limited,
-- documented in incident notes,
-- verified not to log secrets.
+- requires `logging.level: debug`,
+- requires `logging.logOpenBaoRequestIDs: true`,
+- requires `logging.debugCorrelation.incidentId`,
+- requires a positive `logging.debugCorrelation.ttl` no greater than one hour,
+- expires automatically without restart after the configured TTL,
+- still does not log plaintext, JWTs, OpenBao tokens, full ciphertext, raw Transit key material, raw OpenBao paths, or raw key names.
+
+Example incident-only configuration:
+
+```yaml
+logging:
+  level: debug
+  logOpenBaoRequestIDs: true
+  debugCorrelation:
+    enabled: true
+    ttl: 15m
+    incidentId: INC-12345
+```

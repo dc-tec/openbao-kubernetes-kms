@@ -177,6 +177,71 @@ func TestClientResolvePreservesBasePath(t *testing.T) {
 	}
 }
 
+func TestClientObservesSafeOpenBaoRequestID(t *testing.T) {
+	observer := &fakeRequestObserver{}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assertRequest(t, r, http.MethodGet, "/v1/transit/config/keys")
+		_, _ = w.Write([]byte(`{
+			"request_id":"req-123_ABC",
+			"data":{"disable_upsert":true}
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	client := newTestClient(t, server)
+	client.observer = observer
+	if _, err := client.ReadDisableUpsert(context.Background(), testMountPath); err != nil {
+		t.Fatalf("read disable_upsert: %v", err)
+	}
+
+	if len(observer.requests) != 1 {
+		t.Fatalf("expected one observation, got %d", len(observer.requests))
+	}
+	if observer.requests[0].RequestID != "req-123_ABC" {
+		t.Fatalf("unexpected request id: %#v", observer.requests[0])
+	}
+}
+
+func TestClientDropsUnsafeOpenBaoRequestID(t *testing.T) {
+	observer := &fakeRequestObserver{}
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusForbidden,
+			Body: io.NopCloser(strings.NewReader(
+				`{"request_id":"token value with spaces","errors":["permission denied"]}`,
+			)),
+			Header: make(http.Header),
+		}, nil
+	})
+	client, err := NewClientWithHTTPClient(ClientConfig{
+		Address:     "https://bao.example.internal",
+		TokenSource: StaticTokenSource{TokenValue: testToken},
+		Observer:    observer,
+	}, &http.Client{Transport: transport})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	_, err = client.ReadDisableUpsert(context.Background(), testMountPath)
+	if err == nil {
+		t.Fatal("expected request to fail")
+	}
+	if len(observer.requests) != 1 {
+		t.Fatalf("expected one observation, got %d", len(observer.requests))
+	}
+	if observer.requests[0].RequestID != "" {
+		t.Fatalf("unsafe request id should be dropped: %#v", observer.requests[0])
+	}
+}
+
+type fakeRequestObserver struct {
+	requests []RequestObservation
+}
+
+func (f *fakeRequestObserver) ObserveOpenBaoRequest(_ context.Context, observation RequestObservation) {
+	f.requests = append(f.requests, observation)
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {

@@ -1079,6 +1079,10 @@ logging:
   format: json
   redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
+  debugCorrelation:
+    enabled: false
+    ttl: 15m
+    incidentId: ""
 ```
 
 ### 15.2 Configuration validation
@@ -1996,6 +2000,10 @@ logging:
   format: json
   redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
+  debugCorrelation:
+    enabled: false
+    ttl: 15m
+    incidentId: ""
 ```
 
 ---

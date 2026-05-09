@@ -22,6 +22,8 @@ const (
 	jwtFileDisallowedMode    = os.FileMode(0o037)
 	caFileDisallowedMode     = os.FileMode(0o022)
 	socketDisallowedMode     = os.FileMode(0o117)
+	maxDebugCorrelationTTL   = time.Hour
+	maxIncidentIDLength      = 64
 )
 
 var (
@@ -227,8 +229,54 @@ func validateValues(cfg Config) []ValidationProblem {
 	if cfg.Logging.Format != "json" && cfg.Logging.Format != "text" {
 		appendProblem(&problems, "logging.format", "must be json or text")
 	}
+	validateDebugCorrelation(&problems, cfg.Logging)
 
 	return problems
+}
+
+func validateDebugCorrelation(problems *[]ValidationProblem, logging LoggingConfig) {
+	correlation := logging.DebugCorrelation
+	if !correlation.Enabled {
+		return
+	}
+	if logging.Level != "debug" {
+		appendProblem(
+			problems,
+			"logging.debugCorrelation.enabled",
+			"requires logging.level debug",
+		)
+	}
+	if !logging.LogOpenBaoRequestIDs {
+		appendProblem(
+			problems,
+			"logging.logOpenBaoRequestIDs",
+			"must be true when debug correlation is enabled",
+		)
+	}
+	validatePositiveDuration(problems, "logging.debugCorrelation.ttl", correlation.TTL)
+	if correlation.TTL > maxDebugCorrelationTTL {
+		appendProblem(
+			problems,
+			"logging.debugCorrelation.ttl",
+			"must not exceed 1h",
+		)
+	}
+	if correlation.IncidentID == "" {
+		appendProblem(
+			problems,
+			"logging.debugCorrelation.incidentId",
+			"is required when debug correlation is enabled",
+		)
+		return
+	}
+	if len(correlation.IncidentID) > maxIncidentIDLength {
+		appendProblem(
+			problems,
+			"logging.debugCorrelation.incidentId",
+			"must be at most 64 characters",
+		)
+	}
+	validateIdentifier(problems, "logging.debugCorrelation.incidentId", correlation.IncidentID)
 }
 
 func validateSocketPolicy(cfg Config, opts ValidationOptions) []ValidationProblem {

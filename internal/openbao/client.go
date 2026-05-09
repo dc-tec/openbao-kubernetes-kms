@@ -23,6 +23,7 @@ const (
 	contentTypeJSON      = "application/json"
 	openBaoAPIVersion    = "v1"
 	addressSchemeHTTPS   = "https"
+	maxRequestIDLength   = 128
 )
 
 // TokenSource returns the current OpenBao token for one request.
@@ -51,6 +52,7 @@ type ClientConfig struct {
 	TLSServerName string
 	Timeout       time.Duration
 	TokenSource   TokenSource
+	Observer      RequestObserver
 }
 
 // AuthClientConfig contains OpenBao auth client construction settings.
@@ -60,6 +62,7 @@ type AuthClientConfig struct {
 	CACertFile    string
 	TLSServerName string
 	Timeout       time.Duration
+	Observer      RequestObserver
 }
 
 // Client is a narrow OpenBao API client for Transit and diagnostics.
@@ -68,6 +71,7 @@ type Client struct {
 	namespace   string
 	tokenSource TokenSource
 	httpClient  *http.Client
+	observer    RequestObserver
 }
 
 // AuthClient is a narrow OpenBao API client for JWT login and token renewal.
@@ -75,6 +79,26 @@ type AuthClient struct {
 	baseURL    *url.URL
 	namespace  string
 	httpClient *http.Client
+	observer   RequestObserver
+}
+
+// RequestObservation is one redacted OpenBao HTTP request observation.
+type RequestObservation struct {
+	Operation  string
+	Status     string
+	Duration   time.Duration
+	ErrorClass ErrorClass
+	RequestID  string
+}
+
+// RequestObserver receives redacted OpenBao HTTP request observations.
+type RequestObserver interface {
+	ObserveOpenBaoRequest(context.Context, RequestObservation)
+}
+
+// DecryptBatchObserver receives bounded Transit batch size observations.
+type DecryptBatchObserver interface {
+	ObserveOpenBaoDecryptBatchSize(int)
 }
 
 // NewClient builds an OpenBao client with pinned CA roots and server-name validation.
@@ -103,6 +127,7 @@ func NewClientWithHTTPClient(cfg ClientConfig, httpClient *http.Client) (*Client
 		namespace:   cfg.Namespace,
 		tokenSource: cfg.TokenSource,
 		httpClient:  httpClient,
+		observer:    cfg.Observer,
 	}, nil
 }
 
@@ -128,6 +153,7 @@ func NewAuthClientWithHTTPClient(cfg AuthClientConfig, httpClient *http.Client) 
 		baseURL:    baseURL,
 		namespace:  cfg.Namespace,
 		httpClient: httpClient,
+		observer:   cfg.Observer,
 	}, nil
 }
 
@@ -198,6 +224,7 @@ func (c *Client) do(
 		response,
 		token,
 		true,
+		c.observer,
 	)
 }
 
@@ -221,6 +248,7 @@ func (c *AuthClient) doUnauthenticated(
 		response,
 		"",
 		false,
+		c.observer,
 	)
 }
 
@@ -248,6 +276,7 @@ func (c *AuthClient) doWithToken(
 		response,
 		token,
 		true,
+		c.observer,
 	)
 }
 
@@ -263,7 +292,22 @@ func doOpenBao(
 	response responsePayload,
 	token string,
 	includeToken bool,
-) error {
+	observer RequestObserver,
+) (err error) {
+	start := time.Now()
+	requestID := ""
+	defer func() {
+		if observer != nil {
+			observer.ObserveOpenBaoRequest(ctx, RequestObservation{
+				Operation:  operation,
+				Status:     requestStatus(err),
+				Duration:   time.Since(start),
+				ErrorClass: requestErrorClass(err),
+				RequestID:  requestID,
+			})
+		}
+	}()
+
 	var body io.Reader
 	if requestBody != nil {
 		encoded, err := json.Marshal(requestBody)
@@ -297,8 +341,9 @@ func doOpenBao(
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		messages := decodeErrorMessages(resp.Body)
-		return newHTTPError(operation, resp.StatusCode, messages)
+		body := decodeErrorBody(resp.Body)
+		requestID = safeRequestID(body.RequestID)
+		return newHTTPError(operation, resp.StatusCode, body.Errors)
 	}
 	if response == nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
@@ -307,6 +352,7 @@ func doOpenBao(
 	if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
 		return fmt.Errorf("decode OpenBao %s response: %w", operation, err)
 	}
+	requestID = requestIDFromResponse(response)
 	return nil
 }
 
@@ -328,21 +374,63 @@ type responsePayload interface {
 	responsePayload()
 }
 
-type errorBody struct {
-	Errors []string `json:"errors"`
+type requestIDPayload interface {
+	openBaoRequestID() string
 }
 
-func decodeErrorMessages(reader io.Reader) []string {
+type responseMetadata struct {
+	RequestID string `json:"request_id"`
+}
+
+func (m responseMetadata) openBaoRequestID() string {
+	return safeRequestID(m.RequestID)
+}
+
+type errorBody struct {
+	RequestID string   `json:"request_id"`
+	Errors    []string `json:"errors"`
+}
+
+func decodeErrorBody(reader io.Reader) errorBody {
 	var body errorBody
 	if err := json.NewDecoder(reader).Decode(&body); err != nil {
-		return nil
-	}
-	if len(body.Errors) == 0 {
-		return nil
+		return errorBody{}
 	}
 	messages := make([]string, len(body.Errors))
 	copy(messages, body.Errors)
-	return messages
+	body.Errors = messages
+	return body
+}
+
+func requestIDFromResponse(response responsePayload) string {
+	payload, ok := response.(requestIDPayload)
+	if !ok {
+		return ""
+	}
+	return payload.openBaoRequestID()
+}
+
+func safeRequestID(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || len(trimmed) > maxRequestIDLength {
+		return ""
+	}
+	for _, char := range trimmed {
+		if !safeRequestIDChar(char) {
+			return ""
+		}
+	}
+	return trimmed
+}
+
+func safeRequestIDChar(char rune) bool {
+	return char >= 'a' && char <= 'z' ||
+		char >= 'A' && char <= 'Z' ||
+		char >= '0' && char <= '9' ||
+		char == '-' ||
+		char == '_' ||
+		char == '.' ||
+		char == ':'
 }
 
 func parseAddress(address string) (*url.URL, error) {

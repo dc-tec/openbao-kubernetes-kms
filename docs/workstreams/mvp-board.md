@@ -75,7 +75,7 @@ Current status:
 
 - `internal/kmsv2` implements the KMS v2 gRPC service, cached Status reads, Encrypt, Decrypt, timeout/cancellation handling, graceful request drain through the WS07 runtime, redacted panic recovery, and the Status/encrypt key ID invariant behind narrow fakeable interfaces.
 - `test/kmsconformance` starts the KMS v2 service over a Unix socket and exercises it with the real Kubernetes KMS v2 protobuf client.
-- Production status cache and runtime lifecycle are implemented in WS06 and WS07. Structured logging remains in WS09.
+- Production status cache, runtime lifecycle, structured logging, and bounded metrics are implemented in WS06, WS07, and WS09.
 
 Exit criteria:
 
@@ -135,7 +135,7 @@ Current status:
 - `internal/socket` owns safe Unix socket creation (parent validation, symlink/regular-file/directory rejection, live-peer probe, verified-dead stale reclaim, post-bind chmod/chown).
 - `internal/health` serves `/live` and `/ready` behind narrow probe interfaces; `/ready` consumes `status.Diagnostics`.
 - `internal/runtime` composes socket listener + gRPC server + optional health HTTP server with `SIGINT`/`SIGTERM` handling and bounded graceful shutdown.
-- WS09 still owns structured logs and Prometheus metrics; WS07 left an `OnStaleSocketRemoved` hook and the existing diagnostics surface for WS09 to wire without runtime API changes.
+- `internal/logging` and `internal/metrics` now provide structured JSON logs, bounded Prometheus metrics, `/metrics`, safe observer wiring, stale socket restart counting, log/metric redaction coverage, example Prometheus alert rules, and guarded time-limited debug correlation mode.
 
 Exit criteria:
 

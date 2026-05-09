@@ -179,6 +179,11 @@ func (s *Store) Diagnostics(ctx context.Context) (Diagnostics, error) {
 		return Diagnostics{}, err
 	}
 
+	return s.DiagnosticsSnapshot(), nil
+}
+
+// DiagnosticsSnapshot returns a redacted local view without requiring a request context.
+func (s *Store) DiagnosticsSnapshot() Diagnostics {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -191,7 +196,7 @@ func (s *Store) Diagnostics(ctx context.Context) (Diagnostics, error) {
 		s.clock.Now(),
 		s.maxStaleness,
 		s.breaker,
-	), nil
+	)
 }
 
 func (s *Store) staleLocked(now time.Time) bool {

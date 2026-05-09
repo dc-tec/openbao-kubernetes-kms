@@ -15,6 +15,13 @@ import (
 const (
 	tokenSourceMemory          = "memory"
 	defaultRefreshRetryBackoff = time.Second
+	authStatusOK               = "ok"
+	authStatusError            = "error"
+	authStatusJWTExpired       = "jwt_expired"
+	authStatusJWTNearExpiry    = "jwt_near_expiry"
+	authStatusJWTInvalid       = "jwt_invalid"
+	authStatusAuthFailed       = "auth_failed"
+	authStatusNoUsableSession  = "no_usable_session"
 )
 
 var (
@@ -68,6 +75,13 @@ type ManagerOptions struct {
 	Clock               Clock
 	RenewalEnabled      bool
 	RefreshRetryBackoff time.Duration
+	Observer            Observer
+}
+
+// Observer receives redacted auth lifecycle observations.
+type Observer interface {
+	ObserveAuthLogin(context.Context, string)
+	ObserveAuthRenewal(context.Context, string)
 }
 
 // State is the redacted auth state exposed to status and readiness code.
@@ -103,6 +117,7 @@ type Manager struct {
 	retryBackoff   time.Duration
 	refreshing     bool
 	refreshDone    chan struct{}
+	observer       Observer
 }
 
 type currentToken struct {
@@ -131,6 +146,7 @@ func NewManager(cfg ManagerConfig, client OpenBaoAuthClient, opts ManagerOptions
 		clock:          clockOrReal(opts.Clock),
 		renewalEnabled: opts.RenewalEnabled,
 		retryBackoff:   retryBackoff,
+		observer:       opts.Observer,
 	}, nil
 }
 
@@ -292,6 +308,7 @@ func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult
 		Clock:           action.clock,
 	})
 	if err != nil {
+		m.observeLogin(ctx, err)
 		return refreshResult{err: err}
 	}
 
@@ -301,13 +318,17 @@ func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult
 		JWT:       jwt.Raw,
 	})
 	if err != nil {
-		return refreshResult{err: publicAuthError(err)}
+		publicErr := publicAuthError(err)
+		m.observeLogin(ctx, publicErr)
+		return refreshResult{err: publicErr}
 	}
 	now := action.clock.Now()
 	token, err := currentTokenFromAuth(authToken, "", now, true, action.cfg.LoginBeforeTokenExpiry)
 	if err != nil {
+		m.observeLogin(ctx, err)
 		return refreshResult{err: err}
 	}
+	m.observeLogin(ctx, nil)
 
 	return refreshResult{
 		token:   token,
@@ -319,13 +340,17 @@ func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult
 func (m *Manager) renew(ctx context.Context, action refreshAction) (currentToken, time.Time, error) {
 	authToken, err := m.client.RenewSelfToken(ctx, action.current.value, action.cfg.LoginBeforeTokenExpiry)
 	if err != nil {
-		return currentToken{}, time.Time{}, publicAuthError(err)
+		publicErr := publicAuthError(err)
+		m.observeRenewal(ctx, publicErr)
+		return currentToken{}, time.Time{}, publicErr
 	}
 	now := action.clock.Now()
 	token, err := currentTokenFromAuth(authToken, action.current.value, now, false, action.cfg.LoginBeforeTokenExpiry)
 	if err != nil {
+		m.observeRenewal(ctx, err)
 		return currentToken{}, time.Time{}, err
 	}
+	m.observeRenewal(ctx, nil)
 
 	return token, now, nil
 }
@@ -447,6 +472,45 @@ func publicAuthError(err error) error {
 		return nil
 	}
 	return fmt.Errorf("%w: %s", ErrAuthFailed, safeErrorMessage(err))
+}
+
+func (m *Manager) observeLogin(ctx context.Context, err error) {
+	if m.observer == nil {
+		return
+	}
+	m.observer.ObserveAuthLogin(ctx, authStatus(err))
+}
+
+func (m *Manager) observeRenewal(ctx context.Context, err error) {
+	if m.observer == nil {
+		return
+	}
+	m.observer.ObserveAuthRenewal(ctx, authStatus(err))
+}
+
+func authStatus(err error) string {
+	if err == nil {
+		return authStatusOK
+	}
+	switch {
+	case errors.Is(err, ErrJWTExpired):
+		return authStatusJWTExpired
+	case errors.Is(err, ErrJWTNearExpiry):
+		return authStatusJWTNearExpiry
+	case errors.Is(err, ErrJWTMalformed),
+		errors.Is(err, ErrJWTNotYetValid),
+		errors.Is(err, ErrJWTIssuedInFuture),
+		errors.Is(err, ErrJWTRead):
+		return authStatusJWTInvalid
+	case errors.Is(err, ErrAuthFailed),
+		errors.Is(err, ErrTokenUnavailable):
+		if errors.Is(err, ErrTokenUnavailable) {
+			return authStatusNoUsableSession
+		}
+		return authStatusAuthFailed
+	default:
+		return authStatusError
+	}
 }
 
 func safeErrorMessage(err error) string {

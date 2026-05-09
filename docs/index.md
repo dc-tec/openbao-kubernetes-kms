@@ -34,6 +34,7 @@ These documents should be treated as implementation contracts:
 - [Linux identity model](deployment/linux-identity-model.md)
 - [Rotation](operations/rotation.md)
 - [Disaster recovery](operations/disaster-recovery.md)
+- [Prometheus alert rules](operations/prometheus-alerts.yaml)
 - [Troubleshooting](troubleshooting.md)
 
 ## Security And Maintenance

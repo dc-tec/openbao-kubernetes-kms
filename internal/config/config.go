@@ -36,6 +36,7 @@ const (
 	defaultLogFormat            = "json"
 	defaultRedactOpenBaoPaths   = true
 	defaultLogOpenBaoRequestIDs = true
+	defaultDebugCorrelationTTL  = 15 * time.Minute
 )
 
 // Runtime owns the Viper-backed config state at the config boundary.
@@ -145,10 +146,18 @@ type DecryptMicroBatchingConfig struct {
 
 // LoggingConfig contains structured logging settings.
 type LoggingConfig struct {
-	Level                string `mapstructure:"level"`
-	Format               string `mapstructure:"format"`
-	RedactOpenBaoPaths   bool   `mapstructure:"redactOpenBaoPaths"`
-	LogOpenBaoRequestIDs bool   `mapstructure:"logOpenBaoRequestIDs"`
+	Level                string                 `mapstructure:"level"`
+	Format               string                 `mapstructure:"format"`
+	RedactOpenBaoPaths   bool                   `mapstructure:"redactOpenBaoPaths"`
+	LogOpenBaoRequestIDs bool                   `mapstructure:"logOpenBaoRequestIDs"`
+	DebugCorrelation     DebugCorrelationConfig `mapstructure:"debugCorrelation"`
+}
+
+// DebugCorrelationConfig controls temporary incident-response correlation fields.
+type DebugCorrelationConfig struct {
+	Enabled    bool          `mapstructure:"enabled"`
+	TTL        time.Duration `mapstructure:"ttl"`
+	IncidentID string        `mapstructure:"incidentId"`
 }
 
 // NewRuntime returns a config runtime with project defaults.
@@ -232,4 +241,6 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("logging.format", defaultLogFormat)
 	runtime.v.SetDefault("logging.redactOpenBaoPaths", defaultRedactOpenBaoPaths)
 	runtime.v.SetDefault("logging.logOpenBaoRequestIDs", defaultLogOpenBaoRequestIDs)
+	runtime.v.SetDefault("logging.debugCorrelation.enabled", false)
+	runtime.v.SetDefault("logging.debugCorrelation.ttl", defaultDebugCorrelationTTL)
 }

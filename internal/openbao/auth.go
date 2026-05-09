@@ -106,6 +106,7 @@ type renewSelfRequestBody struct {
 func (renewSelfRequestBody) requestPayload() {}
 
 type authResponseBody struct {
+	responseMetadata
 	Auth authResponseData `json:"auth"`
 }
 

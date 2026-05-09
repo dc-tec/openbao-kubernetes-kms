@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+const (
+	testDebugLogLevel            = "debug"
+	testDebugCorrelationIncident = "INC-123"
+)
+
 func TestLoadDefaults(t *testing.T) {
 	cfg, err := Load(NewRuntime(), LoadOptions{})
 	if err != nil {
@@ -36,6 +41,12 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.Auth.ClockSkewLeeway != 30*time.Second {
 		t.Fatalf("unexpected auth clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
+	}
+	if cfg.Logging.DebugCorrelation.Enabled {
+		t.Fatal("debug correlation should default to disabled")
+	}
+	if cfg.Logging.DebugCorrelation.TTL != 15*time.Minute {
+		t.Fatalf("unexpected debug correlation ttl: %s", cfg.Logging.DebugCorrelation.TTL)
 	}
 }
 
@@ -256,6 +267,93 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 				t.Fatalf("expected %s problem, got %v", tt.field, err)
 			}
 		})
+	}
+}
+
+func TestValidateDebugCorrelationGuardrails(t *testing.T) {
+	tests := []struct {
+		name   string
+		field  string
+		mutate func(*Config)
+	}{
+		{
+			name:  "requires debug log level",
+			field: "logging.debugCorrelation.enabled",
+			mutate: func(cfg *Config) {
+				cfg.Logging.Level = "info"
+				cfg.Logging.DebugCorrelation.Enabled = true
+				cfg.Logging.DebugCorrelation.TTL = 15 * time.Minute
+				cfg.Logging.DebugCorrelation.IncidentID = testDebugCorrelationIncident
+			},
+		},
+		{
+			name:  "requires OpenBao request IDs",
+			field: "logging.logOpenBaoRequestIDs",
+			mutate: func(cfg *Config) {
+				cfg.Logging.Level = testDebugLogLevel
+				cfg.Logging.LogOpenBaoRequestIDs = false
+				cfg.Logging.DebugCorrelation.Enabled = true
+				cfg.Logging.DebugCorrelation.TTL = 15 * time.Minute
+				cfg.Logging.DebugCorrelation.IncidentID = testDebugCorrelationIncident
+			},
+		},
+		{
+			name:  "requires ttl",
+			field: "logging.debugCorrelation.ttl",
+			mutate: func(cfg *Config) {
+				cfg.Logging.Level = testDebugLogLevel
+				cfg.Logging.DebugCorrelation.Enabled = true
+				cfg.Logging.DebugCorrelation.TTL = 0
+				cfg.Logging.DebugCorrelation.IncidentID = testDebugCorrelationIncident
+			},
+		},
+		{
+			name:  "caps ttl",
+			field: "logging.debugCorrelation.ttl",
+			mutate: func(cfg *Config) {
+				cfg.Logging.Level = testDebugLogLevel
+				cfg.Logging.DebugCorrelation.Enabled = true
+				cfg.Logging.DebugCorrelation.TTL = 2 * time.Hour
+				cfg.Logging.DebugCorrelation.IncidentID = testDebugCorrelationIncident
+			},
+		},
+		{
+			name:  "requires incident id",
+			field: "logging.debugCorrelation.incidentId",
+			mutate: func(cfg *Config) {
+				cfg.Logging.Level = testDebugLogLevel
+				cfg.Logging.DebugCorrelation.Enabled = true
+				cfg.Logging.DebugCorrelation.TTL = 15 * time.Minute
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := loadValidConfig(t)
+			tt.mutate(&cfg)
+
+			err := Validate(cfg, ValidationOptions{})
+			if !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("expected invalid config error, got %v", err)
+			}
+			if !strings.Contains(err.Error(), tt.field) {
+				t.Fatalf("expected %s problem, got %v", tt.field, err)
+			}
+		})
+	}
+}
+
+func TestValidateAcceptsGuardedDebugCorrelation(t *testing.T) {
+	cfg := loadValidConfig(t)
+	cfg.Logging.Level = testDebugLogLevel
+	cfg.Logging.LogOpenBaoRequestIDs = true
+	cfg.Logging.DebugCorrelation.Enabled = true
+	cfg.Logging.DebugCorrelation.TTL = 15 * time.Minute
+	cfg.Logging.DebugCorrelation.IncidentID = testDebugCorrelationIncident
+
+	if err := Validate(cfg, ValidationOptions{}); err != nil {
+		t.Fatalf("validate debug correlation config: %v", err)
 	}
 }
 

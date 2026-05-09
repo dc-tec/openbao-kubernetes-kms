@@ -312,6 +312,9 @@ func (c *Client) BatchDecrypt(ctx context.Context, req BatchDecryptRequest) (Bat
 	if len(req.Items) == 0 {
 		return BatchDecryptResponse{}, fmt.Errorf("batch decrypt requires at least one item")
 	}
+	if observer, ok := c.observer.(DecryptBatchObserver); ok {
+		observer.ObserveOpenBaoDecryptBatchSize(len(req.Items))
+	}
 	items := make([]batchDecryptRequestItem, 0, len(req.Items))
 	for _, item := range req.Items {
 		if item.Ciphertext == "" {
@@ -410,6 +413,7 @@ func (c *Client) ProbeEncryptDecrypt(ctx context.Context, req ProbeRequest) erro
 }
 
 type keyProfileResponse struct {
+	responseMetadata
 	Data keyProfileData `json:"data"`
 }
 
@@ -472,6 +476,7 @@ func (d keyProfileData) profile() (KeyProfile, error) {
 }
 
 type disableUpsertResponse struct {
+	responseMetadata
 	Data disableUpsertData `json:"data"`
 }
 
@@ -490,6 +495,7 @@ type encryptRequestBody struct {
 func (encryptRequestBody) requestPayload() {}
 
 type encryptResponseBody struct {
+	responseMetadata
 	Data encryptResponseData `json:"data"`
 }
 
@@ -508,6 +514,7 @@ type decryptRequestBody struct {
 func (decryptRequestBody) requestPayload() {}
 
 type decryptResponseBody struct {
+	responseMetadata
 	Data decryptResponseData `json:"data"`
 }
 
@@ -530,6 +537,7 @@ type batchDecryptRequestItem struct {
 }
 
 type batchDecryptResponseBody struct {
+	responseMetadata
 	Data batchDecryptResponseData `json:"data"`
 }
 
@@ -552,6 +560,7 @@ type capabilitiesRequestBody struct {
 func (capabilitiesRequestBody) requestPayload() {}
 
 type capabilitiesResponseBody struct {
+	responseMetadata
 	Data map[string][]string `json:"data"`
 }
 

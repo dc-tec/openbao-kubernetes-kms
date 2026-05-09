@@ -53,3 +53,7 @@ logging:
   format: json
   redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
+  debugCorrelation:
+    enabled: false
+    ttl: 15m
+    incidentId: ""

@@ -123,6 +123,7 @@ type Options struct {
 	Transit        Transit
 	PluginVersion  string
 	RequestTimeout time.Duration
+	Observer       Observer
 }
 
 // Server implements the Kubernetes KMS v2 service.
@@ -134,6 +135,7 @@ type Server struct {
 	transit        Transit
 	pluginVersion  string
 	requestTimeout time.Duration
+	observer       Observer
 }
 
 // NewServer builds a KMS v2 protocol server.
@@ -160,6 +162,7 @@ func NewServer(opts Options) (*Server, error) {
 		transit:        opts.Transit,
 		pluginVersion:  opts.PluginVersion,
 		requestTimeout: opts.RequestTimeout,
+		observer:       opts.Observer,
 	}, nil
 }
 
@@ -170,6 +173,17 @@ func Register(registrar grpc.ServiceRegistrar, server *Server) {
 
 // Status returns cached plugin health and active key_id without calling Transit.
 func (s *Server) Status(ctx context.Context, _ *kmsapi.StatusRequest) (response *kmsapi.StatusResponse, err error) {
+	start := time.Now()
+	observation := RequestObservation{Method: methodStatus}
+	defer func() {
+		if response != nil {
+			observation.Healthz = response.GetHealthz()
+			if response.GetKeyId() != "" {
+				observation.KeyIDHash = aad.HashValue(response.GetKeyId())
+			}
+		}
+		s.observeRequest(ctx, observation, err, time.Since(start))
+	}()
 	defer recoverRPC(&err)
 
 	cached, err := s.statusCache.Current(ctx)
@@ -191,6 +205,14 @@ func (s *Server) Encrypt(
 	ctx context.Context,
 	request *kmsapi.EncryptRequest,
 ) (response *kmsapi.EncryptResponse, err error) {
+	start := time.Now()
+	observation := RequestObservation{Method: methodEncrypt}
+	if request != nil && request.GetUid() != "" {
+		observation.RequestUIDHash = aad.HashValue(request.GetUid())
+	}
+	defer func() {
+		s.observeRequest(ctx, observation, err, time.Since(start))
+	}()
 	defer recoverRPC(&err)
 
 	if request == nil || len(request.GetPlaintext()) == 0 {
@@ -202,15 +224,20 @@ func (s *Server) Encrypt(
 
 	active, keyID, err := s.activeStatus(requestCtx)
 	if err != nil {
+		observation.ErrorClass = errorClass(err)
 		return nil, rpcError(err)
 	}
+	observation.KeyIDHash = aad.HashValue(keyID)
+	observation.TransitKeyVersion = active.TransitVersion
 
 	annotations, err := aad.BuildAnnotations(active, s.pluginVersion)
 	if err != nil {
+		observation.ErrorClass = errorClass(err)
 		return nil, rpcError(err)
 	}
 	canonicalAAD, err := aad.BuildCanonical(active, annotations)
 	if err != nil {
+		observation.ErrorClass = errorClass(err)
 		return nil, rpcError(err)
 	}
 
@@ -220,12 +247,15 @@ func (s *Server) Encrypt(
 		KeyVersion:     active.TransitVersion,
 	})
 	if err != nil {
+		observation.ErrorClass = errorClass(transitRPCError(err))
 		return nil, transitRPCError(err)
 	}
 	if len(encrypted.Ciphertext) == 0 {
+		observation.ErrorClass = errorClassUnknown
 		return nil, rpcError(ErrTransitInvalidResponse)
 	}
 	if encrypted.KeyVersion != 0 && encrypted.KeyVersion != active.TransitVersion {
+		observation.ErrorClass = errorClassUnknown
 		return nil, rpcError(ErrTransitInvalidResponse)
 	}
 
@@ -241,6 +271,19 @@ func (s *Server) Decrypt(
 	ctx context.Context,
 	request *kmsapi.DecryptRequest,
 ) (response *kmsapi.DecryptResponse, err error) {
+	start := time.Now()
+	observation := RequestObservation{Method: methodDecrypt}
+	if request != nil {
+		if request.GetUid() != "" {
+			observation.RequestUIDHash = aad.HashValue(request.GetUid())
+		}
+		if request.GetKeyId() != "" {
+			observation.KeyIDHash = aad.HashValue(request.GetKeyId())
+		}
+	}
+	defer func() {
+		s.observeRequest(ctx, observation, err, time.Since(start))
+	}()
 	defer recoverRPC(&err)
 
 	if request == nil || len(request.GetCiphertext()) == 0 {
@@ -252,18 +295,25 @@ func (s *Server) Decrypt(
 
 	annotations, err := annotationsFromProto(request.GetAnnotations())
 	if err != nil {
+		s.observeValidationError(err)
+		observation.ErrorClass = errorClass(err)
 		return nil, rpcError(err)
 	}
 	prepared, err := aad.PrepareDecrypt(s.registry, request.GetKeyId(), annotations)
 	if err != nil {
+		s.observeValidationError(err)
+		observation.ErrorClass = errorClass(err)
 		return nil, rpcError(err)
 	}
+	observation.KeyIDHash = aad.HashValue(prepared.Snapshot.KubernetesKeyID)
+	observation.TransitKeyVersion = prepared.Snapshot.TransitVersion
 
 	decrypted, err := s.transit.Decrypt(requestCtx, TransitDecryptRequest{
 		Ciphertext:     slices.Clone(request.GetCiphertext()),
 		AssociatedData: prepared.Canonical,
 	})
 	if err != nil {
+		observation.ErrorClass = errorClass(transitRPCError(err))
 		return nil, transitRPCError(err)
 	}
 

@@ -141,6 +141,38 @@ func TestDecryptRejectsUnknownKeyIDBeforeTransit(t *testing.T) {
 	}
 }
 
+func TestObserverReceivesRedactedValidationReasons(t *testing.T) {
+	observer := &fakeObserver{}
+	server, _, _, active := newTestServerWithOptions(t, kmsv2.Options{Observer: observer})
+	unknown := active
+	unknown.TransitVersion++
+	unknown.KubernetesKeyID = ""
+	unknownKeyID, err := keyregistry.DeriveKeyID(unknown)
+	if err != nil {
+		t.Fatalf("derive unknown key_id: %v", err)
+	}
+
+	_, err = server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
+		Ciphertext: []byte(testCiphertext),
+		KeyId:      unknownKeyID,
+	})
+	assertCode(t, err, codes.NotFound)
+
+	if len(observer.keyIDReasons) != 1 || observer.keyIDReasons[0] != "key_id_unknown" {
+		t.Fatalf("unexpected key ID reasons: %#v", observer.keyIDReasons)
+	}
+	if len(observer.requests) != 1 {
+		t.Fatalf("expected one request observation, got %d", len(observer.requests))
+	}
+	request := observer.requests[0]
+	if request.Method != "decrypt" || request.Status != "not_found" || request.ErrorClass != "key_id_unknown" {
+		t.Fatalf("unexpected request observation: %#v", request)
+	}
+	if request.KeyIDHash == "" || request.KeyIDHash == unknownKeyID {
+		t.Fatalf("key ID hash was not redacted: %#v", request)
+	}
+}
+
 func TestDecryptRejectsMalformedKeyIDBeforeTransit(t *testing.T) {
 	server, _, transit, _ := newTestServer(t)
 
@@ -327,6 +359,7 @@ func newTestServerWithOptions(
 		Transit:        transit,
 		PluginVersion:  pluginVersion,
 		RequestTimeout: overrides.RequestTimeout,
+		Observer:       overrides.Observer,
 	}
 	if overrides.StatusCache != nil {
 		options.StatusCache = overrides.StatusCache
@@ -533,4 +566,22 @@ func (f *fakeTransit) lastEncrypt() kmsv2.TransitEncryptRequest {
 		AssociatedData: bytes.Clone(f.lastEnc.AssociatedData),
 		KeyVersion:     f.lastEnc.KeyVersion,
 	}
+}
+
+type fakeObserver struct {
+	requests     []kmsv2.RequestObservation
+	aadReasons   []string
+	keyIDReasons []string
+}
+
+func (f *fakeObserver) ObserveKMSRequest(_ context.Context, observation kmsv2.RequestObservation) {
+	f.requests = append(f.requests, observation)
+}
+
+func (f *fakeObserver) ObserveAADValidationError(reason string) {
+	f.aadReasons = append(f.aadReasons, reason)
+}
+
+func (f *fakeObserver) ObserveDecryptKeyIDError(reason string) {
+	f.keyIDReasons = append(f.keyIDReasons, reason)
 }

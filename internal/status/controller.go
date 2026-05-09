@@ -12,6 +12,12 @@ import (
 )
 
 const (
+	probeStatusOK                 = "ok"
+	probeStatusCanceled           = "canceled"
+	probeStatusTimeout            = "timeout"
+	probeStatusCircuitBreakerOpen = "circuit_breaker_open"
+	probeStatusError              = "error"
+
 	probeAssociatedDataValue = "openbao-kubernetes-kms/status-probe/v1"
 
 	messageAuthRefreshFailed     = "auth refresh failed"
@@ -20,6 +26,16 @@ const (
 	messageDeepProbeFailed       = "Transit deep probe failed"
 	messageRegistryStateSave     = "save registry state"
 	messageTransitMetadataFailed = "Transit metadata read failed"
+)
+
+// ProbeKind identifies the bounded background probe type.
+type ProbeKind string
+
+const (
+	// ProbeKindMetadata refreshes auth, Transit metadata, and rotation state.
+	ProbeKindMetadata ProbeKind = "metadata"
+	// ProbeKindDeep performs a non-secret Transit encrypt/decrypt probe.
+	ProbeKindDeep ProbeKind = "deep"
 )
 
 // AuthRefresher is the auth lifecycle surface needed by background probes.
@@ -33,31 +49,45 @@ type TransitProbeClient interface {
 	ProbeEncryptDecrypt(context.Context, openbao.ProbeRequest) error
 }
 
+// ProbeObservation is one redacted background status probe observation.
+type ProbeObservation struct {
+	Kind     ProbeKind
+	Status   string
+	Duration time.Duration
+}
+
+// ProbeObserver receives redacted background probe observations.
+type ProbeObserver interface {
+	ObserveStatusProbe(context.Context, ProbeObservation)
+}
+
 // ControllerOptions wires the status cache, rotation observer, and probe dependencies.
 type ControllerOptions struct {
-	Clock      Clock
-	Store      *Store
-	Observer   *Observer
-	Auth       AuthRefresher
-	Transit    TransitProbeClient
-	StateStore StateStore
-	MountPath  string
-	KeyName    string
-	Breaker    CircuitBreakerOptions
+	Clock         Clock
+	Store         *Store
+	Observer      *Observer
+	Auth          AuthRefresher
+	Transit       TransitProbeClient
+	StateStore    StateStore
+	MountPath     string
+	KeyName       string
+	Breaker       CircuitBreakerOptions
+	ProbeObserver ProbeObserver
 }
 
 // Controller runs one-shot status probes used by the scheduler and tests.
 type Controller struct {
-	clock      Clock
-	store      *Store
-	observer   *Observer
-	auth       AuthRefresher
-	transit    TransitProbeClient
-	stateStore StateStore
-	mountPath  string
-	keyName    string
-	breakerMu  sync.Mutex
-	breaker    circuitBreaker
+	clock         Clock
+	store         *Store
+	observer      *Observer
+	auth          AuthRefresher
+	transit       TransitProbeClient
+	stateStore    StateStore
+	mountPath     string
+	keyName       string
+	breakerMu     sync.Mutex
+	breaker       circuitBreaker
+	probeObserver ProbeObserver
 }
 
 // NewController builds a status probe controller and loads persisted registry state when available.
@@ -78,15 +108,16 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 	}
 
 	controller := &Controller{
-		clock:      clockOrReal(opts.Clock),
-		store:      opts.Store,
-		observer:   opts.Observer,
-		auth:       opts.Auth,
-		transit:    opts.Transit,
-		stateStore: opts.StateStore,
-		mountPath:  opts.MountPath,
-		keyName:    opts.KeyName,
-		breaker:    newCircuitBreaker(opts.Breaker),
+		clock:         clockOrReal(opts.Clock),
+		store:         opts.Store,
+		observer:      opts.Observer,
+		auth:          opts.Auth,
+		transit:       opts.Transit,
+		stateStore:    opts.StateStore,
+		mountPath:     opts.MountPath,
+		keyName:       opts.KeyName,
+		breaker:       newCircuitBreaker(opts.Breaker),
+		probeObserver: opts.ProbeObserver,
 	}
 	controller.store.UpdateCircuitBreaker(controller.breaker.snapshot())
 	if opts.StateStore != nil {
@@ -98,7 +129,16 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 }
 
 // ProbeOnce refreshes auth, reads Transit metadata, advances rotation state, and publishes cache health.
-func (c *Controller) ProbeOnce(ctx context.Context) error {
+func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
+	start := time.Now()
+	defer func() {
+		c.observeProbe(ctx, ProbeObservation{
+			Kind:     ProbeKindMetadata,
+			Status:   probeStatus(err),
+			Duration: time.Since(start),
+		})
+	}()
+
 	if err := contextErr(ctx); err != nil {
 		return err
 	}
@@ -150,7 +190,16 @@ func (c *Controller) ProbeOnce(ctx context.Context) error {
 }
 
 // DeepProbeOnce performs a non-secret Transit round trip for the active cached version.
-func (c *Controller) DeepProbeOnce(ctx context.Context) error {
+func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
+	start := time.Now()
+	defer func() {
+		c.observeProbe(ctx, ProbeObservation{
+			Kind:     ProbeKindDeep,
+			Status:   probeStatus(err),
+			Duration: time.Since(start),
+		})
+	}()
+
 	if err := contextErr(ctx); err != nil {
 		return err
 	}
@@ -204,6 +253,13 @@ func (c *Controller) recordProbeSuccess() {
 	c.store.UpdateCircuitBreaker(c.breaker.snapshot())
 }
 
+func (c *Controller) observeProbe(ctx context.Context, observation ProbeObservation) {
+	if c.probeObserver == nil {
+		return
+	}
+	c.probeObserver.ObserveStatusProbe(ctx, observation)
+}
+
 func (c *Controller) loadState() error {
 	state, err := c.stateStore.Load()
 	if errors.Is(err, keyregistry.ErrStateNotFound) {
@@ -220,4 +276,23 @@ func contextErr(ctx context.Context) error {
 		return fmt.Errorf("%w: %s", ErrConfigInvalid, messageContextRequired)
 	}
 	return ctx.Err()
+}
+
+func probeStatus(err error) string {
+	if err == nil {
+		return probeStatusOK
+	}
+	switch {
+	case errors.Is(err, context.Canceled):
+		return probeStatusCanceled
+	case errors.Is(err, context.DeadlineExceeded):
+		return probeStatusTimeout
+	case errors.Is(err, ErrCircuitBreakerOpen):
+		return probeStatusCircuitBreakerOpen
+	}
+	var openBaoErr *openbao.Error
+	if errors.As(err, &openBaoErr) {
+		return string(openBaoErr.Class)
+	}
+	return probeStatusError
 }

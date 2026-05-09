@@ -32,6 +32,7 @@ toolchain:
     gomega: "1.40.0"
     mapstructure: "2.4.0"
     pflag: "1.0.10"
+    prometheusClientGolang: "1.23.2"
     viper: "1.20.1"
   testFrameworks:
     e2e: ginkgo

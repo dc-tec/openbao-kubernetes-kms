@@ -11,6 +11,8 @@ import (
 const (
 	sealedErrorFragment                 = "sealed"
 	messageAuthenticationFailedFragment = "message authentication failed"
+	requestStatusOK                     = "ok"
+	requestStatusError                  = "error"
 )
 
 // ErrorClass is a stable OpenBao error category for callers and metrics.
@@ -33,7 +35,6 @@ type Error struct {
 	Class      ErrorClass
 	StatusCode int
 	Operation  string
-	messages   []string
 }
 
 // Error returns a token/payload/path-safe message.
@@ -89,6 +90,27 @@ func newHTTPError(operation string, statusCode int, messages []string) *Error {
 		Class:      classifyError(statusCode, messages),
 		StatusCode: statusCode,
 		Operation:  operation,
-		messages:   messages,
 	}
+}
+
+func requestStatus(err error) string {
+	if err == nil {
+		return requestStatusOK
+	}
+	var openBaoErr *Error
+	if errors.As(err, &openBaoErr) {
+		return string(openBaoErr.Class)
+	}
+	return requestStatusError
+}
+
+func requestErrorClass(err error) ErrorClass {
+	if err == nil {
+		return ""
+	}
+	var openBaoErr *Error
+	if errors.As(err, &openBaoErr) {
+		return openBaoErr.Class
+	}
+	return ErrorClassUnknown
 }

@@ -232,7 +232,7 @@ Goal: implement Kubernetes KMS v2 gRPC behavior exactly enough for kube-apiserve
 | WS05-T04 | P0 | done | Implement `Encrypt`. | WS02-T07, WS03-T05 |
 | WS05-T05 | P0 | done | Implement `Decrypt`. | WS02-T08, WS03-T06 |
 | WS05-T06 | P0 | done | Enforce Status/encrypt key ID invariant. | WS05-T03, WS05-T04 |
-| WS05-T07 | P0 | planned | Propagate request UID only to safe logs/traces. | WS09-T01 |
+| WS05-T07 | P0 | done | Propagate request UID only to safe logs/traces. | WS09-T01 |
 | WS05-T08 | P0 | done | Add timeout and context cancellation handling. | WS03-T01 |
 | WS05-T09 | P0 | done | Add panic recovery with redacted errors. | WS05-T02 |
 | WS05-T10 | P1 | done | Add graceful shutdown behavior. | WS07-T04 |
@@ -259,7 +259,7 @@ Implementation notes:
 - WS06 still owns the production background status cache implementation behind the `StatusCache` interface.
 - WS05-T10 is covered by a runtime-backed KMS RPC drain test: the WS07 runtime uses gRPC graceful shutdown while KMS v2 handlers propagate request contexts into cached Status and Transit operations.
 - WS07 owns production Unix socket lifecycle and process shutdown primitives.
-- WS09 still owns structured logging and any safe request UID propagation.
+- Request UIDs are propagated only as hashes in structured KMS request logs, never as raw log fields or metric labels.
 
 ## WS06: Status Cache, Health, And Rotation Watcher
 
@@ -334,10 +334,10 @@ Test requirements:
 
 Implementation notes:
 
-- `internal/socket` owns the typed `Listen` primitive, including parent-directory checks, symlink/regular-file/directory rejection, live-peer probe via bounded `net.DialTimeout`, verified-dead stale socket reclamation, and post-bind chmod/chown. An `OnStaleSocketRemoved` hook is exposed for WS09 to wire the `openbao_kms_socket_restarts_total` counter without coupling the socket package to metrics.
+- `internal/socket` owns the typed `Listen` primitive, including parent-directory checks, symlink/regular-file/directory rejection, live-peer probe via bounded `net.DialTimeout`, verified-dead stale socket reclamation, and post-bind chmod/chown. `serve` wires `OnStaleSocketRemoved` to `openbao_kms_socket_restarts_total` without coupling the socket package to metrics.
 - `internal/health` owns the `/live` and `/ready` HTTP handler behind narrow `LivenessProbe` and `ReadinessProbe` interfaces; `/ready` consumes `status.Diagnostics` and flips 503 on unhealthy, stale, or no-active-snapshot states. The handler rejects non-GET/HEAD methods and unknown paths.
-- `internal/runtime` composes the socket listener, gRPC server, optional health HTTP server, signal handling (`SIGINT`/`SIGTERM`), and bounded graceful shutdown that falls through `GracefulStop` to `Stop` past `ShutdownTimeout`. The runtime owns the liveness probe internally and keeps WS09 logging/metrics out of the lifecycle.
-- WS08-T01 (`serve`) is responsible for translating typed config into `runtime.Options` and wiring CLI flags. WS09 will plug structured logging and Prometheus metrics into the existing extension points (`OnStaleSocketRemoved`, ready/live probes) without runtime API changes.
+- `internal/runtime` composes the socket listener, gRPC server, optional health HTTP server, optional metrics HTTP server, signal handling (`SIGINT`/`SIGTERM`), and bounded graceful shutdown that falls through `GracefulStop` to `Stop` past `ShutdownTimeout`. The runtime owns listener lifecycle while `serve` supplies health and metrics handlers.
+- WS08-T01 (`serve`) is responsible for translating typed config into `runtime.Options` and wiring CLI flags, structured logging, Prometheus metrics, and the socket cleanup hook.
 - WS07-T08 and WS07-T09 remain planned because both depend on WS10-T01 deployment artifacts.
 
 ## WS08: CLI Tooling
@@ -388,17 +388,17 @@ Goal: make the provider diagnosable without leaking sensitive material.
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS09-T01 | P0 | planned | Add structured JSON logger. | WS00-T02 |
-| WS09-T02 | P0 | planned | Implement redaction helpers. | WS09-T01 |
-| WS09-T03 | P0 | planned | Add Prometheus metrics registry. | WS05-T02 |
-| WS09-T04 | P0 | planned | Add KMS request metrics. | WS05-T04, WS05-T05 |
-| WS09-T05 | P0 | planned | Add OpenBao request metrics. | WS03-T01 |
-| WS09-T06 | P0 | planned | Add auth/token metrics. | WS04-T09 |
-| WS09-T07 | P0 | planned | Add status cache and rotation metrics. | WS06-T02 |
-| WS09-T08 | P0 | planned | Add AAD/key ID validation metrics. | WS02-T08 |
-| WS09-T09 | P0 | planned | Add log/metric redaction tests. | WS09-T02 |
-| WS09-T10 | P1 | planned | Add example alert rules. | WS09-T03 |
-| WS09-T11 | P1 | planned | Add debug correlation mode with strict guardrails. | WS03-T07 |
+| WS09-T01 | P0 | done | Add structured JSON logger. | WS00-T02 |
+| WS09-T02 | P0 | done | Implement redaction helpers. | WS09-T01 |
+| WS09-T03 | P0 | done | Add Prometheus metrics registry. | WS05-T02 |
+| WS09-T04 | P0 | done | Add KMS request metrics. | WS05-T04, WS05-T05 |
+| WS09-T05 | P0 | done | Add OpenBao request metrics. | WS03-T01 |
+| WS09-T06 | P0 | done | Add auth/token metrics. | WS04-T09 |
+| WS09-T07 | P0 | done | Add status cache and rotation metrics. | WS06-T02 |
+| WS09-T08 | P0 | done | Add AAD/key ID validation metrics. | WS02-T08 |
+| WS09-T09 | P0 | done | Add log/metric redaction tests. | WS09-T02 |
+| WS09-T10 | P1 | done | Add example alert rules. | WS09-T03 |
+| WS09-T11 | P1 | done | Add debug correlation mode with strict guardrails. | WS03-T07 |
 
 Acceptance criteria:
 
@@ -412,6 +412,15 @@ Test requirements:
 - Redaction unit tests.
 - Integration test log capture.
 - Metrics label cardinality tests.
+
+Implementation notes:
+
+- `internal/logging` owns the `slog`-backed JSON/text logger, stable log field names, and redaction placeholder helpers. Runtime success-path KMS and OpenBao request events log at debug level; failures log at warning level.
+- `internal/metrics` owns an isolated Prometheus registry and `/metrics` handler using pinned `github.com/prometheus/client_golang`.
+- KMS v2, OpenBao, auth, and status packages expose narrow observer interfaces so metrics/logging remain composed from `serve` without coupling protocol or OpenBao clients to concrete observability packages.
+- Status and auth gauges are collected from redacted snapshots. Metrics never expose raw key IDs, raw OpenBao paths, raw key names, request UIDs, plaintext, JWTs, OpenBao tokens, or full ciphertext.
+- WS09 includes example Prometheus alerting rules under `docs/operations/prometheus-alerts.yaml`.
+- Debug correlation mode is guarded by config validation: it is disabled by default, requires debug logging, requires an incident ID, requires OpenBao request ID logging, and expires automatically after a bounded TTL.
 
 ## WS10: Deployment Artifacts And Packaging
 

@@ -54,6 +54,11 @@ type Options struct {
 	// HealthAddress is a host:port for the /live and /ready HTTP endpoints.
 	// An empty value disables the health listener.
 	HealthAddress string
+	// MetricsHandler serves Prometheus metrics. Required when MetricsAddress is set.
+	MetricsHandler http.Handler
+	// MetricsAddress is a host:port for the /metrics HTTP endpoint. An empty
+	// value disables the metrics listener.
+	MetricsAddress string
 	// ShutdownTimeout bounds graceful shutdown. Zero applies DefaultShutdownTimeout.
 	ShutdownTimeout time.Duration
 }
@@ -64,6 +69,8 @@ type Runtime struct {
 	grpcServer      *grpc.Server
 	healthListener  net.Listener
 	healthServer    *http.Server
+	metricsListener net.Listener
+	metricsServer   *http.Server
 	shutdownTimeout time.Duration
 
 	live         runtimeLiveness
@@ -80,6 +87,9 @@ func New(opts Options) (*Runtime, error) {
 	if opts.HealthAddress != "" && opts.Readiness == nil {
 		return nil, fmt.Errorf("%w: readiness probe is required when health address is set", ErrInvalidConfig)
 	}
+	if opts.MetricsAddress != "" && opts.MetricsHandler == nil {
+		return nil, fmt.Errorf("%w: metrics handler is required when metrics address is set", ErrInvalidConfig)
+	}
 
 	socketListener, err := socket.Listen(opts.Socket)
 	if err != nil {
@@ -92,13 +102,30 @@ func New(opts Options) (*Runtime, error) {
 		shutdownTimeout: shutdownTimeoutOrDefault(opts.ShutdownTimeout),
 	}
 	if opts.HealthAddress != "" {
-		listener, server, healthErr := buildHealthServer(opts.HealthAddress, &r.live, opts.Readiness)
+		handler, handlerErr := health.NewHandler(&r.live, opts.Readiness)
+		if handlerErr != nil {
+			_ = socketListener.Close()
+			return nil, fmt.Errorf("build health handler: %w", handlerErr)
+		}
+		listener, server, healthErr := buildHTTPServer(opts.HealthAddress, handler)
 		if healthErr != nil {
 			_ = socketListener.Close()
-			return nil, healthErr
+			return nil, fmt.Errorf("bind health listener: %w", healthErr)
 		}
 		r.healthListener = listener
 		r.healthServer = server
+	}
+	if opts.MetricsAddress != "" {
+		listener, server, metricsErr := buildHTTPServer(opts.MetricsAddress, opts.MetricsHandler)
+		if metricsErr != nil {
+			_ = socketListener.Close()
+			if r.healthListener != nil {
+				_ = r.healthListener.Close()
+			}
+			return nil, fmt.Errorf("bind metrics listener: %w", metricsErr)
+		}
+		r.metricsListener = listener
+		r.metricsServer = server
 	}
 	return r, nil
 }
@@ -115,6 +142,15 @@ func (r *Runtime) HealthAddr() net.Addr {
 		return nil
 	}
 	return r.healthListener.Addr()
+}
+
+// MetricsAddr returns the bound metrics listener address, or nil when no metrics
+// server is configured.
+func (r *Runtime) MetricsAddr() net.Addr {
+	if r.metricsListener == nil {
+		return nil
+	}
+	return r.metricsListener.Addr()
 }
 
 // Run starts both servers and blocks until ctx is canceled, the process
@@ -137,6 +173,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 	servers := []serverEntry{{name: "grpc", serve: r.serveGRPC}}
 	if r.healthServer != nil {
 		servers = append(servers, serverEntry{name: "health", serve: r.serveHealth})
+	}
+	if r.metricsServer != nil {
+		servers = append(servers, serverEntry{name: "metrics", serve: r.serveMetrics})
 	}
 
 	group, groupCtx := errgroup.WithContext(sigCtx)
@@ -178,6 +217,14 @@ func (r *Runtime) serveHealth() error {
 	return err
 }
 
+func (r *Runtime) serveMetrics() error {
+	err := r.metricsServer.Serve(r.metricsListener)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
 // shutdown drains the gRPC and health servers within ShutdownTimeout.
 //
 // The shutdown context is derived with context.WithoutCancel so an already
@@ -203,6 +250,9 @@ func (r *Runtime) shutdown(parentCtx context.Context) {
 		if r.healthServer != nil {
 			_ = r.healthServer.Shutdown(shutdownCtx)
 		}
+		if r.metricsServer != nil {
+			_ = r.metricsServer.Shutdown(shutdownCtx)
+		}
 	})
 }
 
@@ -211,19 +261,13 @@ type serverEntry struct {
 	serve func() error
 }
 
-func buildHealthServer(
+func buildHTTPServer(
 	address string,
-	live health.LivenessProbe,
-	ready health.ReadinessProbe,
+	handler http.Handler,
 ) (net.Listener, *http.Server, error) {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		return nil, nil, fmt.Errorf("bind health listener: %w", err)
-	}
-	handler, err := health.NewHandler(live, ready)
-	if err != nil {
-		_ = listener.Close()
-		return nil, nil, fmt.Errorf("build health handler: %w", err)
+		return nil, nil, err
 	}
 	server := &http.Server{
 		Handler:           handler,

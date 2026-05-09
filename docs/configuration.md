@@ -68,6 +68,10 @@ logging:
   format: json
   redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
+  debugCorrelation:
+    enabled: false
+    ttl: 15m
+    incidentId: ""
 ```
 
 ## Required Fields
@@ -126,6 +130,20 @@ Required for MVP:
 | `logging.format` | `json` |
 | `logging.redactOpenBaoPaths` | `true` |
 | `logging.logOpenBaoRequestIDs` | `true` |
+| `logging.debugCorrelation.enabled` | `false` |
+| `logging.debugCorrelation.ttl` | `15m` |
+| `logging.debugCorrelation.incidentId` | empty |
+
+## Debug Correlation
+
+`logging.debugCorrelation` is an incident-response mode, not a steady-state logging setting. It only validates when:
+
+- `logging.level` is `debug`,
+- `logging.logOpenBaoRequestIDs` is `true`,
+- `logging.debugCorrelation.incidentId` is set,
+- `logging.debugCorrelation.ttl` is positive and no greater than one hour.
+
+While active, logs may include safe request UID hashes and safe OpenBao request IDs for correlation with kube-apiserver and OpenBao audit records. The mode expires automatically after the configured TTL and still must not log plaintext, JWTs, OpenBao tokens, full ciphertext, raw OpenBao paths, or raw key names.
 
 ## Identity-Bearing Fields
 

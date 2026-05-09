@@ -21,7 +21,7 @@ Responsibilities:
 - start background probes,
 - expose health endpoints when configured.
 
-Prometheus metrics are wired in WS09; `server.metricsAddress` is parsed and validated before then but does not start a metrics listener yet.
+Prometheus metrics are served on `server.metricsAddress` at `/metrics`.
 
 ## doctor
 

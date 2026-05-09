@@ -125,7 +125,16 @@ const configSchemaJSON = `{
         "level": {"type": "string", "enum": ["debug", "info", "warn", "error"]},
         "format": {"type": "string", "enum": ["json", "text"]},
         "redactOpenBaoPaths": {"type": "boolean"},
-        "logOpenBaoRequestIDs": {"type": "boolean"}
+        "logOpenBaoRequestIDs": {"type": "boolean"},
+        "debugCorrelation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "ttl": {"type": "string"},
+            "incidentId": {"type": "string", "maxLength": 64}
+          }
+        }
       }
     }
   }
