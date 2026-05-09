@@ -65,10 +65,17 @@ Blocking tasks:
 
 - WS05-T01 Add Kubernetes KMS v2 protobuf dependency.
 - WS05-T02 Implement KMS v2 service skeleton.
-- WS05-T03 Implement fake Transit-backed encrypt/decrypt.
-- WS05-T04 Enforce Status/encrypt key ID consistency.
-- WS05-T05 Enforce decrypt validation order.
+- WS05-T03 Implement Status from cached status.
+- WS05-T04 Implement Encrypt.
+- WS05-T05 Implement Decrypt.
+- WS05-T06 Enforce Status/encrypt key ID consistency.
 - WS11-T04 Build KMS v2 conformance suite.
+
+Current status:
+
+- `internal/kmsv2` implements the KMS v2 gRPC service, cached Status reads, Encrypt, Decrypt, timeout/cancellation handling, redacted panic recovery, and the Status/encrypt key ID invariant behind narrow fakeable interfaces.
+- `test/kmsconformance` starts the KMS v2 service over a Unix socket and exercises it with the real Kubernetes KMS v2 protobuf client.
+- Production status cache, socket lifecycle, graceful shutdown, and structured logging remain in WS06, WS07, and WS09.
 
 Exit criteria:
 

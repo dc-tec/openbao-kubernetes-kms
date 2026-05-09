@@ -27,6 +27,8 @@ toolchain:
   goDependencies:
     cobra: "1.10.2"
     ginkgo: "2.28.3"
+    grpc: "1.72.1"
+    k8sKMS: "0.34.7"
     gomega: "1.40.0"
     mapstructure: "2.4.0"
     pflag: "1.0.10"

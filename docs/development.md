@@ -25,23 +25,23 @@ Current Go package layout:
 ```text
 cmd/bao-kms-provider
 internal/aad
+internal/auth
 internal/config
 internal/keyregistry
+internal/kmsv2
 internal/openbao
 internal/version
+test/e2e
+test/kmsconformance
 ```
 
 Planned package boundaries:
 
 ```text
-internal/auth/jwt
-internal/kmsv2
 internal/logging
 internal/socket
 internal/status
-test/e2e
 test/integration
-test/kmsconformance
 ```
 
 ## Implementation Order

@@ -226,15 +226,15 @@ Goal: implement Kubernetes KMS v2 gRPC behavior exactly enough for kube-apiserve
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS05-T01 | P0 | planned | Add Kubernetes KMS v2 protobuf dependency. | WS00-T01 |
-| WS05-T02 | P0 | planned | Implement gRPC server skeleton. | WS05-T01 |
-| WS05-T03 | P0 | planned | Implement `Status` from cached status. | WS06-T02 |
-| WS05-T04 | P0 | planned | Implement `Encrypt`. | WS02-T07, WS03-T05 |
-| WS05-T05 | P0 | planned | Implement `Decrypt`. | WS02-T08, WS03-T06 |
-| WS05-T06 | P0 | planned | Enforce Status/encrypt key ID invariant. | WS05-T03, WS05-T04 |
+| WS05-T01 | P0 | done | Add Kubernetes KMS v2 protobuf dependency. | WS00-T01 |
+| WS05-T02 | P0 | done | Implement gRPC server skeleton. | WS05-T01 |
+| WS05-T03 | P0 | done | Implement `Status` from cached status. | WS06-T02 |
+| WS05-T04 | P0 | done | Implement `Encrypt`. | WS02-T07, WS03-T05 |
+| WS05-T05 | P0 | done | Implement `Decrypt`. | WS02-T08, WS03-T06 |
+| WS05-T06 | P0 | done | Enforce Status/encrypt key ID invariant. | WS05-T03, WS05-T04 |
 | WS05-T07 | P0 | planned | Propagate request UID only to safe logs/traces. | WS09-T01 |
-| WS05-T08 | P0 | planned | Add timeout and context cancellation handling. | WS03-T01 |
-| WS05-T09 | P0 | planned | Add panic recovery with redacted errors. | WS05-T02 |
+| WS05-T08 | P0 | done | Add timeout and context cancellation handling. | WS03-T01 |
+| WS05-T09 | P0 | done | Add panic recovery with redacted errors. | WS05-T02 |
 | WS05-T10 | P1 | planned | Add graceful shutdown behavior. | WS07-T04 |
 
 Acceptance criteria:
@@ -252,6 +252,13 @@ Test requirements:
 - Concurrent request tests.
 - Timeout/cancellation tests.
 - Startup with no active snapshot fails closed.
+
+Implementation notes:
+
+- `internal/kmsv2` owns the protocol server and depends on narrow `StatusCache` and `Transit` interfaces.
+- WS06 still owns the production background status cache implementation behind the `StatusCache` interface.
+- WS07 still owns production Unix socket lifecycle and graceful process shutdown.
+- WS09 still owns structured logging and any safe request UID propagation.
 
 ## WS06: Status Cache, Health, And Rotation Watcher
 

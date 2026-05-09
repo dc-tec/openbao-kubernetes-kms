@@ -9,7 +9,9 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.20.1
+	google.golang.org/grpc v1.72.1
 	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/kms v0.34.7
 )
 
 require (
@@ -35,4 +37,6 @@ require (
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250303144028-a0af3efb3deb // indirect
+	google.golang.org/protobuf v1.36.7 // indirect
 )
