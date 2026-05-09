@@ -8,6 +8,6 @@ WS10 deployment and packaging samples:
 - `static-pod/bao-kms-provider.yaml`: kubeadm-compatible static pod sample.
 - `kubernetes/encryption-config.yaml`: Kubernetes KMS v2 `EncryptionConfiguration` sample.
 - `package/linux`: Linux `sysusers.d` and `tmpfiles.d` package snippets.
-- `opentofu/openbao-kubernetes-kms`: OpenTofu module skeleton for rendering config and policy artifacts.
+- `opentofu/openbao-kubernetes-kms`: OpenTofu module skeleton for OpenBao Transit engine, key, and provider policy setup.
 
 Replace sample OpenBao addresses, identity-bearing fields, image digests, and host socket GIDs before deployment.

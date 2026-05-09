@@ -1,28 +1,38 @@
 # OpenTofu Module Skeleton
 
-This module skeleton renders provider-side configuration artifacts. It intentionally does not create OpenBao Transit keys, rotate keys, or publish Kubernetes API objects.
+This module skeleton configures the OpenBao-side primitives required by `bao-kms-provider`:
 
-Use platform automation to create the Transit mount, Transit key, JWT auth method, and policy before rendering these files.
+- Transit secrets engine mount,
+- Transit key with safe Kubernetes KMS defaults,
+- Transit `disable_upsert` mount policy,
+- least-privilege OpenBao policy for the provider token.
+
+It intentionally does not render provider config files, render Kubernetes `EncryptionConfiguration`, configure JWT auth roles, rotate Transit keys, or publish Kubernetes API objects.
+
+The module uses OpenTofu `.tofu` files and the Vault-compatible provider. Configure the provider in the calling stack for your OpenBao address, token, CA bundle, and namespace.
 
 Example:
 
 ```hcl
+provider "vault" {
+  address = "https://bao.example.internal:8200"
+}
+
 module "openbao_kubernetes_kms" {
   source = "./deploy/opentofu/openbao-kubernetes-kms"
 
-  provider_name        = "openbao-kms-workload-a"
-  cluster_id           = "workload-a"
-  openbao_address      = "https://bao.example.internal:8200"
-  openbao_tls_name     = "bao.example.internal"
-  openbao_instance_id  = "bao-prod-a"
-  transit_mount_id     = "transit-prod-primary"
-  transit_key_lineage  = "01HXEXAMPLEKEYLINEAGEID"
-  socket_group         = "openbao-kms-socket"
+  transit_mount_path = "transit"
+  transit_key_name   = "k8s-workload-a-etcd"
+  policy_name        = "openbao-kms-workload-a"
 }
 ```
 
 Outputs:
 
-- `provider_config_yaml`
-- `encryption_config_yaml`
-- `openbao_policy_hcl`
+- `transit_mount_path`
+- `transit_key_name`
+- `transit_key_latest_version`
+- `provider_policy_name`
+- `provider_policy_hcl`
+
+`deletion_allowed`, `exportable`, `allow_plaintext_backup`, `derived`, `convergent_encryption`, and `auto_rotate_period` are fixed to safe values. Destroying the module should not be treated as a key deletion path; Transit key deletion is intentionally blocked by OpenBao unless an operator performs a separate break-glass change.

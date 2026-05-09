@@ -181,6 +181,49 @@ func TestSystemdAndPackageSamplesUseResolvedIdentity(t *testing.T) {
 	}
 }
 
+func TestOpenTofuModuleConfiguresOpenBaoTransit(t *testing.T) {
+	modulePath := repoPath("deploy/opentofu/openbao-kubernetes-kms")
+	tfFiles, err := filepath.Glob(filepath.Join(modulePath, "*.tf"))
+	if err != nil {
+		t.Fatalf("glob OpenTofu .tf files: %v", err)
+	}
+	if len(tfFiles) > 0 {
+		t.Fatalf("OpenTofu module should use .tofu files, found .tf files: %#v", tfFiles)
+	}
+
+	for _, name := range []string{"versions.tofu", "variables.tofu", "main.tofu", "outputs.tofu"} {
+		if _, err := os.Stat(filepath.Join(modulePath, name)); err != nil {
+			t.Fatalf("missing OpenTofu module file %s: %v", name, err)
+		}
+	}
+
+	templateFiles, err := filepath.Glob(filepath.Join(modulePath, "templates", "*"))
+	if err != nil {
+		t.Fatalf("glob OpenTofu template files: %v", err)
+	}
+	if len(templateFiles) > 0 {
+		t.Fatalf("OpenTofu module should configure OpenBao resources, not render config templates: %#v", templateFiles)
+	}
+
+	main := readSample(t, "deploy/opentofu/openbao-kubernetes-kms/main.tofu")
+	required := []string{
+		`resource "vault_mount" "transit"`,
+		`resource "vault_generic_endpoint" "transit_disable_upsert"`,
+		`disable_upsert = true`,
+		`resource "vault_transit_secret_backend_key" "kubernetes_kms"`,
+		`deletion_allowed`,
+		`exportable`,
+		`allow_plaintext_backup`,
+		`auto_rotate_period`,
+		`resource "vault_policy" "provider"`,
+	}
+	for _, want := range required {
+		if !strings.Contains(main, want) {
+			t.Fatalf("OpenTofu main.tofu missing %q", want)
+		}
+	}
+}
+
 func loadProviderConfig(t *testing.T, name string) config.Config {
 	t.Helper()
 

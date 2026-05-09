@@ -12,7 +12,8 @@ No published release exists yet. The repository now includes sample build and de
 - `deploy/systemd/bao-kms-provider.service`,
 - `deploy/static-pod/bao-kms-provider.yaml`,
 - `deploy/kubernetes/encryption-config.yaml`,
-- `deploy/package/linux` package layout snippets.
+- `deploy/package/linux` package layout snippets,
+- `deploy/opentofu/openbao-kubernetes-kms` OpenBao Transit and policy setup skeleton.
 
 ## Host Layout
 
@@ -49,7 +50,7 @@ Required:
 
 - Kubernetes control-plane nodes running a supported Kubernetes version.
 - OpenBao reachable over HTTPS.
-- OpenBao Transit key already created.
+- OpenBao Transit mount, key, and provider policy created manually or through the OpenTofu module.
 - OpenBao JWT auth method configured.
 - CA bundle for OpenBao TLS verification.
 - Host-provisioned JWT file for plugin authentication.
