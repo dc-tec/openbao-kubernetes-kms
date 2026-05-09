@@ -345,6 +345,14 @@ func (f *OpenBaoEnvironment) Seal(ctx context.Context) error {
 	return f.write(ctx, httpClient, "sys/seal", emptyRequestBody{})
 }
 
+func (f *OpenBaoEnvironment) RotateTransitKey(ctx context.Context) error {
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, path.Join(f.TransitMount, "keys", f.TransitKey, "rotate"), emptyRequestBody{})
+}
+
 func (f *OpenBaoEnvironment) Close(ctx context.Context) error {
 	stopErr := f.StopContainer(ctx)
 	if !strings.EqualFold(os.Getenv(EnvSkipCleanup), "true") && f.certDir != "" {

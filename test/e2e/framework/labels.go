@@ -11,6 +11,7 @@ const (
 	LabelReleaseGate = "release-gate"
 	LabelRestore     = "restore"
 	LabelRollback    = "rollback"
+	LabelRotation    = "rotation"
 	LabelSmoke       = "smoke"
 	LabelTransit     = "transit"
 	LabelKMSV2       = "kmsv2"

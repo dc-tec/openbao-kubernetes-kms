@@ -16,7 +16,7 @@ Required before a v0.1 engineering-preview release:
 8. AAD mismatch decrypt is rejected.
 9. Transit encrypt uses explicit `key_version`.
 10. Rotation from Transit version 1 to 2 works without key ID flip-flop.
-11. Old ciphertext remains decryptable after rotation.
+11. Old ciphertext remains decryptable after rotation, new ciphertext uses the promoted key ID, and Transit version rollback is rejected.
 12. JWT expiry and re-login path works.
 13. OpenBao outage fails closed.
 14. Provider backend replacement under a stable OpenBao endpoint fails closed during outage and decrypts existing ciphertext after recovery.

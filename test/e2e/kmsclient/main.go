@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/aad"
@@ -21,8 +22,10 @@ import (
 )
 
 const (
-	envKMSSocketPath = "KMS_SOCKET_PATH"
-	envKMSClientMode = "KMS_CLIENT_MODE"
+	envKMSSocketPath         = "KMS_SOCKET_PATH"
+	envKMSClientMode         = "KMS_CLIENT_MODE"
+	envKMSSamplePath         = "KMS_SAMPLE_PATH"
+	envKMSRotationSamplePath = "KMS_ROTATION_SAMPLE_PATH"
 
 	modeFullStack               = "full-stack"
 	modeCreateStaleSocket       = "create-stale-socket"
@@ -34,14 +37,18 @@ const (
 	modeExpectSocketUnavailable = "expect-socket-unavailable"
 	modeExpectStatusStaleness   = "expect-status-staleness"
 	modeExpectJWTRefresh        = "expect-jwt-refresh"
+	modeExpectRotationPromotion = "expect-rotation-promotion"
+	modeExpectRotationRollback  = "expect-rotation-rollback"
 	modeDecryptStorm            = "decrypt-storm"
 
-	jwtRefreshWait = 7 * time.Second
-	samplePath     = "/kms-sample/encrypted-sample.json"
-	plaintext      = "kubernetes secret payload"
-	requestUID     = "provider-container-full-stack-e2e"
-	stormRequests  = 64
-	stormWorkers   = 8
+	jwtRefreshWait            = 7 * time.Second
+	samplePath                = "/kms-sample/encrypted-sample.json"
+	sampleMountRoot           = "/kms-sample"
+	rotationSamplePathDefault = "/kms-sample/rotated-sample.json"
+	plaintext                 = "kubernetes secret payload"
+	requestUID                = "provider-container-full-stack-e2e"
+	stormRequests             = 64
+	stormWorkers              = 8
 )
 
 type encryptedSample struct {
@@ -60,6 +67,8 @@ var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceC
 	modeExpectSocketUnavailable: expectSocketUnavailable,
 	modeExpectStatusStaleness:   expectStatusStaleness,
 	modeExpectJWTRefresh:        expectJWTRefresh,
+	modeExpectRotationPromotion: expectRotationPromotion,
+	modeExpectRotationRollback:  expectRotationRollback,
 	modeDecryptStorm:            decryptStorm,
 }
 
@@ -259,6 +268,40 @@ func decryptStorm(ctx context.Context, client kmsapi.KeyManagementServiceClient)
 	}
 }
 
+func expectRotationPromotion(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+	preRotation := readSampleAt(currentSamplePath())
+	decryptSample(ctx, client, preRotation, "pre-rotation sample before promotion")
+
+	statusResponse := waitForHealthyStatusWithNewKeyID(ctx, client, preRotation.KeyID, 75*time.Second)
+	rotated := encrypt(ctx, client, statusResponse.GetKeyId())
+	if rotated.GetKeyId() == preRotation.KeyID {
+		failf("rotation promotion did not change key_id")
+	}
+	decrypt(ctx, client, rotated)
+	writeSampleAt(currentRotationSamplePath(), rotated)
+	decryptSample(ctx, client, preRotation, "pre-rotation sample after promotion")
+}
+
+func expectRotationRollback(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+	rotated := readSampleAt(currentRotationSamplePath())
+	waitForUnhealthyStatus(ctx, client)
+
+	_, err := client.Encrypt(ctx, &kmsapi.EncryptRequest{
+		Plaintext: []byte(plaintext),
+		Uid:       requestUID,
+	})
+	assertCode(err, codes.FailedPrecondition, "encrypt after Transit rollback")
+
+	_, err = client.Decrypt(ctx, &kmsapi.DecryptRequest{
+		Ciphertext:  rotated.Ciphertext,
+		KeyId:       rotated.KeyID,
+		Annotations: rotated.Annotations,
+	})
+	if err == nil {
+		failf("post-rotation sample decrypted after OpenBao was restored before that key version")
+	}
+}
+
 func waitForHealthyStatus(ctx context.Context, client kmsapi.KeyManagementServiceClient) *kmsapi.StatusResponse {
 	return waitForHealthyStatusWithin(ctx, client, 15*time.Second)
 }
@@ -282,6 +325,34 @@ func waitForHealthyStatusWithin(
 		time.Sleep(100 * time.Millisecond)
 	}
 	failf("KMS provider did not report healthy status: %v", lastErr)
+	return nil
+}
+
+func waitForHealthyStatusWithNewKeyID(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	previousKeyID string,
+	timeout time.Duration,
+) *kmsapi.StatusResponse {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	var lastKeyID string
+	for time.Now().Before(deadline) {
+		statusResponse, err := client.Status(ctx, &kmsapi.StatusRequest{})
+		if err == nil &&
+			statusResponse.GetVersion() == kmsv2.APIVersion &&
+			statusResponse.GetHealthz() == kmsv2.HealthOK &&
+			statusResponse.GetKeyId() != "" &&
+			statusResponse.GetKeyId() != previousKeyID {
+			return statusResponse
+		}
+		lastErr = err
+		if statusResponse != nil {
+			lastKeyID = statusResponse.GetKeyId()
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	failf("KMS provider did not promote a new rotation key_id: last_key_id=%q err=%v", lastKeyID, lastErr)
 	return nil
 }
 
@@ -331,9 +402,9 @@ func encrypt(
 }
 
 func decrypt(ctx context.Context, client kmsapi.KeyManagementServiceClient, encrypted *kmsapi.EncryptResponse) {
-	decrypted, err := client.Decrypt(ctx, &kmsapi.DecryptRequest{
+	decrypted, err := decryptStored(ctx, client, encryptedSample{
 		Ciphertext:  encrypted.GetCiphertext(),
-		KeyId:       encrypted.GetKeyId(),
+		KeyID:       encrypted.GetKeyId(),
 		Annotations: encrypted.GetAnnotations(),
 	})
 	if err != nil {
@@ -342,6 +413,33 @@ func decrypt(ctx context.Context, client kmsapi.KeyManagementServiceClient, encr
 	if string(decrypted.GetPlaintext()) != plaintext {
 		failf("decrypt returned unexpected plaintext")
 	}
+}
+
+func decryptSample(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	sample encryptedSample,
+	description string,
+) {
+	decrypted, err := decryptStored(ctx, client, sample)
+	if err != nil {
+		failf("decrypt %s: %v", description, err)
+	}
+	if string(decrypted.GetPlaintext()) != plaintext {
+		failf("decrypt %s returned unexpected plaintext", description)
+	}
+}
+
+func decryptStored(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	sample encryptedSample,
+) (*kmsapi.DecryptResponse, error) {
+	return client.Decrypt(ctx, &kmsapi.DecryptRequest{
+		Ciphertext:  sample.Ciphertext,
+		KeyId:       sample.KeyID,
+		Annotations: sample.Annotations,
+	})
 }
 
 func rejectUnknownKey(
@@ -390,7 +488,12 @@ func assertAnyCode(err error, codesAllowed []codes.Code, operation string) {
 }
 
 func writeSample(encrypted *kmsapi.EncryptResponse) {
-	if err := os.MkdirAll(filepath.Dir(samplePath), 0o700); err != nil {
+	writeSampleAt(currentSamplePath(), encrypted)
+}
+
+func writeSampleAt(path string, encrypted *kmsapi.EncryptResponse) {
+	path = requireSamplePath(path)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		failf("create encrypted sample directory: %v", err)
 	}
 	payload, err := json.Marshal(encryptedSample{
@@ -401,13 +504,19 @@ func writeSample(encrypted *kmsapi.EncryptResponse) {
 	if err != nil {
 		failf("encode encrypted sample: %v", err)
 	}
-	if err := os.WriteFile(samplePath, payload, 0o600); err != nil {
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		failf("write encrypted sample: %v", err)
 	}
 }
 
 func readSample() encryptedSample {
-	payload, err := os.ReadFile(samplePath)
+	return readSampleAt(currentSamplePath())
+}
+
+func readSampleAt(path string) encryptedSample {
+	path = requireSamplePath(path)
+	// #nosec G304 -- the e2e client only reads encrypted sample artifacts from the mounted sample volume.
+	payload, err := os.ReadFile(path)
 	if err != nil {
 		failf("read encrypted sample: %v", err)
 	}
@@ -419,6 +528,28 @@ func readSample() encryptedSample {
 		failf("encrypted sample is incomplete")
 	}
 	return sample
+}
+
+func requireSamplePath(path string) string {
+	cleaned := filepath.Clean(path)
+	if cleaned != path || !strings.HasPrefix(cleaned, sampleMountRoot+"/") {
+		failf("encrypted sample path must stay under %s", sampleMountRoot)
+	}
+	return cleaned
+}
+
+func currentSamplePath() string {
+	if path := os.Getenv(envKMSSamplePath); path != "" {
+		return path
+	}
+	return samplePath
+}
+
+func currentRotationSamplePath() string {
+	if path := os.Getenv(envKMSRotationSamplePath); path != "" {
+		return path
+	}
+	return rotationSamplePathDefault
 }
 
 func cloneAnnotations(annotations map[string][]byte) map[string][]byte {

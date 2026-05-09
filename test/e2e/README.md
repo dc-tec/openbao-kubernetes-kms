@@ -40,6 +40,14 @@ make test-e2e-provider-restore-openbao-ci
 
 That target runs OpenBao with integrated raft storage in Docker. It verifies provider fail-closed behavior while the backend is down, replacement of the backend under the same Docker network name, raft snapshot save/restore into a fresh storage volume, and decrypt of ciphertext created before the outage or restore.
 
+Run only the provider/OpenBao Transit rotation slice with:
+
+```sh
+make test-e2e-provider-rotation-openbao-ci
+```
+
+That target runs OpenBao with integrated raft storage in Docker. It writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies the provider rejects the observed Transit version rollback.
+
 Run the pinned Kubernetes Kind smoke lane with:
 
 ```sh

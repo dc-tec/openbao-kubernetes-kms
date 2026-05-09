@@ -17,7 +17,9 @@ import (
 )
 
 const (
-	kmsClientModeEnv = "KMS_CLIENT_MODE"
+	kmsClientModeEnv         = "KMS_CLIENT_MODE"
+	kmsSamplePathEnv         = "KMS_SAMPLE_PATH"
+	kmsRotationSamplePathEnv = "KMS_ROTATION_SAMPLE_PATH"
 
 	kmsClientModeFullStack               = "full-stack"
 	kmsClientModeCreateStaleSocket       = "create-stale-socket"
@@ -29,6 +31,8 @@ const (
 	kmsClientModeExpectSocketUnavailable = "expect-socket-unavailable"
 	kmsClientModeExpectStatusStaleness   = "expect-status-staleness"
 	kmsClientModeExpectJWTRefresh        = "expect-jwt-refresh"
+	kmsClientModeExpectRotationPromotion = "expect-rotation-promotion"
+	kmsClientModeExpectRotationRollback  = "expect-rotation-rollback"
 	kmsClientModeDecryptStorm            = "decrypt-storm"
 	kmsClientSampleMount                 = "/kms-sample"
 	missingTransitKeyName                = "missing-kms-e2e-key"
@@ -347,6 +351,17 @@ chmod 0600 /bao/tls/identity.jwt
 
 func (s *providerFailureStack) runClient(ctx context.Context, nameSuffix string, mode string, sampleMode sampleMountMode) {
 	s.t.Helper()
+	s.runClientWithEnv(ctx, nameSuffix, mode, sampleMode, nil)
+}
+
+func (s *providerFailureStack) runClientWithEnv(
+	ctx context.Context,
+	nameSuffix string,
+	mode string,
+	sampleMode sampleMountMode,
+	env []string,
+) {
+	s.t.Helper()
 
 	clientName := s.providerName + "-" + nameSuffix
 	extraVolumes := make([]string, 0, 1)
@@ -357,9 +372,20 @@ func (s *providerFailureStack) runClient(ctx context.Context, nameSuffix string,
 		}
 		extraVolumes = append(extraVolumes, mount)
 	}
-	runKMSClientContainer(s.t, ctx, s.dockerPath, s.providerName, clientName, s.networkName, s.providerImage, s.clientPath, s.volumes, []string{
-		kmsClientModeEnv + "=" + mode,
-	}, extraVolumes)
+	clientEnv := append([]string{kmsClientModeEnv + "=" + mode}, env...)
+	runKMSClientContainer(
+		s.t,
+		ctx,
+		s.dockerPath,
+		s.providerName,
+		clientName,
+		s.networkName,
+		s.providerImage,
+		s.clientPath,
+		s.volumes,
+		clientEnv,
+		extraVolumes,
+	)
 	removeContainer(s.t, context.Background(), s.dockerPath, clientName)
 }
 

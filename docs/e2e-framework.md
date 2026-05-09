@@ -5,7 +5,7 @@ The E2E framework is intentionally smaller than the OpenBao Operator framework, 
 ## Goals
 
 - keep unit and hermetic integration tests free of external services,
-- provide a PR-capable ephemeral OpenBao `2.5.3` CI environment, provider full-stack OpenBao/KMS v2 socket tests, provider failure-mode coverage, decrypt storm smoke coverage, provider backend replacement and raft restore coverage, pinned Kind KMS v2 smoke and convergence lanes, and static-pod upgrade/rollback coverage,
+- provide a PR-capable ephemeral OpenBao `2.5.3` CI environment, provider full-stack OpenBao/KMS v2 socket tests, provider failure-mode coverage, decrypt storm smoke coverage, provider backend replacement and raft restore coverage, provider Transit rotation coverage, pinned Kind KMS v2 smoke and convergence lanes, and static-pod upgrade/rollback coverage,
 - avoid duplicated OpenBao and Kubernetes versions across workflows,
 - produce JUnit and Ginkgo JSON reports for CI summaries and release evidence.
 
@@ -21,11 +21,12 @@ The E2E framework is intentionally smaller than the OpenBao Operator framework, 
 | Provider OpenBao failure E2E | `make test-e2e-provider-failure-openbao-ci` | Docker-compatible container runtime |
 | Provider decrypt storm E2E | `make test-e2e-provider-decrypt-storm-openbao-ci` | Docker-compatible container runtime |
 | Provider backend replacement and raft restore E2E | `make test-e2e-provider-restore-openbao-ci` | Docker-compatible container runtime |
+| Provider Transit rotation E2E | `make test-e2e-provider-rotation-openbao-ci` | Docker-compatible container runtime |
 | Kind KMS v2 smoke E2E | `make test-e2e-kind-smoke` | Docker-compatible container runtime, Kind, kubectl |
 | Kind multi-control-plane convergence E2E | `make test-e2e-kind-convergence` | Docker-compatible container runtime, Kind, kubectl |
 | Kind static-pod upgrade/rollback E2E | `make test-e2e-kind-upgrade-rollback` | Docker-compatible container runtime, Kind, kubectl |
 
-The OpenBao CI lane starts an owned OpenBao container, enables Transit, creates the test key, disables Transit upsert, configures a least-privilege policy, bootstraps JWT auth with a generated RS256 test issuer, and then runs Transit assertions without external OpenBao credentials. The provider full-stack slice builds the provider image, runs the provider container on a Docker network with OpenBao, shares the Unix socket through a Docker volume, and runs a small containerized Kubernetes KMS v2 client against that socket. The provider failure slice reuses the same real OpenBao/provider/KMS v2 socket path for OpenBao down, OpenBao sealed, reduced policy, expired JWT, JWT file rotation, missing Transit key, Status staleness, and stale socket reclamation cases. It stores only ciphertext, key ID, and annotations between phases. The decrypt storm slice performs concurrent KMS v2 decrypts through the provider against real OpenBao. The restore slice runs OpenBao with integrated raft storage, saves a raft snapshot, replaces or restores the backend, and decrypts ciphertext written before the outage or restore. The Kind smoke lane creates a pinned Kubernetes `1.34.3` cluster, runs OpenBao on the Kind Docker network, deploys the provider as a static pod, configures kube-apiserver KMS v2 encryption, verifies Secret readback, checks raw etcd storage uses the `k8s:enc:kms:v2:` envelope, restarts kube-apiserver, and reads the Secret again. The Kind convergence lane creates a three-control-plane Kind cluster, stages one provider static pod per control-plane node, verifies each stacked etcd member stores the Secret with a KMS v2 envelope, temporarily holds non-target API-server manifests so each kube-apiserver must decrypt as the only serving API endpoint, then restarts every API server and verifies readback. The Kind upgrade/rollback lane mutates and restores the provider static pod manifest, proving kubelet restarts do not break decrypt of existing data.
+The OpenBao CI lane starts an owned OpenBao container, enables Transit, creates the test key, disables Transit upsert, configures a least-privilege policy, bootstraps JWT auth with a generated RS256 test issuer, and then runs Transit assertions without external OpenBao credentials. The provider full-stack slice builds the provider image, runs the provider container on a Docker network with OpenBao, shares the Unix socket through a Docker volume, and runs a small containerized Kubernetes KMS v2 client against that socket. The provider failure slice reuses the same real OpenBao/provider/KMS v2 socket path for OpenBao down, OpenBao sealed, reduced policy, expired JWT, JWT file rotation, missing Transit key, Status staleness, and stale socket reclamation cases. It stores only ciphertext, key ID, and annotations between phases. The decrypt storm slice performs concurrent KMS v2 decrypts through the provider against real OpenBao. The restore slice runs OpenBao with integrated raft storage, saves a raft snapshot, replaces or restores the backend, and decrypts ciphertext written before the outage or restore. The rotation slice writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies the provider rejects the observed Transit version rollback. The Kind smoke lane creates a pinned Kubernetes `1.34.3` cluster, runs OpenBao on the Kind Docker network, deploys the provider as a static pod, configures kube-apiserver KMS v2 encryption, verifies Secret readback, checks raw etcd storage uses the `k8s:enc:kms:v2:` envelope, restarts kube-apiserver, and reads the Secret again. The Kind convergence lane creates a three-control-plane Kind cluster, stages one provider static pod per control-plane node, verifies each stacked etcd member stores the Secret with a KMS v2 envelope, temporarily holds non-target API-server manifests so each kube-apiserver must decrypt as the only serving API endpoint, then restarts every API server and verifies readback. The Kind upgrade/rollback lane mutates and restores the provider static pod manifest, proving kubelet restarts do not break decrypt of existing data.
 
 ## Layout
 
@@ -38,6 +39,7 @@ test/e2e/
   suites_manifest_test.go
   provider_container_test.go
   provider_failure_test.go
+  provider_rotation_test.go
   provider_restore_test.go
   kmsclient/
     main.go
@@ -66,6 +68,7 @@ The current lanes are:
 | `openbao-failure-ci` | active | Validate fail-closed behavior for OpenBao, policy, JWT, Transit key, and Status staleness failure modes. |
 | `openbao-decrypt-storm-ci` | active | Exercise concurrent provider decrypts against real OpenBao as a smoke test. |
 | `openbao-restore-ci` | active | Validate provider recovery after backend replacement and OpenBao integrated raft snapshot restore. |
+| `openbao-rotation-ci` | active | Validate Transit rotation promotion, old/new decrypt compatibility, and rollback rejection. |
 | `kind-upgrade-rollback` | active | Validate static-pod provider upgrade and rollback behavior in pinned Kind. |
 | `release-gate` | planned | Collect the pinned v0.1 OpenBao and Kubernetes E2E checks. |
 
@@ -86,6 +89,7 @@ Label("openbao", "transit", "ci")
 Label("kind", "kmsv2", "smoke")
 Label("kind", "kmsv2", "convergence")
 Label("openbao", "kmsv2", "restore", "ci")
+Label("openbao", "kmsv2", "rotation", "ci")
 Label("kind", "kmsv2", "upgrade", "rollback")
 Label("release-gate")
 ```
@@ -145,6 +149,14 @@ make test-e2e-provider-restore-openbao-ci
 ```
 
 This target runs OpenBao with integrated raft storage in Docker. It verifies provider fail-closed behavior while the backend is down, backend replacement under a stable network name, raft snapshot save/restore into a fresh storage volume, and decrypt of ciphertext created before restore.
+
+Run only the provider/OpenBao Transit rotation slice:
+
+```sh
+make test-e2e-provider-rotation-openbao-ci
+```
+
+This target runs OpenBao with integrated raft storage in Docker. It writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies the provider rejects the observed Transit version rollback.
 
 Run the pinned Kind smoke lane:
 
