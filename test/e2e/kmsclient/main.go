@@ -9,7 +9,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/aad"
@@ -26,6 +29,10 @@ const (
 	envKMSClientMode         = "KMS_CLIENT_MODE"
 	envKMSSamplePath         = "KMS_SAMPLE_PATH"
 	envKMSRotationSamplePath = "KMS_ROTATION_SAMPLE_PATH"
+	envKMSLoadSoakDuration   = "KMS_LOAD_SOAK_DURATION"
+	envKMSLoadSoakWorkers    = "KMS_LOAD_SOAK_WORKERS"
+	envKMSLoadSoakMaxP95     = "KMS_LOAD_SOAK_MAX_P95"
+	envKMSLoadSoakMinOps     = "KMS_LOAD_SOAK_MIN_OPS"
 
 	modeFullStack               = "full-stack"
 	modeCreateStaleSocket       = "create-stale-socket"
@@ -40,8 +47,13 @@ const (
 	modeExpectRotationPromotion = "expect-rotation-promotion"
 	modeExpectRotationRollback  = "expect-rotation-rollback"
 	modeDecryptStorm            = "decrypt-storm"
+	modeLoadSoak                = "load-soak"
 
 	jwtRefreshWait            = 7 * time.Second
+	loadSoakDurationDefault   = 20 * time.Second
+	loadSoakMaxP95Default     = 2 * time.Second
+	loadSoakMinOpsDefault     = 90
+	loadSoakWorkersDefault    = 4
 	samplePath                = "/kms-sample/encrypted-sample.json"
 	sampleMountRoot           = "/kms-sample"
 	rotationSamplePathDefault = "/kms-sample/rotated-sample.json"
@@ -57,6 +69,20 @@ type encryptedSample struct {
 	Annotations map[string][]byte `json:"annotations"`
 }
 
+type loadSoakSample struct {
+	operation string
+	duration  time.Duration
+	err       error
+}
+
+type loadSoakStats struct {
+	counts        map[string]int
+	durations     map[string][]time.Duration
+	firstError    string
+	errorCount    int
+	totalDuration time.Duration
+}
+
 var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceClient){
 	modeFullStack:               runFullStack,
 	modeWriteSample:             writeEncryptedSample,
@@ -70,6 +96,7 @@ var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceC
 	modeExpectRotationPromotion: expectRotationPromotion,
 	modeExpectRotationRollback:  expectRotationRollback,
 	modeDecryptStorm:            decryptStorm,
+	modeLoadSoak:                loadSoak,
 }
 
 func main() {
@@ -266,6 +293,200 @@ func decryptStorm(ctx context.Context, client kmsapi.KeyManagementServiceClient)
 			failf("%v", err)
 		}
 	}
+}
+
+func loadSoak(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+	waitForHealthyStatus(ctx, client)
+
+	duration := durationFromEnv(envKMSLoadSoakDuration, loadSoakDurationDefault)
+	maxP95 := durationFromEnv(envKMSLoadSoakMaxP95, loadSoakMaxP95Default)
+	workers := intFromEnv(envKMSLoadSoakWorkers, loadSoakWorkersDefault)
+	minOps := intFromEnv(envKMSLoadSoakMinOps, loadSoakMinOpsDefault)
+	results := make(chan loadSoakSample, workers*3)
+	soakCtx, cancel := context.WithTimeout(ctx, duration)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	startedAt := time.Now()
+	for workerID := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runLoadSoakWorker(soakCtx, client, workerID, results)
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	stats := collectLoadSoakStats(results)
+	stats.totalDuration = time.Since(startedAt)
+	operations := []string{"status", "encrypt", "decrypt"}
+	printLoadSoakSummary(stats, operations)
+	if stats.errorCount > 0 {
+		failf("load soak recorded %d errors; first=%s", stats.errorCount, stats.firstError)
+	}
+	for _, operation := range operations {
+		if stats.counts[operation] < minOps {
+			failf("load soak %s operations = %d, want at least %d", operation, stats.counts[operation], minOps)
+		}
+		p95 := percentileDuration(stats.durations[operation], 95)
+		if p95 > maxP95 {
+			failf("load soak %s p95 = %s, max %s", operation, p95, maxP95)
+		}
+	}
+}
+
+func runLoadSoakWorker(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	workerID int,
+	results chan<- loadSoakSample,
+) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		statusResponse, ok := recordLoadSoakStatus(ctx, client, results)
+		if !ok {
+			continue
+		}
+		encrypted, ok := recordLoadSoakEncrypt(ctx, client, statusResponse.GetKeyId(), workerID, results)
+		if !ok {
+			continue
+		}
+		recordLoadSoakDecrypt(ctx, client, encrypted, results)
+	}
+}
+
+func recordLoadSoakStatus(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	results chan<- loadSoakSample,
+) (*kmsapi.StatusResponse, bool) {
+	var response *kmsapi.StatusResponse
+	err := recordLoadSoakOperation(ctx, "status", results, func(requestCtx context.Context) error {
+		var statusErr error
+		response, statusErr = client.Status(requestCtx, &kmsapi.StatusRequest{})
+		if statusErr != nil {
+			return statusErr
+		}
+		if response.GetVersion() != kmsv2.APIVersion ||
+			response.GetHealthz() != kmsv2.HealthOK ||
+			response.GetKeyId() == "" {
+			return fmt.Errorf("unexpected unhealthy Status response")
+		}
+		return nil
+	})
+	return response, err == nil
+}
+
+func recordLoadSoakEncrypt(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	keyID string,
+	workerID int,
+	results chan<- loadSoakSample,
+) (*kmsapi.EncryptResponse, bool) {
+	var response *kmsapi.EncryptResponse
+	err := recordLoadSoakOperation(ctx, "encrypt", results, func(requestCtx context.Context) error {
+		var encryptErr error
+		response, encryptErr = client.Encrypt(requestCtx, &kmsapi.EncryptRequest{
+			Plaintext: []byte(fmt.Sprintf("%s-%d", plaintext, workerID)),
+			Uid:       requestUID,
+		})
+		if encryptErr != nil {
+			return encryptErr
+		}
+		if response.GetKeyId() != keyID {
+			return fmt.Errorf("encrypt key_id did not match Status key_id")
+		}
+		if len(response.GetCiphertext()) == 0 || len(response.GetAnnotations()) == 0 {
+			return fmt.Errorf("encrypt returned incomplete response")
+		}
+		return nil
+	})
+	return response, err == nil
+}
+
+func recordLoadSoakDecrypt(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	encrypted *kmsapi.EncryptResponse,
+	results chan<- loadSoakSample,
+) {
+	_ = recordLoadSoakOperation(ctx, "decrypt", results, func(requestCtx context.Context) error {
+		decrypted, err := client.Decrypt(requestCtx, &kmsapi.DecryptRequest{
+			Ciphertext:  encrypted.GetCiphertext(),
+			KeyId:       encrypted.GetKeyId(),
+			Annotations: encrypted.GetAnnotations(),
+		})
+		if err != nil {
+			return err
+		}
+		if !bytes.HasPrefix(decrypted.GetPlaintext(), []byte(plaintext)) {
+			return fmt.Errorf("decrypt returned unexpected plaintext")
+		}
+		return nil
+	})
+}
+
+func recordLoadSoakOperation(
+	ctx context.Context,
+	operation string,
+	results chan<- loadSoakSample,
+	fn func(context.Context) error,
+) error {
+	requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	startedAt := time.Now()
+	err := fn(requestCtx)
+	duration := time.Since(startedAt)
+	if ctx.Err() != nil && err != nil {
+		return err
+	}
+	results <- loadSoakSample{operation: operation, duration: duration, err: err}
+	return err
+}
+
+func collectLoadSoakStats(results <-chan loadSoakSample) loadSoakStats {
+	stats := loadSoakStats{
+		counts:    make(map[string]int),
+		durations: make(map[string][]time.Duration),
+	}
+	for result := range results {
+		stats.counts[result.operation]++
+		stats.durations[result.operation] = append(stats.durations[result.operation], result.duration)
+		if result.err != nil {
+			stats.errorCount++
+			if stats.firstError == "" {
+				stats.firstError = result.err.Error()
+			}
+		}
+	}
+	return stats
+}
+
+func printLoadSoakSummary(stats loadSoakStats, operations []string) {
+	summary := fmt.Sprintf(
+		"load_soak duration=%s errors=%d",
+		stats.totalDuration.Round(time.Millisecond),
+		stats.errorCount,
+	)
+	for _, operation := range operations {
+		durations := stats.durations[operation]
+		summary += fmt.Sprintf(
+			" %s_count=%d %s_p95=%s %s_max=%s",
+			operation,
+			stats.counts[operation],
+			operation,
+			percentileDuration(durations, 95).Round(time.Millisecond),
+			operation,
+			maxDuration(durations).Round(time.Millisecond),
+		)
+	}
+	_, _ = fmt.Fprintln(os.Stdout, summary)
 }
 
 func expectRotationPromotion(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
@@ -550,6 +771,58 @@ func currentRotationSamplePath() string {
 		return path
 	}
 	return rotationSamplePathDefault
+}
+
+func durationFromEnv(name string, fallback time.Duration) time.Duration {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		failf("%s must be a positive duration", name)
+	}
+	return parsed
+}
+
+func intFromEnv(name string, fallback int) int {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		failf("%s must be a positive integer", name)
+	}
+	return parsed
+}
+
+func percentileDuration(values []time.Duration, percentile int) time.Duration {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]time.Duration(nil), values...)
+	sort.Slice(sorted, func(i int, j int) bool {
+		return sorted[i] < sorted[j]
+	})
+	index := (len(sorted)*percentile + 99) / 100
+	if index <= 0 {
+		index = 1
+	}
+	if index > len(sorted) {
+		index = len(sorted)
+	}
+	return sorted[index-1]
+}
+
+func maxDuration(values []time.Duration) time.Duration {
+	var maxValue time.Duration
+	for _, value := range values {
+		if value > maxValue {
+			maxValue = value
+		}
+	}
+	return maxValue
 }
 
 func cloneAnnotations(annotations map[string][]byte) map[string][]byte {

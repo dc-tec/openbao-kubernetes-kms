@@ -90,6 +90,22 @@ lanes:
     status: active
     reports: true
 
+  - id: openbao-load-soak-ci
+    name: OpenBao Load Soak CI
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && soak && ci
+    prScope: main
+    environment: local-openbao
+    isolation: local-container
+    timeout: 6m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
   - id: openbao-restore-ci
     name: OpenBao Backend Replacement And Raft Restore CI
     package: ./test/e2e
@@ -148,6 +164,23 @@ lanes:
     timeout: 30m
     parallelNodes: 1
     versionRefs:
+      - validation.kubernetes.exactVersion
+      - validation.kubernetes.kindNodeImage
+    status: active
+    reports: true
+
+  - id: kind-dr-runbook
+    name: Kubernetes KMS v2 Kind DR Restore Runbook
+    package: ./test/e2e
+    labelFilter: kind && kmsv2 && restore && dr
+    prScope: main
+    environment: kind
+    isolation: local-cluster
+    timeout: 35m
+    parallelNodes: 1
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
       - validation.kubernetes.exactVersion
       - validation.kubernetes.kindNodeImage
     status: active

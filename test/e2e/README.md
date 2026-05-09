@@ -32,6 +32,14 @@ make test-e2e-provider-decrypt-storm-openbao-ci
 
 That target performs concurrent KMS v2 Decrypt calls through the provider against real OpenBao. It is a smoke test, not a replacement for release-candidate load testing.
 
+Run only the provider/OpenBao load-soak slice with:
+
+```sh
+make test-e2e-provider-load-soak-openbao-ci
+```
+
+That target runs sustained Status, Encrypt, and Decrypt calls through the real provider/OpenBao path, requires zero client-visible errors, enforces operation-count and p95-latency thresholds, and compares Docker memory/PID counts before and after the run.
+
 Run only the provider/OpenBao backend replacement and DR restore slice with:
 
 ```sh
@@ -79,6 +87,14 @@ make test-e2e-kind-upgrade-rollback
 ```
 
 That target mutates the provider static pod manifest, waits for kubelet to restart the provider, verifies old and new Secrets remain readable, restores the previous static pod manifest, and verifies readback after provider and kube-apiserver restart.
+
+Run the pinned Kubernetes Kind DR restore runbook lane with:
+
+```sh
+make test-e2e-kind-dr-runbook
+```
+
+That target creates an encrypted Secret, saves an OpenBao raft snapshot and provider node config/TLS/JWT/state backup, removes the provider static pod and local files, restores OpenBao into a fresh raft volume, rehydrates the provider node files, restarts the provider and API server, and verifies Kubernetes readback before and after restore.
 
 The suite manifest is `suites.yaml`. It defines active and planned lanes, while concrete OpenBao and Kubernetes versions remain centralized in `.ci/versions.yaml`.
 

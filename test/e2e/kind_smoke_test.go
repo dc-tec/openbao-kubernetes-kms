@@ -313,9 +313,18 @@ func kindControlPlaneNodeNames(clusterName string, count int) []string {
 func startKindOpenBao(t *testing.T, ctx context.Context) *framework.OpenBaoEnvironment {
 	t.Helper()
 
-	environment, err := framework.StartOpenBaoEnvironment(ctx, framework.OpenBaoEnvironmentConfig{
-		NetworkName: "kind",
-	})
+	return startKindOpenBaoWithConfig(t, ctx, framework.OpenBaoEnvironmentConfig{})
+}
+
+func startKindOpenBaoWithConfig(
+	t *testing.T,
+	ctx context.Context,
+	config framework.OpenBaoEnvironmentConfig,
+) *framework.OpenBaoEnvironment {
+	t.Helper()
+
+	config.NetworkName = "kind"
+	environment, err := framework.StartOpenBaoEnvironment(ctx, config)
 	if errors.Is(err, framework.ErrDockerUnavailable) {
 		t.Skip(err.Error())
 	}
@@ -377,6 +386,7 @@ chown -R 65532:1234 /run/openbao-kms
 chmod 0700 /etc/openbao-kms /etc/openbao-kms/tls /var/lib/openbao-kms /var/lib/openbao-kms/state
 chmod 2770 /run/openbao-kms
 chmod 0600 /etc/openbao-kms/config.yaml /var/lib/openbao-kms/identity.jwt
+if [ -f /var/lib/openbao-kms/state/key-registry.json ]; then chmod 0600 /var/lib/openbao-kms/state/key-registry.json; fi
 chmod 0644 /etc/openbao-kms/tls/ca.crt /etc/kubernetes/encryption/openbao-kms/encryption-config.yaml
 `
 

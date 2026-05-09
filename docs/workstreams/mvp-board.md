@@ -169,8 +169,10 @@ Current status:
 - WS11-T07 provider failure coverage is implemented through `make test-e2e-provider-failure-openbao-ci`; it covers OpenBao down, OpenBao sealed, reduced policy, expired JWT startup failure, JWT file rotation, missing Transit key startup failure, Status staleness, and stale socket reclamation.
 - WS11-T08 rotation coverage is implemented through `make test-e2e-provider-rotation-openbao-ci`; it covers real OpenBao Transit key rotation, provider Status `key_id` promotion, old and new ciphertext decrypt, and fail-closed behavior after restoring a pre-rotation raft snapshot.
 - WS11-T09 decrypt storm smoke coverage is implemented through `make test-e2e-provider-decrypt-storm-openbao-ci` with concurrent KMS v2 Decrypt calls through the real provider image against real OpenBao.
+- WS11-T09A load-soak coverage is implemented through `make test-e2e-provider-load-soak-openbao-ci`; it sustains Status, Encrypt, and Decrypt traffic through real provider/OpenBao and checks error, latency, memory, and PID growth bounds.
 - WS11-T10A install script staging checks are implemented in `test/deployment`; they stage systemd and static-pod lab install outputs into temporary roots and verify paths, modes, and setgid socket directory behavior.
 - WS11-T11A and WS11-T12A portable backend replacement and DR restore coverage is implemented through `make test-e2e-provider-restore-openbao-ci`; it uses OpenBao integrated raft storage and raft snapshots without enabling Transit plaintext backup.
+- WS11-T12B Kind DR runbook coverage is implemented through `make test-e2e-kind-dr-runbook`; it restores OpenBao raft data into a fresh volume, rehydrates provider config/TLS/JWT/state on the control-plane node, and proves Kubernetes Secret readback after replacement.
 - Stable JSON output and explicit completion-generation UX remain WS08 P1 follow-ups.
 
 Exit criteria:

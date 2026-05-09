@@ -34,6 +34,7 @@ const (
 	kmsClientModeExpectRotationPromotion = "expect-rotation-promotion"
 	kmsClientModeExpectRotationRollback  = "expect-rotation-rollback"
 	kmsClientModeDecryptStorm            = "decrypt-storm"
+	kmsClientModeLoadSoak                = "load-soak"
 	kmsClientSampleMount                 = "/kms-sample"
 	missingTransitKeyName                = "missing-kms-e2e-key"
 	providerFailureDefaultTimeout        = 5 * time.Minute
