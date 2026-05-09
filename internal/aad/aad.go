@@ -20,19 +20,19 @@ const (
 	AADVersionV1 = "v1"
 
 	// KeyProvider is the KMS annotation key for the provider marker.
-	KeyProvider = "kms.openbao.org/provider"
+	KeyProvider = "provider.kms.openbao.org"
 	// KeyKeyIDHash is the KMS annotation key for the hashed Kubernetes key_id.
-	KeyKeyIDHash = "kms.openbao.org/key-id-hash"
+	KeyKeyIDHash = "key-id-hash.kms.openbao.org"
 	// KeyTransitKeyVersion is the KMS annotation key for the Transit key version.
-	KeyTransitKeyVersion = "kms.openbao.org/transit-key-version"
+	KeyTransitKeyVersion = "transit-key-version.kms.openbao.org"
 	// KeyTransitMountHash is the KMS annotation key for the hashed Transit mount ID.
-	KeyTransitMountHash = "kms.openbao.org/transit-mount-hash"
+	KeyTransitMountHash = "transit-mount-hash.kms.openbao.org"
 	// KeyTransitKeyHash is the KMS annotation key for the hashed Transit key lineage ID.
-	KeyTransitKeyHash = "kms.openbao.org/transit-key-hash"
+	KeyTransitKeyHash = "transit-key-hash.kms.openbao.org"
 	// KeyPluginVersion is the KMS annotation key for the provider plugin version.
-	KeyPluginVersion = "kms.openbao.org/plugin-version"
+	KeyPluginVersion = "plugin-version.kms.openbao.org"
 	// KeyAADVersion is the KMS annotation key for the AAD schema version.
-	KeyAADVersion = "kms.openbao.org/aad-version"
+	KeyAADVersion = "aad-version.kms.openbao.org"
 
 	purposeValue = "kubernetes-etcd-kms-v2"
 )
@@ -294,11 +294,37 @@ func HashValue(value string) string {
 
 func validateAnnotationKeys(annotations map[string]string) error {
 	for key := range annotations {
-		if !strings.Contains(key, "/") || strings.HasPrefix(key, "/") || strings.HasSuffix(key, "/") {
+		if !isFQDNAnnotationKey(key) {
 			return fmt.Errorf("%w: annotation key %q is not fully qualified", ErrInvalidAnnotations, key)
 		}
 	}
 	return nil
+}
+
+func isFQDNAnnotationKey(key string) bool {
+	if key == "" || len(key) > 253 || strings.Contains(key, "/") || !strings.Contains(key, ".") {
+		return false
+	}
+	labels := strings.SplitSeq(key, ".")
+	for label := range labels {
+		if !isDNS1123Label(label) {
+			return false
+		}
+	}
+	return true
+}
+
+func isDNS1123Label(label string) bool {
+	if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+		return false
+	}
+	for _, r := range label {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func requiredValue(annotations map[string]string, key string) (string, error) {

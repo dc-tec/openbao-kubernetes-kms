@@ -60,6 +60,23 @@ func TestBuildAnnotationsGolden(t *testing.T) {
 	}
 }
 
+func TestAnnotationKeysAreKMSV2FQDNs(t *testing.T) {
+	fixture := loadGoldenFixture(t)
+
+	annotations, err := aad.BuildAnnotations(fixture.Snapshot.keySnapshot(), fixture.PluginVersion)
+	if err != nil {
+		t.Fatalf("build annotations: %v", err)
+	}
+	for key := range annotations {
+		if strings.Contains(key, "/") {
+			t.Fatalf("KMS v2 annotation key %q must be an FQDN, not a Kubernetes annotation qualified name", key)
+		}
+		if !strings.Contains(key, ".") {
+			t.Fatalf("KMS v2 annotation key %q is not fully qualified", key)
+		}
+	}
+}
+
 func TestBuildCanonicalAADGolden(t *testing.T) {
 	fixture := loadGoldenFixture(t)
 	snapshot := fixture.Snapshot.keySnapshot()
@@ -241,7 +258,7 @@ func FuzzParseAnnotations(f *testing.F) {
 	}
 	f.Add(string(valid))
 	f.Add("{}")
-	f.Add(`{"kms.openbao.org/provider":"openbao-transit"}`)
+	f.Add(`{"provider.kms.openbao.org":"openbao-transit"}`)
 	f.Add(`{"provider":"openbao-transit"}`)
 
 	f.Fuzz(func(t *testing.T, input string) {

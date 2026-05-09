@@ -77,18 +77,18 @@ Annotations are plaintext Kubernetes KMS metadata. They are stored with encrypte
 Recommended annotations:
 
 ```yaml
-kms.openbao.org/provider: "openbao-transit"
-kms.openbao.org/key-id-hash: "<base64url-sha256-key-id>"
-kms.openbao.org/transit-key-version: "2"
-kms.openbao.org/transit-mount-hash: "<base64url-sha256-mount-id>"
-kms.openbao.org/transit-key-hash: "<base64url-sha256-key-lineage-id>"
-kms.openbao.org/plugin-version: "v0.1.0"
-kms.openbao.org/aad-version: "v1"
+provider.kms.openbao.org: "openbao-transit"
+key-id-hash.kms.openbao.org: "<base64url-sha256-key-id>"
+transit-key-version.kms.openbao.org: "2"
+transit-mount-hash.kms.openbao.org: "<base64url-sha256-mount-id>"
+transit-key-hash.kms.openbao.org: "<base64url-sha256-key-lineage-id>"
+plugin-version.kms.openbao.org: "v0.1.0"
+aad-version.kms.openbao.org: "v1"
 ```
 
 Rules:
 
-- Annotation keys must be fully qualified.
+- Annotation keys must be fully qualified domain names, not Kubernetes annotation `domain/name` keys.
 - Annotation values must be non-secret.
 - Hash raw topology values before storing them.
 - Reject unknown required annotation versions.

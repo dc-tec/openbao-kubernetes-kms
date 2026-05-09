@@ -14,13 +14,13 @@
   "pluginVersion": "v0.1.0",
   "expectedKeyId": "obk2.U2C3Ke0maGBRFOdn0vdYVNwZkKaxf3KjnrK7kIR-Vro",
   "expectedAnnotations": {
-    "kms.openbao.org/provider": "openbao-transit",
-    "kms.openbao.org/key-id-hash": "MFY-fdnn3o0Tkx3NGLEANm6lO7z4dH6Ot_Ps8AGry3k",
-    "kms.openbao.org/transit-key-version": "3",
-    "kms.openbao.org/transit-mount-hash": "rXiCr_lOjsbykm0mDHAvUcVxQl_XcVnT61MesgcPnzc",
-    "kms.openbao.org/transit-key-hash": "SwWS38Td_yyFNHaECzzHQP3CHFg60mklwtqYUwkx_IA",
-    "kms.openbao.org/plugin-version": "v0.1.0",
-    "kms.openbao.org/aad-version": "v1"
+    "provider.kms.openbao.org": "openbao-transit",
+    "key-id-hash.kms.openbao.org": "MFY-fdnn3o0Tkx3NGLEANm6lO7z4dH6Ot_Ps8AGry3k",
+    "transit-key-version.kms.openbao.org": "3",
+    "transit-mount-hash.kms.openbao.org": "rXiCr_lOjsbykm0mDHAvUcVxQl_XcVnT61MesgcPnzc",
+    "transit-key-hash.kms.openbao.org": "SwWS38Td_yyFNHaECzzHQP3CHFg60mklwtqYUwkx_IA",
+    "plugin-version.kms.openbao.org": "v0.1.0",
+    "aad-version.kms.openbao.org": "v1"
   },
   "expectedCanonicalAAD": "{\"aad_version\":\"v1\",\"purpose\":\"kubernetes-etcd-kms-v2\",\"provider\":\"openbao-transit\",\"provider_name\":\"openbao-kms-workload-a\",\"cluster_id_hash\":\"aJ87hdnMZbDZpJ86CnErao3FRzUhv5o8bqc5tCvFGyY\",\"openbao_instance_hash\":\"D1mX5YANszQPDTOv6P3ATTTa_2Nc2_DQtRJO0ArNx1g\",\"transit_mount_hash\":\"rXiCr_lOjsbykm0mDHAvUcVxQl_XcVnT61MesgcPnzc\",\"transit_key_hash\":\"SwWS38Td_yyFNHaECzzHQP3CHFg60mklwtqYUwkx_IA\",\"key_id_hash\":\"MFY-fdnn3o0Tkx3NGLEANm6lO7z4dH6Ot_Ps8AGry3k\",\"key_version\":\"3\"}",
   "expectedTransitAAD": "eyJhYWRfdmVyc2lvbiI6InYxIiwicHVycG9zZSI6Imt1YmVybmV0ZXMtZXRjZC1rbXMtdjIiLCJwcm92aWRlciI6Im9wZW5iYW8tdHJhbnNpdCIsInByb3ZpZGVyX25hbWUiOiJvcGVuYmFvLWttcy13b3JrbG9hZC1hIiwiY2x1c3Rlcl9pZF9oYXNoIjoiYUo4N2hkbk1aYkRacEo4NkNuRXJhbzNGUnpVaHY1bzhicWM1dEN2Rkd5WSIsIm9wZW5iYW9faW5zdGFuY2VfaGFzaCI6IkQxbVg1WUFOc3pRUERUT3Y2UDNBVFRUYV8yTmMyX0RRdFJKTzBBck54MWciLCJ0cmFuc2l0X21vdW50X2hhc2giOiJyWGlDcl9sT2pzYnlrbTBtREhBdlVjVnhRbF9YY1ZuVDYxTWVzZ2NQbnpjIiwidHJhbnNpdF9rZXlfaGFzaCI6IlN3V1MzOFRkX3l5Rk5IYUVDenpIUVAzQ0hGZzYwbWtsd3RxWVV3a3hfSUEiLCJrZXlfaWRfaGFzaCI6Ik1GWS1mZG5uM28wVGt4M05HTEVBTm02bE83ejRkSDZPdF9QczhBR3J5M2siLCJrZXlfdmVyc2lvbiI6IjMifQ=="
