@@ -2,6 +2,7 @@ package deployment_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -224,6 +225,37 @@ func TestOpenTofuModuleConfiguresOpenBaoTransit(t *testing.T) {
 	}
 }
 
+func TestInstallScriptsStageSystemdAndStaticPodLayouts(t *testing.T) {
+	binaryPath := filepath.Join(t.TempDir(), "bao-kms-provider")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\nexit 0\n"), 0o600); err != nil {
+		t.Fatalf("write fake provider binary: %v", err)
+	}
+
+	systemdRoot := t.TempDir()
+	runSystemdInstallScript(t, []string{
+		"ROOT=" + systemdRoot,
+		"BINARY=" + binaryPath,
+	})
+	requirePathMode(t, systemdRoot, "/usr/local/bin/bao-kms-provider", 0o755)
+	requirePathMode(t, systemdRoot, "/etc/openbao-kms/config.yaml", 0o640)
+	requirePathMode(t, systemdRoot, "/etc/systemd/system/bao-kms-provider.service", 0o644)
+	requirePathMode(t, systemdRoot, "/usr/lib/sysusers.d/openbao-kms.conf", 0o644)
+	requirePathMode(t, systemdRoot, "/usr/lib/tmpfiles.d/openbao-kms.conf", 0o644)
+
+	staticPodRoot := t.TempDir()
+	runStaticPodInstallScript(t, []string{
+		"ROOT=" + staticPodRoot,
+	})
+	requirePathMode(t, staticPodRoot, "/etc/openbao-kms", 0o750)
+	requirePathMode(t, staticPodRoot, "/etc/openbao-kms/tls", 0o755)
+	requirePathMode(t, staticPodRoot, "/var/lib/openbao-kms", 0o750)
+	requirePathMode(t, staticPodRoot, "/var/lib/openbao-kms/state", 0o750)
+	requirePathMode(t, staticPodRoot, "/run/openbao-kms", 0o770)
+	requirePathMode(t, staticPodRoot, "/etc/openbao-kms/config.yaml", 0o640)
+	requirePathMode(t, staticPodRoot, "/etc/kubernetes/manifests/bao-kms-provider.yaml", 0o644)
+	requireSetGID(t, stagedPath(staticPodRoot, "/run/openbao-kms"))
+}
+
 func loadProviderConfig(t *testing.T, name string) config.Config {
 	t.Helper()
 
@@ -319,6 +351,58 @@ func readSample(t *testing.T, name string) string {
 		t.Fatalf("read %s: %v", name, err)
 	}
 	return string(content)
+}
+
+func runSystemdInstallScript(t *testing.T, env []string) {
+	t.Helper()
+
+	cmd := exec.Command("sh", "hack/kubeadm/install-systemd-lab.sh")
+	cmd.Dir = repoPath(".")
+	cmd.Env = append(os.Environ(), env...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run systemd install script: %v: %s", err, strings.TrimSpace(string(output)))
+	}
+}
+
+func runStaticPodInstallScript(t *testing.T, env []string) {
+	t.Helper()
+
+	cmd := exec.Command("sh", "hack/kubeadm/install-static-pod-lab.sh")
+	cmd.Dir = repoPath(".")
+	cmd.Env = append(os.Environ(), env...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run static pod install script: %v: %s", err, strings.TrimSpace(string(output)))
+	}
+}
+
+func requirePathMode(t *testing.T, root string, path string, mode os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(stagedPath(root, path))
+	if err != nil {
+		t.Fatalf("stat staged path %s: %v", path, err)
+	}
+	if got := info.Mode().Perm(); got != mode {
+		t.Fatalf("staged path %s mode %04o, want %04o", path, got, mode)
+	}
+}
+
+func requireSetGID(t *testing.T, path string) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat staged path %s: %v", path, err)
+	}
+	if info.Mode()&os.ModeSetgid == 0 {
+		t.Fatalf("staged path %s should preserve setgid bit", path)
+	}
+}
+
+func stagedPath(root string, path string) string {
+	return filepath.Join(root, strings.TrimPrefix(path, "/"))
 }
 
 func repoPath(parts ...string) string {

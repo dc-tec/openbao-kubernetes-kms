@@ -21,7 +21,11 @@ install_file() {
 	mode="$3"
 	owner="$4"
 	group="$5"
-	install -D -m "$mode" -o "$owner" -g "$group" "$src" "${ROOT}${dst}"
+	if [ -n "$ROOT" ] && [ "${PRESERVE_OWNERS:-false}" != "true" ]; then
+		install -D -m "$mode" "$src" "${ROOT}${dst}"
+	else
+		install -D -m "$mode" -o "$owner" -g "$group" "$src" "${ROOT}${dst}"
+	fi
 }
 
 if [ -z "$ROOT" ]; then
