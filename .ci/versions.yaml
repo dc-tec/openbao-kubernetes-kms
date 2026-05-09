@@ -56,10 +56,11 @@ validation:
   kubernetes:
     minimumLine: "1.34"
     primaryLine: "1.34"
-    exactVersion: ""
-    kindNodeImage: ""
-    kindNodeImageDigest: ""
-    pinStatus: pending
+    upstreamPatch: "1.34.7"
+    exactVersion: "1.34.3"
+    kindNodeImage: kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
+    kindNodeImageDigest: sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48
+    pinStatus: pinned-kind-node
     futureCandidates:
       - "1.35"
       - "1.36"
@@ -70,9 +71,9 @@ validation:
       requiredFor: v0.1
     - name: kubernetes-1.34
       component: kubernetes
-      version: "1.34.x"
+      version: "1.34.3"
       requiredFor: v0.1
-      exactPinStatus: pending
+      exactPinStatus: pinned-kind-node
 
 artifacts:
   versionSource: release-please
