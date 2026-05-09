@@ -1,0 +1,335 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os/user"
+	"strconv"
+	"time"
+
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
+	appruntime "github.com/dc-tec/openbao-kubernetes-kms/internal/runtime"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/socket"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
+	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+)
+
+const (
+	diagnosticCiphertext   = "openbao-kms-provider-diagnostic-ciphertext"
+	messageContextRequired = "context is required"
+)
+
+type runtimeBuilder struct {
+	info version.Info
+}
+
+type serveDependencies struct {
+	runtime   *appruntime.Runtime
+	scheduler *status.Scheduler
+}
+
+func newServeCommand(runtimeConfig *config.Runtime, configPath *string, info version.Info) *cobra.Command {
+	return &cobra.Command{
+		Use:   "serve",
+		Short: "Start the KMS provider",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := loadAndValidateConfig(runtimeConfig, *configPath, true)
+			if err != nil {
+				return err
+			}
+			builder := runtimeBuilder{info: info}
+			deps, err := builder.build(cmd.Context(), cfg)
+			if err != nil {
+				return cli.WithExitCode(cli.ExitRuntime, err)
+			}
+			if err := runServe(cmd.Context(), deps); err != nil {
+				return cli.WithExitCode(cli.ExitRuntime, err)
+			}
+			return nil
+		},
+	}
+}
+
+func loadAndValidateConfig(
+	runtimeConfig *config.Runtime,
+	configPath string,
+	checkFilesystem bool,
+) (config.Config, error) {
+	cfg, err := config.Load(runtimeConfig, config.LoadOptions{Path: configPath})
+	if err != nil {
+		return config.Config{}, cli.WithExitCode(cli.ExitConfig, err)
+	}
+	if err := config.Validate(cfg, config.ValidationOptions{
+		ConfigFilePath:  configPath,
+		CheckFilesystem: checkFilesystem,
+	}); err != nil {
+		return config.Config{}, cli.WithExitCode(cli.ExitConfig, err)
+	}
+	return cfg, nil
+}
+
+func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDependencies, error) {
+	if ctx == nil {
+		return serveDependencies{}, errors.New(messageContextRequired)
+	}
+
+	mode, err := config.ParseSocketMode(cfg.Server.SocketMode)
+	if err != nil {
+		return serveDependencies{}, err
+	}
+	gid, err := lookupGroupID(cfg.Server.SocketGroup)
+	if err != nil {
+		return serveDependencies{}, err
+	}
+
+	authClient, err := openbao.NewAuthClient(openbao.AuthClientConfig{
+		Address:       cfg.OpenBao.Address,
+		Namespace:     cfg.OpenBao.Namespace,
+		CACertFile:    cfg.OpenBao.CACertFile,
+		TLSServerName: cfg.OpenBao.TLSServerName,
+		Timeout:       cfg.OpenBao.Timeout,
+	})
+	if err != nil {
+		return serveDependencies{}, err
+	}
+	authManager, err := auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{
+		RenewalEnabled: true,
+	})
+	if err != nil {
+		return serveDependencies{}, err
+	}
+	transitClient, err := openbao.NewClient(openbao.ClientConfig{
+		Address:       cfg.OpenBao.Address,
+		Namespace:     cfg.OpenBao.Namespace,
+		CACertFile:    cfg.OpenBao.CACertFile,
+		TLSServerName: cfg.OpenBao.TLSServerName,
+		Timeout:       cfg.OpenBao.Timeout,
+		TokenSource:   authManager,
+	})
+	if err != nil {
+		return serveDependencies{}, err
+	}
+
+	store, controller, scheduler, err := buildStatusRuntime(cfg, authManager, transitClient)
+	if err != nil {
+		return serveDependencies{}, err
+	}
+	if err := controller.ProbeOnce(ctx); err != nil {
+		return serveDependencies{}, fmt.Errorf("initialize status cache: %w", err)
+	}
+
+	kmsServer, err := kmsv2.NewServer(kmsv2.Options{
+		StatusCache:    store,
+		Registry:       store,
+		Transit:        transitAdapter{client: transitClient, mountPath: cfg.Transit.MountPath, keyName: cfg.Transit.KeyName},
+		PluginVersion:  b.info.Version,
+		RequestTimeout: cfg.OpenBao.Timeout,
+	})
+	if err != nil {
+		return serveDependencies{}, err
+	}
+	grpcServer := grpc.NewServer()
+	kmsv2.Register(grpcServer, kmsServer)
+
+	rt, err := appruntime.New(appruntime.Options{
+		Socket: socket.Options{
+			Path: cfg.Server.SocketPath,
+			Mode: mode,
+			GID:  gid,
+		},
+		GRPCServer:    grpcServer,
+		Readiness:     readinessAdapter{store: store},
+		HealthAddress: cfg.Server.HealthAddress,
+	})
+	if err != nil {
+		return serveDependencies{}, err
+	}
+
+	return serveDependencies{runtime: rt, scheduler: scheduler}, nil
+}
+
+func buildStatusRuntime(
+	cfg config.Config,
+	authManager *auth.Manager,
+	transitClient openbao.TransitClient,
+) (*status.Store, *status.Controller, *status.Scheduler, error) {
+	store, err := status.NewStore(status.StoreOptions{MaxStaleness: cfg.Status.StatusMaxStaleness})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	observer, err := status.NewObserver(status.SnapshotScope{
+		ProviderName:        cfg.Transit.KeyIDScope.ProviderName,
+		ClusterID:           cfg.Transit.KeyIDScope.ClusterID,
+		OpenBaoInstanceID:   cfg.OpenBao.InstanceID,
+		TransitMountID:      cfg.Transit.KeyIDScope.TransitMountID,
+		TransitKeyLineageID: cfg.Transit.KeyIDScope.KeyLineageID,
+		AADMode:             keyregistry.AADModeRequired,
+	}, status.RotationPolicy{
+		ActivationDelay:               cfg.Rotation.ActivationDelay,
+		RequireStableObservationCount: cfg.Rotation.RequireStableObservationCount,
+		RejectVersionRollback:         cfg.Rotation.RejectVersionRollback,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	controller, err := status.NewController(status.ControllerOptions{
+		Store:      store,
+		Observer:   observer,
+		Auth:       authManager,
+		Transit:    transitClient,
+		StateStore: status.FileStateStore{Path: cfg.State.Path},
+		MountPath:  cfg.Transit.MountPath,
+		KeyName:    cfg.Transit.KeyName,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	scheduler, err := status.NewScheduler(status.SchedulerOptions{
+		Controller:        controller,
+		ProbeInterval:     cfg.Status.ProbeInterval,
+		DeepProbeInterval: cfg.Status.DeepProbeInterval,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return store, controller, scheduler, nil
+}
+
+func runServe(ctx context.Context, deps serveDependencies) error {
+	if ctx == nil {
+		return errors.New(messageContextRequired)
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	group, groupCtx := errgroup.WithContext(runCtx)
+	group.Go(func() error {
+		defer cancel()
+		return deps.runtime.Run(groupCtx)
+	})
+	group.Go(func() error {
+		defer cancel()
+		err := deps.scheduler.Run(groupCtx)
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
+	})
+	return group.Wait()
+}
+
+func authConfig(cfg config.Config) auth.ManagerConfig {
+	return auth.ManagerConfig{
+		MountPath:              cfg.Auth.MountPath,
+		Role:                   cfg.Auth.Role,
+		JWTFile:                cfg.Auth.JWTFile,
+		MinJWTRemainingTTL:     cfg.Auth.MinJWTRemainingTTL,
+		ClockSkewLeeway:        cfg.Auth.ClockSkewLeeway,
+		LoginBeforeTokenExpiry: cfg.Auth.LoginBeforeTokenExpiry,
+	}
+}
+
+func lookupGroupID(name string) (int, error) {
+	if name == "" {
+		return -1, nil
+	}
+	group, err := user.LookupGroup(name)
+	if err != nil {
+		return -1, fmt.Errorf("lookup socket group: %w", err)
+	}
+	gid64, err := strconv.ParseInt(group.Gid, 10, 32)
+	if err != nil {
+		return -1, fmt.Errorf("parse socket group id: %w", err)
+	}
+	return int(gid64), nil
+}
+
+type transitAdapter struct {
+	client    openbao.TransitClient
+	mountPath string
+	keyName   string
+}
+
+func (a transitAdapter) Encrypt(
+	ctx context.Context,
+	req kmsv2.TransitEncryptRequest,
+) (kmsv2.TransitEncryptResponse, error) {
+	result, err := a.client.Encrypt(ctx, openbao.EncryptRequest{
+		MountPath:      a.mountPath,
+		KeyName:        a.keyName,
+		Plaintext:      req.Plaintext,
+		AssociatedData: req.AssociatedData,
+		KeyVersion:     req.KeyVersion,
+	})
+	if err != nil {
+		return kmsv2.TransitEncryptResponse{}, err
+	}
+	return kmsv2.TransitEncryptResponse{
+		Ciphertext: []byte(result.Ciphertext),
+		KeyVersion: result.KeyVersion,
+	}, nil
+}
+
+func (a transitAdapter) Decrypt(
+	ctx context.Context,
+	req kmsv2.TransitDecryptRequest,
+) (kmsv2.TransitDecryptResponse, error) {
+	result, err := a.client.Decrypt(ctx, openbao.DecryptRequest{
+		MountPath:      a.mountPath,
+		KeyName:        a.keyName,
+		Ciphertext:     string(req.Ciphertext),
+		AssociatedData: req.AssociatedData,
+	})
+	if err != nil {
+		return kmsv2.TransitDecryptResponse{}, err
+	}
+	return kmsv2.TransitDecryptResponse{Plaintext: result.Plaintext}, nil
+}
+
+type readinessAdapter struct {
+	store *status.Store
+}
+
+func (r readinessAdapter) Ready(ctx context.Context) (status.Diagnostics, error) {
+	return r.store.Diagnostics(ctx)
+}
+
+type diagnosticTransit struct{}
+
+func (diagnosticTransit) Encrypt(
+	_ context.Context,
+	req kmsv2.TransitEncryptRequest,
+) (kmsv2.TransitEncryptResponse, error) {
+	return kmsv2.TransitEncryptResponse{
+		Ciphertext: []byte(diagnosticCiphertext),
+		KeyVersion: req.KeyVersion,
+	}, nil
+}
+
+func (diagnosticTransit) Decrypt(
+	_ context.Context,
+	_ kmsv2.TransitDecryptRequest,
+) (kmsv2.TransitDecryptResponse, error) {
+	return kmsv2.TransitDecryptResponse{}, fmt.Errorf("diagnostic decrypt is not implemented")
+}
+
+func commandContext(cmd *cobra.Command) context.Context {
+	return cmd.Context()
+}
+
+func withTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, timeout)
+}

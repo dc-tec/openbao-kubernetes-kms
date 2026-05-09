@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
 )
 
@@ -82,12 +83,34 @@ func TestConfigSchemaCommand(t *testing.T) {
 	}
 }
 
-func TestPlannedCommandFailsClosed(t *testing.T) {
+func TestServeFailsClosedWithoutConfig(t *testing.T) {
 	output, err := executeCommand(t, "serve")
 	if err == nil {
-		t.Fatalf("expected planned serve command to fail, output:\n%s", output)
+		t.Fatalf("expected serve command without config to fail, output:\n%s", output)
 	}
-	if !strings.Contains(err.Error(), "planned for a later workstream") {
+	if got := cli.ProcessExitCode(err); got != int(cli.ExitConfig) {
+		t.Fatalf("unexpected serve exit code: %d", got)
+	}
+	if !strings.Contains(err.Error(), "config invalid") {
 		t.Fatalf("unexpected serve error: %v", err)
+	}
+}
+
+func TestDoctorPrintsReportForInvalidConfig(t *testing.T) {
+	output, err := executeCommand(t, "doctor")
+	if err == nil {
+		t.Fatalf("expected doctor without config to fail, output:\n%s", output)
+	}
+	if got := cli.ProcessExitCode(err); got != int(cli.ExitConfig) {
+		t.Fatalf("unexpected doctor exit code: %d", got)
+	}
+	for _, want := range []string{
+		"doctor",
+		"[pass] config.load",
+		"[fail] config.validate",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("doctor output missing %q:\n%s", want, output)
+		}
 	}
 }

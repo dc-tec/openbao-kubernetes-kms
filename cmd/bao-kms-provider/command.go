@@ -41,12 +41,12 @@ func newRootCommand(info version.Info) *cobra.Command {
 	cmd.AddCommand(
 		newVersionCommand(info),
 		newConfigCommand(runtimeConfig, &configPath),
-		newPlannedCommand("serve", "Start the KMS provider"),
-		newPlannedCommand("doctor", "Run preflight checks"),
-		newPlannedCommand("verify-key", "Verify Transit key suitability"),
-		newPlannedCommand("benchmark", "Measure provider and Transit latency"),
-		newPlannedCommand("rotation-plan", "Report rotation state"),
-		newPlannedCommand("verify-rotation", "Verify rotation migration state"),
+		newServeCommand(runtimeConfig, &configPath, info),
+		newDoctorCommand(runtimeConfig, &configPath, info),
+		newVerifyKeyCommand(runtimeConfig, &configPath),
+		newBenchmarkCommand(runtimeConfig, &configPath),
+		newRotationPlanCommand(runtimeConfig, &configPath),
+		newVerifyRotationCommand(runtimeConfig, &configPath),
 	)
 
 	return cmd
@@ -90,17 +90,6 @@ func newConfigSchemaCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := cmd.OutOrStdout().Write(config.SchemaJSON())
 			return err
-		},
-	}
-}
-
-func newPlannedCommand(use string, short string) *cobra.Command {
-	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return fmt.Errorf("%s command is planned for a later workstream", cmd.CommandPath())
 		},
 	}
 }
