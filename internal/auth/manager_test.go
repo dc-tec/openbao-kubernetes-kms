@@ -20,6 +20,7 @@ const (
 	testBaoToken1          = "bao-token-1"
 	testBaoToken2          = "bao-token-2"
 	testLoginBeforeExpiry  = 30 * time.Second
+	testRenewalIncrement   = 2 * time.Minute
 	testMinJWTRemainingTTL = time.Minute
 )
 
@@ -152,7 +153,7 @@ func TestManagerRenewsWhenEnabledAndRenewable(t *testing.T) {
 	if len(logins) != 1 || len(renewals) != 1 {
 		t.Fatalf("expected one login and one renewal, got %d/%d", len(logins), len(renewals))
 	}
-	if renewals[0].Increment != testLoginBeforeExpiry {
+	if renewals[0].Increment != testRenewalIncrement {
 		t.Fatalf("unexpected renewal increment: %s", renewals[0].Increment)
 	}
 }
@@ -218,9 +219,11 @@ func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 		JWTFile:                jwtPath,
 		MinJWTRemainingTTL:     testMinJWTRemainingTTL,
 		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
+		TokenRenewalIncrement:  testRenewalIncrement,
 	}, client, ManagerOptions{
 		Clock:               clock,
 		RefreshRetryBackoff: 10 * time.Second,
+		RefreshRetryJitter:  noRetryJitter,
 	})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
@@ -258,6 +261,47 @@ func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 	logins = client.Logins()
 	if len(logins) != 2 {
 		t.Fatalf("retry backoff should suppress another login, got %d logins", len(logins))
+	}
+}
+
+func TestManagerUsesExponentialRefreshBackoff(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
+	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
+	client := &fakes.OpenBaoAuthClient{LoginErr: errors.New("login endpoint unavailable")}
+	manager, err := NewManager(ManagerConfig{
+		MountPath:              testAuthMountPath,
+		Role:                   testAuthRole,
+		JWTFile:                jwtPath,
+		MinJWTRemainingTTL:     testMinJWTRemainingTTL,
+		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
+		TokenRenewalIncrement:  testRenewalIncrement,
+	}, client, ManagerOptions{
+		Clock:                  clock,
+		RefreshRetryBackoff:    time.Second,
+		MaxRefreshRetryBackoff: 4 * time.Second,
+		RefreshRetryJitter:     noRetryJitter,
+	})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	expectedBackoffs := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 4 * time.Second}
+	for attempt, expected := range expectedBackoffs {
+		_, err := manager.Token(context.Background())
+		if !errors.Is(err, ErrAuthFailed) {
+			t.Fatalf("attempt %d: expected auth failure, got %v", attempt+1, err)
+		}
+		state := manager.State()
+		if state.ConsecutiveFailures != attempt+1 {
+			t.Fatalf("attempt %d: expected %d failures, got %#v", attempt+1, attempt+1, state)
+		}
+		if got := state.NextRetryAt.Sub(clock.now); got != expected {
+			t.Fatalf("attempt %d: expected retry backoff %s, got %s", attempt+1, expected, got)
+		}
+		clock.advance(expected)
+	}
+	if len(client.Logins()) != len(expectedBackoffs) {
+		t.Fatalf("expected %d login attempts, got %d", len(expectedBackoffs), len(client.Logins()))
 	}
 }
 
@@ -302,6 +346,58 @@ func TestManagerCoalescesConcurrentInitialLogins(t *testing.T) {
 	}
 }
 
+func TestManagerAppliesRefreshAfterWaiterCancellation(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
+	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
+	client := fakes.NewBlockingOpenBaoAuthClient(openbao.AuthToken{
+		ClientToken:   testBaoToken1,
+		LeaseDuration: time.Minute,
+	})
+	manager := newTestManager(t, jwtPath, client, clock, false)
+
+	leaderDone := make(chan error, 1)
+	go func() {
+		token, err := manager.Token(context.Background())
+		if err != nil {
+			leaderDone <- err
+			return
+		}
+		if token != testBaoToken1 {
+			leaderDone <- errors.New("unexpected leader token")
+			return
+		}
+		leaderDone <- nil
+	}()
+
+	<-client.Started()
+	waiterCtx, cancelWaiter := context.WithCancel(context.Background())
+	waiterDone := make(chan error, 1)
+	go func() {
+		_, err := manager.Token(waiterCtx)
+		waiterDone <- err
+	}()
+	cancelWaiter()
+
+	if err := <-waiterDone; !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected waiter cancellation, got %v", err)
+	}
+	client.Release()
+	if err := <-leaderDone; err != nil {
+		t.Fatalf("leader token: %v", err)
+	}
+
+	token, err := manager.Token(context.Background())
+	if err != nil {
+		t.Fatalf("token after cancelled waiter: %v", err)
+	}
+	if token != testBaoToken1 {
+		t.Fatalf("unexpected token after cancelled waiter")
+	}
+	if client.LoginCount() != 1 {
+		t.Fatalf("cancelled waiter should not trigger another login, got %d", client.LoginCount())
+	}
+}
+
 func TestManagerStateRedactsUnexpectedErrors(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
@@ -336,9 +432,11 @@ func newTestManager(
 		JWTFile:                jwtPath,
 		MinJWTRemainingTTL:     testMinJWTRemainingTTL,
 		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
+		TokenRenewalIncrement:  testRenewalIncrement,
 	}, client, ManagerOptions{
-		Clock:          clock,
-		RenewalEnabled: renewalEnabled,
+		Clock:              clock,
+		RenewalEnabled:     renewalEnabled,
+		RefreshRetryJitter: noRetryJitter,
 	})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
@@ -354,4 +452,8 @@ func writeJWTFile(t *testing.T, token string) string {
 		t.Fatalf("write jwt: %v", err)
 	}
 	return path
+}
+
+func noRetryJitter(backoff time.Duration) time.Duration {
+	return backoff
 }

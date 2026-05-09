@@ -108,15 +108,26 @@ func TestListenRejectsMissingParent(t *testing.T) {
 	}
 }
 
-func TestListenRejectsWorldWritableParent(t *testing.T) {
-	parent := shortTempDir(t)
-	if err := os.Chmod(parent, parentLooseMode); err != nil {
-		t.Fatalf("chmod parent: %v", err)
+func TestListenRejectsWritableParent(t *testing.T) {
+	cases := []struct {
+		name string
+		mode os.FileMode
+	}{
+		{name: "group-writable", mode: 0o770},
+		{name: "world-writable", mode: parentLooseMode},
 	}
-	socketPath := filepath.Join(parent, socketBaseName)
-	_, err := socket.Listen(socket.Options{Path: socketPath, Mode: socketSafeMode, GID: -1})
-	if !errors.Is(err, socket.ErrUnsafeParent) {
-		t.Fatalf("want ErrUnsafeParent, got %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			parent := shortTempDir(t)
+			if err := os.Chmod(parent, tc.mode); err != nil {
+				t.Fatalf("chmod parent: %v", err)
+			}
+			socketPath := filepath.Join(parent, socketBaseName)
+			_, err := socket.Listen(socket.Options{Path: socketPath, Mode: socketSafeMode, GID: -1})
+			if !errors.Is(err, socket.ErrUnsafeParent) {
+				t.Fatalf("want ErrUnsafeParent, got %v", err)
+			}
+		})
 	}
 }
 

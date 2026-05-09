@@ -106,7 +106,7 @@ Every control-plane node must have:
 ```
 
 The API server must be able to access the socket created under `/run/openbao-kms`.
-The container user or one of its supplemental groups must be able to create the socket in that directory.
+The container user must own the socket directory, or an equally narrow provider-only identity must be the only writer. The kube-apiserver socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
 The provider config used by the static pod should set `server.socketGroup` to the same numeric host GID listed in `supplementalGroups`; see [`deploy/config/provider-static-pod.yaml`](../../deploy/config/provider-static-pod.yaml).
 
 ## kubeadm Placement
@@ -131,6 +131,8 @@ Static pod mode depends on:
 - file permissions inside the container.
 
 If kubelet or the container runtime is broken, the KMS plugin may not start and the API server may be unable to decrypt existing resources.
+
+The provider retries its initial status probe for `bootstrap.graceTimeout` before exiting. Static pod deployments should keep this enabled because the JWT file, container networking, DNS, OpenBao availability, and clock sync can settle after the container process starts.
 
 For single-node control planes, systemd mode is usually safer.
 

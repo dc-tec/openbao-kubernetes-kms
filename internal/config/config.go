@@ -12,31 +12,34 @@ import (
 )
 
 const (
-	defaultConfigVersion        = "v1alpha1"
-	defaultSocketPath           = "/run/openbao-kms/kms.sock"
-	defaultSocketMode           = "0660"
-	defaultMetricsAddress       = "127.0.0.1:8081"
-	defaultHealthAddress        = "127.0.0.1:8082"
-	defaultOpenBaoTimeout       = 2 * time.Second
-	defaultAuthMethod           = "jwt"
-	defaultTokenStorage         = "memory"
-	defaultMinJWTRemainingTTL   = 2 * time.Minute
-	defaultClockSkewLeeway      = 30 * time.Second
-	defaultLoginBeforeExpiry    = 5 * time.Minute
-	defaultProbeInterval        = 30 * time.Second
-	defaultDeepProbeInterval    = 5 * time.Minute
-	defaultStatusMaxStaleness   = 2 * time.Minute
-	defaultStatePath            = "/var/lib/openbao-kms/state/key-registry.json"
-	defaultRotationMode         = "observed"
-	defaultActivationDelay      = 2 * time.Minute
-	defaultStableObservation    = 3
-	defaultMicroBatchSize       = 32
-	defaultMicroBatchMaxWait    = 2 * time.Millisecond
-	defaultLogLevel             = "info"
-	defaultLogFormat            = "json"
-	defaultRedactOpenBaoPaths   = true
-	defaultLogOpenBaoRequestIDs = true
-	defaultDebugCorrelationTTL  = 15 * time.Minute
+	defaultConfigVersion          = "v1alpha1"
+	defaultSocketPath             = "/run/openbao-kms/kms.sock"
+	defaultSocketMode             = "0660"
+	defaultMetricsAddress         = "127.0.0.1:8081"
+	defaultHealthAddress          = "127.0.0.1:8082"
+	defaultOpenBaoTimeout         = 2 * time.Second
+	defaultAuthMethod             = "jwt"
+	defaultTokenStorage           = "memory"
+	defaultMinJWTRemainingTTL     = 2 * time.Minute
+	defaultClockSkewLeeway        = 30 * time.Second
+	defaultLoginBeforeExpiry      = 5 * time.Minute
+	defaultTokenRenewalIncrement  = time.Hour
+	defaultBootstrapGraceTimeout  = time.Minute
+	defaultBootstrapRetryInterval = 5 * time.Second
+	defaultProbeInterval          = 30 * time.Second
+	defaultDeepProbeInterval      = 5 * time.Minute
+	defaultStatusMaxStaleness     = 2 * time.Minute
+	defaultStatePath              = "/var/lib/openbao-kms/state/key-registry.json"
+	defaultRotationMode           = "observed"
+	defaultActivationDelay        = 2 * time.Minute
+	defaultStableObservation      = 3
+	defaultMicroBatchSize         = 32
+	defaultMicroBatchMaxWait      = 2 * time.Millisecond
+	defaultLogLevel               = "info"
+	defaultLogFormat              = "json"
+	defaultRedactOpenBaoPaths     = true
+	defaultLogOpenBaoRequestIDs   = true
+	defaultDebugCorrelationTTL    = 15 * time.Minute
 )
 
 // Runtime owns the Viper-backed config state at the config boundary.
@@ -56,6 +59,7 @@ type Config struct {
 	OpenBao       OpenBaoConfig     `mapstructure:"openbao"`
 	Auth          AuthConfig        `mapstructure:"auth"`
 	Transit       TransitConfig     `mapstructure:"transit"`
+	Bootstrap     BootstrapConfig   `mapstructure:"bootstrap"`
 	Status        StatusConfig      `mapstructure:"status"`
 	State         StateConfig       `mapstructure:"state"`
 	Rotation      RotationConfig    `mapstructure:"rotation"`
@@ -93,6 +97,11 @@ type AuthConfig struct {
 	MinJWTRemainingTTL     time.Duration `mapstructure:"minJwtRemainingTtl"`
 	ClockSkewLeeway        time.Duration `mapstructure:"clockSkewLeeway"`
 	LoginBeforeTokenExpiry time.Duration `mapstructure:"loginBeforeTokenExpiry"`
+	TokenRenewalIncrement  time.Duration `mapstructure:"tokenRenewalIncrement"`
+	LoginTimeout           time.Duration `mapstructure:"loginTimeout"`
+	ExpectedIssuer         string        `mapstructure:"expectedIssuer"`
+	ExpectedAudience       []string      `mapstructure:"expectedAudience"`
+	ExpectedSubject        string        `mapstructure:"expectedSubject"`
 	TokenStorage           string        `mapstructure:"tokenStorage"`
 }
 
@@ -102,6 +111,12 @@ type TransitConfig struct {
 	KeyName           string           `mapstructure:"keyName"`
 	KeyIDScope        KeyIDScopeConfig `mapstructure:"keyIdScope"`
 	UseAssociatedData bool             `mapstructure:"useAssociatedData"`
+}
+
+// BootstrapConfig contains fail-fast startup probe grace settings.
+type BootstrapConfig struct {
+	GraceTimeout  time.Duration `mapstructure:"graceTimeout"`
+	RetryInterval time.Duration `mapstructure:"retryInterval"`
 }
 
 // KeyIDScopeConfig contains identity-bearing key ID scope settings.
@@ -225,6 +240,9 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("auth.minJwtRemainingTtl", defaultMinJWTRemainingTTL)
 	runtime.v.SetDefault("auth.clockSkewLeeway", defaultClockSkewLeeway)
 	runtime.v.SetDefault("auth.loginBeforeTokenExpiry", defaultLoginBeforeExpiry)
+	runtime.v.SetDefault("auth.tokenRenewalIncrement", defaultTokenRenewalIncrement)
+	runtime.v.SetDefault("bootstrap.graceTimeout", defaultBootstrapGraceTimeout)
+	runtime.v.SetDefault("bootstrap.retryInterval", defaultBootstrapRetryInterval)
 	runtime.v.SetDefault("transit.useAssociatedData", true)
 	runtime.v.SetDefault("status.probeInterval", defaultProbeInterval)
 	runtime.v.SetDefault("status.deepProbeInterval", defaultDeepProbeInterval)

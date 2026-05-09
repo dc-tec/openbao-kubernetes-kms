@@ -38,6 +38,12 @@ var (
 	ErrJWTNotYetValid = errors.New("jwt not yet valid")
 	// ErrJWTIssuedInFuture identifies a JWT with a future iat claim.
 	ErrJWTIssuedInFuture = errors.New("jwt issued in future")
+	// ErrJWTIssuerMismatch identifies a JWT whose iss claim does not match local expectations.
+	ErrJWTIssuerMismatch = errors.New("jwt issuer mismatch")
+	// ErrJWTAudienceMismatch identifies a JWT whose aud claim does not match local expectations.
+	ErrJWTAudienceMismatch = errors.New("jwt audience mismatch")
+	// ErrJWTSubjectMismatch identifies a JWT whose sub claim does not match local expectations.
+	ErrJWTSubjectMismatch = errors.New("jwt subject mismatch")
 )
 
 // Clock abstracts time for token lifecycle tests.
@@ -72,11 +78,14 @@ type Claims struct {
 	HasIssuedAt  bool
 }
 
-// JWTValidationOptions controls local JWT expiry checks before OpenBao login.
+// JWTValidationOptions controls local JWT claim checks before OpenBao login.
 type JWTValidationOptions struct {
-	MinRemainingTTL time.Duration
-	ClockSkewLeeway time.Duration
-	Clock           Clock
+	MinRemainingTTL  time.Duration
+	ClockSkewLeeway  time.Duration
+	ExpectedIssuer   string
+	ExpectedAudience []string
+	ExpectedSubject  string
+	Clock            Clock
 }
 
 type registeredClaims struct {
@@ -168,7 +177,8 @@ func ReadAndValidateJWT(path string, opts JWTValidationOptions) (JWT, error) {
 	return token, nil
 }
 
-// ParseClaims parses registered claims from a compact JWT without verifying its signature.
+// ParseClaims intentionally parses registered claims without verifying the signature.
+// OpenBao verifies the JWT signature through the configured JWT auth role, JWKS, or OIDC discovery.
 func ParseClaims(token string) (Claims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != compactJWTPartCount || parts[jwtHeaderPart] == "" || parts[jwtPayloadPart] == "" {
@@ -213,6 +223,9 @@ func ValidateClaims(claims Claims, opts JWTValidationOptions) error {
 	if claims.HasIssuedAt && latestAcceptedNow.Before(claims.IssuedAt) {
 		return fmt.Errorf("%w: iat claim is in the future", ErrJWTIssuedInFuture)
 	}
+	if err := validateExpectedIdentity(claims, opts); err != nil {
+		return err
+	}
 	remaining := claims.ExpiresAt.Sub(now)
 	if now.Add(-leeway).After(claims.ExpiresAt) || now.Add(-leeway).Equal(claims.ExpiresAt) {
 		return fmt.Errorf("%w: exp claim is not in the future", ErrJWTExpired)
@@ -221,6 +234,28 @@ func ValidateClaims(claims Claims, opts JWTValidationOptions) error {
 		return fmt.Errorf("%w: remaining TTL is below minimum", ErrJWTNearExpiry)
 	}
 	return nil
+}
+
+func validateExpectedIdentity(claims Claims, opts JWTValidationOptions) error {
+	if opts.ExpectedIssuer != "" && claims.Issuer != opts.ExpectedIssuer {
+		return fmt.Errorf("%w: got %q", ErrJWTIssuerMismatch, claims.Issuer)
+	}
+	if len(opts.ExpectedAudience) > 0 && !hasExpectedAudience(claims.Audience, opts.ExpectedAudience) {
+		return fmt.Errorf("%w: got %q", ErrJWTAudienceMismatch, claims.Audience)
+	}
+	if opts.ExpectedSubject != "" && claims.Subject != opts.ExpectedSubject {
+		return fmt.Errorf("%w: got %q", ErrJWTSubjectMismatch, claims.Subject)
+	}
+	return nil
+}
+
+func hasExpectedAudience(actual []string, expected []string) bool {
+	for _, want := range expected {
+		if slices.Contains(actual, want) {
+			return true
+		}
+	}
+	return false
 }
 
 // RemainingTTL returns the JWT expiry duration relative to the supplied clock.
@@ -272,6 +307,8 @@ func decodeJWTPart(segment string) ([]byte, error) {
 	if err == nil {
 		return decoded, nil
 	}
+	// OpenBao-bound Kubernetes tokens should be unpadded base64url. Accept padded
+	// base64url as diagnostic leniency for non-conformant issuers.
 	return base64.URLEncoding.DecodeString(segment)
 }
 

@@ -128,8 +128,8 @@ func validateParent(socketPath string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("%w: parent is not a directory", ErrUnsafeParent)
 	}
-	if info.Mode().Perm()&0o002 != 0 {
-		return fmt.Errorf("%w: parent is world-writable", ErrUnsafeParent)
+	if info.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf("%w: parent must not be group-writable or world-writable", ErrUnsafeParent)
 	}
 	return nil
 }

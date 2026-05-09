@@ -47,7 +47,7 @@ install_dir /etc/openbao-kms 0750 root root
 install_dir /etc/openbao-kms/tls 0755 root root
 install_dir /var/lib/openbao-kms 0750 65532 65532
 install_dir /var/lib/openbao-kms/state 0750 65532 65532
-install_dir /run/openbao-kms 2770 65532 "$SOCKET_GID"
+install_dir /run/openbao-kms 2750 65532 "$SOCKET_GID"
 install_file "$CONFIG" /etc/openbao-kms/config.yaml 0640 root 65532
 install_file "$MANIFEST" "$DEST_MANIFEST" 0644 root root
 

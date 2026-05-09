@@ -31,6 +31,11 @@ auth:
   minJwtRemainingTtl: 2m
   clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  expectedIssuer: ""
+  expectedAudience: []
+  expectedSubject: ""
   tokenStorage: memory
 
 transit:
@@ -42,6 +47,10 @@ transit:
     transitMountId: transit-prod-primary
     keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
   useAssociatedData: true
+
+bootstrap:
+  graceTimeout: 60s
+  retryInterval: 5s
 
 status:
   probeInterval: 30s
@@ -113,8 +122,15 @@ Required for MVP:
 | `auth.minJwtRemainingTtl` | `2m` |
 | `auth.clockSkewLeeway` | `30s` |
 | `auth.loginBeforeTokenExpiry` | `5m` |
+| `auth.tokenRenewalIncrement` | `1h` |
+| `auth.loginTimeout` | `max(openbao.timeout, 5s)` when unset or `0s` |
+| `auth.expectedIssuer` | empty |
+| `auth.expectedAudience` | empty |
+| `auth.expectedSubject` | empty |
 | `auth.tokenStorage` | `memory` |
 | `transit.useAssociatedData` | `true` |
+| `bootstrap.graceTimeout` | `60s` |
+| `bootstrap.retryInterval` | `5s` |
 | `status.probeInterval` | `30s` |
 | `status.deepProbeInterval` | `5m` |
 | `status.statusMaxStaleness` | `2m` |
@@ -133,6 +149,12 @@ Required for MVP:
 | `logging.debugCorrelation.enabled` | `false` |
 | `logging.debugCorrelation.ttl` | `15m` |
 | `logging.debugCorrelation.incidentId` | empty |
+
+## Auth Timing
+
+`auth.loginBeforeTokenExpiry` is the refresh-ahead threshold for deciding when an existing OpenBao token is no longer comfortable to use. `auth.tokenRenewalIncrement` is the requested TTL increment sent to OpenBao during `auth/token/renew-self`; keep it larger than the refresh-ahead threshold and within the JWT role's maximum token TTL. `auth.loginTimeout` can be left at `0s` to derive `max(openbao.timeout, 5s)`.
+
+`bootstrap.graceTimeout` controls how long startup retries the initial status probe before the process exits. It is intended for boot races such as JWT file projection, DNS/routing settling, OpenBao restart, and clock synchronization.
 
 ## Debug Correlation
 
@@ -197,11 +219,11 @@ Recommended local permissions:
 /etc/openbao-kms/tls/ca.crt         root:root 0644
 /var/lib/openbao-kms/identity.jwt   root:openbao-kms 0640
 /var/lib/openbao-kms/state          openbao-kms:openbao-kms 0750
-/run/openbao-kms                    openbao-kms:openbao-kms-socket 2770
+/run/openbao-kms                    openbao-kms:openbao-kms-socket 2750
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket 0660
 ```
 
-The JWT file should be readable only by the plugin process. The socket should be readable/writable only by the plugin and the local API server identity.
+The JWT file should be readable only by the plugin process. The socket should be readable/writable only by the plugin and the local API server identity. The socket directory itself should be writable only by the provider identity.
 
 `server.socketGroup` may be either a local group name or a decimal numeric GID. Use a group name for systemd or host-binary deployments. Use a numeric GID in static pod mode so the distroless non-root container does not depend on host group names being present inside the image.
 

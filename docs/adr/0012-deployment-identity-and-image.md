@@ -32,7 +32,7 @@ Container images use a distroless non-root runtime base, run as `65532:65532`, a
 ## Consequences
 
 - Package artifacts must create both `openbao-kms` and `openbao-kms-socket`.
-- `/run/openbao-kms` must be created as `openbao-kms:openbao-kms-socket` with mode `2770`.
+- `/run/openbao-kms` must be created as `openbao-kms:openbao-kms-socket` with mode `2750`, so the socket access group can traverse the directory but cannot replace the socket path.
 - Static pod manifests must set `runAsUser: 65532`, `runAsGroup: 65532`, and a host-specific `supplementalGroups` numeric GID that matches the host socket group.
 - The static pod provider config should set `server.socketGroup` to the same numeric GID.
 - Operators must replace sample image digests and sample GIDs with site-specific values before deployment.

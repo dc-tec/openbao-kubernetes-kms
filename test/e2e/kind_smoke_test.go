@@ -384,7 +384,7 @@ const kindProviderPermissionsScript = `set -eu
 chown -R 65532:65532 /etc/openbao-kms /var/lib/openbao-kms
 chown -R 65532:1234 /run/openbao-kms
 chmod 0700 /etc/openbao-kms /etc/openbao-kms/tls /var/lib/openbao-kms /var/lib/openbao-kms/state
-chmod 2770 /run/openbao-kms
+chmod 2750 /run/openbao-kms
 chmod 0600 /etc/openbao-kms/config.yaml /var/lib/openbao-kms/identity.jwt
 if [ -f /var/lib/openbao-kms/state/key-registry.json ]; then chmod 0600 /var/lib/openbao-kms/state/key-registry.json; fi
 chmod 0644 /etc/openbao-kms/tls/ca.crt /etc/kubernetes/encryption/openbao-kms/encryption-config.yaml
@@ -877,6 +877,8 @@ auth:
   minJwtRemainingTtl: 2m
   clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 30s
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
   tokenStorage: memory
 transit:
   mountPath: %q
@@ -887,6 +889,9 @@ transit:
     transitMountId: transit-ci-primary
     keyLineageId: 01HXEXAMPLEKEYLINEAGEID
   useAssociatedData: true
+bootstrap:
+  graceTimeout: 60s
+  retryInterval: 5s
 status:
   probeInterval: 1s
   deepProbeInterval: 30s

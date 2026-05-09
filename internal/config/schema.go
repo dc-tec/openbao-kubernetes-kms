@@ -50,12 +50,20 @@ const configSchemaJSON = `{
         "mountPath": {"type": "string", "minLength": 1},
         "role": {"type": "string", "minLength": 1},
         "jwtFile": {"type": "string", "minLength": 1},
-        "minJwtRemainingTtl": {"type": "string"},
-        "clockSkewLeeway": {"type": "string"},
-        "loginBeforeTokenExpiry": {"type": "string"},
-        "tokenStorage": {"type": "string", "const": "memory"}
-      }
-    },
+	        "minJwtRemainingTtl": {"type": "string"},
+	        "clockSkewLeeway": {"type": "string"},
+	        "loginBeforeTokenExpiry": {"type": "string"},
+	        "tokenRenewalIncrement": {"type": "string"},
+	        "loginTimeout": {"type": "string"},
+	        "expectedIssuer": {"type": "string"},
+	        "expectedAudience": {
+	          "type": "array",
+	          "items": {"type": "string", "minLength": 1}
+	        },
+	        "expectedSubject": {"type": "string"},
+	        "tokenStorage": {"type": "string", "const": "memory"}
+	      }
+	    },
     "transit": {
       "type": "object",
       "additionalProperties": false,
@@ -74,10 +82,18 @@ const configSchemaJSON = `{
             "keyLineageId": {"type": "string", "minLength": 1}
           }
         },
-        "useAssociatedData": {"type": "boolean", "const": true}
-      }
-    },
-    "status": {
+	        "useAssociatedData": {"type": "boolean", "const": true}
+	      }
+	    },
+	    "bootstrap": {
+	      "type": "object",
+	      "additionalProperties": false,
+	      "properties": {
+	        "graceTimeout": {"type": "string"},
+	        "retryInterval": {"type": "string"}
+	      }
+	    },
+	    "status": {
       "type": "object",
       "additionalProperties": false,
       "properties": {

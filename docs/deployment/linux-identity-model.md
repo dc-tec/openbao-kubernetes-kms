@@ -29,7 +29,7 @@ Permissions:
 /var/lib/openbao-kms                openbao-kms:openbao-kms 0750
 /var/lib/openbao-kms/identity.jwt   root:openbao-kms 0640
 /var/lib/openbao-kms/state          openbao-kms:openbao-kms 0750
-/run/openbao-kms                    openbao-kms:openbao-kms-socket 2770
+/run/openbao-kms                    openbao-kms:openbao-kms-socket 2750
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket 0660
 ```
 
@@ -54,7 +54,7 @@ This avoids depending on host group names inside the distroless non-root image.
 
 `RuntimeDirectory=` alone may create `/run/openbao-kms` with the service primary group rather than the socket access group. Packaging should prefer one of:
 
-- a `tmpfiles.d` entry that creates `/run/openbao-kms` with `openbao-kms:openbao-kms-socket` and mode `2770`,
+- a `tmpfiles.d` entry that creates `/run/openbao-kms` with `openbao-kms:openbao-kms-socket` and mode `2750`,
 - a privileged package install step that creates the directory before service start,
 - a root pre-start helper that only creates/chowns the runtime directory.
 
@@ -67,6 +67,7 @@ The provider should still validate the directory at startup and fail closed if i
 Pros:
 
 - kube-apiserver gets socket access without JWT access,
+- kube-apiserver can connect without being able to replace the socket path,
 - provider keeps a private primary group,
 - works with non-root kube-apiserver services,
 - clear least-privilege boundary.

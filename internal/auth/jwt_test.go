@@ -170,6 +170,61 @@ func TestValidateClaimsAppliesClockSkewLeeway(t *testing.T) {
 	}
 }
 
+func TestValidateClaimsChecksExpectedIdentity(t *testing.T) {
+	claims, err := ParseClaims(loadJWTFixture(t, validJWTFixture))
+	if err != nil {
+		t.Fatalf("parse claims: %v", err)
+	}
+	err = ValidateClaims(claims, JWTValidationOptions{
+		MinRemainingTTL:  time.Minute,
+		ExpectedIssuer:   testIssuer,
+		ExpectedAudience: []string{testAudienceOpenBao},
+		ExpectedSubject:  testSubject,
+		Clock:            &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()},
+	})
+	if err != nil {
+		t.Fatalf("expected identity checks to pass: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		opts      JWTValidationOptions
+		wantError error
+	}{
+		{
+			name: "issuer",
+			opts: JWTValidationOptions{
+				ExpectedIssuer: "https://other-issuer.example.internal",
+			},
+			wantError: ErrJWTIssuerMismatch,
+		},
+		{
+			name: "audience",
+			opts: JWTValidationOptions{
+				ExpectedAudience: []string{"other-audience"},
+			},
+			wantError: ErrJWTAudienceMismatch,
+		},
+		{
+			name: "subject",
+			opts: JWTValidationOptions{
+				ExpectedSubject: "system:serviceaccount:other:provider",
+			},
+			wantError: ErrJWTSubjectMismatch,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.opts.MinRemainingTTL = time.Minute
+			tt.opts.Clock = &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
+			err := ValidateClaims(claims, tt.opts)
+			if !errors.Is(err, tt.wantError) {
+				t.Fatalf("expected %v, got %v", tt.wantError, err)
+			}
+		})
+	}
+}
+
 func TestValidateClaimsRejectsIssuedAtBeyondClockSkewLeeway(t *testing.T) {
 	now := time.Unix(testCurrentUnix, 0).UTC()
 	err := ValidateClaims(Claims{

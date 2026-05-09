@@ -2,8 +2,10 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"path"
 	"strings"
 	"sync"
@@ -15,6 +17,7 @@ import (
 const (
 	tokenSourceMemory          = "memory"
 	defaultRefreshRetryBackoff = time.Second
+	defaultMaxRefreshBackoff   = time.Minute
 	authStatusOK               = "ok"
 	authStatusError            = "error"
 	authStatusJWTExpired       = "jwt_expired"
@@ -40,6 +43,9 @@ var safeAuthErrorClasses = []error{
 	ErrJWTNearExpiry,
 	ErrJWTNotYetValid,
 	ErrJWTIssuedInFuture,
+	ErrJWTIssuerMismatch,
+	ErrJWTAudienceMismatch,
+	ErrJWTSubjectMismatch,
 	ErrAuthConfig,
 	ErrAuthFailed,
 	ErrTokenUnavailable,
@@ -68,14 +74,20 @@ type ManagerConfig struct {
 	MinJWTRemainingTTL     time.Duration
 	ClockSkewLeeway        time.Duration
 	LoginBeforeTokenExpiry time.Duration
+	TokenRenewalIncrement  time.Duration
+	ExpectedIssuer         string
+	ExpectedAudience       []string
+	ExpectedSubject        string
 }
 
 // ManagerOptions contains testable lifecycle behavior settings.
 type ManagerOptions struct {
-	Clock               Clock
-	RenewalEnabled      bool
-	RefreshRetryBackoff time.Duration
-	Observer            Observer
+	Clock                  Clock
+	RenewalEnabled         bool
+	RefreshRetryBackoff    time.Duration
+	MaxRefreshRetryBackoff time.Duration
+	RefreshRetryJitter     func(time.Duration) time.Duration
+	Observer               Observer
 }
 
 // Observer receives redacted auth lifecycle observations.
@@ -86,38 +98,42 @@ type Observer interface {
 
 // State is the redacted auth state exposed to status and readiness code.
 type State struct {
-	Status           Status
-	TokenRenewable   bool
-	TokenExpiresAt   time.Time
-	TokenTTL         time.Duration
-	JWTExpiresAt     time.Time
-	JWTTTL           time.Duration
-	LastLoginAt      time.Time
-	LastRenewalAt    time.Time
-	LastError        string
-	LastRenewalError string
-	NextRetryAt      time.Time
-	LastTokenSource  string
+	Status              Status
+	TokenRenewable      bool
+	TokenExpiresAt      time.Time
+	TokenTTL            time.Duration
+	JWTExpiresAt        time.Time
+	JWTTTL              time.Duration
+	LastLoginAt         time.Time
+	LastRenewalAt       time.Time
+	LastError           string
+	LastRenewalError    string
+	NextRetryAt         time.Time
+	ConsecutiveFailures int
+	LastTokenSource     string
 }
 
 // Manager keeps the OpenBao token in memory and refreshes it through JWT login.
 type Manager struct {
-	mu             sync.Mutex
-	cfg            ManagerConfig
-	client         OpenBaoAuthClient
-	clock          Clock
-	renewalEnabled bool
-	current        currentToken
-	lastJWT        JWT
-	lastLoginAt    time.Time
-	lastRenewalAt  time.Time
-	lastErr        error
-	lastRenewalErr error
-	nextRetryAt    time.Time
-	retryBackoff   time.Duration
-	refreshing     bool
-	refreshDone    chan struct{}
-	observer       Observer
+	mu                  sync.Mutex
+	cfg                 ManagerConfig
+	client              OpenBaoAuthClient
+	clock               Clock
+	renewalEnabled      bool
+	current             currentToken
+	lastJWT             JWT
+	lastLoginAt         time.Time
+	lastRenewalAt       time.Time
+	lastErr             error
+	lastRenewalErr      error
+	nextRetryAt         time.Time
+	baseRetryBackoff    time.Duration
+	maxRetryBackoff     time.Duration
+	retryJitter         func(time.Duration) time.Duration
+	consecutiveFailures int
+	refreshing          bool
+	refreshDone         chan struct{}
+	observer            Observer
 }
 
 type currentToken struct {
@@ -139,14 +155,27 @@ func NewManager(cfg ManagerConfig, client OpenBaoAuthClient, opts ManagerOptions
 	if retryBackoff <= 0 {
 		retryBackoff = defaultRefreshRetryBackoff
 	}
+	maxRetryBackoff := opts.MaxRefreshRetryBackoff
+	if maxRetryBackoff <= 0 {
+		maxRetryBackoff = defaultMaxRefreshBackoff
+	}
+	if maxRetryBackoff < retryBackoff {
+		maxRetryBackoff = retryBackoff
+	}
+	retryJitter := opts.RefreshRetryJitter
+	if retryJitter == nil {
+		retryJitter = jitterRetryBackoff
+	}
 
 	return &Manager{
-		cfg:            normalized,
-		client:         client,
-		clock:          clockOrReal(opts.Clock),
-		renewalEnabled: opts.RenewalEnabled,
-		retryBackoff:   retryBackoff,
-		observer:       opts.Observer,
+		cfg:              normalized,
+		client:           client,
+		clock:            clockOrReal(opts.Clock),
+		renewalEnabled:   opts.RenewalEnabled,
+		baseRetryBackoff: retryBackoff,
+		maxRetryBackoff:  maxRetryBackoff,
+		retryJitter:      retryJitter,
+		observer:         opts.Observer,
 	}, nil
 }
 
@@ -175,18 +204,19 @@ func (m *Manager) State() State {
 
 	now := m.clock.Now()
 	state := State{
-		Status:           StatusUnknown,
-		TokenRenewable:   m.current.renewable,
-		TokenExpiresAt:   m.current.expiresAt,
-		TokenTTL:         ttlUntil(now, m.current.expiresAt),
-		JWTExpiresAt:     m.lastJWT.Claims.ExpiresAt,
-		JWTTTL:           ttlUntil(now, m.lastJWT.Claims.ExpiresAt),
-		LastLoginAt:      m.lastLoginAt,
-		LastRenewalAt:    m.lastRenewalAt,
-		LastError:        safeErrorMessage(m.lastErr),
-		LastRenewalError: safeErrorMessage(m.lastRenewalErr),
-		NextRetryAt:      m.nextRetryAt,
-		LastTokenSource:  tokenSourceMemory,
+		Status:              StatusUnknown,
+		TokenRenewable:      m.current.renewable,
+		TokenExpiresAt:      m.current.expiresAt,
+		TokenTTL:            ttlUntil(now, m.current.expiresAt),
+		JWTExpiresAt:        m.lastJWT.Claims.ExpiresAt,
+		JWTTTL:              ttlUntil(now, m.lastJWT.Claims.ExpiresAt),
+		LastLoginAt:         m.lastLoginAt,
+		LastRenewalAt:       m.lastRenewalAt,
+		LastError:           safeErrorMessage(m.lastErr),
+		LastRenewalError:    safeErrorMessage(m.lastRenewalErr),
+		NextRetryAt:         m.nextRetryAt,
+		ConsecutiveFailures: m.consecutiveFailures,
+		LastTokenSource:     tokenSourceMemory,
 	}
 	if m.current.value != "" && now.Before(m.current.expiresAt) && m.lastErr == nil {
 		state.Status = StatusAuthenticated
@@ -303,9 +333,12 @@ func (m *Manager) performRefresh(ctx context.Context, action refreshAction) refr
 
 func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult {
 	jwt, err := ReadAndValidateJWT(action.cfg.JWTFile, JWTValidationOptions{
-		MinRemainingTTL: action.cfg.MinJWTRemainingTTL,
-		ClockSkewLeeway: action.cfg.ClockSkewLeeway,
-		Clock:           action.clock,
+		MinRemainingTTL:  action.cfg.MinJWTRemainingTTL,
+		ClockSkewLeeway:  action.cfg.ClockSkewLeeway,
+		ExpectedIssuer:   action.cfg.ExpectedIssuer,
+		ExpectedAudience: action.cfg.ExpectedAudience,
+		ExpectedSubject:  action.cfg.ExpectedSubject,
+		Clock:            action.clock,
 	})
 	if err != nil {
 		m.observeLogin(ctx, err)
@@ -338,7 +371,7 @@ func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult
 }
 
 func (m *Manager) renew(ctx context.Context, action refreshAction) (currentToken, time.Time, error) {
-	authToken, err := m.client.RenewSelfToken(ctx, action.current.value, action.cfg.LoginBeforeTokenExpiry)
+	authToken, err := m.client.RenewSelfToken(ctx, action.current.value, action.cfg.TokenRenewalIncrement)
 	if err != nil {
 		publicErr := publicAuthError(err)
 		m.observeRenewal(ctx, publicErr)
@@ -362,7 +395,8 @@ func (m *Manager) applyRefreshResultLocked(result refreshResult) (currentToken, 
 	}
 	if result.err != nil {
 		m.lastErr = result.err
-		m.nextRetryAt = now.Add(m.retryBackoff)
+		m.consecutiveFailures++
+		m.nextRetryAt = now.Add(m.nextRetryBackoffLocked())
 		if m.current.value != "" && now.Before(m.current.expiresAt) {
 			return m.current, nil
 		}
@@ -382,6 +416,7 @@ func (m *Manager) applyRefreshResultLocked(result refreshResult) (currentToken, 
 	}
 	m.lastErr = nil
 	m.nextRetryAt = time.Time{}
+	m.consecutiveFailures = 0
 	return result.token, nil
 }
 
@@ -394,6 +429,7 @@ func currentTokenFromAuth(
 ) (currentToken, error) {
 	value := token.ClientToken
 	if value == "" {
+		// auth/token/renew-self normally omits client_token; retain the existing token.
 		value = fallbackValue
 	}
 	if requireValue && value == "" {
@@ -426,10 +462,56 @@ func (m *Manager) tokenDuringRetryBackoffLocked(now time.Time) (currentToken, er
 	return currentToken{}, ErrTokenUnavailable
 }
 
+func (m *Manager) nextRetryBackoffLocked() time.Duration {
+	backoff := exponentialBackoff(m.baseRetryBackoff, m.maxRetryBackoff, m.consecutiveFailures)
+	jittered := m.retryJitter(backoff)
+	if jittered <= 0 {
+		return backoff
+	}
+	if jittered > m.maxRetryBackoff {
+		return m.maxRetryBackoff
+	}
+	return jittered
+}
+
+func exponentialBackoff(base time.Duration, max time.Duration, failures int) time.Duration {
+	if failures <= 1 {
+		return base
+	}
+	backoff := base
+	for attempt := 1; attempt < failures; attempt++ {
+		if backoff >= max || backoff > max/2 {
+			return max
+		}
+		backoff *= 2
+	}
+	return backoff
+}
+
+func jitterRetryBackoff(backoff time.Duration) time.Duration {
+	quarter := backoff / 4
+	if quarter <= 0 {
+		return backoff
+	}
+	width := int64(quarter*2 + 1)
+	offset, err := rand.Int(rand.Reader, big.NewInt(width))
+	if err != nil {
+		return backoff
+	}
+	return backoff + time.Duration(offset.Int64()) - quarter
+}
+
 func validateManagerConfig(cfg ManagerConfig) (ManagerConfig, error) {
 	cfg.MountPath = strings.TrimSpace(cfg.MountPath)
 	cfg.Role = strings.TrimSpace(cfg.Role)
 	cfg.JWTFile = strings.TrimSpace(cfg.JWTFile)
+	cfg.ExpectedIssuer = strings.TrimSpace(cfg.ExpectedIssuer)
+	cfg.ExpectedSubject = strings.TrimSpace(cfg.ExpectedSubject)
+	expectedAudience, err := normalizeExpectedAudience(cfg.ExpectedAudience)
+	if err != nil {
+		return ManagerConfig{}, err
+	}
+	cfg.ExpectedAudience = expectedAudience
 	if strings.TrimSpace(cfg.MountPath) == "" {
 		return ManagerConfig{}, fmt.Errorf("%w: auth mount path is required", ErrAuthConfig)
 	}
@@ -457,7 +539,25 @@ func validateManagerConfig(cfg ManagerConfig) (ManagerConfig, error) {
 	if cfg.LoginBeforeTokenExpiry <= 0 {
 		return ManagerConfig{}, fmt.Errorf("%w: login-before-expiry duration must be positive", ErrAuthConfig)
 	}
+	if cfg.TokenRenewalIncrement <= 0 {
+		return ManagerConfig{}, fmt.Errorf("%w: token renewal increment must be positive", ErrAuthConfig)
+	}
 	return cfg, nil
+}
+
+func normalizeExpectedAudience(values []string) ([]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	expectedAudience := make([]string, 0, len(values))
+	for _, audience := range values {
+		trimmed := strings.TrimSpace(audience)
+		if trimmed == "" {
+			return nil, fmt.Errorf("%w: expected JWT audience must not be empty", ErrAuthConfig)
+		}
+		expectedAudience = append(expectedAudience, trimmed)
+	}
+	return expectedAudience, nil
 }
 
 func ttlUntil(now time.Time, expiry time.Time) time.Duration {
@@ -500,6 +600,9 @@ func authStatus(err error) string {
 	case errors.Is(err, ErrJWTMalformed),
 		errors.Is(err, ErrJWTNotYetValid),
 		errors.Is(err, ErrJWTIssuedInFuture),
+		errors.Is(err, ErrJWTIssuerMismatch),
+		errors.Is(err, ErrJWTAudienceMismatch),
+		errors.Is(err, ErrJWTSubjectMismatch),
 		errors.Is(err, ErrJWTRead):
 		return authStatusJWTInvalid
 	case errors.Is(err, ErrAuthFailed),

@@ -211,7 +211,7 @@ func authenticateForDiagnostics(
 		Namespace:     cfg.OpenBao.Namespace,
 		CACertFile:    cfg.OpenBao.CACertFile,
 		TLSServerName: cfg.OpenBao.TLSServerName,
-		Timeout:       cfg.OpenBao.Timeout,
+		Timeout:       authLoginTimeout(cfg),
 	})
 	if err != nil {
 		report.Fail(checkOpenBaoTLS, "OpenBao TLS config", safeMessage(err))
@@ -225,7 +225,7 @@ func authenticateForDiagnostics(
 		report.Fail(checkOpenBaoAuth, "OpenBao JWT login", safeMessage(err))
 		return diagnosticClients{}, false
 	}
-	loginCtx, cancel := withTimeout(ctx, cfg.OpenBao.Timeout)
+	loginCtx, cancel := withTimeout(ctx, authLoginTimeout(cfg))
 	defer cancel()
 	if err := manager.Refresh(loginCtx); err != nil {
 		report.Fail(checkOpenBaoAuth, "OpenBao JWT login", safeMessage(err))

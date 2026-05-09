@@ -181,6 +181,15 @@ func validateValues(cfg Config) []ValidationProblem {
 	}
 	validateMountPath(&problems, "auth.mountPath", cfg.Auth.MountPath)
 	validateIdentifier(&problems, "auth.role", cfg.Auth.Role)
+	validateClaimExpectation(&problems, "auth.expectedIssuer", cfg.Auth.ExpectedIssuer)
+	validateClaimExpectation(&problems, "auth.expectedSubject", cfg.Auth.ExpectedSubject)
+	for _, audience := range cfg.Auth.ExpectedAudience {
+		if audience == "" {
+			appendProblem(&problems, "auth.expectedAudience", "must not contain empty values")
+			continue
+		}
+		validateClaimExpectation(&problems, "auth.expectedAudience", audience)
+	}
 	validateMountPath(&problems, "transit.mountPath", cfg.Transit.MountPath)
 	validateIdentifier(&problems, "transit.keyName", cfg.Transit.KeyName)
 	validateIdentifier(&problems, "transit.keyIdScope.providerName", cfg.Transit.KeyIDScope.ProviderName)
@@ -205,6 +214,10 @@ func validateValues(cfg Config) []ValidationProblem {
 	validatePositiveDuration(&problems, "auth.minJwtRemainingTtl", cfg.Auth.MinJWTRemainingTTL)
 	validateNonNegativeDuration(&problems, "auth.clockSkewLeeway", cfg.Auth.ClockSkewLeeway)
 	validatePositiveDuration(&problems, "auth.loginBeforeTokenExpiry", cfg.Auth.LoginBeforeTokenExpiry)
+	validatePositiveDuration(&problems, "auth.tokenRenewalIncrement", cfg.Auth.TokenRenewalIncrement)
+	validateNonNegativeDuration(&problems, "auth.loginTimeout", cfg.Auth.LoginTimeout)
+	validateNonNegativeDuration(&problems, "bootstrap.graceTimeout", cfg.Bootstrap.GraceTimeout)
+	validatePositiveDuration(&problems, "bootstrap.retryInterval", cfg.Bootstrap.RetryInterval)
 	validatePositiveDuration(&problems, "status.probeInterval", cfg.Status.ProbeInterval)
 	validatePositiveDuration(&problems, "status.deepProbeInterval", cfg.Status.DeepProbeInterval)
 	validatePositiveDuration(&problems, "status.statusMaxStaleness", cfg.Status.StatusMaxStaleness)
@@ -370,6 +383,15 @@ func validateIdentifier(problems *[]ValidationProblem, field string, value strin
 	}
 }
 
+func validateClaimExpectation(problems *[]ValidationProblem, field string, value string) {
+	if value == "" {
+		return
+	}
+	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t") {
+		appendProblem(problems, field, "must not contain control characters or surrounding whitespace")
+	}
+}
+
 func validateAbsolutePath(problems *[]ValidationProblem, field string, value string) {
 	if value == "" {
 		return
@@ -432,8 +454,8 @@ func validateSocketParent(problems *[]ValidationProblem, socketPath string) {
 		appendProblem(problems, "server.socketPath", "parent path must be a directory")
 		return
 	}
-	if info.Mode().Perm()&0o002 != 0 {
-		appendProblem(problems, "server.socketPath", "parent directory must not be world-writable")
+	if info.Mode().Perm()&0o022 != 0 {
+		appendProblem(problems, "server.socketPath", "parent directory must not be group-writable or world-writable")
 	}
 }
 

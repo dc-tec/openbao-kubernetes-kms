@@ -198,6 +198,8 @@ auth:
   minJwtRemainingTtl: %s
   clockSkewLeeway: 30s
   loginBeforeTokenExpiry: %s
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
   tokenStorage: memory
 transit:
   mountPath: %q
@@ -208,6 +210,9 @@ transit:
     transitMountId: transit-ci-primary
     keyLineageId: 01HXEXAMPLEKEYLINEAGEID
   useAssociatedData: true
+bootstrap:
+  graceTimeout: 60s
+  retryInterval: 5s
 status:
   probeInterval: %s
   deepProbeInterval: %s

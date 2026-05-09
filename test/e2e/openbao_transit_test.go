@@ -62,6 +62,7 @@ var _ = Describe("OpenBao Transit CI", Label(framework.LabelOpenBao, framework.L
 			MinJWTRemainingTTL:     2 * time.Minute,
 			ClockSkewLeeway:        30 * time.Second,
 			LoginBeforeTokenExpiry: 30 * time.Second,
+			TokenRenewalIncrement:  time.Hour,
 		}, authClient, auth.ManagerOptions{})
 		Expect(err).NotTo(HaveOccurred())
 

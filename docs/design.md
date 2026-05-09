@@ -452,6 +452,11 @@ auth:
   minJwtRemainingTtl: 2m
   clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  expectedIssuer: ""
+  expectedAudience: []
+  expectedSubject: ""
   tokenStorage: memory
 ```
 
@@ -1051,6 +1056,11 @@ auth:
   minJwtRemainingTtl: 2m
   clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  expectedIssuer: ""
+  expectedAudience: []
+  expectedSubject: ""
   tokenStorage: memory
 transit:
   mountPath: transit
@@ -1061,6 +1071,9 @@ transit:
     transitMountId: transit-prod-primary
     keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
   useAssociatedData: true
+bootstrap:
+  graceTimeout: 60s
+  retryInterval: 5s
 status:
   probeInterval: 30s
   deepProbeInterval: 5m
@@ -1177,6 +1190,7 @@ Requirements:
 * Socket mode should be 0660.
 * Socket group should allow kube-apiserver access.
 * Do not use abstract Unix sockets by default.
+* The runtime socket directory must not be group-writable or world-writable.
 * If path exists, verify it is a Unix socket.
 * If it is a socket, attempt a connection to determine if it is live.
 * Remove only verified dead stale sockets.
@@ -1976,6 +1990,11 @@ auth:
   minJwtRemainingTtl: 2m
   clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  expectedIssuer: ""
+  expectedAudience: []
+  expectedSubject: ""
   tokenStorage: memory
 transit:
   mountPath: transit
@@ -1986,6 +2005,9 @@ transit:
     transitMountId: transit-prod-primary
     keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
   useAssociatedData: true
+bootstrap:
+  graceTimeout: 60s
+  retryInterval: 5s
 status:
   probeInterval: 30s
   deepProbeInterval: 5m

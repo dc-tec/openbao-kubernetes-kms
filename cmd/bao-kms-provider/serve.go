@@ -122,7 +122,7 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 		Namespace:     cfg.OpenBao.Namespace,
 		CACertFile:    cfg.OpenBao.CACertFile,
 		TLSServerName: cfg.OpenBao.TLSServerName,
-		Timeout:       cfg.OpenBao.Timeout,
+		Timeout:       authLoginTimeout(cfg),
 		Observer:      observer,
 	})
 	if err != nil {
@@ -158,7 +158,7 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 	if err := metricsRecorder.RegisterStatusProvider(store); err != nil {
 		return serveDependencies{}, err
 	}
-	if err := controller.ProbeOnce(ctx); err != nil {
+	if err := probeOnceWithBootstrapGrace(ctx, controller, cfg.Bootstrap); err != nil {
 		return serveDependencies{}, fmt.Errorf("initialize status cache: %w", err)
 	}
 
@@ -278,7 +278,79 @@ func authConfig(cfg config.Config) auth.ManagerConfig {
 		MinJWTRemainingTTL:     cfg.Auth.MinJWTRemainingTTL,
 		ClockSkewLeeway:        cfg.Auth.ClockSkewLeeway,
 		LoginBeforeTokenExpiry: cfg.Auth.LoginBeforeTokenExpiry,
+		TokenRenewalIncrement:  cfg.Auth.TokenRenewalIncrement,
+		ExpectedIssuer:         cfg.Auth.ExpectedIssuer,
+		ExpectedAudience:       cfg.Auth.ExpectedAudience,
+		ExpectedSubject:        cfg.Auth.ExpectedSubject,
 	}
+}
+
+type bootstrapProbeController interface {
+	ProbeOnce(context.Context) error
+}
+
+func probeOnceWithBootstrapGrace(
+	ctx context.Context,
+	controller bootstrapProbeController,
+	cfg config.BootstrapConfig,
+) error {
+	return probeOnceWithBootstrapGraceAndSleep(ctx, controller, cfg, time.Now, sleepContext)
+}
+
+func probeOnceWithBootstrapGraceAndSleep(
+	ctx context.Context,
+	controller bootstrapProbeController,
+	cfg config.BootstrapConfig,
+	now func() time.Time,
+	sleep func(context.Context, time.Duration) error,
+) error {
+	if cfg.GraceTimeout <= 0 {
+		return controller.ProbeOnce(ctx)
+	}
+	deadline := now().Add(cfg.GraceTimeout)
+	var lastErr error
+	for {
+		if err := controller.ProbeOnce(ctx); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		remaining := deadline.Sub(now())
+		if remaining <= 0 {
+			return fmt.Errorf("bootstrap status probe did not succeed within %s: %w", cfg.GraceTimeout, lastErr)
+		}
+		delay := cfg.RetryInterval
+		if delay <= 0 {
+			delay = 5 * time.Second
+		}
+		if delay > remaining {
+			delay = remaining
+		}
+		if err := sleep(ctx, delay); err != nil {
+			return err
+		}
+	}
+}
+
+func sleepContext(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func authLoginTimeout(cfg config.Config) time.Duration {
+	if cfg.Auth.LoginTimeout > 0 {
+		return cfg.Auth.LoginTimeout
+	}
+	if cfg.OpenBao.Timeout > 5*time.Second {
+		return cfg.OpenBao.Timeout
+	}
+	return 5 * time.Second
 }
 
 func lookupGroupID(name string) (int, error) {

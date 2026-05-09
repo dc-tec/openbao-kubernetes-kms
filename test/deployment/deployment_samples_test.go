@@ -173,7 +173,7 @@ func TestSystemdAndPackageSamplesUseResolvedIdentity(t *testing.T) {
 
 	tmpfiles := readSample(t, "deploy/package/linux/tmpfiles.d/openbao-kms.conf")
 	for _, want := range []string{
-		"d /run/openbao-kms 2770 openbao-kms openbao-kms-socket -",
+		"d /run/openbao-kms 2750 openbao-kms openbao-kms-socket -",
 		"d /var/lib/openbao-kms/state 0750 openbao-kms openbao-kms -",
 	} {
 		if !strings.Contains(tmpfiles, want) {
@@ -250,7 +250,7 @@ func TestInstallScriptsStageSystemdAndStaticPodLayouts(t *testing.T) {
 	requirePathMode(t, staticPodRoot, "/etc/openbao-kms/tls", 0o755)
 	requirePathMode(t, staticPodRoot, "/var/lib/openbao-kms", 0o750)
 	requirePathMode(t, staticPodRoot, "/var/lib/openbao-kms/state", 0o750)
-	requirePathMode(t, staticPodRoot, "/run/openbao-kms", 0o770)
+	requirePathMode(t, staticPodRoot, "/run/openbao-kms", 0o750)
 	requirePathMode(t, staticPodRoot, "/etc/openbao-kms/config.yaml", 0o640)
 	requirePathMode(t, staticPodRoot, "/etc/kubernetes/manifests/bao-kms-provider.yaml", 0o644)
 	requireSetGID(t, stagedPath(staticPodRoot, "/run/openbao-kms"))

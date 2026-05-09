@@ -69,15 +69,15 @@ install -d -o root -g root -m 0750 /etc/openbao-kms
 install -d -o root -g root -m 0755 /etc/openbao-kms/tls
 install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms
 install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms/state
-install -d -o openbao-kms -g openbao-kms-socket -m 2770 /run/openbao-kms
+install -d -o openbao-kms -g openbao-kms-socket -m 2750 /run/openbao-kms
 ```
 
-The service should verify `/run/openbao-kms` at startup. Packaging should create it through `tmpfiles.d` or an equivalent root-owned install step so the group is `openbao-kms-socket` and the setgid bit preserves the socket access group.
+The service should verify `/run/openbao-kms` at startup. Packaging should create it through `tmpfiles.d` or an equivalent root-owned install step so the group is `openbao-kms-socket` and the setgid bit preserves the socket access group. The socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
 
 Sample `tmpfiles.d` entries live under [`deploy/package/linux/tmpfiles.d/openbao-kms.conf`](../../deploy/package/linux/tmpfiles.d/openbao-kms.conf). The runtime-only entry is:
 
 ```text
-d /run/openbao-kms 2770 openbao-kms openbao-kms-socket -
+d /run/openbao-kms 2750 openbao-kms openbao-kms-socket -
 ```
 
 ## Start
@@ -127,5 +127,7 @@ Common failures:
 - CA bundle path is missing,
 - host DNS is not ready before service start,
 - OpenBao TLS server name mismatch.
+
+The provider retries the initial status probe for `bootstrap.graceTimeout` before exiting. Keep this grace long enough for JWT projection, DNS/routing, OpenBao restart, and clock-sync races, but short enough that deterministic misconfiguration is visible in service status.
 
 Use [Troubleshooting](../troubleshooting.md) for recovery.

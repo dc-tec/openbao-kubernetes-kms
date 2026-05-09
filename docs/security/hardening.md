@@ -52,7 +52,7 @@ Recommended:
 /etc/openbao-kms/tls/ca.crt         root:root 0644
 /var/lib/openbao-kms/identity.jwt   root:openbao-kms 0640
 /var/lib/openbao-kms/state          openbao-kms:openbao-kms 0750
-/run/openbao-kms                    openbao-kms:openbao-kms-socket 2770
+/run/openbao-kms                    openbao-kms:openbao-kms-socket 2750
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket 0660
 ```
 
@@ -70,6 +70,7 @@ Recommended:
 
 - external issuer independent of protected API server,
 - short JWT lifetime with reliable renewal,
+- `auth.expectedIssuer`, `auth.expectedAudience`, and `auth.expectedSubject` set as early misconfiguration diagnostics when the expected service-account token identity is stable,
 - issuer key rotation overlap,
 - emergency issuance process documented,
 - pinned public keys for recovery where appropriate.
@@ -107,6 +108,7 @@ Required:
 - Provider name is stable.
 - Endpoint is a local Unix socket.
 - API server can access only the required socket path.
+- API server socket group can traverse the socket directory but cannot create, delete, or replace entries in it.
 
 Recommended:
 

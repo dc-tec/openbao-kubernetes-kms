@@ -37,7 +37,7 @@ Recommended ownership:
 /var/lib/openbao-kms                   openbao-kms:openbao-kms 0750
 /var/lib/openbao-kms/identity.jwt      root:openbao-kms 0640
 /var/lib/openbao-kms/state             openbao-kms:openbao-kms 0750
-/run/openbao-kms                       openbao-kms:openbao-kms-socket 2770
+/run/openbao-kms                       openbao-kms:openbao-kms-socket 2750
 ```
 
 The actual service user/group names may vary by distribution. The API server must be able to connect to the socket; it does not need access to the JWT file.

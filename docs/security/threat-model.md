@@ -55,17 +55,18 @@ The design does not defend against every action by:
 |---|---|
 | Offline etcd snapshot theft | Encrypt selected API resources before persistence. |
 | Local key exposure | Use remote OpenBao Transit instead of static local encryption keys. |
-| OpenBao token theft | Memory-only token storage, short TTLs, no token logs. |
-| JWT theft | File permissions, short lifetime, claim binding, external issuer. |
+| OpenBao token theft | Memory-only token storage, short TTLs, explicit renewal increment, no token logs. |
+| JWT theft | File permissions, short lifetime, optional local issuer/audience/subject diagnostics, OpenBao role binding, external issuer. |
 | Transit key deletion | `deletion_allowed=false`, no delete permission, tested backups. |
 | Accidental key creation | `disable_upsert=true`, no create permission on encrypt path. |
 | Key recreation with same name | Key lineage ID, decrypt validation, DR checks. |
 | Ciphertext replay across clusters | AAD binds provider, cluster, OpenBao, key lineage, and version. |
 | key_id spoofing | Strict local key ID registry and decrypt rejection before Transit. |
 | Annotation tampering | Canonical AAD reconstruction and annotation hash checks. |
+| KMS socket path replacement | Provider-owned, non-group-writable runtime directory; filesystem socket permissions; live-socket collision checks; verified-dead stale socket cleanup only. |
 | Provider downgrade to plaintext | Remove `identity` fallback after migration; audit encryption config. |
 | OpenBao MITM | TLS CA validation and server name verification. |
-| OpenBao outage | Cached Status with staleness limits, fail closed, alerting. |
+| OpenBao outage | Cached Status with staleness limits, fail closed, bootstrap grace, jittered auth retry backoff, alerting. |
 | Log leakage | Redaction rules and tests for plaintext, JWT, tokens, ciphertext. |
 | Metrics leakage | Hash key IDs and avoid raw OpenBao paths or high-cardinality labels. |
 | Static pod API dependency | Static pod manifests avoid ConfigMaps, Secrets, ServiceAccounts. |
@@ -106,3 +107,4 @@ Before MVP:
 - review of log/metric redaction,
 - failure-mode validation for key deletion, recreated keys, and premature `min_decryption_version`.
 
+The implementation-backed `WS12-T07` through `WS12-T10` review evidence is recorded in [WS12 implementation security review](reviews/ws12-implementation-security-review.md).

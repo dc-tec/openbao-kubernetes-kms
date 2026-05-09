@@ -42,6 +42,15 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Auth.ClockSkewLeeway != 30*time.Second {
 		t.Fatalf("unexpected auth clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
 	}
+	if cfg.Auth.TokenRenewalIncrement != time.Hour {
+		t.Fatalf("unexpected token renewal increment: %s", cfg.Auth.TokenRenewalIncrement)
+	}
+	if cfg.Auth.LoginTimeout != 0 {
+		t.Fatalf("auth login timeout should default to derived value, got %s", cfg.Auth.LoginTimeout)
+	}
+	if cfg.Bootstrap.GraceTimeout != time.Minute || cfg.Bootstrap.RetryInterval != 5*time.Second {
+		t.Fatalf("unexpected bootstrap defaults: %#v", cfg.Bootstrap)
+	}
 	if cfg.Logging.DebugCorrelation.Enabled {
 		t.Fatal("debug correlation should default to disabled")
 	}
@@ -69,6 +78,12 @@ auth:
   role: openbao-kms-control-plane
   jwtFile: /var/lib/openbao-kms/identity.jwt
   clockSkewLeeway: 45s
+  tokenRenewalIncrement: 2h
+  loginTimeout: 9s
+  expectedIssuer: https://issuer.example.internal
+  expectedAudience:
+    - openbao
+  expectedSubject: system:serviceaccount:kube-system:bao-kms-provider
 transit:
   mountPath: transit
   keyName: k8s-workload-a-etcd
@@ -80,6 +95,9 @@ transit:
   useAssociatedData: true
 status:
   probeInterval: 45s
+bootstrap:
+  graceTimeout: 30s
+  retryInterval: 3s
 state:
   path: /var/lib/openbao-kms/state/custom-key-registry.json
 `)
@@ -91,6 +109,12 @@ state:
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
+
+	assertLoadedConfigFile(t, cfg)
+}
+
+func assertLoadedConfigFile(t *testing.T, cfg Config) {
+	t.Helper()
 
 	if cfg.Server.SocketPath != "/tmp/bao-kms-provider.sock" {
 		t.Fatalf("unexpected socket path: %q", cfg.Server.SocketPath)
@@ -109,6 +133,30 @@ state:
 	}
 	if cfg.Auth.ClockSkewLeeway != 45*time.Second {
 		t.Fatalf("unexpected clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
+	}
+	assertLoadedConfigFileAuth(t, cfg.Auth)
+	if cfg.Bootstrap.GraceTimeout != 30*time.Second || cfg.Bootstrap.RetryInterval != 3*time.Second {
+		t.Fatalf("unexpected bootstrap config: %#v", cfg.Bootstrap)
+	}
+}
+
+func assertLoadedConfigFileAuth(t *testing.T, cfg AuthConfig) {
+	t.Helper()
+
+	if cfg.TokenRenewalIncrement != 2*time.Hour {
+		t.Fatalf("unexpected token renewal increment: %s", cfg.TokenRenewalIncrement)
+	}
+	if cfg.LoginTimeout != 9*time.Second {
+		t.Fatalf("unexpected login timeout: %s", cfg.LoginTimeout)
+	}
+	if cfg.ExpectedIssuer != "https://issuer.example.internal" {
+		t.Fatalf("unexpected expected issuer: %q", cfg.ExpectedIssuer)
+	}
+	if len(cfg.ExpectedAudience) != 1 || cfg.ExpectedAudience[0] != "openbao" {
+		t.Fatalf("unexpected expected audience: %#v", cfg.ExpectedAudience)
+	}
+	if cfg.ExpectedSubject != "system:serviceaccount:kube-system:bao-kms-provider" {
+		t.Fatalf("unexpected expected subject: %q", cfg.ExpectedSubject)
 	}
 }
 
@@ -208,6 +256,48 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			field: "auth.clockSkewLeeway",
 			mutate: func(cfg *Config) {
 				cfg.Auth.ClockSkewLeeway = -time.Second
+			},
+		},
+		{
+			name:  "invalid token renewal increment",
+			field: "auth.tokenRenewalIncrement",
+			mutate: func(cfg *Config) {
+				cfg.Auth.TokenRenewalIncrement = 0
+			},
+		},
+		{
+			name:  "negative auth login timeout",
+			field: "auth.loginTimeout",
+			mutate: func(cfg *Config) {
+				cfg.Auth.LoginTimeout = -time.Second
+			},
+		},
+		{
+			name:  "negative bootstrap grace timeout",
+			field: "bootstrap.graceTimeout",
+			mutate: func(cfg *Config) {
+				cfg.Bootstrap.GraceTimeout = -time.Second
+			},
+		},
+		{
+			name:  "invalid bootstrap retry interval",
+			field: "bootstrap.retryInterval",
+			mutate: func(cfg *Config) {
+				cfg.Bootstrap.RetryInterval = 0
+			},
+		},
+		{
+			name:  "expected issuer with whitespace",
+			field: "auth.expectedIssuer",
+			mutate: func(cfg *Config) {
+				cfg.Auth.ExpectedIssuer = " https://issuer.example.internal"
+			},
+		},
+		{
+			name:  "empty expected audience",
+			field: "auth.expectedAudience",
+			mutate: func(cfg *Config) {
+				cfg.Auth.ExpectedAudience = []string{""}
 			},
 		},
 		{
@@ -382,6 +472,32 @@ func TestValidateRejectsUnsafeLocalFiles(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "config") {
 		t.Fatalf("expected config permission problem, got %v", err)
+	}
+}
+
+func TestValidateRejectsGroupWritableSocketParent(t *testing.T) {
+	tempDir := t.TempDir()
+	// #nosec G302 -- this test intentionally creates an unsafe socket parent mode.
+	if err := os.Chmod(tempDir, 0o770); err != nil {
+		t.Fatalf("chmod socket parent: %v", err)
+	}
+	cfg := loadValidConfig(t)
+	cfg.Server.SocketPath = filepath.Join(tempDir, "kms.sock")
+	cfg.OpenBao.CACertFile = filepath.Join(tempDir, "ca.crt")
+	cfg.Auth.JWTFile = filepath.Join(tempDir, "identity.jwt")
+
+	writeFile(t, cfg.OpenBao.CACertFile, 0o644, "ca")
+	writeFile(t, cfg.Auth.JWTFile, 0o640, "jwt")
+
+	err := Validate(cfg, ValidationOptions{
+		CheckFilesystem:         true,
+		AllowedSocketParentDirs: []string{tempDir},
+	})
+	if !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("expected invalid config error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "server.socketPath") {
+		t.Fatalf("expected socket path problem, got %v", err)
 	}
 }
 
