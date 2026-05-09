@@ -187,4 +187,4 @@ bao-kms-provider policy openbao \
   --config /etc/openbao-kms/config.yaml
 ```
 
-The output grants only Transit metadata read, encrypt update, decrypt update, and `disable_upsert` inspection. Review the rendered paths before applying the policy.
+The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy.

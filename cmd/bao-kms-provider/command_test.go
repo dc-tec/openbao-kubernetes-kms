@@ -60,6 +60,7 @@ func TestPolicyOpenBaoCommand(t *testing.T) {
 		`path "transit/encrypt/k8s-workload-a-etcd"`,
 		`path "transit/decrypt/k8s-workload-a-etcd"`,
 		`path "transit/config/keys"`,
+		`path "sys/capabilities-self"`,
 	}
 	for _, want := range required {
 		if !strings.Contains(output, want) {

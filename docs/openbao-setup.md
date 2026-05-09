@@ -104,6 +104,11 @@ path "transit/decrypt/k8s-workload-a-etcd" {
 path "transit/config/keys" {
   capabilities = ["read"]
 }
+
+# Allow doctor to inspect this token's capabilities.
+path "sys/capabilities-self" {
+  capabilities = ["update"]
+}
 ```
 
 Do not grant these capabilities to the plugin token:

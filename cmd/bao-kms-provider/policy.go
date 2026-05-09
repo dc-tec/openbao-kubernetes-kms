@@ -5,6 +5,7 @@ import (
 	"io"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
@@ -49,6 +50,11 @@ func writeOpenBaoPolicy(out io.Writer, cfg config.Config) error {
 		{Path: paths.Encrypt, Capabilities: []string{"update"}, Comment: "Encrypt with the existing key."},
 		{Path: paths.Decrypt, Capabilities: []string{"update"}, Comment: "Decrypt existing ciphertext."},
 		{Path: paths.DisableUpsert, Capabilities: []string{"read"}, Comment: "Inspect Transit disable_upsert."},
+		{
+			Path:         paths.CapabilitiesSelf,
+			Capabilities: []string{"update"},
+			Comment:      "Allow doctor to inspect this token's capabilities.",
+		},
 	} {
 		if _, err := fmt.Fprintf(out, "# %s\n", stanza.Comment); err != nil {
 			return err
@@ -67,10 +73,11 @@ func writeOpenBaoPolicy(out io.Writer, cfg config.Config) error {
 }
 
 type openBaoPolicyPathSet struct {
-	Metadata      string
-	Encrypt       string
-	Decrypt       string
-	DisableUpsert string
+	Metadata         string
+	Encrypt          string
+	Decrypt          string
+	DisableUpsert    string
+	CapabilitiesSelf string
 }
 
 type openBaoPolicyStanza struct {
@@ -83,20 +90,21 @@ func openBaoPolicyPaths(cfg config.Config) openBaoPolicyPathSet {
 	mountPath := cfg.Transit.MountPath
 	keyName := cfg.Transit.KeyName
 	return openBaoPolicyPathSet{
-		Metadata:      path.Join(mountPath, "keys", keyName),
-		Encrypt:       path.Join(mountPath, "encrypt", keyName),
-		Decrypt:       path.Join(mountPath, "decrypt", keyName),
-		DisableUpsert: path.Join(mountPath, "config", "keys"),
+		Metadata:         path.Join(mountPath, "keys", keyName),
+		Encrypt:          path.Join(mountPath, "encrypt", keyName),
+		Decrypt:          path.Join(mountPath, "decrypt", keyName),
+		DisableUpsert:    path.Join(mountPath, "config", "keys"),
+		CapabilitiesSelf: path.Join("sys", "capabilities-self"),
 	}
 }
 
 func quotedList(values []string) string {
-	result := ""
+	var result strings.Builder
 	for index, value := range values {
 		if index > 0 {
-			result += ", "
+			result.WriteString(", ")
 		}
-		result += strconv.Quote(value)
+		result.WriteString(strconv.Quote(value))
 	}
-	return result
+	return result.String()
 }
