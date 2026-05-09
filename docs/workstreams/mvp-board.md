@@ -132,7 +132,10 @@ Current status:
 
 - `internal/status` implements the cached Status view, staleness policy, background probe scheduler, Transit metadata rotation observer, stable observation count, activation delay, rollback rejection, persisted pending-rotation state, circuit breaker behavior, and local redacted diagnostics.
 - The status store implements both the KMS v2 Status cache and decrypt snapshot lookup, keeping pending and rejected observations out of decryptable registry state.
-- Runtime socket lifecycle remains in WS07. WS09 still owns metrics/log emission from the local diagnostics surface.
+- `internal/socket` owns safe Unix socket creation (parent validation, symlink/regular-file/directory rejection, live-peer probe, verified-dead stale reclaim, post-bind chmod/chown).
+- `internal/health` serves `/live` and `/ready` behind narrow probe interfaces; `/ready` consumes `status.Diagnostics`.
+- `internal/runtime` composes socket listener + gRPC server + optional health HTTP server with `SIGINT`/`SIGTERM` handling and bounded graceful shutdown.
+- WS09 still owns structured logs and Prometheus metrics; WS07 left an `OnStaleSocketRemoved` hook and the existing diagnostics surface for WS09 to wire without runtime API changes.
 
 Exit criteria:
 

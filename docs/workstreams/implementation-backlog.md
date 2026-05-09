@@ -306,13 +306,13 @@ Goal: safely expose the local Unix socket and behave predictably under service r
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS07-T01 | P0 | planned | Implement socket parent directory validation. | WS01-T05 |
-| WS07-T02 | P0 | planned | Implement safe Unix socket creation. | WS07-T01 |
-| WS07-T03 | P0 | planned | Implement stale socket detection and safe cleanup. | WS07-T02 |
-| WS07-T04 | P0 | planned | Implement signal handling and graceful shutdown. | WS05-T02 |
-| WS07-T05 | P0 | planned | Implement `/live` endpoint. | WS05-T02 |
-| WS07-T06 | P0 | planned | Implement `/ready` endpoint. | WS06-T02 |
-| WS07-T07 | P0 | planned | Reject symlink and regular-file socket paths. | WS07-T01 |
+| WS07-T01 | P0 | done | Implement socket parent directory validation. | WS01-T05 |
+| WS07-T02 | P0 | done | Implement safe Unix socket creation. | WS07-T01 |
+| WS07-T03 | P0 | done | Implement stale socket detection and safe cleanup. | WS07-T02 |
+| WS07-T04 | P0 | done | Implement signal handling and graceful shutdown. | WS05-T02 |
+| WS07-T05 | P0 | done | Implement `/live` endpoint. | WS05-T02 |
+| WS07-T06 | P0 | done | Implement `/ready` endpoint. | WS06-T02 |
+| WS07-T07 | P0 | done | Reject symlink and regular-file socket paths. | WS07-T01 |
 | WS07-T08 | P1 | planned | Add SELinux/AppArmor deployment notes after testing. | WS10-T01 |
 | WS07-T09 | P1 | planned | Add service restart behavior tests. | WS10-T01 |
 
@@ -330,6 +330,14 @@ Test requirements:
 - Symlink and regular-file tests.
 - Live socket collision tests.
 - Graceful shutdown tests.
+
+Implementation notes:
+
+- `internal/socket` owns the typed `Listen` primitive, including parent-directory checks, symlink/regular-file/directory rejection, live-peer probe via bounded `net.DialTimeout`, verified-dead stale socket reclamation, and post-bind chmod/chown. An `OnStaleSocketRemoved` hook is exposed for WS09 to wire the `openbao_kms_socket_restarts_total` counter without coupling the socket package to metrics.
+- `internal/health` owns the `/live` and `/ready` HTTP handler behind narrow `LivenessProbe` and `ReadinessProbe` interfaces; `/ready` consumes `status.Diagnostics` and flips 503 on unhealthy, stale, or no-active-snapshot states. The handler rejects non-GET/HEAD methods and unknown paths.
+- `internal/runtime` composes the socket listener, gRPC server, optional health HTTP server, signal handling (`SIGINT`/`SIGTERM`), and bounded graceful shutdown that falls through `GracefulStop` to `Stop` past `ShutdownTimeout`. The runtime owns the liveness probe internally and keeps WS09 logging/metrics out of the lifecycle.
+- WS08-T01 (`serve`) is responsible for translating typed config into `runtime.Options` and wiring CLI flags. WS09 will plug structured logging and Prometheus metrics into the existing extension points (`OnStaleSocketRemoved`, ready/live probes) without runtime API changes.
+- WS07-T08 and WS07-T09 remain planned because both depend on WS10-T01 deployment artifacts.
 
 ## WS08: CLI Tooling
 
