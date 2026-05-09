@@ -1,0 +1,14 @@
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+%{ for resource in resources ~}
+      - ${resource}
+%{ endfor ~}
+    providers:
+      - kms:
+          apiVersion: v2
+          name: ${provider_name}
+          endpoint: unix://${socket_path}
+          timeout: 3s
+      - identity: {}

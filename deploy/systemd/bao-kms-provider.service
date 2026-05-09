@@ -1,0 +1,43 @@
+[Unit]
+Description=OpenBao Kubernetes KMS v2 Provider
+Documentation=https://github.com/dc-tec/openbao-kubernetes-kms
+Wants=network-online.target
+After=network-online.target
+Before=kubelet.service
+ConditionPathExists=/etc/openbao-kms/config.yaml
+ConditionPathExists=/var/lib/openbao-kms/identity.jwt
+ConditionPathIsDirectory=/run/openbao-kms
+
+[Service]
+Type=exec
+User=openbao-kms
+Group=openbao-kms
+SupplementaryGroups=openbao-kms-socket
+ExecStart=/usr/local/bin/bao-kms-provider serve --config /etc/openbao-kms/config.yaml
+Restart=always
+RestartSec=5s
+StartLimitIntervalSec=60
+StartLimitBurst=10
+UMask=0027
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadOnlyPaths=/etc/openbao-kms
+ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state
+
+[Install]
+WantedBy=multi-user.target

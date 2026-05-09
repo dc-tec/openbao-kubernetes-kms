@@ -1,0 +1,13 @@
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+      - secrets
+      - configmaps
+    providers:
+      - kms:
+          apiVersion: v2
+          name: openbao-kms-workload-a
+          endpoint: unix:///run/openbao-kms/kms.sock
+          timeout: 3s
+      - identity: {}

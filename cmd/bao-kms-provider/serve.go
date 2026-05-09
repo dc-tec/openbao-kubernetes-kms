@@ -285,6 +285,12 @@ func lookupGroupID(name string) (int, error) {
 	if name == "" {
 		return -1, nil
 	}
+	if gid, ok, err := parseNumericGroupID(name); ok || err != nil {
+		if err != nil {
+			return -1, err
+		}
+		return gid, nil
+	}
 	group, err := user.LookupGroup(name)
 	if err != nil {
 		return -1, fmt.Errorf("lookup socket group: %w", err)
@@ -294,6 +300,19 @@ func lookupGroupID(name string) (int, error) {
 		return -1, fmt.Errorf("parse socket group id: %w", err)
 	}
 	return int(gid64), nil
+}
+
+func parseNumericGroupID(value string) (int, bool, error) {
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return -1, false, nil
+		}
+	}
+	gid64, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return -1, true, fmt.Errorf("parse socket group id: %w", err)
+	}
+	return int(gid64), true, nil
 }
 
 type transitAdapter struct {

@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap build build-linux release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci tidy verify-tidy ci-core docs-check versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
+.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci tidy verify-tidy ci-core docs-check versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
 
 GO_VERSION := $(shell cat .go-version)
 GO ?= go
@@ -27,6 +27,11 @@ E2E_GINKGO_EXTRA_ARGS ?=
 E2E_OPENBAO_IMAGE ?= $(shell awk '/^[[:space:]]*image:[[:space:]]*/ { gsub("\"", "", $$2); print $$2; exit }' .ci/versions.yaml)
 BINARY_NAME ?= bao-kms-provider
 BIN ?= bin/$(BINARY_NAME)
+DOCKER ?= docker
+IMAGE_REPOSITORY ?= ghcr.io/dc-tec/bao-kms-provider
+IMAGE_TAG ?= $(VERSION)
+IMAGE ?= $(IMAGE_REPOSITORY):$(IMAGE_TAG)
+IMAGE_PLATFORM ?= linux/$(shell "$(GO)" env GOARCH)
 DIST_DIR ?= dist/release
 CHECKSUM_FILE ?= $(DIST_DIR)/checksums.txt
 CHECKSUM ?= shasum -a 256
@@ -48,6 +53,9 @@ help:
 	@printf '%s\n' '  bootstrap       Prepare local development prerequisites once implementation exists'
 	@printf '%s\n' '  build           Build bao-kms-provider with version metadata'
 	@printf '%s\n' '  build-linux     Cross-compile Linux release artifacts'
+	@printf '%s\n' '  image           Build local distroless non-root container image'
+	@printf '%s\n' '  image-smoke     Build and smoke-test local container image'
+	@printf '%s\n' '  deployment-samples-check Validate deployment sample manifests and scripts'
 	@printf '%s\n' '  checksums       Generate release artifact checksums'
 	@printf '%s\n' '  fmt             Format Go sources when go.mod exists'
 	@printf '%s\n' '  lint            Run lightweight lint checks'
@@ -83,6 +91,23 @@ install-go-tools:
 build:
 	@mkdir -p "$$(dirname "$(BIN)")"
 	@"$(GO)" build -trimpath -ldflags "$(LDFLAGS)" -o "$(BIN)" ./cmd/bao-kms-provider
+
+image:
+	@DOCKER_BUILDKIT=1 "$(DOCKER)" build \
+		--platform "$(IMAGE_PLATFORM)" \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg COMMIT="$(COMMIT)" \
+		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg DIRTY="$(DIRTY)" \
+		-t "$(IMAGE)" .
+
+image-smoke: image
+	@user="$$("$(DOCKER)" image inspect "$(IMAGE)" --format '{{.Config.User}}')"; \
+	if [ "$$user" != "65532:65532" ]; then \
+		printf 'image user must be 65532:65532, got %s\n' "$$user"; \
+		exit 1; \
+	fi
+	@"$(DOCKER)" run --rm "$(IMAGE)" version | grep -q '^version: '
 
 build-linux: release-artifacts
 
@@ -183,6 +208,15 @@ verify-tidy:
 
 vulncheck:
 	@if command -v "$(GOVULNCHECK)" >/dev/null 2>&1; then "$(GOVULNCHECK)" ./...; else printf '%s\n' 'govulncheck not installed; skipping govulncheck.'; fi
+
+deployment-samples-check:
+	@"$(GO)" test ./test/deployment
+	@for script in hack/kubeadm/*.sh; do sh -n "$$script"; done
+	@if command -v systemd-analyze >/dev/null 2>&1; then \
+		systemd-analyze verify deploy/systemd/bao-kms-provider.service; \
+	else \
+		printf '%s\n' 'systemd-analyze not installed; skipping systemd unit verification.'; \
+	fi
 
 ci-core: verify-tidy lint vulncheck test test-race build release-artifacts
 
