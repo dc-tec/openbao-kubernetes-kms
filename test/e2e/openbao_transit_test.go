@@ -8,6 +8,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/test/e2e/framework"
 	. "github.com/onsi/ginkgo/v2"
@@ -32,6 +33,44 @@ var _ = Describe("OpenBao Transit CI", Label(framework.LabelOpenBao, framework.L
 		}()
 
 		client, err := environment.NewClient()
+		Expect(err).NotTo(HaveOccurred())
+		validateOpenBaoTransit(ctx, client, environment.TransitMount, environment.TransitKey)
+	}, SpecTimeout(90*time.Second))
+
+	It("validates JWT auth bootstrap against an ephemeral OpenBao environment", func(ctx SpecContext) {
+		if !framework.OpenBaoCIEnabled() {
+			Skip("E2E_OPENBAO_CI=true is required")
+		}
+
+		environment, err := framework.StartOpenBaoEnvironment(ctx, framework.OpenBaoEnvironmentConfig{})
+		if errors.Is(err, framework.ErrDockerUnavailable) {
+			Skip(err.Error())
+		}
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			Expect(environment.Close(cleanupCtx)).To(Succeed())
+		}()
+
+		authClient, err := environment.NewAuthClient()
+		Expect(err).NotTo(HaveOccurred())
+		manager, err := auth.NewManager(auth.ManagerConfig{
+			MountPath:              environment.AuthMount,
+			Role:                   environment.AuthRole,
+			JWTFile:                environment.JWTFile,
+			MinJWTRemainingTTL:     2 * time.Minute,
+			ClockSkewLeeway:        30 * time.Second,
+			LoginBeforeTokenExpiry: 30 * time.Second,
+		}, authClient, auth.ManagerOptions{})
+		Expect(err).NotTo(HaveOccurred())
+
+		token, err := manager.Token(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(token).NotTo(BeEmpty())
+		Expect(manager.State().Status).To(Equal(auth.StatusAuthenticated))
+
+		client, err := environment.NewClientWithTokenSource(manager)
 		Expect(err).NotTo(HaveOccurred())
 		validateOpenBaoTransit(ctx, client, environment.TransitMount, environment.TransitKey)
 	}, SpecTimeout(90*time.Second))
