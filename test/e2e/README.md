@@ -48,6 +48,14 @@ make test-e2e-provider-rotation-openbao-ci
 
 That target runs OpenBao with integrated raft storage in Docker. It writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies the provider rejects the observed Transit version rollback.
 
+Run only the provider binary upgrade/rollback slice with:
+
+```sh
+make test-e2e-provider-upgrade-rollback-openbao-ci
+```
+
+That target builds distinct old/new provider images, verifies their version metadata differs, encrypts through the old image, upgrades the same provider state volume to the new image, reads old ciphertext, encrypts new ciphertext, rolls back to the old image, and verifies both ciphertexts remain decryptable.
+
 Run the pinned Kubernetes Kind smoke lane with:
 
 ```sh

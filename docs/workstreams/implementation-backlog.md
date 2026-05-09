@@ -477,6 +477,7 @@ Goal: build confidence through layered tests before production claims.
 | WS11-T06 | P0 | done | Add minimal pinned Kubernetes `1.34.3` Kind e2e. | WS10-T02, WS00-T09 |
 | WS11-T06B | P0 | done | Add public-CI portable Kind multi-control-plane convergence e2e. | WS11-T06 |
 | WS11-T06C | P0 | done | Add public-CI portable Kind static-pod upgrade/rollback e2e. | WS11-T06 |
+| WS11-T06D | P0 | done | Add portable provider binary upgrade/rollback e2e with distinct images. | WS10-T05, WS11-T05B |
 | WS11-T07 | P0 | done | Add failure injection tests. | WS06-T02 |
 | WS11-T08 | P0 | done | Add rotation tests. | WS06-T03 |
 | WS11-T09 | P0 | done | Add decrypt storm performance smoke test. | WS05-T05 |
@@ -515,6 +516,7 @@ Implementation notes:
 - `test/e2e` has provider/OpenBao failure-mode tests for OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
 - `test/e2e` has a provider/OpenBao decrypt storm smoke test that performs concurrent KMS v2 Decrypt calls through the real provider image against real OpenBao.
 - `test/e2e` has a provider/OpenBao rotation lane that runs OpenBao with integrated raft storage, writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies provider fail-closed behavior after the observed Transit version rollback.
+- `test/e2e` has a provider binary upgrade/rollback lane that builds distinct old/new provider images, verifies their version metadata differs, encrypts through the old image, upgrades the same state volume to the new image, verifies old and new ciphertext readback, rolls back to the old image, and verifies both ciphertexts remain decryptable.
 - `test/e2e` has a pinned Kind smoke lane for Kubernetes `1.34.3` that deploys the provider as a static pod, enables kube-apiserver KMS v2 encryption, verifies Secret create/read, verifies raw etcd storage uses the `k8s:enc:kms:v2:` envelope without plaintext, restarts kube-apiserver, and reads the Secret again.
 - `test/e2e` has a pinned Kind multi-control-plane convergence lane that runs three control-plane nodes, stages the provider on each node, verifies each stacked etcd member stores the Secret with a KMS v2 envelope, proves each kube-apiserver can decrypt while it is the only serving API endpoint, and then restarts every kube-apiserver with readback.
 - `test/e2e` has a provider/OpenBao backend replacement and restore lane that runs OpenBao with integrated raft storage, verifies fail-closed behavior while the backend is down, restarts the backend under the same Docker network name, saves a raft snapshot, restores it into a fresh storage volume, and decrypts ciphertext created before the outage or restore.

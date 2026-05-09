@@ -22,7 +22,7 @@ Required before a v0.1 engineering-preview release:
 14. Provider backend replacement under a stable OpenBao endpoint fails closed during outage and decrypts existing ciphertext after recovery.
 15. Containerized OpenBao integrated raft snapshot restore decrypts ciphertext created before restore.
 16. Kind multi-control-plane convergence proves each API server can decrypt through its node-local provider.
-17. Kind static-pod upgrade and rollback preserve decrypt compatibility.
+17. Kind static-pod upgrade and rollback preserve decrypt compatibility, and provider binary upgrade/rollback with distinct images preserves old/new ciphertext readback.
 18. systemd and static-pod install scripts stage expected files and permissions.
 19. `doctor` catches bad socket, bad JWT, bad policy, and bad Transit key config.
 20. Logs and metrics redaction tests pass.

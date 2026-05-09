@@ -186,6 +186,7 @@ func TestProviderDecryptStormSmokeE2E(t *testing.T) {
 }
 
 type providerFailureStackOptions struct {
+	ProviderImage       string
 	Config              providerContainerConfigOptions
 	Environment         framework.OpenBaoEnvironmentConfig
 	BeforePopulate      func(t *testing.T, environment *framework.OpenBaoEnvironment, stagingDir string)
@@ -221,7 +222,11 @@ func startProviderFailureStack(
 ) *providerFailureStack {
 	t.Helper()
 
-	providerImage := requireProviderFailureImage(t)
+	requireOpenBaoCI(t)
+	providerImage := opts.ProviderImage
+	if providerImage == "" {
+		providerImage = requireProviderImageFromEnv(t, envProviderImage)
+	}
 	dockerPath := requireDocker(t, ctx)
 	prefix := fmt.Sprintf("%s-%d", prefixBase, time.Now().UnixNano())
 	networkName := prefix + "-net"
@@ -302,12 +307,24 @@ func startProviderFailureStack(
 func requireProviderFailureImage(t *testing.T) string {
 	t.Helper()
 
+	requireOpenBaoCI(t)
+	return requireProviderImageFromEnv(t, envProviderImage)
+}
+
+func requireOpenBaoCI(t *testing.T) {
+	t.Helper()
+
 	if !framework.OpenBaoCIEnabled() {
 		t.Skip("E2E_OPENBAO_CI=true is required")
 	}
-	providerImage := os.Getenv(envProviderImage)
+}
+
+func requireProviderImageFromEnv(t *testing.T, envName string) string {
+	t.Helper()
+
+	providerImage := os.Getenv(envName)
 	if providerImage == "" {
-		t.Skip(envProviderImage + " is required")
+		t.Skip(envName + " is required")
 	}
 	return providerImage
 }
@@ -352,6 +369,16 @@ chmod 0600 /bao/tls/identity.jwt
 func (s *providerFailureStack) runClient(ctx context.Context, nameSuffix string, mode string, sampleMode sampleMountMode) {
 	s.t.Helper()
 	s.runClientWithEnv(ctx, nameSuffix, mode, sampleMode, nil)
+}
+
+func (s *providerFailureStack) restartProvider(ctx context.Context, image string) {
+	s.t.Helper()
+	if image == "" {
+		s.t.Fatal("provider restart image is empty")
+	}
+	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
+	startProviderContainer(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes)
+	s.providerImage = image
 }
 
 func (s *providerFailureStack) runClientWithEnv(

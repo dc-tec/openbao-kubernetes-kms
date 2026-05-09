@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-provider-rotation-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback tidy verify-tidy ci-core docs-check versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
+.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-provider-rotation-openbao-ci test-e2e-provider-upgrade-rollback-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback tidy verify-tidy ci-core docs-check versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
 
 GO_VERSION := $(shell cat .go-version)
 GO ?= go
@@ -26,6 +26,8 @@ E2E_PARALLEL_NODES ?= 1
 E2E_GINKGO_EXTRA_ARGS ?=
 E2E_OPENBAO_IMAGE ?= $(shell awk '/^[[:space:]]*image:[[:space:]]*/ { gsub("\"", "", $$2); print $$2; exit }' .ci/versions.yaml)
 E2E_PROVIDER_IMAGE ?= $(IMAGE_REPOSITORY):e2e-$(COMMIT)
+E2E_PROVIDER_OLD_IMAGE ?= $(IMAGE_REPOSITORY):e2e-upgrade-old-$(COMMIT)
+E2E_PROVIDER_NEW_IMAGE ?= $(IMAGE_REPOSITORY):e2e-upgrade-new-$(COMMIT)
 E2E_PROVIDER_BUILD ?= true
 E2E_KIND_NODE_IMAGE ?= $(shell awk '/^[[:space:]]*kindNodeImage:[[:space:]]*/ { print $$2; exit }' .ci/versions.yaml)
 BINARY_NAME ?= bao-kms-provider
@@ -72,6 +74,7 @@ help:
 	@printf '%s\n' '  test-e2e-provider-decrypt-storm-openbao-ci Run provider/OpenBao decrypt storm smoke E2E tests'
 	@printf '%s\n' '  test-e2e-provider-restore-openbao-ci Run provider/OpenBao backend replacement and restore E2E tests'
 	@printf '%s\n' '  test-e2e-provider-rotation-openbao-ci Run provider/OpenBao Transit rotation E2E tests'
+	@printf '%s\n' '  test-e2e-provider-upgrade-rollback-openbao-ci Run provider binary upgrade/rollback E2E tests'
 	@printf '%s\n' '  test-e2e-kind-smoke Run pinned Kind Kubernetes KMS v2 smoke tests'
 	@printf '%s\n' '  test-e2e-kind-convergence Run pinned Kind multi-control-plane convergence tests'
 	@printf '%s\n' '  test-e2e-kind-upgrade-rollback Run pinned Kind static-pod upgrade/rollback tests'
@@ -226,6 +229,13 @@ test-e2e-provider-restore-openbao-ci: verify-e2e-manifest
 test-e2e-provider-rotation-openbao-ci: verify-e2e-manifest
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
 	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderTransitRotationE2E$$' -count=1 -timeout=8m
+
+test-e2e-provider-upgrade-rollback-openbao-ci: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then \
+		$(MAKE) image IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" VERSION="$(VERSION)-e2e-old" COMMIT="$(COMMIT)-old"; \
+		$(MAKE) image IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" VERSION="$(VERSION)-e2e-new" COMMIT="$(COMMIT)-new"; \
+	fi
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_OLD_IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" E2E_PROVIDER_NEW_IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderBinaryUpgradeRollbackE2E$$' -count=1 -timeout=8m
 
 test-e2e-kind-smoke: verify-e2e-manifest
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi

@@ -122,6 +122,22 @@ lanes:
     status: active
     reports: true
 
+  - id: openbao-provider-upgrade-rollback-ci
+    name: OpenBao Provider Binary Upgrade Rollback CI
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && upgrade && rollback && ci
+    prScope: main
+    environment: local-openbao
+    isolation: local-container
+    timeout: 8m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
   - id: kind-upgrade-rollback
     name: Kubernetes KMS v2 Kind Static-Pod Upgrade Rollback
     package: ./test/e2e
