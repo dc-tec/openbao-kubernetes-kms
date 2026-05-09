@@ -38,12 +38,43 @@ func TestRootHelp(t *testing.T) {
 		"OpenBao-native Kubernetes KMS v2 provider",
 		"serve",
 		"doctor",
+		"policy",
 		"--config",
 	}
 	for _, want := range required {
 		if !strings.Contains(output, want) {
 			t.Fatalf("help output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestPolicyOpenBaoCommand(t *testing.T) {
+	output, err := executeCommand(t, "policy", "openbao", "--config", "../../test/testdata/config/valid.yaml")
+	if err != nil {
+		t.Fatalf("expected policy command to succeed: %v", err)
+	}
+
+	required := []string{
+		`path "transit/keys/k8s-workload-a-etcd"`,
+		`capabilities = ["read"]`,
+		`path "transit/encrypt/k8s-workload-a-etcd"`,
+		`path "transit/decrypt/k8s-workload-a-etcd"`,
+		`path "transit/config/keys"`,
+	}
+	for _, want := range required {
+		if !strings.Contains(output, want) {
+			t.Fatalf("policy output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestLookupGroupIDAcceptsNumericGID(t *testing.T) {
+	gid, err := lookupGroupID("1234")
+	if err != nil {
+		t.Fatalf("lookup numeric group: %v", err)
+	}
+	if gid != 1234 {
+		t.Fatalf("unexpected gid: %d", gid)
 	}
 }
 
