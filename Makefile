@@ -72,7 +72,7 @@ go_licenses_comma := ,
 GO_LICENSES_ALLOWED_CSV := $(subst $(go_licenses_space),$(go_licenses_comma),$(strip $(GO_LICENSES_ALLOWED)))
 HUGO_VERSION ?= v0.159.1
 HUGO_RUN := GOFLAGS="-mod=mod" "$(GO)" run github.com/gohugoio/hugo@$(HUGO_VERSION)
-DOCS_BASE_URL ?= https://dc-tec.github.io/openbao-kms-provider/
+DOCS_BASE_URL ?= https://dc-tec.github.io/openbao-kubernetes-kms/
 DOCS_OUT ?= public
 
 help:

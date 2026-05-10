@@ -1,14 +1,19 @@
 # OpenBao Kubernetes KMS
 
-OpenBao-native Kubernetes KMS v2 provider for encrypting selected Kubernetes API resources at rest in etcd using the OpenBao Transit secrets engine.
+`bao-kms-provider` is an OpenBao-backed Kubernetes KMS v2 provider. It lets
+`kube-apiserver` envelope-encrypt selected Kubernetes API resources at rest in
+etcd using the OpenBao Transit secrets engine.
 
-This repository is in the v0.1 engineering-preview implementation track. It is not production-ready until the release gates pass.
+This project is pre-release. The current target is a v0.1 engineering preview.
+Do not assume production readiness, published support, signed release artifacts,
+or release provenance until the documented release gates have passed.
 
-## Scope
+## What It Does
 
-The provider is intended to run on each Kubernetes control-plane node as a local gRPC KMS plugin. `kube-apiserver` connects to the plugin over a Unix domain socket. The plugin authenticates to OpenBao, calls Transit encrypt/decrypt APIs, and returns Kubernetes KMS v2 responses.
-
-Target flow:
+The provider runs on each Kubernetes control-plane node and exposes the
+Kubernetes KMS v2 gRPC API over a local Unix domain socket. The API server calls
+that socket during encryption and decryption, and the provider authenticates to
+OpenBao before calling Transit.
 
 ```text
 kube-apiserver
@@ -16,81 +21,102 @@ kube-apiserver
   -> bao-kms-provider
   -> OpenBao JWT auth
   -> OpenBao Transit encrypt/decrypt
-  -> encrypted Kubernetes API resource data in etcd
+  -> KMS v2 envelope stored in etcd
 ```
 
-This plugin is for Kubernetes encryption-at-rest of selected API resources. It does not encrypt etcd disk blocks, node filesystems, persistent volumes, pod filesystems, or Kubernetes network traffic.
+This protects selected Kubernetes API resources through Kubernetes encryption at
+rest. It does not encrypt raw etcd disk blocks, etcd snapshots, node
+filesystems, PersistentVolumes, pod filesystems, or Kubernetes network traffic.
 
-## Current Status
+## Status
 
-Status: implementation in progress for v0.1 engineering preview.
+| Area | Current state |
+|---|---|
+| Release channel | No published release yet. |
+| Maturity | v0.1 engineering-preview implementation track. |
+| Kubernetes target | KMS v2 on the Kubernetes 1.34 release line, with current CI/lab pins documented in `.ci/versions.yaml`. |
+| OpenBao target | OpenBao `2.5.3` with Transit and JWT auth. |
+| Deployment models | systemd and kubelet-managed static pod. |
+| Same-cluster DaemonSet | Not supported for protecting that cluster's own API server. |
+| Supply chain | Vendor, SBOM, scan, and reproducibility scaffolding exists. First signed artifacts, provenance verification output, and release evidence are still pending. |
 
-The Go binary, deployment samples, and local container image build exist. No published release artifact, support claim, or production-ready deployment should be assumed yet.
+The provider is control-plane critical. If the provider socket, JWT credential,
+OpenBao endpoint, or Transit key is unavailable, `kube-apiserver` may be unable
+to decrypt previously encrypted resources during startup.
 
-## Design Direction
+## Recommended Reading
 
-The design is intentionally conservative:
+Start with the published docs:
 
-- Kubernetes KMS v2 only by default.
-- Kubernetes 1.34 release-line validation target for v0.1.
-- OpenBao Transit as the remote key encryption service.
-- JWT-first OpenBao authentication from a host-mounted JWT file.
-- Explicit Transit `key_version` on every encrypt operation.
-- Opaque Kubernetes `key_id` values.
-- Strict decrypt-side `key_id` and annotation validation.
-- Associated data required for v0.1 deployments.
-- Cheap cached KMS `Status`; OpenBao probing runs in the background.
-- No Transit key creation, deletion, export, backup, or rotation from the hot-path plugin.
-- systemd and static pod deployment models.
+1. [Overview](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/overview/)
+2. [OpenBao setup](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/openbao-setup/)
+3. [Install](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/install/)
+4. [Kubernetes EncryptionConfiguration](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/kubernetes-encryption-config/)
+5. [First encrypt](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/first-encrypt/)
 
-## Documentation Map
+## Deployment Model Summary
 
-Start here:
+| Model | Use when | Notes |
+|---|---|---|
+| systemd | You control the host OS lifecycle and want the provider available before kubelet starts the static-pod API server. | Preferred for lower bootstrap dependency when host management is available. |
+| Static pod | The control plane is kubeadm-style and operators want a node-local manifest managed by kubelet. | Requires kubelet, container runtime, hostPath mounts, and preloaded or reliably available images. |
+| DaemonSet | Not for protecting the same cluster's API server. | DaemonSets depend on the Kubernetes API server they would be required to unlock. |
 
-- [Design](docs/design.md)
-- [Documentation index](docs/index.md)
-- [Architecture](docs/architecture.md)
-- [KMS v2 contract](docs/kms-v2-contract.md)
-- [Key ID and AAD](docs/key-id-and-aad.md)
-- [Configuration](docs/configuration.md)
-- [OpenBao setup](docs/openbao-setup.md)
-- [Code quality](docs/code-quality.md)
-- [Testing strategy](docs/testing-strategy.md)
-- [Release gates](docs/release-gates.md)
-- [Release policy](docs/release-policy.md)
-- [Support policy](docs/support-policy.md)
-- [Research notes](docs/research-notes.md)
-- [Implementation backlog](docs/workstreams/implementation-backlog.md)
+See [Deployment: Choosing A Model](https://dc-tec.github.io/openbao-kubernetes-kms/deployment/choosing-a-model/)
+for the full rationale.
 
-Operator docs:
+## Validation Coverage
 
-- [Install](docs/install.md)
-- [Kubernetes encryption config](docs/kubernetes-encryption-config.md)
-- [systemd deployment](docs/deployment/systemd.md)
-- [Static pod deployment](docs/deployment/static-pod.md)
-- [Linux identity model](docs/deployment/linux-identity-model.md)
-- [Rotation](docs/operations/rotation.md)
-- [Disaster recovery](docs/operations/disaster-recovery.md)
-- [Troubleshooting](docs/troubleshooting.md)
+The repository contains portable and local-only validation layers:
 
-Security and maintenance:
+- unit, race, fuzz, lint, static security, license, vendor, and vulnerability checks,
+- KMS v2 conformance tests over the real Unix-socket server path,
+- OpenBao `2.5.3` Transit and JWT auth E2E tests,
+- JWT bound-claim and pinned signing-key rollover tests,
+- provider/OpenBao failure, HA failover, restore, rotation, load-soak, and upgrade/rollback E2E tests,
+- pinned Kind KMS v2 smoke, multi-control-plane convergence, static-pod upgrade/rollback, and DR runbook tests,
+- local-only Harvester kubeadm VM gates for systemd, static pod, OpenBao outage, paired restore, upgrade/rollback, load smoke, and multi-control-plane recovery.
 
-- [Contributing](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
-- [Threat model](docs/security/threat-model.md)
-- [Hardening](docs/security/hardening.md)
-- [Observability](docs/observability.md)
-- [CLI reference](docs/cli.md)
-- [Development guide](docs/development.md)
-- [Code quality](docs/code-quality.md)
-- [Compatibility](docs/compatibility.md)
-- [CI and supply chain](docs/ci-supply-chain.md)
-- [Architecture decisions](docs/adr)
-- [Workstreams](docs/workstreams)
+Run the local core gate with:
+
+```sh
+make ci-core
+```
+
+Selected E2E entrypoints:
+
+```sh
+make test-e2e-openbao-ci
+make test-e2e-provider-ha-openbao-ci
+make test-e2e-kind-smoke
+```
+
+The Harvester kubeadm lab is intentionally local-only and must not be added to
+public CI. See [Harvester Kubeadm Lab](https://dc-tec.github.io/openbao-kubernetes-kms/development/harvester-kubeadm-lab/).
+
+## Build From Source
+
+The repository commits `vendor/` and CI uses `GOFLAGS=-mod=vendor`.
+
+```sh
+make build
+bin/bao-kms-provider version
+```
+
+Build a local container image:
+
+```sh
+make image
+```
+
+Release packages and bundles are produced by the release targets, but no
+published release channel exists yet:
+
+```sh
+make release-distribution
+```
 
 ## Upstream References
-
-The documentation is based on upstream Kubernetes and OpenBao behavior:
 
 - [Kubernetes: Using a KMS provider for data encryption](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [Kubernetes: Encrypting confidential data at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
