@@ -133,18 +133,18 @@ Possible strategies:
 
 This command cannot prove absence of old ciphertext if it cannot inspect every encrypted resource and backup.
 
-## Output Modes
+## Common Flags
 
 Recommended flags:
 
 ```text
---output text
---output json
+--config <path>
 --log-level info
---redact=true
+--metrics-address <host:port>
+--health-address <host:port>
 ```
 
-JSON output should be stable enough for automation once the CLI reaches beta.
+Stable JSON output is a planned automation follow-up; text output is the implemented CLI surface today.
 
 ## Exit Codes
 

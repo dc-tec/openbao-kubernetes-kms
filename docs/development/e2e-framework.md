@@ -25,6 +25,7 @@ The E2E framework is intentionally smaller than the OpenBao Operator framework, 
 | OpenBao CI E2E | `make test-e2e-openbao-ci` | Docker-compatible container runtime |
 | Provider OpenBao and KMS v2 full-stack E2E | `make test-e2e-provider-openbao-ci` | Docker-compatible container runtime |
 | Provider OpenBao failure E2E | `make test-e2e-provider-failure-openbao-ci` | Docker-compatible container runtime |
+| Provider OpenBao HA failover E2E | `make test-e2e-provider-ha-openbao-ci` | Docker-compatible container runtime |
 | Provider decrypt storm E2E | `make test-e2e-provider-decrypt-storm-openbao-ci` | Docker-compatible container runtime |
 | Provider load-soak E2E | `make test-e2e-provider-load-soak-openbao-ci` | Docker-compatible container runtime |
 | Provider backend replacement and raft restore E2E | `make test-e2e-provider-restore-openbao-ci` | Docker-compatible container runtime |
@@ -40,6 +41,8 @@ The OpenBao CI lane starts an owned OpenBao container, enables Transit, creates 
 The provider full-stack slice builds the provider image, runs the provider container on a Docker network with OpenBao, shares the Unix socket through a Docker volume, and runs a containerized Kubernetes KMS v2 client against that socket.
 
 The provider failure slice reuses the same real OpenBao, provider, and KMS v2 socket path for OpenBao down, OpenBao sealed, reduced policy, expired JWT, JWT file rotation, missing Transit key, Status staleness, and stale socket reclamation cases. It stores only ciphertext, `key_id`, and annotations between phases.
+
+The OpenBao HA slice starts three integrated-raft OpenBao nodes, points the provider at a standby endpoint, writes ciphertext, stops the active node, waits for a surviving voter to become active, then verifies old ciphertext readback and new KMS operations.
 
 The decrypt storm slice performs concurrent KMS v2 decrypts through the provider against real OpenBao.
 
@@ -71,6 +74,7 @@ test/e2e/
   suites_manifest_test.go
   provider_container_test.go
   provider_failure_test.go
+  provider_ha_test.go
   provider_load_test.go
   provider_rotation_test.go
   provider_upgrade_test.go
@@ -81,6 +85,7 @@ test/e2e/
     artifacts.go
     env.go
     labels.go
+    openbao_ha_environment.go
     openbao_environment.go
 ```
 
@@ -100,6 +105,7 @@ Current lanes:
 | `kind-smoke` | active | Validate KMS v2 encryption with a real pinned Kind API server. |
 | `kind-convergence` | active | Validate multi-control-plane KMS v2 convergence with real pinned Kind API servers. |
 | `openbao-failure-ci` | active | Validate fail-closed behavior for OpenBao, policy, JWT, Transit key, and Status staleness failure modes. |
+| `openbao-ha-ci` | active | Validate provider behavior across OpenBao integrated-raft active-node failover. |
 | `openbao-decrypt-storm-ci` | active | Exercise concurrent provider decrypts against real OpenBao as a smoke test. |
 | `openbao-load-soak-ci` | active | Validate sustained Status, Encrypt, and Decrypt traffic with latency and resource checks. |
 | `openbao-restore-ci` | active | Validate provider recovery after backend replacement and OpenBao integrated raft snapshot restore. |
@@ -125,6 +131,7 @@ Labels are the routing API. Prefer small composable labels:
 Label("openbao", "transit", "ci")
 Label("kind", "kmsv2", "smoke")
 Label("kind", "kmsv2", "convergence")
+Label("openbao", "kmsv2", "ha", "ci")
 Label("openbao", "kmsv2", "restore", "ci")
 Label("openbao", "kmsv2", "rotation", "ci")
 Label("openbao", "kmsv2", "soak", "ci")

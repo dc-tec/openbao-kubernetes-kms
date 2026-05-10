@@ -68,6 +68,7 @@ For the rationale and runtime directory creation pattern see [Deployment: Linux 
 
 Required:
 
+- bound issuer,
 - bound audience,
 - bound subject,
 - expiry checked before login,
@@ -82,6 +83,10 @@ Recommended:
 - issuer key rotation overlap,
 - documented emergency issuance process,
 - pinned public keys for recovery where appropriate.
+
+The portable OpenBao/provider e2e lanes exercise bound-claim rejection and
+pinned public-key rollover. JWKS/OIDC discovery behavior remains
+issuer-environment specific and should be validated during issuer integration.
 
 For the trust-boundary discussion see [Auth Model](/security/auth-model/).
 

@@ -79,6 +79,11 @@ The OpenBao JWT role should require:
 
 OpenBao JWT roles require at least one bound value such as audience, subject, or claims. The role configuration also controls token TTL, max TTL, attached policies, and the default-policy switch.
 
+The portable OpenBao/provider e2e lanes exercise bound issuer, audience, and
+subject rejection plus pinned public-key rollover. JWKS/OIDC discovery rotation
+is issuer-environment specific and should be validated during issuer
+integration.
+
 ## JWT And Token Renewal Considerations
 
 | Issue | Design response |

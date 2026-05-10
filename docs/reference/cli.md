@@ -6,7 +6,7 @@ weight: 10
 
 # CLI
 
-This page documents every command and flag supported by `bao-kms-provider` in v0.1. Commands print stable text or JSON output and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
+This page documents every command and flag supported by `bao-kms-provider` in v0.1. Commands print stable text output and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
 
 ## serve
 
@@ -175,17 +175,20 @@ bao-kms-provider policy openbao \
 
 The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy. See [Reference: Transit Policy Examples](/reference/transit-policy-examples/) for variants and rationale.
 
-## Output Modes
+## Common Flags
 
 Common flags supported across commands:
 
 ```text
---output text|json
+--config <path>
 --log-level trace|debug|info|warn|error
---redact=true|false
+--metrics-address <host:port>
+--health-address <host:port>
 ```
 
-JSON output is intended for stable automation once the CLI reaches beta. Treat it as the primary machine-readable form; text output is for direct human inspection.
+`--config` selects the provider configuration file. The other common flags override the corresponding configuration values for the current invocation.
+
+Stable JSON output is not implemented yet. It remains tracked as a follow-up for automation consumers; text output is the supported CLI surface today.
 
 ## Exit Codes
 

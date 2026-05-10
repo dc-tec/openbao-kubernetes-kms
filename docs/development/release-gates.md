@@ -23,7 +23,7 @@ Required before a v0.1 engineering-preview release:
 9. Transit encrypt uses explicit `key_version`.
 10. Rotation from Transit version 1 to 2 works without `key_id` flip-flop.
 11. Old ciphertext remains decryptable after rotation, new ciphertext uses the promoted `key_id`, and Transit version rollback is rejected.
-12. JWT expiry and re-login path works.
+12. JWT expiry, re-login, role claim binding, and signing-key rollover paths work.
 13. OpenBao outage fails closed.
 14. Provider backend replacement under a stable OpenBao endpoint fails closed during outage and decrypts existing ciphertext after recovery.
 15. Containerized OpenBao integrated raft snapshot restore decrypts ciphertext created before restore.
@@ -92,6 +92,8 @@ Target: under 10 minutes.
 - pinned Kubernetes `1.34.3` static-pod upgrade and rollback e2e,
 - rotation tests,
 - failure injection tests,
+- JWT role-claim rejection and signing-key rollover tests,
+- OpenBao HA failover tests,
 - OpenBao backend replacement and raft restore tests,
 - provider and OpenBao load-soak tests,
 - Kind DR restore runbook tests,
@@ -104,9 +106,11 @@ Target: under 10 minutes.
 
 - exact-pinned Kubernetes version matrix,
 - exact-pinned OpenBao version matrix,
-- kubeadm VM tests,
+- local-only Harvester kubeadm production gate,
+- local-only Harvester multi-control-plane kubeadm recovery gate,
 - systemd deployment tests,
 - static-pod deployment tests,
+- paired OpenBao, provider state, and etcd restore in the Harvester lab,
 - OpenBao HA failover tests,
 - disaster recovery tests,
 - startup decrypt storm test,
@@ -127,4 +131,19 @@ For a real environment:
 6. Perform storage migration.
 7. Restore an OpenBao and etcd backup pair in a lab.
 8. Simulate an OpenBao outage.
-9. Simulate JWT expiry.
+9. Simulate JWT expiry and planned signing-key rollover.
+
+The local Harvester gate is the closest pre-production harness in this
+repository:
+
+```sh
+make harvester-lab-production-gate
+```
+
+Set `HARVESTER_ENABLE_MULTI_CONTROL_PLANE=true` before rendering the Harvester
+values to include the multi-control-plane recovery topology in that gate. It
+must stay outside public CI because it reboots VMs and intentionally stops
+OpenBao inside the lab.
+
+JWT role-claim rejection and pinned signing-key rollover remain portable
+OpenBao/provider CI coverage, not Harvester lab coverage.

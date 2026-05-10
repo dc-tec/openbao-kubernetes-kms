@@ -276,7 +276,7 @@ Goal: keep Kubernetes Status cheap while background probes maintain OpenBao and 
 | WS06-T07 | P0 | done | Add local multi-node consistency diagnostic surface. | WS06-T02, WS06-T08 |
 | WS06-T08 | P0 | done | Integrate persisted registry state into rotation promotion and restart behavior. | WS02-T12 |
 | WS06-T09 | P1 | done | Add circuit breaker for repeated OpenBao failures. | WS03-T07 |
-| WS06-T10 | P1 | planned | Add OpenBao HA failover behavior tests. | WS11-T07 |
+| WS06-T10 | P1 | done | Add OpenBao HA failover behavior tests. | WS11-T07, WS11-T11 |
 
 Acceptance criteria:
 
@@ -299,7 +299,7 @@ Implementation notes:
 - Background probes refresh auth, read Transit metadata, update persisted registry state, and publish health without logging sensitive request material.
 - Pending Transit versions are persisted with observation count and activation timing, but pending and rejected snapshots are not exposed for decrypt lookup.
 - Local diagnostics expose redacted active/pending key hashes, Transit versions, state generation, rotation state, cache staleness, and circuit breaker state for later WS09 metrics/logging.
-- WS06-T10 remains planned until WS11 failure-injection and OpenBao HA test support lands.
+- WS06-T10 is covered by the provider/OpenBao HA failover e2e lane, which exercises active-node loss with a standby provider endpoint and verifies decrypt/readback plus new KMS operations after failover.
 
 ## WS07: Socket And Runtime Service Behavior
 
@@ -315,7 +315,7 @@ Goal: safely expose the local Unix socket and behave predictably under service r
 | WS07-T06 | P0 | done | Implement `/ready` endpoint. | WS06-T02 |
 | WS07-T07 | P0 | done | Reject symlink and regular-file socket paths. | WS07-T01 |
 | WS07-T08 | P1 | planned | Add SELinux/AppArmor deployment notes after testing. | WS10-T01 |
-| WS07-T09 | P1 | planned | Add service restart behavior tests. | WS10-T01 |
+| WS07-T09 | P1 | done | Add service restart behavior tests. | WS10-T01, WS11-T10B |
 
 Acceptance criteria:
 
@@ -338,7 +338,7 @@ Implementation notes:
 - `internal/health` owns the `/live` and `/ready` HTTP handler behind narrow `LivenessProbe` and `ReadinessProbe` interfaces; `/ready` consumes `status.Diagnostics` and flips 503 on unhealthy, stale, or no-active-snapshot states. The handler rejects non-GET/HEAD methods and unknown paths.
 - `internal/runtime` composes the socket listener, gRPC server, optional health HTTP server, optional metrics HTTP server, signal handling (`SIGINT`/`SIGTERM`), and bounded graceful shutdown that falls through `GracefulStop` to `Stop` past `ShutdownTimeout`. The runtime owns listener lifecycle while `serve` supplies health and metrics handlers.
 - WS08-T01 (`serve`) is responsible for translating typed config into `runtime.Options` and wiring CLI flags, structured logging, Prometheus metrics, and the socket cleanup hook.
-- WS07-T08 and WS07-T09 remain planned because both depend on WS10-T01 deployment artifacts.
+- WS07-T08 remains planned pending explicit SELinux/AppArmor validation. WS07-T09 is covered by unit/runtime shutdown coverage, deployment staging checks, and the local-only Harvester gate that restarts providers, kube-apiserver containers, and VMs for both deployment modes.
 
 ## WS08: CLI Tooling
 
@@ -475,6 +475,7 @@ Goal: build confidence through layered tests before production claims.
 | WS11-T05 | P0 | done | Add OpenBao `2.5.3` CI e2e environment. | WS03-T05 |
 | WS11-T05A | P0 | done | Extend OpenBao CI environment with JWT auth role bootstrap after WS04 lands. | WS04-T04, WS11-T05 |
 | WS11-T05B | P0 | done | Add containerized provider full-stack OpenBao/KMS v2 socket e2e without a Kubernetes API server. | WS05-T02, WS07-T01, WS10-T05, WS11-T05A |
+| WS11-T05C | P0 | done | Add OpenBao/provider CI coverage for JWT role claim binding and pinned signing-key rollover. | WS04-T04, WS11-T05B |
 | WS11-T06 | P0 | done | Add minimal pinned Kubernetes `1.34.3` Kind e2e. | WS10-T02, WS00-T09 |
 | WS11-T06B | P0 | done | Add public-CI portable Kind multi-control-plane convergence e2e. | WS11-T06 |
 | WS11-T06C | P0 | done | Add public-CI portable Kind static-pod upgrade/rollback e2e. | WS11-T06 |
@@ -485,14 +486,17 @@ Goal: build confidence through layered tests before production claims.
 | WS11-T09A | P0 | done | Add provider/OpenBao load-soak e2e with latency/error/resource checks. | WS11-T09 |
 | WS11-T10 | P1 | done | Add kubeadm VM e2e. | WS10-T01, WS10-T02 |
 | WS11-T10A | P0 | done | Add systemd and static-pod install script staging checks. | WS10-T07 |
-| WS11-T11 | P1 | planned | Add OpenBao HA failover tests. | WS03-T01 |
+| WS11-T10B | P1 | done | Add local-only Harvester kubeadm production gate for provider restart, kube-apiserver restart, VM reboot, OpenBao cached and cold outage behavior, upgrade/rollback, and load smoke. | WS11-T10, WS10-T08 |
+| WS11-T10C | P1 | done | Add local-only Harvester paired OpenBao, provider state, and etcd restore validation. | WS11-T10B, WS11-T12B |
+| WS11-T10D | P1 | done | Add local-only Harvester multi-control-plane kubeadm recovery topology and gate. | WS11-T10C |
+| WS11-T11 | P1 | done | Add OpenBao HA failover tests. | WS03-T01, WS11-T05B |
 | WS11-T11A | P0 | done | Add portable provider backend replacement e2e against OpenBao integrated raft storage. | WS11-T05B |
-| WS11-T12 | P1 | planned | Add DR restore tests. | WS10-T07 |
+| WS11-T12 | P1 | done | Add DR restore tests. | WS10-T07, WS11-T12A, WS11-T12B, WS11-T10C |
 | WS11-T12A | P0 | done | Add containerized OpenBao integrated raft snapshot restore e2e. | WS11-T11A |
 | WS11-T12B | P0 | done | Add Kind DR runbook e2e with OpenBao raft restore and provider state/config rehydration. | WS11-T06, WS11-T12A |
-| WS11-T13 | P0 | planned | Add exact-pinned Kubernetes `1.34.3` release-gate matrix row. | WS11-T06 |
-| WS11-T14 | P0 | planned | Add exact-pinned OpenBao `2.5.3` release-gate matrix row. | WS11-T05 |
-| WS11-T15 | P1 | planned | Add long-running Status polling test. | WS06-T02 |
+| WS11-T13 | P0 | done | Add exact-pinned Kubernetes `1.34.3` release-gate matrix row. | WS11-T06, WS00-T09 |
+| WS11-T14 | P0 | done | Add exact-pinned OpenBao `2.5.3` release-gate matrix row. | WS11-T05, WS00-T09 |
+| WS11-T15 | P1 | planned | Add dedicated long-running Status polling test; the load-soak lane already covers mixed sustained Status, Encrypt, and Decrypt traffic. | WS06-T02, WS11-T09A |
 | WS11-T16 | P1 | planned | Add future-candidate Kubernetes lanes only after exact versions are approved. | WS11-T13 |
 
 Acceptance criteria:
@@ -514,11 +518,13 @@ Implementation notes:
 - `test/fakes` owns reusable KMS v2 fake Transit, fake Status cache, and fake OpenBao auth/token clients for cross-package validation.
 - `test/kmsconformance` starts the real KMS v2 gRPC service over a filesystem Unix socket and exercises it through the Kubernetes KMS v2 protobuf client.
 - The KMS conformance suite verifies cached Status behavior, Status no-Transit-call behavior, `EncryptResponse.key_id == Status.key_id`, decrypt of encrypt output, and invalid decrypt rejection before Transit.
-- The OpenBao CI e2e environment bootstraps Transit, `disable_upsert`, a least-privilege provider policy, JWT auth with a generated RS256 test issuer, and a role exercised by the real auth manager.
+- The OpenBao CI e2e environment bootstraps Transit, `disable_upsert`, a least-privilege provider policy, JWT auth with a generated RS256 test issuer, configurable issuer/audience/subject bindings, and a role exercised by the real auth manager.
 - `test/e2e` has a containerized full-stack test that builds/runs the provider image against real OpenBao and validates KMS v2 Status, Encrypt, Decrypt, unknown-key rejection, and annotation tamper rejection from a second container over the shared Unix socket volume.
-- `test/e2e` has provider/OpenBao failure-mode tests for OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
+- `test/e2e` has OpenBao/JWT auth assertions for bound issuer, audience, and subject rejection plus pinned public-key signing-key rollover with bounded overlap and prune.
+- `test/e2e` has provider/OpenBao failure-mode tests for OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, provider re-login after signing-key rollover, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
 - `test/e2e` has a provider/OpenBao decrypt storm smoke test that performs concurrent KMS v2 Decrypt calls through the real provider image against real OpenBao.
 - `test/e2e` has a provider/OpenBao load-soak lane that runs sustained Status, Encrypt, and Decrypt traffic through the real provider/OpenBao path, fails on client-visible errors or high p95 latency, and checks Docker memory/PID growth across the run.
+- `test/e2e` has a provider/OpenBao HA failover lane that starts three integrated-raft OpenBao nodes, points the provider at a standby, writes ciphertext, removes the active node, waits for a surviving voter to become active, and verifies old ciphertext readback plus new KMS operations.
 - `test/e2e` has a provider/OpenBao rotation lane that runs OpenBao with integrated raft storage, writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies provider fail-closed behavior after the observed Transit version rollback.
 - `test/e2e` has a provider binary upgrade/rollback lane that builds distinct old/new provider images, verifies their version metadata differs, encrypts through the old image, upgrades the same state volume to the new image, verifies old and new ciphertext readback, rolls back to the old image, and verifies both ciphertexts remain decryptable.
 - `test/e2e` has a pinned Kind smoke lane for Kubernetes `1.34.3` that deploys the provider as a static pod, enables kube-apiserver KMS v2 encryption, verifies Secret create/read, verifies raw etcd storage uses the `k8s:enc:kms:v2:` envelope without plaintext, restarts kube-apiserver, and reads the Secret again.
@@ -528,6 +534,9 @@ Implementation notes:
 - `test/e2e` has a pinned Kind DR runbook lane that saves an OpenBao raft snapshot and provider node config/TLS/JWT/state backup, removes the provider static pod and local files, restores OpenBao into a fresh raft volume, rehydrates provider node files, restarts provider and kube-apiserver, and verifies Kubernetes Secret readback before and after replacement.
 - `test/deployment` stages the systemd and static-pod lab install scripts into temporary roots and verifies expected files, directories, modes, and setgid socket directory behavior without requiring host root privileges.
 - The local-only Harvester kubeadm VM harness is driven by `harvester_lab lab <step>`, deploys real Ubuntu VMs, bootstraps OpenBao plus two kubeadm control planes, wires systemd and static-pod provider deployments, and verifies raw etcd KMS v2 envelope storage. It is not part of public CI.
+- The Harvester kubeadm production gate is driven by `harvester_lab lab production-gate` and deliberately restarts providers, restarts kube-apiserver containers, reboots lab VMs, verifies OpenBao outage behavior for cached API server writes and cold post-restart writes, exercises provider upgrade/rollback, and runs a small KMS Secret load smoke against both kubeadm deployment modes. It is local-only and must not be added to public CI.
+- The Harvester multi-control-plane recovery topology is opt-in with `HARVESTER_ENABLE_MULTI_CONTROL_PLANE=true`. It adds three kubeadm control-plane VMs, joins them with real kubeadm control-plane join flow, wires the static-pod provider onto every control-plane node, and extends the local-only production gate with per-node provider restart, kube-apiserver restart, VM reboot, API-server readback, and raw etcd envelope checks.
+- The Harvester paired restore gate captures OpenBao file storage, provider state, and per-cluster etcd snapshots, mutates state after the backup, restores the paired artifacts, verifies pre-backup Secrets remain readable, and verifies post-backup Secrets are absent after restore.
 
 ## WS12: Security Hardening And Supply Chain
 
@@ -550,6 +559,9 @@ Goal: reduce operational and supply-chain risk before broader use.
 | WS12-T13 | P0 | done | Add release evidence pack and provenance index. | WS12-T06 |
 | WS12-T14 | P0 | done | Pin GitHub Actions and release tools by immutable version or commit. | WS00-T05 |
 | WS12-T15 | P1 | planned | Add reproducible build hardening beyond release gate. | WS12-T12 |
+| WS12-T16 | P0 | planned | Run first signed-artifact release gate and retain verification output. | WS12-T05 |
+| WS12-T17 | P0 | planned | Run first provenance verification gate against the expected workflow identity. | WS12-T06 |
+| WS12-T18 | P0 | planned | Publish or retain the first release evidence pack and provenance index from an actual release run. | WS12-T13 |
 
 Acceptance criteria:
 
@@ -566,7 +578,7 @@ Implementation notes:
 - The review found and remediated `WS12-SR-001`: `/run/openbao-kms` must not be group-writable because the socket access group should connect to `kms.sock`, not replace the socket path.
 - Secondary review remediated `WS12-SR-002` through `WS12-SR-007` across renewal increment, bootstrap probe grace, auth retry backoff, local JWT claim expectations, auth login timeout, and refresh-wait cancellation coverage.
 - `WS12-SR-008` remains a deferred low-severity OpenBao client-resilience follow-up for opt-in HTTP retry on transient upstream errors.
-- CI now commits `vendor/`, verifies vendor sync, runs license and vulnerability gates, performs Trivy filesystem and image scans, generates image SBOMs, signs and attests release evidence, and verifies byte reproducibility for release images, binaries, checksums, and SBOMs.
+- CI now commits `vendor/`, verifies vendor sync, runs license and vulnerability gates, performs Trivy filesystem and image scans, generates image SBOMs, includes release workflow scaffolding for signing, attestations, provenance index generation, and verifies byte reproducibility for release images, binaries, checksums, and SBOMs. The first actual signed artifacts, provenance verification output, and release evidence pack remain planned in WS12-T16 through WS12-T18.
 
 ## WS13: Documentation, Examples, And Release Process
 
@@ -574,13 +586,13 @@ Goal: keep documentation accurate as implementation decisions become concrete.
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS13-T01 | P0 | planned | Update docs with actual command flags after CLI implementation. | WS08-T01 |
-| WS13-T02 | P0 | planned | Add runnable OpenBao setup example. | WS03-T10 |
+| WS13-T01 | P0 | done | Update docs with actual command flags after CLI implementation. | WS08-T01 |
+| WS13-T02 | P0 | done | Add runnable OpenBao setup example. | WS03-T10 |
 | WS13-T03 | P0 | planned | Add v0.1 release notes and known limitations. | WS11-T06 |
-| WS13-T04 | P0 | planned | Add issue templates using workstream IDs. | WS00-T05 |
+| WS13-T04 | P0 | done | Add issue templates using workstream IDs. | WS00-T05 |
 | WS13-T05 | P1 | planned | Add production readiness guide after full gates pass. | WS11-T12 |
-| WS13-T06 | P1 | planned | Add upgrade guide. | WS10-T08 |
-| WS13-T07 | P1 | planned | Add rollback guide. | WS10-T08 |
+| WS13-T06 | P1 | done | Add upgrade guide. | WS10-T08 |
+| WS13-T07 | P1 | done | Add rollback guide. | WS10-T08 |
 | WS13-T08 | P1 | planned | Add distro-specific deployment guides after testing. | WS11-T10 |
 | WS13-T09 | P2 | planned | Add architecture diagrams generated from source. | WS05-T02 |
 | WS13-T10 | P0 | done | Add CI and supply-chain implementation docs after workflows exist. | WS12-T13 |
@@ -591,6 +603,13 @@ Acceptance criteria:
 - v0.1 docs clearly state engineering preview.
 - Compatibility claims match tested matrix.
 - Release notes call out migration and wire-format risks.
+
+Implementation notes:
+
+- CLI docs now describe the implemented text output and root flags only; stable JSON output remains WS08-T11.
+- The runnable OpenBao setup example lives in the getting-started and Transit policy reference docs.
+- Issue templates prompt for related workstream IDs.
+- Upgrade and rollback guidance lives in the operations upgrade runbook. Distro-specific deployment guidance remains planned until explicit distro hardening notes, including SELinux/AppArmor, are validated.
 
 ## Dependency Map
 
@@ -653,10 +672,10 @@ This checklist duplicates the release gates in implementation terms:
 - Decrypt storm smoke coverage passes; decrypt micro-batching remains disabled by default until benchmarking justifies enabling it.
 - Rotation v1 to v2 works without key ID flip-flop.
 - Old ciphertext remains decryptable after rotation.
-- JWT expiry/re-login path works.
+- JWT expiry/re-login, role claim binding, and signing-key rollover paths work.
 - OpenBao outage fails closed.
 - `doctor` catches bad socket, bad JWT, bad policy, and bad Transit key config.
 - Logs and metrics redaction tests pass.
 - Static pod manifest does not rely on API objects.
 - systemd unit ordering is validated in kubeadm-style test.
-- Supply-chain release gates produce SBOM, signatures, attestations, reproducibility evidence, and provenance index.
+- Supply-chain release gates produce SBOM, vulnerability/license results, and byte reproducibility evidence; first signed artifacts, provenance verification output, and release evidence publication remain WS12-T16 through WS12-T18.

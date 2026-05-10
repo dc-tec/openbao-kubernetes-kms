@@ -206,7 +206,8 @@ Nightly runs:
 - the full pinned `1.34.3` Kind e2e,
 - OpenBao `2.5.3` CI e2e tests,
 - failure injection,
-- long-running Status polling,
+- OpenBao HA failover,
+- provider load-soak with sustained Status, Encrypt, and Decrypt traffic,
 - decrypt storm benchmark,
 - supply-chain checks,
 - optional kubeadm VM smoke when infrastructure is available.
