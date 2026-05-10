@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://nfpm.goreleaser.com/schema.json
+name: bao-kms-provider
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${VERSION}
+release: ${NFPM_RELEASE}
+version_schema: semver
+section: admin
+priority: optional
+maintainer: OpenBao Kubernetes KMS maintainers
+description: |
+  Kubernetes KMS v2 provider backed by OpenBao Transit.
+vendor: dc-tec
+homepage: https://github.com/dc-tec/openbao-kubernetes-kms
+license: Apache-2.0
+contents:
+  - src: ${PACKAGE_BINARY}
+    dst: /usr/bin/bao-kms-provider
+    expand: true
+    file_info:
+      owner: root
+      group: root
+      mode: 0755
+  - src: deploy/systemd/bao-kms-provider.service
+    dst: /usr/lib/systemd/system/bao-kms-provider.service
+    file_info:
+      owner: root
+      group: root
+      mode: 0644
+  - src: deploy/package/linux/sysusers.d/openbao-kms.conf
+    dst: /usr/lib/sysusers.d/openbao-kms.conf
+    file_info:
+      owner: root
+      group: root
+      mode: 0644
+  - src: deploy/package/linux/tmpfiles.d/openbao-kms.conf
+    dst: /usr/lib/tmpfiles.d/openbao-kms.conf
+    file_info:
+      owner: root
+      group: root
+      mode: 0644
+  - src: deploy/config/provider-systemd.yaml
+    dst: /usr/share/doc/bao-kms-provider/examples/provider-systemd.yaml
+    file_info:
+      owner: root
+      group: root
+      mode: 0644
+  - src: deploy/kubernetes/encryption-config.yaml
+    dst: /usr/share/doc/bao-kms-provider/examples/encryption-config.yaml
+    file_info:
+      owner: root
+      group: root
+      mode: 0644
+  - src: deploy/package/linux/README.md
+    dst: /usr/share/doc/bao-kms-provider/README.md
+    file_info:
+      owner: root
+      group: root
+      mode: 0644
+  - src: LICENSE
+    dst: /usr/share/doc/bao-kms-provider/LICENSE
+    file_info:
+      owner: root
+      group: root
+      mode: 0644
+scripts:
+  postinstall: deploy/package/linux/scripts/postinstall.sh
+  postremove: deploy/package/linux/scripts/postremove.sh

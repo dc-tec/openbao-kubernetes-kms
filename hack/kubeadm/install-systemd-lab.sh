@@ -32,7 +32,7 @@ if [ -z "$ROOT" ]; then
 	require_root
 fi
 
-install_file "$BINARY" /usr/local/bin/bao-kms-provider 0755 root root
+install_file "$BINARY" /usr/bin/bao-kms-provider 0755 root root
 install_file "$CONFIG" /etc/openbao-kms/config.yaml 0640 root openbao-kms
 install_file "$SERVICE_FILE" /etc/systemd/system/bao-kms-provider.service 0644 root root
 install_file "$SYSUSERS_FILE" /usr/lib/sysusers.d/openbao-kms.conf 0644 root root

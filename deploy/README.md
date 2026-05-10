@@ -7,7 +7,9 @@ WS10 deployment and packaging samples:
 - `systemd/bao-kms-provider.service`: hardened sample systemd unit.
 - `static-pod/bao-kms-provider.yaml`: kubeadm-compatible static pod sample.
 - `kubernetes/encryption-config.yaml`: Kubernetes KMS v2 `EncryptionConfiguration` sample.
-- `package/linux`: Linux `sysusers.d` and `tmpfiles.d` package snippets.
+- `package/linux`: nFPM, `sysusers.d`, `tmpfiles.d`, and maintainer-script inputs for `.deb` and `.rpm` packages.
+- `package/bundles`: deterministic tarball bundle README inputs for systemd and static-pod release bundles.
+- `harvester/openbao-kms-lab`: local-only Harvester VM lab chart for kubeadm release-gate setup.
 - `opentofu/openbao-kubernetes-kms`: OpenTofu module skeleton for OpenBao Transit engine, key, and provider policy setup.
 
 Replace sample OpenBao addresses, identity-bearing fields, image digests, and host socket GIDs before deployment.

@@ -19,8 +19,8 @@ mkdir -p "$BACKUP_DIR"
 case "$MODE" in
 systemd)
 	bao-kms-provider doctor --config "$CONFIG"
-	cp -p /usr/local/bin/bao-kms-provider "$BACKUP_DIR/bao-kms-provider.previous"
-	install -m 0755 -o root -g root "$BINARY" /usr/local/bin/bao-kms-provider
+	cp -p /usr/bin/bao-kms-provider "$BACKUP_DIR/bao-kms-provider.previous"
+	install -m 0755 -o root -g root "$BINARY" /usr/bin/bao-kms-provider
 	systemctl restart "$SERVICE"
 	;;
 static-pod)

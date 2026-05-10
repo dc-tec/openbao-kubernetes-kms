@@ -20,7 +20,7 @@ No published release exists yet. The repository now includes sample build and de
 Recommended paths:
 
 ```text
-/usr/local/bin/bao-kms-provider
+/usr/bin/bao-kms-provider
 /etc/openbao-kms/config.yaml
 /etc/openbao-kms/tls/ca.crt
 /var/lib/openbao-kms/identity.jwt
@@ -30,7 +30,7 @@ Recommended paths:
 Recommended ownership:
 
 ```text
-/usr/local/bin/bao-kms-provider    root:root 0755
+/usr/bin/bao-kms-provider          root:root 0755
 /etc/openbao-kms                       root:root 0750
 /etc/openbao-kms/config.yaml           root:openbao-kms 0640
 /etc/openbao-kms/tls/ca.crt            root:root 0644

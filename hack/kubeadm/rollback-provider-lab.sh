@@ -16,7 +16,7 @@ case "$MODE" in
 systemd)
 	test -f "$BACKUP_DIR/bao-kms-provider.previous"
 	bao-kms-provider doctor --config "$CONFIG"
-	install -m 0755 -o root -g root "$BACKUP_DIR/bao-kms-provider.previous" /usr/local/bin/bao-kms-provider
+	install -m 0755 -o root -g root "$BACKUP_DIR/bao-kms-provider.previous" /usr/bin/bao-kms-provider
 	systemctl restart "$SERVICE"
 	;;
 static-pod)

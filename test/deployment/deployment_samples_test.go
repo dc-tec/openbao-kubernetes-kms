@@ -149,7 +149,7 @@ func TestSystemdAndPackageSamplesUseResolvedIdentity(t *testing.T) {
 		"User=openbao-kms",
 		"Group=openbao-kms",
 		"SupplementaryGroups=openbao-kms-socket",
-		"ExecStart=/usr/local/bin/bao-kms-provider serve --config /etc/openbao-kms/config.yaml",
+		"ExecStart=/usr/bin/bao-kms-provider serve --config /etc/openbao-kms/config.yaml",
 		"ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state",
 		"NoNewPrivileges=true",
 	}
@@ -178,6 +178,27 @@ func TestSystemdAndPackageSamplesUseResolvedIdentity(t *testing.T) {
 	} {
 		if !strings.Contains(tmpfiles, want) {
 			t.Fatalf("tmpfiles sample missing %q", want)
+		}
+	}
+
+	nfpm := readSample(t, "deploy/package/linux/nfpm.yaml")
+	for _, want := range []string{
+		"name: bao-kms-provider",
+		"arch: ${NFPM_ARCH}",
+		"dst: /usr/bin/bao-kms-provider",
+		"dst: /usr/lib/systemd/system/bao-kms-provider.service",
+		"postinstall: deploy/package/linux/scripts/postinstall.sh",
+		"postremove: deploy/package/linux/scripts/postremove.sh",
+	} {
+		if !strings.Contains(nfpm, want) {
+			t.Fatalf("nFPM config missing %q", want)
+		}
+	}
+
+	postinstall := readSample(t, "deploy/package/linux/scripts/postinstall.sh")
+	for _, forbidden := range []string{"systemctl enable", "systemctl start"} {
+		if strings.Contains(postinstall, forbidden) {
+			t.Fatalf("package postinstall must not run %q", forbidden)
 		}
 	}
 }
@@ -236,7 +257,7 @@ func TestInstallScriptsStageSystemdAndStaticPodLayouts(t *testing.T) {
 		"ROOT=" + systemdRoot,
 		"BINARY=" + binaryPath,
 	})
-	requirePathMode(t, systemdRoot, "/usr/local/bin/bao-kms-provider", 0o755)
+	requirePathMode(t, systemdRoot, "/usr/bin/bao-kms-provider", 0o755)
 	requirePathMode(t, systemdRoot, "/etc/openbao-kms/config.yaml", 0o640)
 	requirePathMode(t, systemdRoot, "/etc/systemd/system/bao-kms-provider.service", 0o644)
 	requirePathMode(t, systemdRoot, "/usr/lib/sysusers.d/openbao-kms.conf", 0o644)

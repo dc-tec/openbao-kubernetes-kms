@@ -17,7 +17,8 @@ No public release exists for v0.1 yet. The repository ships sample build and dep
 - `deploy/systemd/bao-kms-provider.service` systemd unit,
 - `deploy/static-pod/bao-kms-provider.yaml` static pod manifest,
 - `deploy/kubernetes/encryption-config.yaml` API server `EncryptionConfiguration` sample,
-- `deploy/package/linux` package layout snippets.
+- `deploy/package/linux` native package inputs,
+- `deploy/package/bundles` release bundle inputs.
 
 For local builds during development, see [Development: Contributing](/development/contributing/).
 
@@ -27,8 +28,10 @@ The provider ships in two forms.
 
 | Form | Use | Details |
 |---|---|---|
-| Linux binary | systemd deployment | Tarball with checksum, signature, and SBOM in the release assets. |
-| Container image | static-pod deployment | Distroless non-root image, runs as `65532:65532`, pinned to a base image digest in `.ci/versions.yaml`. |
+| Native package | systemd deployment | `.deb` or `.rpm` with systemd unit, sysusers, tmpfiles, examples, checksum, signature, and attestation. |
+| Linux binary tarball | systemd deployment fallback | Deterministic tarball with binary, systemd metadata, examples, checksum, signature, and attestation. |
+| Static-pod bundle | static-pod deployment | Deterministic tarball with static-pod manifest, provider config sample, encryption config, image reference, checksum, signature, and attestation. |
+| Container image | static-pod runtime | Distroless non-root image, runs as `65532:65532`, pinned to a base image digest in `.ci/versions.yaml`. |
 
 The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) once the artifact is in place.
 
@@ -55,7 +58,7 @@ For the full evidence catalog and supply-chain controls behind these artifacts, 
 Recommended host layout:
 
 ```text
-/usr/local/bin/bao-kms-provider
+/usr/bin/bao-kms-provider
 /etc/openbao-kms/config.yaml
 /etc/openbao-kms/tls/ca.crt
 /var/lib/openbao-kms/identity.jwt
@@ -65,7 +68,7 @@ Recommended host layout:
 Recommended ownership:
 
 ```text
-/usr/local/bin/bao-kms-provider    root:root                       0755
+/usr/bin/bao-kms-provider          root:root                       0755
 /etc/openbao-kms                   root:root                       0750
 /etc/openbao-kms/config.yaml       root:openbao-kms                0640
 /etc/openbao-kms/tls/ca.crt        root:root                       0644
