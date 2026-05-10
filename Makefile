@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-load-soak-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-provider-rotation-openbao-ci test-e2e-provider-upgrade-rollback-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback test-e2e-kind-dr-runbook tidy verify-tidy ci-core docs-check versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
+.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-load-soak-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-provider-rotation-openbao-ci test-e2e-provider-upgrade-rollback-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback test-e2e-kind-dr-runbook tidy verify-tidy ci-core docs-check docs-deps docs-build docs-serve versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
 
 GO_VERSION := $(shell cat .go-version)
 GO ?= go
@@ -52,6 +52,10 @@ STATICCHECK_VERSION ?= v0.7.0
 GOVULNCHECK_VERSION ?= v1.2.0
 GOLANGCI_LINT_VERSION ?= v2.11.4
 GINKGO_VERSION ?= v2.28.3
+HUGO_VERSION ?= v0.159.1
+HUGO_RUN := GOFLAGS="-mod=mod" "$(GO)" run github.com/gohugoio/hugo@$(HUGO_VERSION)
+DOCS_BASE_URL ?= https://dc-tec.github.io/openbao-kms-provider/
+DOCS_OUT ?= public
 
 help:
 	@printf '%s\n' 'Targets:'
@@ -82,6 +86,9 @@ help:
 	@printf '%s\n' '  test-e2e-kind-dr-runbook Run pinned Kind DR restore runbook tests'
 	@printf '%s\n' '  ci-core         Run the local core quality gate'
 	@printf '%s\n' '  docs-check      Check docs for known formatting artifacts'
+	@printf '%s\n' '  docs-deps       Install the pinned Hugo binary locally'
+	@printf '%s\n' '  docs-build      Build the Hugo docs site into public/'
+	@printf '%s\n' '  docs-serve      Serve the docs site locally on http://localhost:1313/'
 	@printf '%s\n' '  install-go-tools Install pinned optional Go quality tools into bin/'
 	@printf '%s\n' '  semgrep-ci      Run Semgrep rule tests and blocking scan when semgrep is available'
 	@printf '%s\n' '  versions-check  Check central version policy exists'
@@ -285,9 +292,19 @@ deployment-samples-check:
 ci-core: verify-tidy lint vulncheck test test-race build release-artifacts
 
 docs-check:
-	@! grep -R -n $$(printf '\357\277\274') README.md docs
-	@! grep -R -n '⸻' README.md docs
-	@! grep -R -n 'openbao-kms-provider' README.md docs
+	@! grep -R -n --exclude-dir=_archive $$(printf '\357\277\274') README.md docs
+	@! grep -R -n --exclude-dir=_archive '⸻' README.md docs
+	@! grep -R -n --exclude-dir=_archive 'openbao-kms-provider' README.md docs
+	@! grep -R -n --exclude-dir=_archive '—' README.md docs
+
+docs-deps:
+	@GOFLAGS="-mod=mod" "$(GO)" install github.com/gohugoio/hugo@$(HUGO_VERSION)
+
+docs-build:
+	@$(HUGO_RUN) --source . --baseURL "$(DOCS_BASE_URL)" --destination "$(DOCS_OUT)" --gc --minify
+
+docs-serve:
+	@$(HUGO_RUN) server --source . --baseURL http://localhost:1313/
 
 test-ast:
 	@if command -v "$(AST_GREP)" >/dev/null 2>&1; then \

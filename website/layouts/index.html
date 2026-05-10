@@ -1,0 +1,138 @@
+{{ define "main" }}
+  <main class="home">
+    <section class="home-hero">
+      <div class="home-hero__inner">
+        <div class="home-hero__content">
+          <p class="section-label">{{ .Params.hero_label | default "Documentation" }}</p>
+          <h1>{{ .Title }}</h1>
+          <div class="home-hero__lead">
+            {{ .Content }}
+          </div>
+          <div class="home-hero__actions">
+            <a class="button button--primary" href="{{ relURL (strings.TrimPrefix "/" .Params.primary_href) }}">
+              {{ .Params.primary_label }}
+            </a>
+            <a class="button button--secondary" href="{{ relURL (strings.TrimPrefix "/" .Params.secondary_href) }}">
+              {{ .Params.secondary_label }}
+            </a>
+          </div>
+        </div>
+
+        <div class="home-hero__visual" aria-hidden="true">
+          <img
+            class="home-hero__mark"
+            src="{{ relURL (site.Params.heroMarkPath | default "brand/openbao-color.svg") }}"
+            alt=""
+          >
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="home-section__header">
+        <p class="section-label">Workflow</p>
+        <h2>Read In The Order You Operate</h2>
+      </div>
+      <ol class="workflow-list">
+        <li>
+          <span class="workflow-list__step">01</span>
+          <div>
+            <h3><a href="{{ relURL "getting-started/overview/" }}">Check Fit</a></h3>
+            <p>Confirm that Kubernetes KMS v2 is the right encryption layer for the resources you care about, and that the OpenBao Transit model matches your trust boundary and version envelope.</p>
+            <div class="workflow-list__links">
+              <a href="{{ relURL "getting-started/overview/" }}">Overview</a>
+              <a href="{{ relURL "security/threat-model/" }}">Threat Model</a>
+              <a href="{{ relURL "reference/compatibility/" }}">Compatibility</a>
+            </div>
+          </div>
+        </li>
+        <li>
+          <span class="workflow-list__step">02</span>
+          <div>
+            <h3><a href="{{ relURL "getting-started/openbao-setup/" }}">Set Up OpenBao</a></h3>
+            <p>Provision a Transit mount, an aes256-gcm96 key, a least-privilege policy, and JWT authentication for the Kubernetes API server identity.</p>
+            <div class="workflow-list__links">
+              <a href="{{ relURL "getting-started/openbao-setup/" }}">OpenBao Setup</a>
+              <a href="{{ relURL "security/auth-model/" }}">Auth Model</a>
+              <a href="{{ relURL "reference/transit-policy-examples/" }}">Transit Policy Examples</a>
+            </div>
+          </div>
+        </li>
+        <li>
+          <span class="workflow-list__step">03</span>
+          <div>
+            <h3><a href="{{ relURL "getting-started/install/" }}">Install And Wire The Provider</a></h3>
+            <p>Install <code>bao-kms-provider</code>, choose between systemd and static-pod deployment, and write the <code>EncryptionConfiguration</code> that the Kubernetes API server consumes.</p>
+            <div class="workflow-list__links">
+              <a href="{{ relURL "getting-started/install/" }}">Install</a>
+              <a href="{{ relURL "deployment/choosing-a-model/" }}">Choosing A Model</a>
+              <a href="{{ relURL "getting-started/kubernetes-encryption-config/" }}">EncryptionConfiguration</a>
+            </div>
+          </div>
+        </li>
+        <li>
+          <span class="workflow-list__step">04</span>
+          <div>
+            <h3><a href="{{ relURL "getting-started/first-encrypt/" }}">Verify End-To-End</a></h3>
+            <p>Run the first-encrypt smoke test, confirm key_id stability and AAD shape, and exercise the observability surface before relying on the provider in production.</p>
+            <div class="workflow-list__links">
+              <a href="{{ relURL "getting-started/first-encrypt/" }}">First Encrypt</a>
+              <a href="{{ relURL "reference/key-id-and-aad/" }}">Key ID And AAD</a>
+              <a href="{{ relURL "reference/observability/" }}">Observability</a>
+            </div>
+          </div>
+        </li>
+        <li>
+          <span class="workflow-list__step">05</span>
+          <div>
+            <h3><a href="{{ relURL "operations/" }}">Operate Safely</a></h3>
+            <p>Run Transit key rotation, recover from OpenBao or etcd loss, upgrade the provider with rollback in mind, and consult the failure-mode catalog when something breaks.</p>
+            <div class="workflow-list__links">
+              <a href="{{ relURL "operations/rotation/" }}">Rotation</a>
+              <a href="{{ relURL "operations/disaster-recovery/" }}">Disaster Recovery</a>
+              <a href="{{ relURL "operations/troubleshooting/" }}">Troubleshooting</a>
+            </div>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="home-section">
+      <div class="home-section__header">
+        <p class="section-label">Sections</p>
+        <h2>Documentation Map</h2>
+      </div>
+      <div class="home-directory">
+        {{ range site.Home.Sections.ByWeight }}
+          <a class="home-directory__item" href="{{ .RelPermalink }}">
+            <span class="home-directory__title">{{ partial "page_title.html" . }}</span>
+            {{ with partial "page_description.html" . }}
+              <span class="home-directory__summary">{{ . }}</span>
+            {{ end }}
+          </a>
+        {{ end }}
+      </div>
+    </section>
+
+    <section class="home-section home-section--accent">
+      <div class="home-section__header">
+        <p class="section-label">Reference</p>
+        <h2>Support, Security, And Internals</h2>
+      </div>
+      <div class="home-triad">
+        <a href="{{ relURL "reference/" }}">
+          <span>Reference</span>
+          <p>CLI behavior, configuration shape, KMS v2 contract, key_id and AAD format, observability surface, and Transit policy boundaries.</p>
+        </a>
+        <a href="{{ relURL "security/" }}">
+          <span>Security</span>
+          <p>Threat model, hardening, JWT-first authentication, decrypt validation, and the security review record for each workstream.</p>
+        </a>
+        <a href="{{ relURL "architecture/" }}">
+          <span>Architecture</span>
+          <p>Component model, OpenBao Transit key design, rotation invariants, failure-mode catalog, and prior-art comparison.</p>
+        </a>
+      </div>
+    </section>
+  </main>
+{{ end }}
