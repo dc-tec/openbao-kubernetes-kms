@@ -202,8 +202,10 @@ func appendStringAttr(attrs []slog.Attr, key string, value string) []slog.Attr {
 	return append(attrs, logging.String(key, value))
 }
 
-var _ kmsv2.Observer = observability{}
-var _ openbao.RequestObserver = observability{}
-var _ openbao.DecryptBatchObserver = observability{}
-var _ auth.Observer = observability{}
-var _ status.ProbeObserver = observability{}
+var (
+	_ kmsv2.Observer               = observability{}
+	_ openbao.RequestObserver      = observability{}
+	_ openbao.DecryptBatchObserver = observability{}
+	_ auth.Observer                = observability{}
+	_ status.ProbeObserver         = observability{}
+)

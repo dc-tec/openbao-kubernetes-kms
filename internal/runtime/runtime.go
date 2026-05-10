@@ -37,10 +37,8 @@ const (
 	healthIdleTimeout       = 30 * time.Second
 )
 
-var (
-	// ErrInvalidConfig identifies invalid runtime options.
-	ErrInvalidConfig = errors.New("runtime config invalid")
-)
+// ErrInvalidConfig identifies invalid runtime options.
+var ErrInvalidConfig = errors.New("runtime config invalid")
 
 // Options controls runtime construction.
 type Options struct {
