@@ -1,0 +1,52 @@
+namespace: default
+
+network:
+  name: default/vm4000
+
+image:
+  namespace: default
+  name: REPLACE_WITH_HARVESTER_IMAGE_NAME
+  storageClassName: ""
+
+cloudInit:
+  username: ubuntu
+  sshAuthorizedKeys: []
+  packageUpdate: true
+  mtu: 1350
+  packages:
+    - apt-transport-https
+    - ca-certificates
+    - conntrack
+    - curl
+    - ebtables
+    - ethtool
+    - iproute2
+    - iptables
+    - jq
+    - net-tools
+    - openssl
+    - qemu-guest-agent
+    - socat
+
+vmDefaults:
+  runStrategy: RerunOnFailure
+  osType: linux
+  cpu: 4
+  memoryGi: 8
+  diskSizeGi: 80
+  diskBus: virtio
+  machineType: q35
+
+vms:
+  - name: obk-openbao-1
+    role: openbao
+    hostname: obk-openbao-1
+    cpu: 2
+    memoryGi: 4
+    diskSizeGi: 50
+  - name: obk-kubeadm-systemd-1
+    role: kubeadm-systemd
+    hostname: obk-kubeadm-systemd-1
+  - name: obk-kubeadm-static-1
+    role: kubeadm-static
+    hostname: obk-kubeadm-static-1

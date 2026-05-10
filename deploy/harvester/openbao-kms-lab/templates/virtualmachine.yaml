@@ -1,0 +1,109 @@
+{{- range .Values.vms }}
+{{- $cpu := default $.Values.vmDefaults.cpu .cpu -}}
+{{- $memoryGi := default $.Values.vmDefaults.memoryGi .memoryGi -}}
+{{- $diskSizeGi := default $.Values.vmDefaults.diskSizeGi .diskSizeGi -}}
+{{- $diskBus := default $.Values.vmDefaults.diskBus .diskBus -}}
+{{- $machineType := default $.Values.vmDefaults.machineType .machineType -}}
+{{- $hostname := default .name .hostname -}}
+{{- $storageClass := default (printf "longhorn-%s" $.Values.image.name) $.Values.image.storageClassName -}}
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+{{ include "openbao-kms-harvester-lab.vmLabels" (dict "root" $ "vm" .) | indent 4 }}
+    harvesterhci.io/creator: harvester
+    harvesterhci.io/os: {{ default $.Values.vmDefaults.osType .osType | quote }}
+  annotations:
+    harvesterhci.io/volumeClaimTemplates: |
+      [
+        {
+          "metadata": {
+            "name": "{{ .name }}-disk-0",
+            "annotations": {
+              "harvesterhci.io/imageId": "{{ $.Values.image.namespace }}/{{ $.Values.image.name }}",
+              "openbao-kms.dev/lab-release": "{{ $.Release.Name }}"
+            },
+            "labels": {
+              "app.kubernetes.io/name": "{{ include "openbao-kms-harvester-lab.name" $ }}",
+              "app.kubernetes.io/instance": "{{ $.Release.Name }}",
+              "openbao-kms.dev/lab-role": "{{ .role }}",
+              "vm-name": "{{ .name }}"
+            }
+          },
+          "spec": {
+            "accessModes": ["ReadWriteMany"],
+            "resources": {
+              "requests": {
+                "storage": "{{ $diskSizeGi }}Gi"
+              }
+            },
+            "volumeMode": "Block",
+            "storageClassName": "{{ $storageClass }}"
+          },
+          "deletionPolicy": "Delete"
+        }
+      ]
+    network.harvesterhci.io/ips: '[]'
+spec:
+  runStrategy: {{ default $.Values.vmDefaults.runStrategy .runStrategy }}
+  template:
+    metadata:
+      labels:
+{{ include "openbao-kms-harvester-lab.vmLabels" (dict "root" $ "vm" .) | indent 8 }}
+        harvesterhci.io/vmName: {{ .name | quote }}
+        harvesterhci.io/creator: harvester
+        harvesterhci.io/os: {{ default $.Values.vmDefaults.osType .osType | quote }}
+        vm.kubevirt.io/name: {{ .name | quote }}
+    spec:
+      domain:
+        machine:
+          type: {{ $machineType | quote }}
+        cpu:
+          cores: {{ $cpu }}
+          sockets: 1
+          threads: 1
+        devices:
+          interfaces:
+            - bridge: {}
+              model: virtio
+              name: default
+          disks:
+            - name: disk-0
+              disk:
+                bus: {{ $diskBus }}
+              bootOrder: 1
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+        memory:
+          guest: {{ $memoryGi }}Gi
+        resources:
+          limits:
+            memory: {{ $memoryGi }}Gi
+            cpu: {{ $cpu | quote }}
+        features:
+          acpi:
+            enabled: true
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
+      evictionStrategy: LiveMigrate
+      hostname: {{ $hostname | quote }}
+      networks:
+        - name: default
+          multus:
+            networkName: {{ $.Values.network.name | quote }}
+      volumes:
+        - name: disk-0
+          persistentVolumeClaim:
+            claimName: {{ .name }}-disk-0
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            secretRef:
+              name: {{ .name }}-cloudinit
+      terminationGracePeriodSeconds: 120
+{{ end }}

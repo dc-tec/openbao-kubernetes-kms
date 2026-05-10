@@ -452,6 +452,7 @@ Implementation notes:
 - The container image uses a pinned distroless non-root runtime base and runs as `65532:65532`.
 - `server.socketGroup` accepts a group name or decimal GID; static pod samples use a numeric GID to avoid host group-name dependencies inside the image.
 - Linux package snippets use separate `openbao-kms` and `openbao-kms-socket` groups per [ADR 0012](../adr/0012-deployment-identity-and-image.md).
+- Release distribution now builds native `.deb` and `.rpm` packages for systemd hosts, deterministic systemd tarball fallbacks, and a deterministic static-pod host-filesystem bundle. Helm remains intentionally unsupported for protecting the same cluster API server.
 
 Test requirements:
 
@@ -482,7 +483,7 @@ Goal: build confidence through layered tests before production claims.
 | WS11-T08 | P0 | done | Add rotation tests. | WS06-T03 |
 | WS11-T09 | P0 | done | Add decrypt storm performance smoke test. | WS05-T05 |
 | WS11-T09A | P0 | done | Add provider/OpenBao load-soak e2e with latency/error/resource checks. | WS11-T09 |
-| WS11-T10 | P1 | planned | Add kubeadm VM e2e. | WS10-T01, WS10-T02 |
+| WS11-T10 | P1 | done | Add kubeadm VM e2e. | WS10-T01, WS10-T02 |
 | WS11-T10A | P0 | done | Add systemd and static-pod install script staging checks. | WS10-T07 |
 | WS11-T11 | P1 | planned | Add OpenBao HA failover tests. | WS03-T01 |
 | WS11-T11A | P0 | done | Add portable provider backend replacement e2e against OpenBao integrated raft storage. | WS11-T05B |
@@ -526,6 +527,7 @@ Implementation notes:
 - `test/e2e` has a pinned Kind static-pod upgrade/rollback lane that mutates the provider static pod manifest, waits for kubelet restart, verifies old and new Secret readback, restores the previous manifest, and verifies readback after provider and kube-apiserver restart.
 - `test/e2e` has a pinned Kind DR runbook lane that saves an OpenBao raft snapshot and provider node config/TLS/JWT/state backup, removes the provider static pod and local files, restores OpenBao into a fresh raft volume, rehydrates provider node files, restarts provider and kube-apiserver, and verifies Kubernetes Secret readback before and after replacement.
 - `test/deployment` stages the systemd and static-pod lab install scripts into temporary roots and verifies expected files, directories, modes, and setgid socket directory behavior without requiring host root privileges.
+- The local-only Harvester kubeadm VM harness is driven by `harvester_lab lab <step>`, deploys real Ubuntu VMs, bootstraps OpenBao plus two kubeadm control planes, wires systemd and static-pod provider deployments, and verifies raw etcd KMS v2 envelope storage. It is not part of public CI.
 
 ## WS12: Security Hardening And Supply Chain
 
@@ -533,20 +535,20 @@ Goal: reduce operational and supply-chain risk before broader use.
 
 | ID | Priority | Status | Task | Dependencies |
 |---|---|---|---|---|
-| WS12-T01 | P0 | planned | Add static security checks. | WS00-T05 |
-| WS12-T02 | P0 | planned | Add SBOM generation. | WS10-T05 |
-| WS12-T03 | P0 | planned | Add vulnerability scanning. | WS10-T05 |
-| WS12-T04 | P0 | planned | Add dependency license check. | WS00-T06 |
-| WS12-T05 | P0 | planned | Add artifact signing. | WS00-T07 |
-| WS12-T06 | P0 | planned | Add provenance generation and verification. | WS12-T05 |
+| WS12-T01 | P0 | done | Add static security checks. | WS00-T05 |
+| WS12-T02 | P0 | done | Add SBOM generation. | WS10-T05 |
+| WS12-T03 | P0 | done | Add vulnerability scanning. | WS10-T05 |
+| WS12-T04 | P0 | done | Add dependency license check. | WS00-T06 |
+| WS12-T05 | P0 | done | Add artifact signing. | WS00-T07 |
+| WS12-T06 | P0 | done | Add provenance generation and verification. | WS12-T05 |
 | WS12-T07 | P1 | done | Perform security review of key ID/AAD. | WS02-T06 |
 | WS12-T08 | P1 | done | Perform security review of socket handling. | WS07-T03 |
 | WS12-T09 | P1 | done | Perform security review of JWT/token lifecycle. | WS04-T10 |
 | WS12-T10 | P1 | done | Perform threat model review with implementation evidence. | WS11-T07 |
-| WS12-T11 | P1 | planned | Add fuzzing to CI or scheduled job. | WS02-T09 |
-| WS12-T12 | P0 | planned | Add release byte reproducibility check. | WS00-T08, WS12-T02 |
-| WS12-T13 | P0 | planned | Add release evidence pack and provenance index. | WS12-T06 |
-| WS12-T14 | P0 | planned | Pin GitHub Actions and release tools by immutable version or commit. | WS00-T05 |
+| WS12-T11 | P1 | done | Add fuzzing to CI or scheduled job. | WS02-T09 |
+| WS12-T12 | P0 | done | Add release byte reproducibility check. | WS00-T08, WS12-T02 |
+| WS12-T13 | P0 | done | Add release evidence pack and provenance index. | WS12-T06 |
+| WS12-T14 | P0 | done | Pin GitHub Actions and release tools by immutable version or commit. | WS00-T05 |
 | WS12-T15 | P1 | planned | Add reproducible build hardening beyond release gate. | WS12-T12 |
 
 Acceptance criteria:
@@ -564,6 +566,7 @@ Implementation notes:
 - The review found and remediated `WS12-SR-001`: `/run/openbao-kms` must not be group-writable because the socket access group should connect to `kms.sock`, not replace the socket path.
 - Secondary review remediated `WS12-SR-002` through `WS12-SR-007` across renewal increment, bootstrap probe grace, auth retry backoff, local JWT claim expectations, auth login timeout, and refresh-wait cancellation coverage.
 - `WS12-SR-008` remains a deferred low-severity OpenBao client-resilience follow-up for opt-in HTTP retry on transient upstream errors.
+- CI now commits `vendor/`, verifies vendor sync, runs license and vulnerability gates, performs Trivy filesystem and image scans, generates image SBOMs, signs and attests release evidence, and verifies byte reproducibility for release images, binaries, checksums, and SBOMs.
 
 ## WS13: Documentation, Examples, And Release Process
 
@@ -580,7 +583,7 @@ Goal: keep documentation accurate as implementation decisions become concrete.
 | WS13-T07 | P1 | planned | Add rollback guide. | WS10-T08 |
 | WS13-T08 | P1 | planned | Add distro-specific deployment guides after testing. | WS11-T10 |
 | WS13-T09 | P2 | planned | Add architecture diagrams generated from source. | WS05-T02 |
-| WS13-T10 | P0 | planned | Add CI and supply-chain implementation docs after workflows exist. | WS12-T13 |
+| WS13-T10 | P0 | done | Add CI and supply-chain implementation docs after workflows exist. | WS12-T13 |
 
 Acceptance criteria:
 
