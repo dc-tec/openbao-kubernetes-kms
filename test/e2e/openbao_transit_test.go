@@ -75,7 +75,96 @@ var _ = Describe("OpenBao Transit CI", Label(framework.LabelOpenBao, framework.L
 		Expect(err).NotTo(HaveOccurred())
 		validateOpenBaoTransit(ctx, client, environment.TransitMount, environment.TransitKey)
 	}, SpecTimeout(90*time.Second))
+
+	It("rejects JWTs that violate role claim bindings", func(ctx SpecContext) {
+		if !framework.OpenBaoCIEnabled() {
+			Skip("E2E_OPENBAO_CI=true is required")
+		}
+
+		environment, err := framework.StartOpenBaoEnvironment(ctx, framework.OpenBaoEnvironmentConfig{})
+		if errors.Is(err, framework.ErrDockerUnavailable) {
+			Skip(err.Error())
+		}
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			Expect(environment.Close(cleanupCtx)).To(Succeed())
+		}()
+
+		authClient, err := environment.NewAuthClient()
+		Expect(err).NotTo(HaveOccurred())
+		validJWT, err := environment.IssueJWT(time.Now().UTC(), 30*time.Minute, framework.JWTClaimsOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = loginJWT(ctx, authClient, environment, validJWT)
+		Expect(err).NotTo(HaveOccurred())
+
+		cases := []struct {
+			name   string
+			claims framework.JWTClaimsOptions
+		}{
+			{name: "issuer", claims: framework.JWTClaimsOptions{Issuer: "https://wrong-issuer.example.internal"}},
+			{name: "audience", claims: framework.JWTClaimsOptions{Audience: []string{"wrong-audience"}}},
+			{name: "subject", claims: framework.JWTClaimsOptions{Subject: "system:openbao-kms:wrong-workload"}},
+		}
+		for _, tc := range cases {
+			By("rejecting wrong " + tc.name)
+			jwt, err := environment.IssueJWT(time.Now().UTC(), 30*time.Minute, tc.claims)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = loginJWT(ctx, authClient, environment, jwt)
+			Expect(err).To(HaveOccurred())
+		}
+	}, SpecTimeout(90*time.Second))
+
+	It("supports pinned JWT signing-key rollover", func(ctx SpecContext) {
+		if !framework.OpenBaoCIEnabled() {
+			Skip("E2E_OPENBAO_CI=true is required")
+		}
+
+		environment, err := framework.StartOpenBaoEnvironment(ctx, framework.OpenBaoEnvironmentConfig{})
+		if errors.Is(err, framework.ErrDockerUnavailable) {
+			Skip(err.Error())
+		}
+		Expect(err).NotTo(HaveOccurred())
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			Expect(environment.Close(cleanupCtx)).To(Succeed())
+		}()
+
+		authClient, err := environment.NewAuthClient()
+		Expect(err).NotTo(HaveOccurred())
+		oldJWT, err := environment.IssueJWT(time.Now().UTC(), 30*time.Minute, framework.JWTClaimsOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = loginJWT(ctx, authClient, environment, oldJWT)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(environment.RotateJWTSigningKey(ctx, true)).To(Succeed())
+		newJWT, err := environment.IssueJWT(time.Now().UTC(), 30*time.Minute, framework.JWTClaimsOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = loginJWT(ctx, authClient, environment, newJWT)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(environment.PrunePreviousJWTSigningKeys(ctx)).To(Succeed())
+		_, err = loginJWT(ctx, authClient, environment, oldJWT)
+		Expect(err).To(HaveOccurred())
+		_, err = loginJWT(ctx, authClient, environment, newJWT)
+		Expect(err).NotTo(HaveOccurred())
+	}, SpecTimeout(90*time.Second))
 })
+
+func loginJWT(
+	ctx context.Context,
+	authClient *openbao.AuthClient,
+	environment *framework.OpenBaoEnvironment,
+	jwt string,
+) (openbao.AuthToken, error) {
+	return authClient.LoginJWT(ctx, openbao.JWTLoginRequest{
+		MountPath: environment.AuthMount,
+		Role:      environment.AuthRole,
+		JWT:       jwt,
+	})
+}
 
 func validateOpenBaoTransit(ctx SpecContext, client *openbao.Client, mountPath string, keyName string) {
 	By("reading Transit key metadata")

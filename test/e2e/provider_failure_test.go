@@ -124,6 +124,33 @@ func TestProviderJWTFileRotationE2E(t *testing.T) {
 	stack.runClient(ctx, "refresh-client", kmsClientModeExpectJWTRefresh, sampleNotMounted)
 }
 
+func TestProviderJWTSigningKeyRolloverE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
+	defer cancel()
+
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-jwt-key-rollover", providerFailureStackOptions{
+		Environment: framework.OpenBaoEnvironmentConfig{
+			JWTTokenTTL: "4s",
+			JWTMaxTTL:   "20s",
+		},
+		Config: providerContainerConfigOptions{
+			MinJWTRemainingTTL:     "1s",
+			LoginBeforeTokenExpiry: "2s",
+		},
+		BeforeProviderStart: func(t *testing.T, ctx context.Context, stack *providerFailureStack) {
+			t.Helper()
+			stack.replaceJWT(ctx, time.Now().UTC(), providerJWTRotationInitialJWTTTL)
+		},
+	})
+
+	stack.runClient(ctx, "initial-client", kmsClientModeWriteSample, sampleReadWrite)
+	if err := stack.environment.RotateJWTSigningKey(ctx, true); err != nil {
+		t.Fatalf("rotate JWT signing key: %v", err)
+	}
+	stack.replaceJWT(ctx, time.Now().UTC(), providerJWTRotationReplacementJWTTTL)
+	stack.runClient(ctx, "rollover-client", kmsClientModeExpectJWTRefresh, sampleNotMounted)
+}
+
 func TestProviderTransitKeyMissingFailsClosedE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
 	defer cancel()

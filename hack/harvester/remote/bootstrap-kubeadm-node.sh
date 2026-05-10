@@ -4,6 +4,10 @@ set -eu
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34.3}"
 KUBERNETES_MINOR="${KUBERNETES_MINOR:-$(printf '%s\n' "$KUBERNETES_VERSION" | awk -F. '{print $1 "." $2}')}"
 KUBEADM_NODE_IP="${KUBEADM_NODE_IP:?KUBEADM_NODE_IP is required}"
+KUBEADM_CLUSTER_MODE="${KUBEADM_CLUSTER_MODE:-single}"
+KUBEADM_CONTROL_PLANE_ENDPOINT="${KUBEADM_CONTROL_PLANE_ENDPOINT:-}"
+KUBEADM_JOIN_COMMAND="${KUBEADM_JOIN_COMMAND:-}"
+KUBEADM_CERTIFICATE_KEY="${KUBEADM_CERTIFICATE_KEY:-}"
 KUBEADM_POD_CIDR="${KUBEADM_POD_CIDR:-10.244.0.0/16}"
 KUBEADM_SERVICE_CIDR="${KUBEADM_SERVICE_CIDR:-10.96.0.0/12}"
 KUBEADM_INSTALL_CNI="${KUBEADM_INSTALL_CNI:-true}"
@@ -69,18 +73,47 @@ systemctl enable --now kubelet
 
 if [ ! -f /etc/kubernetes/admin.conf ]; then
 	kubeadm config images pull --kubernetes-version "v${KUBERNETES_VERSION}"
-	kubeadm_init_log="/var/log/openbao-kms-kubeadm-init.log"
-	if ! kubeadm init \
-		--kubernetes-version "v${KUBERNETES_VERSION}" \
-		--apiserver-advertise-address "$KUBEADM_NODE_IP" \
-		--node-name "$(hostname)" \
-		--pod-network-cidr "$KUBEADM_POD_CIDR" \
-		--service-cidr "$KUBEADM_SERVICE_CIDR" >"$kubeadm_init_log" 2>&1; then
-		tail -80 "$kubeadm_init_log" >&2
+	case "$KUBEADM_CLUSTER_MODE" in
+	single | init)
+		kubeadm_init_log="/var/log/openbao-kms-kubeadm-init.log"
+		set -- kubeadm init \
+			--kubernetes-version "v${KUBERNETES_VERSION}" \
+			--apiserver-advertise-address "$KUBEADM_NODE_IP" \
+			--node-name "$(hostname)" \
+			--pod-network-cidr "$KUBEADM_POD_CIDR" \
+			--service-cidr "$KUBEADM_SERVICE_CIDR"
+		if [ "$KUBEADM_CLUSTER_MODE" = "init" ]; then
+			if [ -z "$KUBEADM_CONTROL_PLANE_ENDPOINT" ]; then
+				printf '%s\n' 'KUBEADM_CONTROL_PLANE_ENDPOINT is required for init mode' >&2
+				exit 1
+			fi
+			set -- "$@" --control-plane-endpoint "$KUBEADM_CONTROL_PLANE_ENDPOINT" --upload-certs
+		fi
+		if ! "$@" >"$kubeadm_init_log" 2>&1; then
+			tail -80 "$kubeadm_init_log" >&2
+			exit 1
+		fi
+		chmod 0600 "$kubeadm_init_log"
+		printf 'kubeadm initialized; detailed log: %s\n' "$kubeadm_init_log"
+		;;
+	join)
+		if [ -z "$KUBEADM_JOIN_COMMAND" ] || [ -z "$KUBEADM_CERTIFICATE_KEY" ]; then
+			printf '%s\n' 'KUBEADM_JOIN_COMMAND and KUBEADM_CERTIFICATE_KEY are required for join mode' >&2
+			exit 1
+		fi
+		kubeadm_join_log="/var/log/openbao-kms-kubeadm-join.log"
+		if ! sh -c "$KUBEADM_JOIN_COMMAND --control-plane --certificate-key '$KUBEADM_CERTIFICATE_KEY' --apiserver-advertise-address '$KUBEADM_NODE_IP' --node-name '$(hostname)'" >"$kubeadm_join_log" 2>&1; then
+			tail -80 "$kubeadm_join_log" >&2
+			exit 1
+		fi
+		chmod 0600 "$kubeadm_join_log"
+		printf 'kubeadm joined control plane; detailed log: %s\n' "$kubeadm_join_log"
+		;;
+	*)
+		printf 'unsupported KUBEADM_CLUSTER_MODE: %s\n' "$KUBEADM_CLUSTER_MODE" >&2
 		exit 1
-	fi
-	chmod 0600 "$kubeadm_init_log"
-	printf 'kubeadm initialized; detailed log: %s\n' "$kubeadm_init_log"
+		;;
+	esac
 fi
 
 install -d -m 0700 -o ubuntu -g ubuntu /home/ubuntu/.kube
@@ -93,6 +126,9 @@ kubectl taint nodes --all node-role.kubernetes.io/control-plane- >/dev/null 2>&1
 
 if [ "$KUBEADM_INSTALL_CNI" = "true" ]; then
 	kubectl apply -f "https://github.com/flannel-io/flannel/releases/download/${FLANNEL_VERSION}/kube-flannel.yml"
+fi
+
+if [ "$KUBEADM_INSTALL_CNI" = "true" ] || [ "$KUBEADM_CLUSTER_MODE" = "join" ]; then
 	kubectl wait node "$(hostname)" --for=condition=Ready --timeout="${KUBEADM_NODE_READY_TIMEOUT:-10m}"
 fi
 

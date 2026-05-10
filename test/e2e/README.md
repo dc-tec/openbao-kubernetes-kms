@@ -2,7 +2,7 @@
 
 This directory contains the Ginkgo/Gomega E2E suite.
 
-The default OpenBao E2E target uses ephemeral OpenBao CI environments with Transit and JWT auth bootstrap. It runs the Ginkgo Transit/JWT assertions and the provider full-stack OpenBao/KMS v2 socket test:
+The default OpenBao E2E target uses ephemeral OpenBao CI environments with Transit and JWT auth bootstrap. It runs the Ginkgo Transit/JWT assertions, including role claim binding and pinned signing-key rollover, and the provider full-stack OpenBao/KMS v2 socket test:
 
 ```sh
 make test-e2e-openbao-ci
@@ -22,7 +22,15 @@ Run only the provider/OpenBao failure-mode slice with:
 make test-e2e-provider-failure-openbao-ci
 ```
 
-That target uses real OpenBao Transit/JWT auth and the real provider image. It covers OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
+That target uses real OpenBao Transit/JWT auth and the real provider image. It covers OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, provider re-login after signing-key rollover, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
+
+Run only the provider/OpenBao HA failover slice with:
+
+```sh
+make test-e2e-provider-ha-openbao-ci
+```
+
+That target starts three OpenBao integrated-raft nodes, points the provider at a standby node, writes encrypted data, removes the active OpenBao node, waits for a surviving voter to become active, and verifies old ciphertext readback plus new KMS operations through the same provider.
 
 Run only the provider decrypt storm smoke slice with:
 

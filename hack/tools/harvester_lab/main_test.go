@@ -311,6 +311,56 @@ func TestDefaultLabValues(t *testing.T) {
 	}
 }
 
+func TestDefaultLabValuesWithMultiControlPlane(t *testing.T) {
+	cfg := &labConfig{
+		namespace:                "default",
+		networkName:              "default/vm4000",
+		imageNamespace:           "default",
+		imageName:                "image-wjmvv",
+		sshUser:                  "ubuntu",
+		multiControlPlaneEnabled: true,
+		multiControlPlaneHosts: []string{
+			"obk-kubeadm-mcp-1",
+			"obk-kubeadm-mcp-2",
+			"obk-kubeadm-mcp-3",
+		},
+	}
+
+	values := defaultLabValues(cfg, "ssh-ed25519 test")
+	if len(values.VMs) != 6 {
+		t.Fatalf("len(VMs) = %d, want 6", len(values.VMs))
+	}
+	last := values.VMs[len(values.VMs)-1]
+	if last.Name != "obk-kubeadm-mcp-3" || last.Role != "kubeadm-mcp-3" {
+		t.Fatalf("last VM = %#v", last)
+	}
+}
+
+func TestRewriteKubeconfigServer(t *testing.T) {
+	input := []byte(`apiVersion: v1
+kind: Config
+clusters:
+  - name: kubernetes
+    cluster:
+      certificate-authority-data: test
+      server: https://10.0.0.1:6443
+contexts: []
+current-context: ""
+users: []
+`)
+
+	output, err := rewriteKubeconfigServer(input, "https://10.0.0.2:6443")
+	if err != nil {
+		t.Fatalf("rewriteKubeconfigServer() error = %v", err)
+	}
+	if !strings.Contains(string(output), "server: https://10.0.0.2:6443") {
+		t.Fatalf("rewritten kubeconfig did not include new server:\n%s", string(output))
+	}
+	if !strings.Contains(string(output), "certificate-authority-data: test") {
+		t.Fatalf("rewritten kubeconfig did not preserve CA data:\n%s", string(output))
+	}
+}
+
 func mustWriteFile(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

@@ -194,6 +194,7 @@ jobs:
         run: |
           make test-e2e-openbao-ci
           make test-e2e-provider-failure-openbao-ci
+          make test-e2e-provider-ha-openbao-ci
           make test-e2e-provider-decrypt-storm-openbao-ci
           make test-e2e-provider-load-soak-openbao-ci
           make test-e2e-provider-restore-openbao-ci

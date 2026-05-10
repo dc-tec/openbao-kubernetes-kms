@@ -24,6 +24,10 @@ auth:
   loginBeforeTokenExpiry: 5m
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
+  expectedIssuer: https://issuer.example.internal
+  expectedAudience:
+    - bao-kms-provider
+  expectedSubject: system:openbao-kms:workload-a
   tokenStorage: memory
 transit:
   mountPath: transit

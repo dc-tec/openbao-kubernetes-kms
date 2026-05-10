@@ -69,6 +69,9 @@ type OpenBaoEnvironmentConfig struct {
 	JWTTTL        time.Duration
 	JWTTokenTTL   string
 	JWTMaxTTL     string
+	JWTIssuer     string
+	JWTAudience   string
+	JWTSubject    string
 }
 
 type OpenBaoEnvironment struct {
@@ -90,9 +93,14 @@ type OpenBaoEnvironment struct {
 	storageVolume string
 	unsealKey     string
 	jwtPrivateKey *rsa.PrivateKey
+	jwtPublicKey  string
+	jwtPublicKeys []string
 	jwtTTL        time.Duration
 	jwtTokenTTL   string
 	jwtMaxTTL     string
+	jwtIssuer     string
+	jwtAudience   string
+	jwtSubject    string
 }
 
 type mountRequestBody struct {
@@ -163,6 +171,12 @@ type jwtClaims struct {
 	IssuedAt  int64    `json:"iat"`
 }
 
+type JWTClaimsOptions struct {
+	Issuer   string
+	Subject  string
+	Audience []string
+}
+
 type environmentSetupPayload interface {
 	environmentSetupPayload()
 }
@@ -227,6 +241,9 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 		jwtTTL:        cfg.JWTTTL,
 		jwtTokenTTL:   cfg.JWTTokenTTL,
 		jwtMaxTTL:     cfg.JWTMaxTTL,
+		jwtIssuer:     cfg.JWTIssuer,
+		jwtAudience:   cfg.JWTAudience,
+		jwtSubject:    cfg.JWTSubject,
 	}
 	if err := environment.startContainer(ctx, cfg.Image); err != nil {
 		_ = environment.Close(context.Background())
@@ -303,10 +320,20 @@ func (f *OpenBaoEnvironment) WriteJWTFile(now time.Time, ttl time.Duration) erro
 }
 
 func (f *OpenBaoEnvironment) WriteJWTFileAt(filePath string, now time.Time, ttl time.Duration) error {
-	if f.jwtPrivateKey == nil {
-		return fmt.Errorf("OpenBao environment JWT signer is not initialized")
-	}
-	jwt, err := signJWT(f.jwtPrivateKey, now, ttl)
+	return f.WriteJWTFileAtWithClaims(filePath, now, ttl, JWTClaimsOptions{})
+}
+
+func (f *OpenBaoEnvironment) WriteJWTFileWithClaims(now time.Time, ttl time.Duration, opts JWTClaimsOptions) error {
+	return f.WriteJWTFileAtWithClaims(f.JWTFile, now, ttl, opts)
+}
+
+func (f *OpenBaoEnvironment) WriteJWTFileAtWithClaims(
+	filePath string,
+	now time.Time,
+	ttl time.Duration,
+	opts JWTClaimsOptions,
+) error {
+	jwt, err := f.IssueJWT(now, ttl, opts)
 	if err != nil {
 		return err
 	}
@@ -314,6 +341,53 @@ func (f *OpenBaoEnvironment) WriteJWTFileAt(filePath string, now time.Time, ttl 
 		return fmt.Errorf("write OpenBao environment JWT file: %w", err)
 	}
 	return nil
+}
+
+func (f *OpenBaoEnvironment) IssueJWT(now time.Time, ttl time.Duration, opts JWTClaimsOptions) (string, error) {
+	if f.jwtPrivateKey == nil {
+		return "", fmt.Errorf("OpenBao environment JWT signer is not initialized")
+	}
+	claims := f.jwtClaims(now, ttl, opts)
+	jwt, err := signJWT(f.jwtPrivateKey, claims)
+	if err != nil {
+		return "", err
+	}
+	return jwt, nil
+}
+
+func (f *OpenBaoEnvironment) JWTIssuer() string {
+	return f.jwtIssuer
+}
+
+func (f *OpenBaoEnvironment) JWTAudience() string {
+	return f.jwtAudience
+}
+
+func (f *OpenBaoEnvironment) JWTSubject() string {
+	return f.jwtSubject
+}
+
+func (f *OpenBaoEnvironment) RotateJWTSigningKey(ctx context.Context, keepPrevious bool) error {
+	privateKey, publicKeyPEM, err := generateJWTSigningKey()
+	if err != nil {
+		return err
+	}
+	f.jwtPrivateKey = privateKey
+	f.jwtPublicKey = publicKeyPEM
+	if keepPrevious {
+		f.jwtPublicKeys = append(f.jwtPublicKeys, publicKeyPEM)
+	} else {
+		f.jwtPublicKeys = []string{publicKeyPEM}
+	}
+	return f.writeJWTAuthConfig(ctx)
+}
+
+func (f *OpenBaoEnvironment) PrunePreviousJWTSigningKeys(ctx context.Context) error {
+	if f.jwtPublicKey == "" {
+		return fmt.Errorf("OpenBao environment current JWT public key is not initialized")
+	}
+	f.jwtPublicKeys = []string{f.jwtPublicKey}
+	return f.writeJWTAuthConfig(ctx)
 }
 
 func (f *OpenBaoEnvironment) InstallProviderPolicy(ctx context.Context, policy string) error {
@@ -500,6 +574,15 @@ func defaultOpenBaoEnvironmentConfig(cfg OpenBaoEnvironmentConfig) OpenBaoEnviro
 	if cfg.JWTMaxTTL == "" {
 		cfg.JWTMaxTTL = openBaoJWTTokenMaxTTL
 	}
+	if cfg.JWTIssuer == "" {
+		cfg.JWTIssuer = openBaoJWTIssuer
+	}
+	if cfg.JWTAudience == "" {
+		cfg.JWTAudience = openBaoJWTAudience
+	}
+	if cfg.JWTSubject == "" {
+		cfg.JWTSubject = openBaoJWTSubject
+	}
 	return cfg
 }
 
@@ -596,10 +679,14 @@ func (f *OpenBaoEnvironment) startRaftStorageContainer(ctx context.Context, imag
 }
 
 func (f *OpenBaoEnvironment) prepareStorageVolume(ctx context.Context, image string) error {
-	cmd := exec.CommandContext(ctx, f.dockerBinary,
+	return prepareOpenBaoStorageVolume(ctx, f.dockerBinary, image, f.storageVolume)
+}
+
+func prepareOpenBaoStorageVolume(ctx context.Context, dockerBinary string, image string, storageVolume string) error {
+	cmd := exec.CommandContext(ctx, dockerBinary,
 		"run", "--rm",
 		"--entrypoint", "/bin/sh",
-		"--volume", f.storageVolume+":/bao/data",
+		"--volume", storageVolume+":/bao/data",
 		image,
 		"-c", "chown -R 100:1000 /bao/data",
 	)
@@ -632,6 +719,10 @@ listener "tcp" {
 }
 
 func writeOpenBaoServerTLSFiles(dir string) error {
+	return writeOpenBaoServerTLSFilesForHosts(dir, []string{openBaoTLSServerName})
+}
+
+func writeOpenBaoServerTLSFilesForHosts(dir string, dnsNames []string) error {
 	if _, err := os.Stat(filepath.Join(dir, "ca.pem")); err == nil {
 		if _, err := os.Stat(filepath.Join(dir, "server.crt")); err != nil {
 			return fmt.Errorf("stat OpenBao TLS certificate: %w", err)
@@ -663,7 +754,7 @@ func writeOpenBaoServerTLSFiles(dir string) error {
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
-		DNSNames:              []string{openBaoTLSServerName},
+		DNSNames:              uniqueDNSNames(append(dnsNames, openBaoTLSServerName)),
 		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
@@ -682,6 +773,23 @@ func writeOpenBaoServerTLSFiles(dir string) error {
 		return fmt.Errorf("write OpenBao TLS key: %w", err)
 	}
 	return nil
+}
+
+func uniqueDNSNames(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	names := make([]string, 0, len(values))
+	for _, value := range values {
+		name := strings.TrimSpace(value)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
 }
 
 func (f *OpenBaoEnvironment) waitUntilEndpoint(ctx context.Context, timeout time.Duration) error {
@@ -1004,15 +1112,13 @@ func (f *OpenBaoEnvironment) bootstrapJWTAuth(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return fmt.Errorf("generate JWT signing key: %w", err)
-	}
-	f.jwtPrivateKey = privateKey
-	publicKeyPEM, err := jwtPublicKeyPEM(&privateKey.PublicKey)
+	privateKey, publicKeyPEM, err := generateJWTSigningKey()
 	if err != nil {
 		return err
 	}
+	f.jwtPrivateKey = privateKey
+	f.jwtPublicKey = publicKeyPEM
+	f.jwtPublicKeys = []string{publicKeyPEM}
 	jwtFile := filepath.Join(f.certDir, "identity.jwt")
 	f.JWTFile = jwtFile
 	if err := f.WriteJWTFile(time.Now().UTC(), f.jwtTTL); err != nil {
@@ -1027,17 +1133,14 @@ func (f *OpenBaoEnvironment) bootstrapJWTAuth(ctx context.Context) error {
 	if err := f.write(ctx, httpClient, "sys/auth/"+authMountName(f.AuthMount), mountRequestBody{Type: "jwt"}); err != nil {
 		return err
 	}
-	if err := f.write(ctx, httpClient, path.Join(f.AuthMount, "config"), jwtAuthConfigRequestBody{
-		JWTValidationPubKeys: []string{publicKeyPEM},
-		BoundIssuer:          openBaoJWTIssuer,
-	}); err != nil {
+	if err := f.writeJWTAuthConfig(ctx); err != nil {
 		return err
 	}
 	if err := f.write(ctx, httpClient, path.Join(f.AuthMount, "role", f.AuthRole), jwtAuthRoleRequestBody{
 		RoleType:             "jwt",
 		UserClaim:            "sub",
-		BoundAudiences:       []string{openBaoJWTAudience},
-		BoundSubject:         openBaoJWTSubject,
+		BoundAudiences:       []string{f.jwtAudience},
+		BoundSubject:         f.jwtSubject,
 		TokenPolicies:        []string{openBaoJWTPolicyName},
 		TokenTTL:             f.jwtTokenTTL,
 		TokenMaxTTL:          f.jwtMaxTTL,
@@ -1048,6 +1151,17 @@ func (f *OpenBaoEnvironment) bootstrapJWTAuth(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (f *OpenBaoEnvironment) writeJWTAuthConfig(ctx context.Context) error {
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, path.Join(f.AuthMount, "config"), jwtAuthConfigRequestBody{
+		JWTValidationPubKeys: f.jwtPublicKeys,
+		BoundIssuer:          f.jwtIssuer,
+	})
 }
 
 func (f *OpenBaoEnvironment) providerPolicy() string {
@@ -1082,6 +1196,18 @@ func authMountName(mountPath string) string {
 	return strings.Trim(strings.TrimPrefix(strings.TrimSpace(mountPath), "auth/"), "/")
 }
 
+func generateJWTSigningKey() (*rsa.PrivateKey, string, error) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, "", fmt.Errorf("generate JWT signing key: %w", err)
+	}
+	publicKeyPEM, err := jwtPublicKeyPEM(&privateKey.PublicKey)
+	if err != nil {
+		return nil, "", err
+	}
+	return privateKey, publicKeyPEM, nil
+}
+
 func jwtPublicKeyPEM(publicKey *rsa.PublicKey) (string, error) {
 	encoded, err := x509.MarshalPKIXPublicKey(publicKey)
 	if err != nil {
@@ -1090,23 +1216,39 @@ func jwtPublicKeyPEM(publicKey *rsa.PublicKey) (string, error) {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded})), nil
 }
 
-func signJWT(privateKey *rsa.PrivateKey, now time.Time, ttl time.Duration) (string, error) {
+func (f *OpenBaoEnvironment) jwtClaims(now time.Time, ttl time.Duration, opts JWTClaimsOptions) jwtClaims {
+	issuer := opts.Issuer
+	if issuer == "" {
+		issuer = f.jwtIssuer
+	}
+	subject := opts.Subject
+	if subject == "" {
+		subject = f.jwtSubject
+	}
+	audience := opts.Audience
+	if len(audience) == 0 {
+		audience = []string{f.jwtAudience}
+	}
+	return jwtClaims{
+		Issuer:    issuer,
+		Subject:   subject,
+		Audience:  audience,
+		ExpiresAt: now.Add(ttl).Unix(),
+		NotBefore: now.Add(-time.Minute).Unix(),
+		IssuedAt:  now.Unix(),
+	}
+}
+
+func signJWT(privateKey *rsa.PrivateKey, claims jwtClaims) (string, error) {
 	header, err := encodeJWTHeader(jwtHeader{Algorithm: "RS256", Type: "JWT"})
 	if err != nil {
 		return "", err
 	}
-	claims, err := encodeJWTClaims(jwtClaims{
-		Issuer:    openBaoJWTIssuer,
-		Subject:   openBaoJWTSubject,
-		Audience:  []string{openBaoJWTAudience},
-		ExpiresAt: now.Add(ttl).Unix(),
-		NotBefore: now.Add(-time.Minute).Unix(),
-		IssuedAt:  now.Unix(),
-	})
+	encodedClaims, err := encodeJWTClaims(claims)
 	if err != nil {
 		return "", err
 	}
-	signingInput := header + "." + claims
+	signingInput := header + "." + encodedClaims
 	digest := sha256.Sum256([]byte(signingInput))
 	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
 	if err != nil {

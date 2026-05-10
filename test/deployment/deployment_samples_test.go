@@ -22,6 +22,7 @@ func TestProviderAndEncryptionSamplesValidate(t *testing.T) {
 		if err := config.Validate(cfg, config.ValidationOptions{}); err != nil {
 			t.Fatalf("validate %s provider config: %v", name, err)
 		}
+		requireHardenedAuthConfig(t, name, cfg)
 	}
 
 	encryptionConfig, err := config.LoadEncryptionConfiguration(repoPath("deploy/kubernetes/encryption-config.yaml"))
@@ -37,6 +38,29 @@ func TestProviderAndEncryptionSamplesValidate(t *testing.T) {
 	}
 	if staticPodConfig.Server.SocketGroup != "1234" {
 		t.Fatalf("static pod config should use numeric socket group, got %q", staticPodConfig.Server.SocketGroup)
+	}
+}
+
+func requireHardenedAuthConfig(t *testing.T, name string, cfg config.Config) {
+	t.Helper()
+
+	if cfg.Server.UnsafeDebugEndpoints {
+		t.Fatalf("%s provider config must not enable unsafe debug endpoints", name)
+	}
+	if cfg.Auth.TokenStorage != "memory" {
+		t.Fatalf("%s provider config should keep OpenBao tokens in memory, got %q", name, cfg.Auth.TokenStorage)
+	}
+	if cfg.Auth.ExpectedIssuer == "" {
+		t.Fatalf("%s provider config should set auth.expectedIssuer", name)
+	}
+	if len(cfg.Auth.ExpectedAudience) == 0 {
+		t.Fatalf("%s provider config should set auth.expectedAudience", name)
+	}
+	if cfg.Auth.ExpectedSubject == "" {
+		t.Fatalf("%s provider config should set auth.expectedSubject", name)
+	}
+	if !cfg.Logging.RedactOpenBaoPaths {
+		t.Fatalf("%s provider config should redact OpenBao paths in logs", name)
 	}
 }
 

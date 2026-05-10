@@ -139,6 +139,7 @@ func writeProviderContainerConfig(t *testing.T, path string, environment *framew
 
 type providerContainerConfigOptions struct {
 	OpenBaoTimeout         string
+	OpenBaoAddress         string
 	TransitKeyName         string
 	ProbeInterval          string
 	DeepProbeInterval      string
@@ -158,6 +159,9 @@ func writeProviderContainerConfigWithOptions(
 	if opts.OpenBaoTimeout == "" {
 		opts.OpenBaoTimeout = "5s"
 	}
+	if opts.OpenBaoAddress == "" {
+		opts.OpenBaoAddress = environment.ContainerAddress()
+	}
 	if opts.TransitKeyName == "" {
 		opts.TransitKeyName = environment.TransitKey
 	}
@@ -176,6 +180,11 @@ func writeProviderContainerConfigWithOptions(
 	if opts.LoginBeforeTokenExpiry == "" {
 		opts.LoginBeforeTokenExpiry = "30s"
 	}
+	expectedClaims := fmt.Sprintf(`  expectedIssuer: %q
+  expectedAudience:
+    - %q
+  expectedSubject: %q
+`, environment.JWTIssuer(), environment.JWTAudience(), environment.JWTSubject())
 
 	raw := fmt.Sprintf(`configVersion: v1alpha1
 server:
@@ -201,6 +210,7 @@ auth:
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
   tokenStorage: memory
+%s
 transit:
   mountPath: %q
   keyName: %q
@@ -238,7 +248,7 @@ logging:
     enabled: false
     ttl: 15m
 `, containerSocketPath,
-		environment.ContainerAddress(),
+		opts.OpenBaoAddress,
 		containerCAPath,
 		environment.TLSServerName,
 		opts.OpenBaoTimeout,
@@ -247,6 +257,7 @@ logging:
 		containerJWTPath,
 		opts.MinJWTRemainingTTL,
 		opts.LoginBeforeTokenExpiry,
+		expectedClaims,
 		environment.TransitMount,
 		opts.TransitKeyName,
 		opts.ProbeInterval,

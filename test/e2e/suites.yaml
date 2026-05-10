@@ -19,7 +19,7 @@ lanes:
     prScope: pr
     environment: local-openbao
     isolation: local-container
-    timeout: 4m
+    timeout: 6m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
     versionRefs:
@@ -65,7 +65,23 @@ lanes:
     prScope: main
     environment: local-openbao
     isolation: local-container
-    timeout: 5m
+    timeout: 10m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
+  - id: openbao-ha-ci
+    name: OpenBao HA Failover CI
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && ha && ci
+    prScope: main
+    environment: local-openbao-ha
+    isolation: local-container
+    timeout: 7m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
     versionRefs:

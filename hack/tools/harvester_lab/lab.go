@@ -3,19 +3,17 @@ package main
 import (
 	"bytes"
 	"context"
-	crand "crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,10 +77,14 @@ type labConfig struct {
 	kubeadmInstallCNI string
 	kubeadmHosts      []string
 
+	multiControlPlaneEnabled bool
+	multiControlPlaneHosts   []string
+
 	systemdHost      string
 	staticPodHost    string
 	providerImage    string
 	providerAssetDir string
+	loadSecretCount  int
 }
 
 type versionsConfig struct {
@@ -153,12 +155,21 @@ var labCommands = []labCommand{
 	{name: "wait-ssh", run: labWaitSSH},
 	{name: "bootstrap-openbao", run: labBootstrapOpenBao},
 	{name: "bootstrap-kubeadm", run: labBootstrapKubeadm},
+	{name: "bootstrap-mcp", run: labBootstrapMultiControlPlane},
 	{name: "bootstrap-guests", run: labBootstrapGuests},
 	{name: "verify-guests", run: labVerifyGuests},
 	{name: "wire-provider", run: labWireProviderCommand},
 	{name: "wire-systemd", run: labWireSystemdCommand},
 	{name: "wire-static", run: labWireStaticCommand},
+	{name: "wire-mcp", run: labWireMultiControlPlaneCommand},
 	{name: "verify-kms", run: labVerifyKMS},
+	{name: "verify-recovery", run: labVerifyRecovery},
+	{name: "verify-openbao-outage", run: labVerifyOpenBaoOutage},
+	{name: "verify-load", run: labVerifyLoad},
+	{name: "verify-upgrade-rollback", run: labVerifyUpgradeRollback},
+	{name: "verify-paired-restore", run: labVerifyPairedRestore},
+	{name: "verify-mcp-recovery", run: labVerifyMultiControlPlaneRecovery},
+	{name: "production-gate", run: labProductionGate},
 	{name: "e2e", run: labE2E},
 	{name: "destroy", run: labDestroy},
 }
@@ -228,15 +239,28 @@ func newLabConfig() (*labConfig, error) {
 		flannelVersion:        envOrDefault("FLANNEL_VERSION", versions.Validation.Kubernetes.Flannel),
 		kubeadmInstallCNI:     envOrDefault("KUBEADM_INSTALL_CNI", "true"),
 		kubeadmHosts:          envList("KUBEADM_HOSTS", []string{systemdHostAlias, staticPodHostAlias}),
-		systemdHost:           envOrDefault("SYSTEMD_HOST", systemdHostAlias),
-		staticPodHost:         envOrDefault("STATIC_HOST", staticPodHostAlias),
-		providerImage:         envOrDefault("PROVIDER_IMAGE", providerImageDefault),
-		providerAssetDir:      envOrDefault("HARVESTER_PROVIDER_ASSET_DIR", filepath.Join(artifactDir, "provider")),
+		multiControlPlaneEnabled: envBool(
+			"HARVESTER_ENABLE_MULTI_CONTROL_PLANE",
+		),
+		multiControlPlaneHosts: envList("HARVESTER_MCP_HOSTS", defaultMultiControlPlaneHosts()),
+		systemdHost:            envOrDefault("SYSTEMD_HOST", systemdHostAlias),
+		staticPodHost:          envOrDefault("STATIC_HOST", staticPodHostAlias),
+		providerImage:          envOrDefault("PROVIDER_IMAGE", providerImageDefault),
+		providerAssetDir:       envOrDefault("HARVESTER_PROVIDER_ASSET_DIR", filepath.Join(artifactDir, "provider")),
+		loadSecretCount:        envInt("HARVESTER_LOAD_SECRET_COUNT", 25),
 	}
 	if cfg.openBaoVersion == "" || cfg.kubernetesVersion == "" || cfg.flannelVersion == "" {
 		return nil, errors.New("missing OpenBao or Kubernetes versions in .ci/versions.yaml")
 	}
 	return cfg, nil
+}
+
+func defaultMultiControlPlaneHosts() []string {
+	return []string{
+		"obk-kubeadm-mcp-1",
+		"obk-kubeadm-mcp-2",
+		"obk-kubeadm-mcp-3",
+	}
 }
 
 func repoRoot() (string, error) {
@@ -297,6 +321,18 @@ func envDuration(name string, fallback time.Duration) time.Duration {
 	return fallback
 }
 
+func envInt(name string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
 func envList(name string, fallback []string) []string {
 	value := strings.TrimSpace(os.Getenv(name))
 	if value == "" {
@@ -323,8 +359,8 @@ func runCmdEnv(ctx context.Context, cfg *labConfig, env []string, name string, a
 	return cmd.Run()
 }
 
-func quietCmdEnv(ctx context.Context, cfg *labConfig, env []string, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- local lab invokes configured developer tools.
+func quietKubectl(ctx context.Context, cfg *labConfig, env []string, args ...string) error {
+	cmd := exec.CommandContext(ctx, "kubectl", args...) // #nosec G204 -- local lab invokes configured developer tools.
 	cmd.Dir = cfg.root
 	cmd.Env = append(baseLabEnv(cfg), env...)
 	return cmd.Run()
@@ -422,7 +458,7 @@ func labRenderValues(ctx context.Context, cfg *labConfig, _ []string) error {
 }
 
 func defaultLabValues(cfg *labConfig, sshPublicKey string) labValues {
-	return labValues{
+	values := labValues{
 		Namespace: cfg.namespace,
 		Network:   labNetworkValues{Name: cfg.networkName},
 		Image:     labImageValues{Namespace: cfg.imageNamespace, Name: cfg.imageName},
@@ -447,6 +483,19 @@ func defaultLabValues(cfg *labConfig, sshPublicKey string) labValues {
 			},
 		},
 	}
+	if cfg.multiControlPlaneEnabled {
+		for _, host := range cfg.multiControlPlaneHosts {
+			values.VMs = append(values.VMs, labVMValues{
+				Name:       host,
+				Role:       strings.TrimPrefix(host, "obk-"),
+				Hostname:   host,
+				CPU:        4,
+				MemoryGi:   8,
+				DiskSizeGi: 80,
+			})
+		}
+	}
+	return values
 }
 
 func labLint(ctx context.Context, cfg *labConfig, _ []string) error {
@@ -784,7 +833,6 @@ func labBootstrapKubeadm(ctx context.Context, cfg *labConfig, _ []string) error 
 	if err := os.MkdirAll(cfg.artifactDir, 0o750); err != nil {
 		return fmt.Errorf("create artifact directory: %w", err)
 	}
-	remoteScript := filepath.Join(cfg.root, "hack", "harvester", "remote", "bootstrap-kubeadm-node.sh")
 	for _, host := range cfg.kubeadmHosts {
 		nodeIP, err := sshHostIP(cfg.sshConfig, host)
 		if err != nil {
@@ -793,17 +841,17 @@ func labBootstrapKubeadm(ctx context.Context, cfg *labConfig, _ []string) error 
 		if nodeIP == "" {
 			return fmt.Errorf("could not resolve kubeadm host IP from SSH config: %s", host)
 		}
-		fmt.Printf("bootstrapping kubeadm on %s (%s)\n", host, nodeIP)
-		if err := scpLab(ctx, cfg, remoteScript, host+":/tmp/bootstrap-kubeadm-node.sh"); err != nil {
-			return err
-		}
-		command := joinEnvForSudo(
-			"KUBERNETES_VERSION", cfg.kubernetesVersion,
-			"KUBEADM_NODE_IP", nodeIP,
-			"KUBEADM_INSTALL_CNI", cfg.kubeadmInstallCNI,
-			"FLANNEL_VERSION", cfg.flannelVersion,
-		) + " sh /tmp/bootstrap-kubeadm-node.sh"
-		if err := sshLab(ctx, cfg, host, command); err != nil {
+		if err := bootstrapKubeadmHost(
+			ctx,
+			cfg,
+			host,
+			nodeIP,
+			"single",
+			"",
+			"",
+			"",
+			cfg.kubeadmInstallCNI,
+		); err != nil {
 			return err
 		}
 		if err := writeRemoteKubeconfig(ctx, cfg, host); err != nil {
@@ -813,17 +861,239 @@ func labBootstrapKubeadm(ctx context.Context, cfg *labConfig, _ []string) error 
 	return nil
 }
 
+func labBootstrapMultiControlPlane(ctx context.Context, cfg *labConfig, _ []string) error {
+	checks, err := requireMultiControlPlaneChecks(cfg)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(cfg.artifactDir, 0o750); err != nil {
+		return fmt.Errorf("create artifact directory: %w", err)
+	}
+	nodeIPs := make([]string, 0, len(checks))
+	for _, check := range checks {
+		nodeIP, err := sshHostIP(cfg.sshConfig, check.host)
+		if err != nil {
+			return err
+		}
+		if nodeIP == "" {
+			return fmt.Errorf("could not resolve multi-control-plane host IP from SSH config: %s", check.host)
+		}
+		nodeIPs = append(nodeIPs, nodeIP)
+	}
+	endpoint := net.JoinHostPort(nodeIPs[0], "6443")
+	if err := bootstrapKubeadmHost(
+		ctx,
+		cfg,
+		checks[0].host,
+		nodeIPs[0],
+		"init",
+		endpoint,
+		"",
+		"",
+		cfg.kubeadmInstallCNI,
+	); err != nil {
+		return err
+	}
+	if err := writeRemoteKubeconfigPath(ctx, cfg, checks[0].host, checks[0].kubeconfig, nodeIPs[0]); err != nil {
+		return err
+	}
+	joinCommand, certificateKey, err := multiControlPlaneJoinMaterial(ctx, cfg, checks[0].host)
+	if err != nil {
+		return err
+	}
+	for index := 1; index < len(checks); index++ {
+		check := checks[index]
+		if err := bootstrapKubeadmHost(
+			ctx,
+			cfg,
+			check.host,
+			nodeIPs[index],
+			"join",
+			endpoint,
+			joinCommand,
+			certificateKey,
+			"false",
+		); err != nil {
+			return err
+		}
+		if err := writeRemoteKubeconfigPath(ctx, cfg, check.host, check.kubeconfig, nodeIPs[index]); err != nil {
+			return err
+		}
+	}
+	return waitMultiControlPlaneReady(ctx, cfg, checks)
+}
+
+func bootstrapKubeadmHost(
+	ctx context.Context,
+	cfg *labConfig,
+	host string,
+	nodeIP string,
+	clusterMode string,
+	controlPlaneEndpoint string,
+	joinCommand string,
+	certificateKey string,
+	installCNI string,
+) error {
+	remoteScript := filepath.Join(cfg.root, "hack", "harvester", "remote", "bootstrap-kubeadm-node.sh")
+	fmt.Printf("bootstrapping kubeadm on %s (%s, mode=%s)\n", host, nodeIP, clusterMode)
+	if err := scpLab(ctx, cfg, remoteScript, host+":/tmp/bootstrap-kubeadm-node.sh"); err != nil {
+		return err
+	}
+	command := joinEnvForSudo(
+		"KUBERNETES_VERSION", cfg.kubernetesVersion,
+		"KUBEADM_NODE_IP", nodeIP,
+		"KUBEADM_CLUSTER_MODE", clusterMode,
+		"KUBEADM_CONTROL_PLANE_ENDPOINT", controlPlaneEndpoint,
+		"KUBEADM_JOIN_COMMAND", joinCommand,
+		"KUBEADM_CERTIFICATE_KEY", certificateKey,
+		"KUBEADM_INSTALL_CNI", installCNI,
+		"FLANNEL_VERSION", cfg.flannelVersion,
+	) + " sh /tmp/bootstrap-kubeadm-node.sh"
+	return sshLab(ctx, cfg, host, command)
+}
+
+func multiControlPlaneJoinMaterial(ctx context.Context, cfg *labConfig, host string) (string, string, error) {
+	certificateKeyOutput, err := sshLabOutput(
+		ctx,
+		cfg,
+		host,
+		"sudo kubeadm init phase upload-certs --upload-certs | tail -n1",
+	)
+	if err != nil {
+		return "", "", err
+	}
+	certificateKey := lastNonEmptyLine(string(certificateKeyOutput))
+	if certificateKey == "" {
+		return "", "", errors.New("kubeadm did not return a certificate key for control-plane join")
+	}
+	joinCommandOutput, err := sshLabOutput(ctx, cfg, host, "sudo kubeadm token create --ttl 2h --print-join-command")
+	if err != nil {
+		return "", "", err
+	}
+	joinCommand := strings.TrimSpace(string(joinCommandOutput))
+	if joinCommand == "" {
+		return "", "", errors.New("kubeadm did not return a control-plane join command")
+	}
+	return joinCommand, certificateKey, nil
+}
+
+func lastNonEmptyLine(output string) string {
+	lines := strings.Split(output, "\n")
+	for index := len(lines) - 1; index >= 0; index-- {
+		line := strings.TrimSpace(lines[index])
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+func waitMultiControlPlaneReady(ctx context.Context, cfg *labConfig, checks []kubeadmCheck) error {
+	if len(checks) == 0 {
+		return errors.New("multi-control-plane check list is empty")
+	}
+	env := []string{"KUBECONFIG=" + checks[0].kubeconfig}
+	for _, check := range checks {
+		if err := runCmdEnv(
+			ctx,
+			cfg,
+			env,
+			"kubectl",
+			"wait",
+			"node",
+			check.host,
+			"--for=condition=Ready",
+			"--timeout=10m",
+		); err != nil {
+			return err
+		}
+	}
+	return runCmdEnv(ctx, cfg, env, "kubectl", "get", "nodes", "-o", "wide")
+}
+
 func writeRemoteKubeconfig(ctx context.Context, cfg *labConfig, host string) error {
+	nodeIP, err := sshHostIP(cfg.sshConfig, host)
+	if err != nil {
+		return err
+	}
+	if nodeIP == "" {
+		return fmt.Errorf("could not resolve kubeadm host IP from SSH config: %s", host)
+	}
+	suffix := strings.TrimPrefix(host, "obk-kubeadm-")
+	path := filepath.Join(cfg.artifactDir, "kubeconfig-"+suffix+".yaml")
+	return writeRemoteKubeconfigPath(ctx, cfg, host, path, nodeIP)
+}
+
+func writeRemoteKubeconfigPath(
+	ctx context.Context,
+	cfg *labConfig,
+	host string,
+	path string,
+	serverHost string,
+) error {
 	output, err := sshLabOutput(ctx, cfg, host, "sudo cat /etc/kubernetes/admin.conf")
 	if err != nil {
 		return err
 	}
-	suffix := strings.TrimPrefix(host, "obk-kubeadm-")
-	path := filepath.Join(cfg.artifactDir, "kubeconfig-"+suffix+".yaml")
+	if serverHost != "" {
+		output, err = rewriteKubeconfigServer(output, "https://"+net.JoinHostPort(serverHost, "6443"))
+		if err != nil {
+			return err
+		}
+	}
 	if err := os.WriteFile(path, output, 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+func rewriteKubeconfigServer(data []byte, server string) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("decode kubeconfig: %w", err)
+	}
+	root := documentContent(&doc)
+	clusters := mappingValue(root, "clusters")
+	if clusters == nil || clusters.Kind != yaml.SequenceNode {
+		return nil, errors.New("kubeconfig does not contain clusters")
+	}
+	rewrote := false
+	for _, clusterEntry := range clusters.Content {
+		cluster := mappingValue(clusterEntry, "cluster")
+		if cluster == nil {
+			continue
+		}
+		serverNode := mappingValue(cluster, "server")
+		if serverNode == nil {
+			continue
+		}
+		serverNode.Value = server
+		rewrote = true
+	}
+	if !rewrote {
+		return nil, errors.New("kubeconfig does not contain a cluster server")
+	}
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&doc); err != nil {
+		_ = encoder.Close()
+		return nil, fmt.Errorf("encode kubeconfig: %w", err)
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, fmt.Errorf("close kubeconfig encoder: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func documentContent(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		return node.Content[0]
+	}
+	return node
 }
 
 func labVerifyGuests(ctx context.Context, cfg *labConfig, _ []string) error {
@@ -965,6 +1235,47 @@ func labWireStaticCommand(ctx context.Context, cfg *labConfig, _ []string) error
 	return labWireProvider(ctx, cfg, "static-pod")
 }
 
+func labWireMultiControlPlaneCommand(ctx context.Context, cfg *labConfig, _ []string) error {
+	checks, err := requireMultiControlPlaneChecks(cfg)
+	if err != nil {
+		return err
+	}
+	openBaoIP, err := requireProviderInputs(cfg)
+	if err != nil {
+		return err
+	}
+	if err := buildProviderBinary(ctx, cfg); err != nil {
+		return err
+	}
+	if err := copyProviderBaseAssets(cfg); err != nil {
+		return err
+	}
+	imageTar, err := prepareStaticPodProviderAssets(
+		ctx,
+		cfg,
+		openBaoIP,
+		"provider-mcp.yaml",
+		"harvester-mcp",
+	)
+	if err != nil {
+		return err
+	}
+	for _, check := range checks {
+		if err := installStaticPodProviderOnHost(
+			ctx,
+			cfg,
+			check.host,
+			check.kubeconfig,
+			"provider-mcp.yaml",
+			imageTar,
+			check.suffix,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func labWireProvider(ctx context.Context, cfg *labConfig, mode string) error {
 	openBaoIP, err := requireProviderInputs(cfg)
 	if err != nil {
@@ -1009,6 +1320,10 @@ func requireProviderInputs(cfg *labConfig) (string, error) {
 }
 
 func buildProviderBinary(ctx context.Context, cfg *labConfig) error {
+	return buildProviderBinaryAt(ctx, cfg, "harvester-lab", filepath.Join(cfg.providerAssetDir, "bao-kms-provider"))
+}
+
+func buildProviderBinaryAt(ctx context.Context, cfg *labConfig, version string, outputPath string) error {
 	if err := requireCommand("go"); err != nil {
 		return err
 	}
@@ -1019,7 +1334,7 @@ func buildProviderBinary(ctx context.Context, cfg *labConfig) error {
 	buildDate := time.Now().UTC().Format(time.RFC3339)
 	ldflags := strings.Join([]string{
 		"-s -w",
-		"-X github.com/dc-tec/openbao-kubernetes-kms/internal/version.version=harvester-lab",
+		"-X github.com/dc-tec/openbao-kubernetes-kms/internal/version.version=" + version,
 		"-X github.com/dc-tec/openbao-kubernetes-kms/internal/version.commit=" + commit,
 		"-X github.com/dc-tec/openbao-kubernetes-kms/internal/version.buildDate=" + buildDate,
 		"-X github.com/dc-tec/openbao-kubernetes-kms/internal/version.dirty=true",
@@ -1035,7 +1350,7 @@ func buildProviderBinary(ctx context.Context, cfg *labConfig) error {
 		"-ldflags",
 		ldflags,
 		"-o",
-		filepath.Join(cfg.providerAssetDir, "bao-kms-provider"),
+		outputPath,
 		"./cmd/bao-kms-provider",
 	)
 }
@@ -1123,56 +1438,79 @@ func installSystemdProvider(ctx context.Context, cfg *labConfig, openBaoIP strin
 }
 
 func installStaticPodProvider(ctx context.Context, cfg *labConfig, openBaoIP string) error {
-	if err := requireCommand("docker"); err != nil {
+	imageTar, err := prepareStaticPodProviderAssets(ctx, cfg, openBaoIP, "provider-static.yaml", "harvester-static")
+	if err != nil {
 		return err
 	}
-	if err := writeProviderConfig(cfg, "provider-static.yaml", "1234", "harvester-static", openBaoIP); err != nil {
-		return err
-	}
-	if err := writeEncryptionConfig(filepath.Join(cfg.providerAssetDir, "encryption-config.yaml")); err != nil {
-		return err
-	}
-	if err := writeStaticPodManifest(cfg); err != nil {
-		return err
-	}
-	if err := runCmdEnv(
+	return installStaticPodProviderOnHost(
 		ctx,
 		cfg,
-		[]string{"DOCKER_BUILDKIT=1"},
-		"docker",
-		"build",
-		"--platform",
-		"linux/amd64",
-		"-t",
-		cfg.providerImage,
-		".",
-	); err != nil {
-		return err
+		cfg.staticPodHost,
+		filepath.Join(cfg.artifactDir, "kubeconfig-static.yaml"),
+		"provider-static.yaml",
+		imageTar,
+		"static",
+	)
+}
+
+func prepareStaticPodProviderAssets(
+	ctx context.Context,
+	cfg *labConfig,
+	openBaoIP string,
+	providerConfigName string,
+	clusterID string,
+) (string, error) {
+	if err := requireCommand("docker"); err != nil {
+		return "", err
+	}
+	if err := writeProviderConfig(cfg, providerConfigName, "1234", clusterID, openBaoIP); err != nil {
+		return "", err
+	}
+	if err := writeEncryptionConfig(filepath.Join(cfg.providerAssetDir, "encryption-config.yaml")); err != nil {
+		return "", err
+	}
+	if err := writeStaticPodManifest(cfg); err != nil {
+		return "", err
+	}
+	if err := buildProviderImage(ctx, cfg, cfg.providerImage, "harvester-lab"); err != nil {
+		return "", err
 	}
 	imageTar := filepath.Join(cfg.providerAssetDir, "bao-kms-provider-image.tar")
 	if err := runCmd(ctx, cfg, "docker", "save", cfg.providerImage, "-o", imageTar); err != nil {
+		return "", err
+	}
+	return imageTar, nil
+}
+
+func installStaticPodProviderOnHost(
+	ctx context.Context,
+	cfg *labConfig,
+	host string,
+	kubeconfig string,
+	providerConfigName string,
+	imageTar string,
+	name string,
+) error {
+	if err := copyCommonProviderAssets(ctx, cfg, host); err != nil {
 		return err
 	}
-	if err := copyCommonProviderAssets(ctx, cfg, cfg.staticPodHost); err != nil {
-		return err
-	}
-	if err := copyStaticPodAssets(ctx, cfg, imageTar); err != nil {
+	if err := copyStaticPodAssets(ctx, cfg, host, providerConfigName, imageTar); err != nil {
 		return err
 	}
 	remoteScript := filepath.Join(cfg.root, "hack", "harvester", "remote", "install-provider-static-pod.sh")
-	if err := scpLab(ctx, cfg, remoteScript, cfg.staticPodHost+":/tmp/install-provider-static-pod.sh"); err != nil {
+	if err := scpLab(ctx, cfg, remoteScript, host+":/tmp/install-provider-static-pod.sh"); err != nil {
 		return err
 	}
-	if err := sshLab(ctx, cfg, cfg.staticPodHost, "sudo sh /tmp/install-provider-static-pod.sh"); err != nil {
+	if err := sshLab(ctx, cfg, host, "sudo sh /tmp/install-provider-static-pod.sh"); err != nil {
 		return err
 	}
-	if err := patchRemoteAPIServer(ctx, cfg, cfg.staticPodHost, "static"); err != nil {
+	if err := patchRemoteAPIServer(ctx, cfg, host, name); err != nil {
 		return err
 	}
-	if err := waitAPIServer(ctx, cfg, filepath.Join(cfg.artifactDir, "kubeconfig-static.yaml")); err != nil {
+	if err := waitAPIServer(ctx, cfg, kubeconfig); err != nil {
 		return err
 	}
-	fmt.Println("static-pod kube-apiserver is ready with KMS config")
+	fmt.Printf("%s kube-apiserver is ready with KMS config\n", name)
 	return nil
 }
 
@@ -1193,15 +1531,21 @@ func copyCommonProviderAssets(ctx context.Context, cfg *labConfig, host string) 
 	return nil
 }
 
-func copyStaticPodAssets(ctx context.Context, cfg *labConfig, imageTar string) error {
+func copyStaticPodAssets(
+	ctx context.Context,
+	cfg *labConfig,
+	host string,
+	providerConfigName string,
+	imageTar string,
+) error {
 	staticAssets := []string{
-		filepath.Join(cfg.providerAssetDir, "provider-static.yaml"),
+		filepath.Join(cfg.providerAssetDir, providerConfigName),
 		filepath.Join(cfg.providerAssetDir, "bao-kms-provider.yaml"),
 		imageTar,
 	}
 	remoteNames := []string{"provider.yaml", "bao-kms-provider.yaml", "bao-kms-provider-image.tar"}
 	for index, source := range staticAssets {
-		dest := cfg.staticPodHost + ":" + remoteProviderAssetDir + "/" + remoteNames[index]
+		dest := host + ":" + remoteProviderAssetDir + "/" + remoteNames[index]
 		if err := scpLab(ctx, cfg, source, dest); err != nil {
 			return err
 		}
@@ -1318,6 +1662,11 @@ resources:
 }
 
 func writeStaticPodManifest(cfg *labConfig) error {
+	path := filepath.Join(cfg.providerAssetDir, "bao-kms-provider.yaml")
+	return writeStaticPodManifestForImage(cfg, path, cfg.providerImage)
+}
+
+func writeStaticPodManifestForImage(cfg *labConfig, path string, image string) error {
 	source := filepath.Join(cfg.root, "deploy", "static-pod", "bao-kms-provider.yaml")
 	// #nosec G304 -- local lab reads repository static-pod manifest.
 	data, err := os.ReadFile(source)
@@ -1325,13 +1674,37 @@ func writeStaticPodManifest(cfg *labConfig) error {
 		return fmt.Errorf("read %s: %w", source, err)
 	}
 	placeholder := "ghcr.io/dc-tec/bao-kms-provider@sha256:" + staticPodPlaceholderHash
-	content := strings.ReplaceAll(string(data), placeholder, cfg.providerImage)
-	path := filepath.Join(cfg.providerAssetDir, "bao-kms-provider.yaml")
+	content := strings.ReplaceAll(string(data), placeholder, image)
 	// #nosec G703 -- path is assembled from local lab config.
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+func buildProviderImage(ctx context.Context, cfg *labConfig, image string, version string) error {
+	commit := gitShortCommit(ctx, cfg)
+	buildDate := time.Now().UTC().Format(time.RFC3339)
+	return runCmdEnv(
+		ctx,
+		cfg,
+		[]string{"DOCKER_BUILDKIT=1"},
+		"docker",
+		"build",
+		"--platform",
+		"linux/amd64",
+		"--build-arg",
+		"VERSION="+version,
+		"--build-arg",
+		"COMMIT="+commit,
+		"--build-arg",
+		"BUILD_DATE="+buildDate,
+		"--build-arg",
+		"DIRTY=true",
+		"-t",
+		image,
+		".",
+	)
 }
 
 func patchRemoteAPIServer(ctx context.Context, cfg *labConfig, host string, name string) error {
@@ -1365,7 +1738,7 @@ func patchRemoteAPIServer(ctx context.Context, cfg *labConfig, host string, name
 func waitAPIServer(ctx context.Context, cfg *labConfig, kubeconfig string) error {
 	deadline := time.Now().Add(4 * time.Minute)
 	for {
-		err := quietCmdEnv(ctx, cfg, []string{"KUBECONFIG=" + kubeconfig}, "kubectl", "get", "--raw=/readyz")
+		err := quietKubectl(ctx, cfg, []string{"KUBECONFIG=" + kubeconfig}, "get", "--raw=/readyz")
 		if err == nil {
 			return nil
 		}
@@ -1376,127 +1749,31 @@ func waitAPIServer(ctx context.Context, cfg *labConfig, kubeconfig string) error
 	}
 }
 
-func labVerifyKMS(ctx context.Context, cfg *labConfig, _ []string) error {
-	checks := []struct {
-		host       string
-		kubeconfig string
-		suffix     string
-	}{
-		{cfg.systemdHost, filepath.Join(cfg.artifactDir, "kubeconfig-systemd.yaml"), "systemd"},
-		{cfg.staticPodHost, filepath.Join(cfg.artifactDir, "kubeconfig-static.yaml"), "static"},
-	}
-	for _, check := range checks {
-		if err := verifyKMSOne(ctx, cfg, check.host, check.kubeconfig, check.suffix); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func verifyKMSOne(ctx context.Context, cfg *labConfig, host string, kubeconfig string, suffix string) error {
-	secretName := "openbao-kms-smoke-" + suffix
-	secretValue, err := randomHex(16)
-	if err != nil {
-		return err
-	}
-	tempFile, cleanup, err := writeTempSecretValue(secretValue)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-	env := []string{"KUBECONFIG=" + kubeconfig}
-	if err := runCmdEnv(
-		ctx,
-		cfg,
-		env,
-		"kubectl",
-		"delete",
-		"secret",
-		secretName,
-		"-n",
-		"default",
-		"--ignore-not-found=true",
-	); err != nil {
-		return err
-	}
-	if err := runCmdEnv(
-		ctx,
-		cfg,
-		env,
-		"kubectl",
-		"create",
-		"secret",
-		"generic",
-		secretName,
-		"-n",
-		"default",
-		"--from-file=value="+tempFile,
-	); err != nil {
-		return err
-	}
-	if err := runCmdEnv(ctx, cfg, env, "kubectl", "get", "secret", secretName, "-n", "default"); err != nil {
-		return err
-	}
-	remoteScript := filepath.Join(cfg.root, "hack", "harvester", "remote", "verify-kms-encryption.sh")
-	if err := scpLab(ctx, cfg, remoteScript, host+":/tmp/verify-kms-encryption.sh"); err != nil {
-		return err
-	}
-	if err := scpLab(ctx, cfg, tempFile, host+":"+remoteValuePath); err != nil {
-		return err
-	}
-	command := joinEnvForSudo(
-		"SECRET_NAME", secretName,
-		"SECRET_VALUE_FILE", remoteValuePath,
-	) + " sh /tmp/verify-kms-encryption.sh; sudo rm -f " + remoteValuePath
-	return sshLab(ctx, cfg, host, command)
-}
-
-func randomHex(length int) (string, error) {
-	data := make([]byte, length)
-	if _, err := io.ReadFull(crand.Reader, data); err != nil {
-		return "", fmt.Errorf("generate secret value: %w", err)
-	}
-	return hex.EncodeToString(data), nil
-}
-
-func writeTempSecretValue(value string) (string, func(), error) {
-	file, err := os.CreateTemp("", "openbao-kms-secret-*")
-	if err != nil {
-		return "", func() {}, fmt.Errorf("create temp secret file: %w", err)
-	}
-	path := file.Name()
-	cleanup := func() {
-		_ = os.Remove(path)
-	}
-	if _, err := file.WriteString(value); err != nil {
-		_ = file.Close()
-		cleanup()
-		return "", func() {}, fmt.Errorf("write temp secret file: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		cleanup()
-		return "", func() {}, fmt.Errorf("close temp secret file: %w", err)
-	}
-	if err := os.Chmod(path, 0o600); err != nil {
-		cleanup()
-		return "", func() {}, fmt.Errorf("chmod temp secret file: %w", err)
-	}
-	return path, cleanup, nil
-}
-
 func labE2E(ctx context.Context, cfg *labConfig, _ []string) error {
-	steps := []struct {
+	type labStep struct {
 		name string
 		run  func(context.Context, *labConfig, []string) error
-	}{
+	}
+	steps := []labStep{
 		{"lint", labLint},
 		{"create", labCreate},
 		{"wait", labWaitVMs},
 		{"wait-ssh", labWaitSSH},
 		{"bootstrap-guests", labBootstrapGuests},
-		{"verify-guests", labVerifyGuests},
-		{"wire-provider", labWireProviderCommand},
-		{"verify-kms", labVerifyKMS},
+	}
+	if cfg.multiControlPlaneEnabled {
+		steps = append(steps, labStep{"bootstrap-mcp", labBootstrapMultiControlPlane})
+	}
+	steps = append(steps,
+		labStep{"verify-guests", labVerifyGuests},
+		labStep{"wire-provider", labWireProviderCommand},
+		labStep{"verify-kms", labVerifyKMS},
+	)
+	if cfg.multiControlPlaneEnabled {
+		steps = append(steps,
+			labStep{"wire-mcp", labWireMultiControlPlaneCommand},
+			labStep{"verify-mcp-recovery", labVerifyMultiControlPlaneRecovery},
+		)
 	}
 	for _, step := range steps {
 		fmt.Printf("==> harvester lab: %s\n", step.name)
