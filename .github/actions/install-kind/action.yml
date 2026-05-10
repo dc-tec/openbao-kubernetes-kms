@@ -1,0 +1,44 @@
+name: Install kind
+description: Install a pinned kind release binary and verify its SHA256 checksum.
+
+inputs:
+  kind-version:
+    description: kind version to install.
+    required: false
+    default: v0.31.0
+  install-dir:
+    description: Directory to install kind into.
+    required: false
+    default: bin
+
+runs:
+  using: composite
+  steps:
+    - name: Install kind
+      shell: bash
+      env:
+        KIND_VERSION: ${{ inputs.kind-version }}
+        INSTALL_DIR_INPUT: ${{ inputs.install-dir }}
+      run: |
+        set -euo pipefail
+
+        install_dir="${INSTALL_DIR_INPUT/#\~/$HOME}"
+        arch="$(go env GOARCH)"
+        bin="kind-linux-${arch}"
+
+        if [[ -f "${install_dir}/kind" ]] && "${install_dir}/kind" version | grep -q "${KIND_VERSION}"; then
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+          echo "KIND=$(realpath "${install_dir}/kind")" >> "${GITHUB_ENV}"
+          "${install_dir}/kind" version
+          exit 0
+        fi
+
+        install -d "${install_dir}"
+        curl -fsSLo "${bin}" "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/${bin}"
+        curl -fsSLo "${bin}.sha256sum" "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/${bin}.sha256sum"
+        sha256sum -c "${bin}.sha256sum"
+        install -m 0755 "${bin}" "${install_dir}/kind"
+
+        echo "${install_dir}" >> "${GITHUB_PATH}"
+        echo "KIND=$(realpath "${install_dir}/kind")" >> "${GITHUB_ENV}"
+        "${install_dir}/kind" version

@@ -1,0 +1,55 @@
+name: Reproducibility Report
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Release workflow run id to fetch the report from.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reproducibility-${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Publish Reproducibility Report
+    runs-on: ubuntu-24.04
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.event == 'push' &&
+         !github.event.workflow_run.repository.fork)
+      }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Download reproducibility report artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/report
+          gh run download "${RUN_ID}" -n release-reproducibility-report -D dist/report
+
+      - name: Append report to job summary
+        run: cat dist/report/reproducibility-report.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload reproducibility report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reproducibility-report
+          path: dist/report/reproducibility-report.md
+          if-no-files-found: error
+          retention-days: 30

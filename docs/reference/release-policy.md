@@ -10,9 +10,9 @@ This page defines the release-channel policy for `bao-kms-provider`.
 
 ## Current Status
 
-The project is pre-implementation. No published release channel exists yet.
+The project is pre-release. No published release channel exists yet.
 
-release-please is configured to open release PRs and maintain the changelog. Release publishing is disabled until release gates and publishing workflows are implemented.
+release-please is configured to open release PRs and maintain the changelog. Release publishing is implemented as a separate tag workflow and remains gated by the release criteria.
 
 The first release ships as a v0.1 engineering preview unless every production-readiness gate passes.
 
@@ -83,7 +83,7 @@ The release-please workflow is PR-only:
 - it does not publish GitHub Releases,
 - it does not build, sign, attest, or upload artifacts.
 
-Publishing is a separate release workflow concern. Release workflows consume the release-please version, run release gates, build the `dist/release` artifacts, generate checksums, create SBOMs, sign, attest, and publish evidence.
+Publishing is a separate release workflow concern. Release workflows consume the release-please version, run release gates, build the release artifacts, generate checksums, create SBOMs, sign, attest, verify byte reproducibility, and publish evidence.
 
 The workflow expects a GitHub App token so release PR updates can trigger normal PR checks. Configure these repository secrets:
 
@@ -109,13 +109,27 @@ Initial Linux artifact matrix:
 | linux | amd64 |
 | linux | arm64 |
 
+Systemd hosts also receive native Linux packages and tarball fallbacks:
+
+```text
+bao-kms-provider_${VERSION}_linux_${GOARCH}.deb
+bao-kms-provider_${VERSION}_linux_${GOARCH}.rpm
+bao-kms-provider_${VERSION}_systemd_linux_${GOARCH}.tar.gz
+```
+
+Static-pod deployments receive a host-filesystem bundle:
+
+```text
+bao-kms-provider_${VERSION}_static-pod.tar.gz
+```
+
 Checksums are written to:
 
 ```text
 dist/release/checksums.txt
 ```
 
-The checksum file uses SHA-256 and contains one line per binary artifact. The Makefile target `release-artifacts` builds the Linux matrix and regenerates the checksum file.
+The checksum file uses SHA-256 and contains one line per published release artifact. `release-artifacts` builds the Linux binary matrix, `release-packages` builds `.deb` and `.rpm` packages for systemd hosts, and `release-bundles` builds deterministic systemd and static-pod tarballs.
 
 ## Release Evidence
 
@@ -126,6 +140,7 @@ Every stable release retains:
 - the workflow run reference,
 - the OpenBao and Kubernetes version matrix,
 - image and binary digests,
+- systemd packages and static-pod bundle digests,
 - checksums,
 - SBOMs,
 - a vulnerability scan summary,

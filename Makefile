@@ -1,21 +1,25 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-load-soak-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-provider-rotation-openbao-ci test-e2e-provider-upgrade-rollback-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback test-e2e-kind-dr-runbook tidy verify-tidy ci-core docs-check docs-deps docs-build docs-serve versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools vulncheck
+.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts release-packages release-bundles release-distribution checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-load-soak-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-provider-rotation-openbao-ci test-e2e-provider-upgrade-rollback-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback test-e2e-kind-dr-runbook tidy vendor verify-tidy verify-vendor ci-core docs-check docs-deps docs-build docs-serve versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools install-release-tools vulncheck go-licenses license-check license-report security-ci security-scan-fs security-scan-image security-scan-built-image fuzz harvester-lab-values harvester-lab-lint harvester-lab-render harvester-lab-dry-run harvester-lab-create harvester-lab-status harvester-lab-wait harvester-lab-ssh-config harvester-lab-wait-ssh harvester-lab-bootstrap-openbao harvester-lab-bootstrap-kubeadm harvester-lab-bootstrap-guests harvester-lab-verify-guests harvester-lab-wire-provider harvester-lab-wire-systemd harvester-lab-wire-static harvester-lab-verify-kms harvester-lab-e2e harvester-lab-destroy
 
 GO_VERSION := $(shell cat .go-version)
 GO ?= go
 GOBIN ?= $(CURDIR)/bin
 AST_GREP ?= .github/tools/node_modules/.bin/ast-grep
 SEMGREP ?= semgrep
-GOFUMPT ?= gofumpt
-STATICCHECK ?= staticcheck
-GOVULNCHECK ?= govulncheck
-GOLANGCI_LINT ?= golangci-lint
+GOFUMPT ?= $(if $(wildcard $(GOBIN)/gofumpt),$(GOBIN)/gofumpt,gofumpt)
+STATICCHECK ?= $(if $(wildcard $(GOBIN)/staticcheck),$(GOBIN)/staticcheck,staticcheck)
+GOVULNCHECK ?= $(if $(wildcard $(GOBIN)/govulncheck),$(GOBIN)/govulncheck,govulncheck)
+GOLANGCI_LINT ?= $(if $(wildcard $(GOBIN)/golangci-lint),$(GOBIN)/golangci-lint,golangci-lint)
+GO_LICENSES ?= $(if $(wildcard $(GOBIN)/go-licenses),$(GOBIN)/go-licenses,go-licenses)
+NFPM ?= $(if $(wildcard $(GOBIN)/nfpm),$(GOBIN)/nfpm,nfpm)
+TRIVY ?= trivy
 GINKGO ?= $(if $(wildcard $(GOBIN)/ginkgo),$(GOBIN)/ginkgo,ginkgo)
 SEMGREP_CONFIG_FLAGS ?= --config .semgrep/rules
-SEMGREP_TARGETS ?= cmd internal
+SEMGREP_TARGETS ?= cmd internal .github
 SEMGREP_ARTIFACT_DIR ?= dist/semgrep
 SEMGREP_OUTPUT_JSON ?= $(SEMGREP_ARTIFACT_DIR)/semgrep.json
+FUZZTIME ?= 10s
 E2E_PACKAGE ?= ./test/e2e
 E2E_LABEL_FILTER ?=
 E2E_TIMEOUT ?= 30m
@@ -41,17 +45,31 @@ DIST_DIR ?= dist/release
 CHECKSUM_FILE ?= $(DIST_DIR)/checksums.txt
 CHECKSUM ?= shasum -a 256
 RELEASE_TARGETS ?= linux/amd64 linux/arm64
+PACKAGE_FORMATS ?= deb rpm
+PACKAGE_RELEASE ?= 1
+NFPM_CONFIG ?= deploy/package/linux/nfpm.yaml
 VERSION ?= 0.0.0-dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf '%s' unknown)
-BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+BUILD_DATE ?= $(shell if [ -n "$${SOURCE_DATE_EPOCH:-}" ]; then date -u -r "$${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ; else date -u +%Y-%m-%dT%H:%M:%SZ; fi)
 DIRTY ?= $(shell if [ -n "$$(git status --porcelain 2>/dev/null)" ]; then printf '%s' true; else printf '%s' false; fi)
 VERSION_PKG := github.com/dc-tec/openbao-kubernetes-kms/internal/version
+GO_BUILD_FLAGS ?= -trimpath -buildvcs=false
 LDFLAGS := -s -w -X $(VERSION_PKG).version=$(VERSION) -X $(VERSION_PKG).commit=$(COMMIT) -X $(VERSION_PKG).buildDate=$(BUILD_DATE) -X $(VERSION_PKG).dirty=$(DIRTY)
 GOFUMPT_VERSION ?= v0.9.2
 STATICCHECK_VERSION ?= v0.7.0
 GOVULNCHECK_VERSION ?= v1.2.0
 GOLANGCI_LINT_VERSION ?= v2.11.4
 GINKGO_VERSION ?= v2.28.3
+GO_LICENSES_VERSION ?= v2.0.1
+NFPM_VERSION ?= v2.46.3
+GO_LICENSES_ALLOWED ?= Apache-2.0 BSD-2-Clause BSD-3-Clause ISC MIT MPL-2.0 Unicode-DFS-2016
+GO_LICENSES_IGNORE ?= github.com/dc-tec/openbao-kubernetes-kms
+GO_LICENSES_PACKAGE_TARGETS ?= ./cmd/bao-kms-provider
+LICENSE_REPORT_DIR ?= dist/licenses
+go_licenses_empty :=
+go_licenses_space := $(go_licenses_empty) $(go_licenses_empty)
+go_licenses_comma := ,
+GO_LICENSES_ALLOWED_CSV := $(subst $(go_licenses_space),$(go_licenses_comma),$(strip $(GO_LICENSES_ALLOWED)))
 HUGO_VERSION ?= v0.159.1
 HUGO_RUN := GOFLAGS="-mod=mod" "$(GO)" run github.com/gohugoio/hugo@$(HUGO_VERSION)
 DOCS_BASE_URL ?= https://dc-tec.github.io/openbao-kms-provider/
@@ -65,6 +83,9 @@ help:
 	@printf '%s\n' '  image           Build local distroless non-root container image'
 	@printf '%s\n' '  image-smoke     Build and smoke-test local container image'
 	@printf '%s\n' '  deployment-samples-check Validate deployment sample manifests and scripts'
+	@printf '%s\n' '  release-packages Build native systemd .deb/.rpm packages from release binaries'
+	@printf '%s\n' '  release-bundles  Build deterministic systemd and static-pod tarball bundles'
+	@printf '%s\n' '  release-distribution Build release packages and bundles, then refresh checksums'
 	@printf '%s\n' '  checksums       Generate release artifact checksums'
 	@printf '%s\n' '  fmt             Format Go sources when go.mod exists'
 	@printf '%s\n' '  lint            Run lightweight lint checks'
@@ -89,8 +110,20 @@ help:
 	@printf '%s\n' '  docs-deps       Install the pinned Hugo binary locally'
 	@printf '%s\n' '  docs-build      Build the Hugo docs site into public/'
 	@printf '%s\n' '  docs-serve      Serve the docs site locally on http://localhost:1313/'
+	@printf '%s\n' '  harvester-lab-values Generate ignored local Harvester lab values'
+	@printf '%s\n' '  harvester-lab-render Render local-only Harvester VM manifests'
+	@printf '%s\n' '  harvester-lab-create Create local-only Harvester VM lab'
+	@printf '%s\n' '  harvester-lab-bootstrap-guests Bootstrap OpenBao and kubeadm inside lab VMs'
+	@printf '%s\n' '  harvester-lab-verify-guests Verify OpenBao and kubeadm guest bootstrap'
+	@printf '%s\n' '  harvester-lab-wire-provider Wire provider into both kubeadm VMs'
+	@printf '%s\n' '  harvester-lab-verify-kms Verify Kubernetes KMS v2 envelope storage'
+	@printf '%s\n' '  harvester-lab-e2e Run the full local-only Harvester kubeadm lab'
+	@printf '%s\n' '  harvester-lab-destroy Destroy local-only Harvester VM lab'
 	@printf '%s\n' '  install-go-tools Install pinned optional Go quality tools into bin/'
+	@printf '%s\n' '  install-release-tools Install pinned release packaging tools into bin/'
 	@printf '%s\n' '  semgrep-ci      Run Semgrep rule tests and blocking scan when semgrep is available'
+	@printf '%s\n' '  security-ci     Run vulnerability, license, and filesystem security scans'
+	@printf '%s\n' '  verify-vendor   Verify vendor/ is synchronized with go.mod and go.sum'
 	@printf '%s\n' '  versions-check  Check central version policy exists'
 	@printf '%s\n' '  verify-e2e-manifest Validate the E2E suite manifest'
 
@@ -105,15 +138,20 @@ bootstrap:
 
 install-go-tools:
 	@mkdir -p "$(GOBIN)"
-	@GOBIN="$(GOBIN)" "$(GO)" install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
-	@GOBIN="$(GOBIN)" "$(GO)" install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
-	@GOBIN="$(GOBIN)" "$(GO)" install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
-	@GOBIN="$(GOBIN)" "$(GO)" install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-	@GOBIN="$(GOBIN)" "$(GO)" install github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
+	@env -u GOFLAGS GOBIN="$(GOBIN)" "$(GO)" install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+	@env -u GOFLAGS GOBIN="$(GOBIN)" "$(GO)" install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
+	@env -u GOFLAGS GOBIN="$(GOBIN)" "$(GO)" install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	@env -u GOFLAGS GOBIN="$(GOBIN)" "$(GO)" install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@env -u GOFLAGS GOBIN="$(GOBIN)" "$(GO)" install github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
+	@env -u GOFLAGS GOBIN="$(GOBIN)" "$(GO)" install github.com/google/go-licenses/v2@$(GO_LICENSES_VERSION)
+
+install-release-tools:
+	@mkdir -p "$(GOBIN)"
+	@env -u GOFLAGS GOBIN="$(GOBIN)" "$(GO)" install github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION)
 
 build:
 	@mkdir -p "$$(dirname "$(BIN)")"
-	@"$(GO)" build -trimpath -ldflags "$(LDFLAGS)" -o "$(BIN)" ./cmd/bao-kms-provider
+	@"$(GO)" build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o "$(BIN)" ./cmd/bao-kms-provider
 
 image:
 	@DOCKER_BUILDKIT=1 "$(DOCKER)" build \
@@ -142,13 +180,74 @@ release-artifacts: clean-dist
 		goarch="$${target#*/}"; \
 		artifact="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
 		printf 'building %s\n' "$$artifact"; \
-		CGO_ENABLED=0 GOOS="$$goos" GOARCH="$$goarch" "$(GO)" build -trimpath -ldflags "$(LDFLAGS)" -o "$$artifact" ./cmd/bao-kms-provider; \
+			CGO_ENABLED=0 GOOS="$$goos" GOARCH="$$goarch" "$(GO)" build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o "$$artifact" ./cmd/bao-kms-provider; \
 	done
+	@$(MAKE) checksums
+
+release-packages:
+	@if ! command -v "$(NFPM)" >/dev/null 2>&1; then \
+		printf '%s\n' 'nfpm not installed; run make install-release-tools.'; \
+		exit 1; \
+	fi
+	@set -eu; \
+	for target in $(RELEASE_TARGETS); do \
+		goos="$${target%/*}"; \
+		goarch="$${target#*/}"; \
+		binary="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
+		if [ ! -f "$$binary" ]; then \
+			printf 'release binary not found: %s\n' "$$binary" >&2; \
+			exit 1; \
+		fi; \
+		for format in $(PACKAGE_FORMATS); do \
+			artifact="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${goos}_$${goarch}.$$format"; \
+			printf 'packaging %s\n' "$$artifact"; \
+			SOURCE_DATE_EPOCH="$${SOURCE_DATE_EPOCH:-0}" \
+			VERSION="$(VERSION)" \
+			NFPM_ARCH="$$goarch" \
+			NFPM_RELEASE="$(PACKAGE_RELEASE)" \
+			BUILD_DATE="$(BUILD_DATE)" \
+			PACKAGE_BINARY="$$binary" \
+				"$(NFPM)" package --config "$(NFPM_CONFIG)" --packager "$$format" --target "$$artifact"; \
+		done; \
+	done
+
+release-bundles:
+	@set -eu; \
+	source_date_epoch="$${SOURCE_DATE_EPOCH:-0}"; \
+	image_ref="$(IMAGE)"; \
+	if [ -n "$${IMAGE_DIGEST:-}" ]; then image_ref="$${image_ref}@$${IMAGE_DIGEST}"; fi; \
+	for target in $(RELEASE_TARGETS); do \
+		goos="$${target%/*}"; \
+		goarch="$${target#*/}"; \
+		binary="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
+		if [ ! -f "$$binary" ]; then \
+			printf 'release binary not found: %s\n' "$$binary" >&2; \
+			exit 1; \
+		fi; \
+		GOFLAGS="-mod=vendor" "$(GO)" run ./hack/tools/release_bundle \
+			-kind systemd \
+			-output "$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_systemd_$${goos}_$${goarch}.tar.gz" \
+			-prefix "$(BINARY_NAME)_$(VERSION)_systemd_$${goos}_$${goarch}" \
+			-binary "$$binary" \
+			-source-date-epoch "$$source_date_epoch"; \
+	done; \
+	GOFLAGS="-mod=vendor" "$(GO)" run ./hack/tools/release_bundle \
+		-kind static-pod \
+		-output "$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_static-pod.tar.gz" \
+		-prefix "$(BINARY_NAME)_$(VERSION)_static-pod" \
+		-image-ref "$$image_ref" \
+		-source-date-epoch "$$source_date_epoch"
+
+release-distribution: release-packages release-bundles
 	@$(MAKE) checksums
 
 checksums:
 	@set -eu; \
-	artifacts="$$(find "$(DIST_DIR)" -maxdepth 1 -type f -name '$(BINARY_NAME)_$(VERSION)_*' -exec basename {} \; | sort)"; \
+	artifacts="$$(find "$(DIST_DIR)" -maxdepth 1 -type f \
+		! -name "$$(basename "$(CHECKSUM_FILE)")" \
+		! -name '*.bundle' \
+		! -name 'provenance-index.json' \
+		-exec basename {} \; | sort)"; \
 	if [ -z "$$artifacts" ]; then \
 		printf '%s\n' 'No release artifacts found for checksum generation.'; \
 		exit 1; \
@@ -159,19 +258,19 @@ clean-dist:
 	@rm -rf "$(DIST_DIR)"
 
 fmt:
-	@if find cmd internal test -name '*.go' 2>/dev/null | grep -q .; then \
-		gofmt -w $$(find cmd internal test -name '*.go'); \
-		if command -v "$(GOFUMPT)" >/dev/null 2>&1; then "$(GOFUMPT)" -w cmd internal test; fi; \
+	@if find cmd internal test hack/tools -name '*.go' 2>/dev/null | grep -q .; then \
+		gofmt -w $$(find cmd internal test hack/tools -name '*.go'); \
+		if command -v "$(GOFUMPT)" >/dev/null 2>&1; then "$(GOFUMPT)" -w cmd internal test hack/tools; fi; \
 	else \
 		printf '%s\n' 'No Go files yet; skipping Go formatting.'; \
 	fi
 
 verify-fmt:
-	@if find cmd internal test -name '*.go' 2>/dev/null | grep -q .; then \
-		unformatted="$$(gofmt -l $$(find cmd internal test -name '*.go'))"; \
+	@if find cmd internal test hack/tools -name '*.go' 2>/dev/null | grep -q .; then \
+		unformatted="$$(gofmt -l $$(find cmd internal test hack/tools -name '*.go'))"; \
 		if [ -n "$$unformatted" ]; then printf '%s\n' "$$unformatted"; exit 1; fi; \
 		if command -v "$(GOFUMPT)" >/dev/null 2>&1; then \
-			unformatted="$$("$(GOFUMPT)" -l cmd internal test)"; \
+			unformatted="$$("$(GOFUMPT)" -l cmd internal test hack/tools)"; \
 			if [ -n "$$unformatted" ]; then printf '%s\n' "$$unformatted"; exit 1; fi; \
 		else \
 			printf '%s\n' 'gofumpt not installed; skipping gofumpt verification.'; \
@@ -267,29 +366,104 @@ test-e2e-kind-dr-runbook: verify-e2e-manifest
 	@E2E_KIND_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" E2E_KIND_NODE_IMAGE="$(E2E_KIND_NODE_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestKindDRRestoreRunbookE2E$$' -count=1 -timeout=35m
 
 tidy:
-	@"$(GO)" mod tidy
+	@GOFLAGS="-mod=mod" "$(GO)" mod tidy
+
+vendor:
+	@GOFLAGS="-mod=mod" "$(GO)" mod vendor
 
 verify-tidy:
 	@tmp="$$(mktemp -d)"; \
 	trap 'rm -rf "$$tmp"' EXIT; \
 	cp go.mod "$$tmp/go.mod"; \
 	cp go.sum "$$tmp/go.sum"; \
-	"$(GO)" mod tidy; \
+	GOFLAGS="-mod=mod" "$(GO)" mod tidy; \
 	cmp -s go.mod "$$tmp/go.mod" && cmp -s go.sum "$$tmp/go.sum"
+
+verify-vendor:
+	@tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	cp go.mod "$$tmp/go.mod"; \
+	cp go.sum "$$tmp/go.sum"; \
+	if [ -d vendor ]; then cp -R vendor "$$tmp/vendor"; else mkdir "$$tmp/vendor"; fi; \
+	GOFLAGS="-mod=mod" "$(GO)" mod vendor; \
+	cmp -s go.mod "$$tmp/go.mod" && cmp -s go.sum "$$tmp/go.sum" && diff -qr "$$tmp/vendor" vendor >/dev/null
 
 vulncheck:
 	@if command -v "$(GOVULNCHECK)" >/dev/null 2>&1; then "$(GOVULNCHECK)" ./...; else printf '%s\n' 'govulncheck not installed; skipping govulncheck.'; fi
 
+go-licenses:
+	@if ! command -v "$(GO_LICENSES)" >/dev/null 2>&1; then \
+		printf '%s\n' 'go-licenses not installed; run make install-go-tools.'; \
+		exit 1; \
+	fi
+
+license-check: verify-vendor go-licenses
+	@"$(GO_LICENSES)" check \
+		--allowed_licenses="$(GO_LICENSES_ALLOWED_CSV)" \
+		--ignore "$(GO_LICENSES_IGNORE)" \
+		$(GO_LICENSES_PACKAGE_TARGETS)
+
+license-report: verify-vendor go-licenses
+	@mkdir -p "$(LICENSE_REPORT_DIR)"
+	@"$(GO_LICENSES)" report \
+		--ignore "$(GO_LICENSES_IGNORE)" \
+		$(GO_LICENSES_PACKAGE_TARGETS) \
+		> "$(LICENSE_REPORT_DIR)/go-licenses-report.csv" \
+		2> "$(LICENSE_REPORT_DIR)/go-licenses-report.stderr.log"
+	@printf 'License report written to %s\n' "$(LICENSE_REPORT_DIR)/go-licenses-report.csv"
+
+security-ci: vulncheck license-check security-scan-fs
+
+security-scan-fs:
+	@if command -v "$(TRIVY)" >/dev/null 2>&1; then \
+		"$(TRIVY)" fs \
+			--scanners vuln,misconfig \
+			--severity HIGH,CRITICAL \
+			--ignore-unfixed \
+			--exit-code 1 \
+			--ignorefile .trivyignore \
+			--skip-version-check \
+			--skip-dirs .github/tools/node_modules \
+			--skip-dirs artifacts \
+			--skip-dirs bin \
+			--skip-dirs dist \
+			--skip-dirs public \
+			--skip-dirs vendor \
+			.; \
+	else \
+		printf '%s\n' 'trivy not installed; skipping filesystem security scan.'; \
+	fi
+
+security-scan-image:
+	@if command -v "$(TRIVY)" >/dev/null 2>&1; then \
+		"$(TRIVY)" image \
+			--severity HIGH,CRITICAL \
+			--ignore-unfixed \
+			--exit-code 1 \
+			--skip-version-check \
+			"$(IMAGE)"; \
+	else \
+		printf '%s\n' 'trivy not installed; skipping image security scan.'; \
+	fi
+
+security-scan-built-image: image security-scan-image
+
+fuzz:
+	@"$(GO)" test ./internal/aad -run '^$$' -fuzz '^FuzzParseAnnotations$$' -fuzztime="$(FUZZTIME)"
+	@"$(GO)" test ./internal/keyregistry -run '^$$' -fuzz '^FuzzParseKeyID$$' -fuzztime="$(FUZZTIME)"
+
 deployment-samples-check:
 	@"$(GO)" test ./test/deployment
 	@for script in hack/kubeadm/*.sh; do sh -n "$$script"; done
+	@for script in hack/harvester/*.sh hack/harvester/remote/*.sh; do sh -n "$$script"; done
+	@for script in deploy/package/linux/scripts/*.sh; do sh -n "$$script"; done
 	@if command -v systemd-analyze >/dev/null 2>&1; then \
 		systemd-analyze verify deploy/systemd/bao-kms-provider.service; \
 	else \
 		printf '%s\n' 'systemd-analyze not installed; skipping systemd unit verification.'; \
 	fi
 
-ci-core: verify-tidy lint vulncheck test test-race build release-artifacts
+ci-core: verify-tidy verify-vendor lint security-ci test test-race fuzz build release-artifacts
 
 docs-check:
 	@! grep -R -n --exclude-dir=_archive $$(printf '\357\277\274') README.md docs
@@ -305,6 +479,63 @@ docs-build:
 
 docs-serve:
 	@$(HUGO_RUN) server --source . --baseURL http://localhost:1313/
+
+harvester-lab-values:
+	@hack/harvester/lab.sh values
+
+harvester-lab-lint:
+	@hack/harvester/lab.sh lint
+
+harvester-lab-render:
+	@hack/harvester/lab.sh render
+
+harvester-lab-dry-run:
+	@hack/harvester/lab.sh dry-run
+
+harvester-lab-create:
+	@hack/harvester/lab.sh create
+
+harvester-lab-status:
+	@hack/harvester/lab.sh status
+
+harvester-lab-wait:
+	@hack/harvester/lab.sh wait
+
+harvester-lab-ssh-config:
+	@hack/harvester/lab.sh ssh-config
+
+harvester-lab-wait-ssh:
+	@hack/harvester/lab.sh wait-ssh
+
+harvester-lab-bootstrap-openbao:
+	@hack/harvester/lab.sh bootstrap-openbao
+
+harvester-lab-bootstrap-kubeadm:
+	@hack/harvester/lab.sh bootstrap-kubeadm
+
+harvester-lab-bootstrap-guests:
+	@hack/harvester/lab.sh bootstrap-guests
+
+harvester-lab-verify-guests:
+	@hack/harvester/lab.sh verify-guests
+
+harvester-lab-wire-provider:
+	@hack/harvester/lab.sh wire-provider
+
+harvester-lab-wire-systemd:
+	@hack/harvester/lab.sh wire-systemd
+
+harvester-lab-wire-static:
+	@hack/harvester/lab.sh wire-static
+
+harvester-lab-verify-kms:
+	@hack/harvester/lab.sh verify-kms
+
+harvester-lab-e2e:
+	@hack/harvester/lab.sh e2e
+
+harvester-lab-destroy:
+	@hack/harvester/lab.sh destroy
 
 test-ast:
 	@if command -v "$(AST_GREP)" >/dev/null 2>&1; then \

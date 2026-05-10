@@ -23,6 +23,10 @@ The design follows a pattern adopted from the OpenBao Operator project where it 
 - provenance and signature evidence,
 - release reproducibility checks before promotion.
 
+The repository commits the Go `vendor/` tree. CI and release jobs run with
+`GOFLAGS=-mod=vendor` except where a target intentionally refreshes or verifies
+module metadata.
+
 ## Version Pinning Policy
 
 CI does not use floating `latest` inputs for support claims.
@@ -277,7 +281,7 @@ Every stable release publishes or retains:
 - the source commit,
 - a signed tag,
 - image digests,
-- binary checksums,
+- binary, package, and bundle checksums,
 - SBOMs,
 - a vulnerability scan result summary,
 - provenance attestations,
@@ -285,6 +289,12 @@ Every stable release publishes or retains:
 - a reproducibility report,
 - release notes,
 - the compatibility matrix used for the release.
+
+The release workflow publishes the KMS provider image by digest, the Linux
+binary matrix, native `.deb` and `.rpm` packages for systemd hosts,
+deterministic systemd and static-pod tarball bundles, checksums, image and
+binary SPDX SBOMs, a checksum signature bundle, GitHub provenance
+attestations, a byte-reproducibility report, and a provenance index.
 
 ## Backlog Implications
 

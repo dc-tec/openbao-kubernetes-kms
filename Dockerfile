@@ -10,6 +10,7 @@ ARG VERSION=0.0.0-dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=1970-01-01T00:00:00Z
 ARG DIRTY=false
+ARG SOURCE_DATE_EPOCH=0
 
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -18,7 +19,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false \
       -ldflags="-s -w -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.version=$VERSION -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.commit=$COMMIT -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.buildDate=$BUILD_DATE -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.dirty=$DIRTY" \
       -o /out/bao-kms-provider ./cmd/bao-kms-provider
 
