@@ -1,14 +1,18 @@
+---
+title: "systemd Deployment"
+description: "Hardened systemd unit, directory setup, and startup procedure for running bao-kms-provider as a host service."
+weight: 20
+---
+
 # systemd Deployment
 
-systemd is the preferred hardened deployment model when operators control the host operating system.
+systemd is the preferred hardened deployment model when operators control the host operating system. It avoids depending on kubelet, the container runtime, or the Kubernetes API server to start the KMS plugin, which matters because `kube-apiserver` may require the plugin to decrypt already-encrypted resources during startup.
 
-## Why systemd
-
-systemd avoids depending on kubelet, the container runtime, or the Kubernetes API server to start the KMS plugin. That matters because kube-apiserver may require the KMS plugin to decrypt already-encrypted resources during startup.
+This page covers the unit file, directory setup, and startup procedure. For the model selection rationale see [Deployment: Choosing A Model](/deployment/choosing-a-model/). For the user, group, and file ownership model see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
 ## Recommended Unit
 
-The maintained sample unit lives at [`deploy/systemd/bao-kms-provider.service`](../../deploy/systemd/bao-kms-provider.service). It uses the resolved identity model from [Linux identity model](linux-identity-model.md).
+The maintained sample unit lives at `deploy/systemd/bao-kms-provider.service` in the repository. It uses the identity model from [Linux Identity Model](/deployment/linux-identity-model/).
 
 ```ini
 [Unit]
@@ -56,13 +60,11 @@ AmbientCapabilities=
 WantedBy=multi-user.target
 ```
 
-The exact ordering depends on the Kubernetes distribution. For kubeadm-style hosts, the goal is that the plugin socket is available before kubelet starts the static pod API server.
+The exact ordering depends on the Kubernetes distribution. For kubeadm-style hosts, the goal is that the plugin socket is available before kubelet starts the static-pod API server.
 
-Use [`deploy/config/provider-systemd.yaml`](../../deploy/config/provider-systemd.yaml) as the starting provider config for host-service deployments.
+Use `deploy/config/provider-systemd.yaml` as the starting provider configuration for host-service deployments.
 
 ## Directory Setup
-
-Example:
 
 ```sh
 install -d -o root -g root -m 0750 /etc/openbao-kms
@@ -72,9 +74,9 @@ install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms/state
 install -d -o openbao-kms -g openbao-kms-socket -m 2750 /run/openbao-kms
 ```
 
-The service should verify `/run/openbao-kms` at startup. Packaging should create it through `tmpfiles.d` or an equivalent root-owned install step so the group is `openbao-kms-socket` and the setgid bit preserves the socket access group. The socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
+The service verifies `/run/openbao-kms` at startup. Packaging should create the runtime directory through `tmpfiles.d` or an equivalent root-owned install step so the group is `openbao-kms-socket` and the setgid bit preserves the socket access group. The socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
 
-Sample `tmpfiles.d` entries live under [`deploy/package/linux/tmpfiles.d/openbao-kms.conf`](../../deploy/package/linux/tmpfiles.d/openbao-kms.conf). The runtime-only entry is:
+A sample `tmpfiles.d` entry lives under `deploy/package/linux/tmpfiles.d/openbao-kms.conf`. The runtime-only entry is:
 
 ```text
 d /run/openbao-kms 2750 openbao-kms openbao-kms-socket -
@@ -98,36 +100,26 @@ bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
 ## Hardening Checklist
 
 - Run as non-root where possible.
-- Keep JWT readable only by the plugin.
-- Keep socket writable only by plugin and kube-apiserver.
+- Keep the JWT readable only by the plugin process.
+- Keep the socket writable only by the plugin and the API server identity.
 - Verify `ProtectSystem=strict` does not block required paths.
 - Bind metrics and health endpoints to localhost unless explicitly needed.
 - Avoid debug endpoints.
 - Use systemd restart limits suitable for control-plane recovery.
 
-## Upgrade
-
-Upgrade one control-plane node at a time:
-
-1. Run `doctor` with the new binary.
-2. Stop service on one node.
-3. Replace binary.
-4. Start service.
-5. Verify `/ready`.
-6. Verify KMS Status key hash matches the cluster.
-7. Continue to the next node.
+For the broader hardening surface beyond the systemd unit see [Security: Hardening](/security/hardening/).
 
 ## Failure Modes
 
-Common failures:
+Common failures during initial bring-up:
 
-- service starts after kubelet/API server,
-- socket directory group is wrong,
-- `ProtectSystem` blocks config or JWT file,
-- CA bundle path is missing,
+- the service starts after kubelet or the API server,
+- the socket directory group is wrong,
+- `ProtectSystem` blocks the configuration file or JWT file,
+- the CA bundle path is missing,
 - host DNS is not ready before service start,
-- OpenBao TLS server name mismatch.
+- the OpenBao TLS server name does not match the certificate.
 
-The provider retries the initial status probe for `bootstrap.graceTimeout` before exiting. Keep this grace long enough for JWT projection, DNS/routing, OpenBao restart, and clock-sync races, but short enough that deterministic misconfiguration is visible in service status.
+The provider retries the initial status probe for `bootstrap.graceTimeout` before exiting. Keep the grace long enough for JWT projection, DNS or routing, OpenBao restart, and clock-sync races. Keep it short enough that deterministic misconfiguration is visible in service status.
 
-Use [Troubleshooting](../troubleshooting.md) for recovery.
+For diagnosis and recovery see [Operations: Troubleshooting](/operations/troubleshooting/). For provider upgrade procedure see [Operations: Upgrade](/operations/upgrade/).

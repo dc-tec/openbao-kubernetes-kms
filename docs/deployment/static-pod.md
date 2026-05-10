@@ -1,14 +1,22 @@
+---
+title: "Static Pod Deployment"
+description: "Static pod manifest, image preload, host preparation, and bootstrap risk profile for running bao-kms-provider as a kubelet-managed pod."
+weight: 30
+---
+
 # Static Pod Deployment
 
-Static pod deployment is useful for kubeadm-style environments and image-based control-plane management. It has different bootstrap risks than systemd.
+Static pod deployment is appropriate for kubeadm-style environments and image-based control-plane management. It has different bootstrap risks than systemd.
+
+For the model selection rationale see [Deployment: Choosing A Model](/deployment/choosing-a-model/). For the user, group, and file ownership model see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
 ## Constraints
 
-A static Pod manifest is read from the host filesystem by kubelet. Static Pods cannot depend on Kubernetes API objects such as ConfigMaps, Secrets, or ServiceAccounts.
+A static pod manifest is read from the host filesystem by kubelet. Static pods cannot depend on Kubernetes API objects such as ConfigMaps, Secrets, or ServiceAccounts.
 
-Therefore the plugin static pod must mount all required files from the host:
+The plugin static pod mounts everything it needs from the host:
 
-- config file,
+- configuration file,
 - CA bundle,
 - JWT file,
 - runtime socket directory,
@@ -16,7 +24,7 @@ Therefore the plugin static pod must mount all required files from the host:
 
 ## Example Manifest
 
-The maintained sample manifest lives at [`deploy/static-pod/bao-kms-provider.yaml`](../../deploy/static-pod/bao-kms-provider.yaml). Replace the image digest and supplemental group GID before deploying.
+The maintained sample manifest lives at `deploy/static-pod/bao-kms-provider.yaml` in the repository. Replace the image digest and the supplemental group GID before deploying.
 
 ```yaml
 apiVersion: v1
@@ -80,13 +88,11 @@ spec:
         type: Directory
 ```
 
-The final manifest depends on the host socket group GID and the released image digest. The sample uses UID/GID `65532:65532`, matching the distroless non-root image user.
+The final manifest depends on the host socket group GID and the released image digest. The sample uses UID and GID `65532:65532`, matching the distroless non-root image user.
 
 ## Image Availability
 
-For air-gapped or bootstrap-sensitive control planes, preload the image on every control-plane node.
-
-Recommended:
+For air-gapped or bootstrap-sensitive control planes, preload the image on every control-plane node:
 
 - use immutable image digests,
 - avoid `Always` pulls in recovery-sensitive deployments,
@@ -105,9 +111,9 @@ Every control-plane node must have:
 /run/openbao-kms
 ```
 
-The API server must be able to access the socket created under `/run/openbao-kms`.
-The container user must own the socket directory, or an equally narrow provider-only identity must be the only writer. The kube-apiserver socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
-The provider config used by the static pod should set `server.socketGroup` to the same numeric host GID listed in `supplementalGroups`; see [`deploy/config/provider-static-pod.yaml`](../../deploy/config/provider-static-pod.yaml).
+The API server must be able to access the socket created under `/run/openbao-kms`. The container user must own the socket directory, or an equally narrow provider-only identity must be the only writer. The API server's socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
+
+The provider configuration used by the static pod sets `server.socketGroup` to the same numeric host GID listed in `supplementalGroups`. See `deploy/config/provider-static-pod.yaml` for the matching configuration sample.
 
 ## kubeadm Placement
 
@@ -124,7 +130,7 @@ The kubelet watches this directory and starts the static pod.
 Static pod mode depends on:
 
 - kubelet,
-- container runtime,
+- the container runtime,
 - local image availability,
 - hostPath mounts,
 - container networking and DNS,
@@ -134,17 +140,17 @@ If kubelet or the container runtime is broken, the KMS plugin may not start and 
 
 The provider retries its initial status probe for `bootstrap.graceTimeout` before exiting. Static pod deployments should keep this enabled because the JWT file, container networking, DNS, OpenBao availability, and clock sync can settle after the container process starts.
 
-For single-node control planes, systemd mode is usually safer.
+For single-node control planes, systemd is usually safer. See [Deployment: Choosing A Model](/deployment/choosing-a-model/).
 
 ## Verification
 
 Before enabling API server encryption:
 
-1. Place the static pod manifest.
+1. Place the static pod manifest under `/etc/kubernetes/manifests/`.
 2. Confirm the pod is running through kubelet or container runtime tooling.
 3. Confirm `/run/openbao-kms/kms.sock` exists on the host.
-4. Run `doctor` on the host or in an equivalent debug container.
-5. Confirm kube-apiserver can connect to the socket.
+4. Run `bao-kms-provider doctor` on the host or in an equivalent debug container.
+5. Confirm `kube-apiserver` can connect to the socket.
 
 ## Source References
 

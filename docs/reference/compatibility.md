@@ -1,0 +1,135 @@
+---
+title: "Compatibility"
+description: "Kubernetes, OpenBao, OS, deployment mode, Transit key type, and CI version policy supported by bao-kms-provider in v0.1, plus breaking-change rules."
+weight: 80
+---
+
+# Compatibility
+
+This page defines the compatibility matrix for `bao-kms-provider`. Support claims do not expand beyond what CI and release tests prove.
+
+## Current Claim
+
+Status: no tested compatibility claims yet. v0.1 design target:
+
+- Kubernetes 1.34 release line,
+- Kubernetes KMS v2,
+- OpenBao 2.5.3,
+- OpenBao Transit,
+- JWT auth,
+- Linux control-plane nodes with filesystem Unix domain sockets.
+
+## Kubernetes
+
+| Version | Status |
+|---|---|
+| `< 1.34` | Not targeted for v0.1. |
+| `1.34.3` | Initial Kind e2e target pinned by image digest in `.ci/versions.yaml`. |
+| `1.34.4`–`1.34.7` | Tracked as part of the upstream `1.34` line; not validated by Kind until a runnable exact-pinned lane exists. |
+| `1.35.x` | Future candidate. Not a v0.1 support claim until release-gated. |
+| `1.36.x` | Future candidate. Not a v0.1 support claim until release-gated. |
+
+KMS v1 is not part of the primary implementation.
+
+## OpenBao
+
+| Version | Status |
+|---|---|
+| `2.5.3` | Initial v0.1 validation target. |
+| Other `2.5.x` | Future compatibility candidate; not claimed until tested. |
+| `2.4.x` | Not targeted for v0.1. |
+
+The design requires OpenBao Transit features:
+
+- a symmetric encryption key type such as `aes256-gcm96`,
+- Transit encrypt and decrypt,
+- explicit encrypt `key_version`,
+- Transit `associated_data` for AEAD key types,
+- key metadata including versions and restrictions,
+- `min_encryption_version`,
+- `min_decryption_version`,
+- `disable_upsert`,
+- JWT auth.
+
+## Operating Systems
+
+Targeted:
+
+- Linux control-plane nodes,
+- filesystem Unix domain sockets,
+- systemd or kubelet-managed static pod runtime.
+
+Not targeted for v0.1:
+
+- Windows control-plane nodes,
+- abstract Unix sockets,
+- non-Linux socket semantics.
+
+## Deployment Modes
+
+| Mode | v0.1 status |
+|---|---|
+| systemd | Targeted. |
+| Static pod | Targeted. |
+| DaemonSet | Not recommended for protecting the same cluster's API server. |
+| Sidecar with `kube-apiserver` | Not targeted. |
+
+See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model selection rationale.
+
+## Transit Key Types
+
+| Key type | Status |
+|---|---|
+| `aes256-gcm96` | Recommended default. |
+| `xchacha20-poly1305` | Optional after testing. |
+| Derived or convergent keys | Not recommended. |
+
+## Compatibility Promises
+
+After the first stable release, these surfaces remain backward compatible within a major version:
+
+- `key_id` derivation for existing epochs,
+- annotation schema,
+- AAD canonicalization,
+- configuration field meanings for identity-bearing values,
+- decrypt support for historical `key_id` values,
+- CLI JSON output once marked stable.
+
+## CI Version Policy
+
+CI does not use floating `latest` inputs for compatibility claims.
+
+The implementation uses a central version manifest at `.ci/versions.yaml` for:
+
+- OpenBao image tag and digest,
+- Kubernetes exact patch version,
+- Kind node image digest,
+- release-gate matrix rows,
+- future candidate versions.
+
+For the full CI and supply-chain controls see [Development: CI And Supply Chain](/development/ci-supply-chain/).
+
+## Breaking Changes
+
+Breaking changes require:
+
+- a written design decision,
+- a migration guide,
+- a release note,
+- updated test fixtures,
+- an explicit compatibility section in the release evidence.
+
+Examples of breaking changes:
+
+- changing `key_id` derivation,
+- changing AAD canonicalization,
+- dropping a historical annotation version,
+- changing the default AAD mode,
+- changing provider-name handling,
+- removing decrypt support for old key epochs.
+
+## Source References
+
+- [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
+- [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
+- [OpenBao JWT auth](https://openbao.org/docs/2.4.x/auth/jwt/)
