@@ -122,6 +122,22 @@ lanes:
     status: active
     reports: true
 
+  - id: openbao-decrypt-soak-ci
+    name: OpenBao Sustained Decrypt Soak CI
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && performance && soak && ci
+    prScope: main
+    environment: local-openbao
+    isolation: local-container
+    timeout: 7m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
   - id: openbao-restore-ci
     name: OpenBao Backend Replacement And Raft Restore CI
     package: ./test/e2e

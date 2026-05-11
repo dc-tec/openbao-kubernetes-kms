@@ -40,6 +40,14 @@ make test-e2e-provider-decrypt-storm-openbao-ci
 
 That target performs concurrent KMS v2 Decrypt calls through the provider against real OpenBao. It is a smoke test, not a replacement for release-candidate load testing.
 
+Run only the sustained direct decrypt soak slice with:
+
+```sh
+make test-e2e-provider-decrypt-soak-openbao-ci
+```
+
+That target prepares a fixed corpus of encrypted samples, sustains concurrent KMS v2 Decrypt calls through the real provider/OpenBao path, requires zero client-visible errors, enforces operation-count and p95-latency thresholds, and compares Docker memory/PID counts before and after the run.
+
 Run only the provider/OpenBao load-soak slice with:
 
 ```sh

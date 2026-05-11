@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts release-packages release-bundles release-distribution checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-ha-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-load-soak-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-provider-rotation-openbao-ci test-e2e-provider-upgrade-rollback-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback test-e2e-kind-dr-runbook tidy vendor verify-tidy verify-vendor ci-core docs-check docs-deps docs-build docs-serve versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools install-release-tools vulncheck go-licenses license-check license-report security-ci security-scan-fs security-scan-image security-scan-built-image fuzz harvester-lab-values harvester-lab-lint harvester-lab-render harvester-lab-dry-run harvester-lab-create harvester-lab-status harvester-lab-wait harvester-lab-ssh-config harvester-lab-wait-ssh harvester-lab-bootstrap-openbao harvester-lab-bootstrap-kubeadm harvester-lab-bootstrap-mcp harvester-lab-bootstrap-guests harvester-lab-verify-guests harvester-lab-wire-provider harvester-lab-wire-systemd harvester-lab-wire-static harvester-lab-wire-mcp harvester-lab-verify-kms harvester-lab-verify-recovery harvester-lab-verify-openbao-outage harvester-lab-verify-load harvester-lab-verify-upgrade-rollback harvester-lab-verify-paired-restore harvester-lab-verify-mcp-recovery harvester-lab-production-gate harvester-lab-e2e harvester-lab-destroy
+.PHONY: help bootstrap build build-linux image image-smoke deployment-samples-check release-artifacts release-packages release-bundles release-distribution checksums clean-dist fmt verify-fmt lint lint-ci test test-race test-e2e test-e2e-openbao test-e2e-openbao-ci test-e2e-provider-openbao-ci test-e2e-provider-failure-openbao-ci test-e2e-provider-ha-openbao-ci test-e2e-provider-decrypt-storm-openbao-ci test-e2e-provider-decrypt-soak-openbao-ci test-e2e-provider-load-soak-openbao-ci test-e2e-provider-restore-openbao-ci test-e2e-provider-rotation-openbao-ci test-e2e-provider-upgrade-rollback-openbao-ci test-e2e-kind-smoke test-e2e-kind-convergence test-e2e-kind-upgrade-rollback test-e2e-kind-dr-runbook tidy vendor verify-tidy verify-vendor ci-core docs-check docs-deps docs-build docs-serve versions-check verify-e2e-manifest lint-ast test-ast semgrep-rules-test semgrep-scan semgrep-ci install-go-tools install-release-tools vulncheck go-licenses license-check license-report security-ci security-scan-fs security-scan-image security-scan-built-image fuzz harvester-lab-values harvester-lab-lint harvester-lab-render harvester-lab-dry-run harvester-lab-create harvester-lab-status harvester-lab-wait harvester-lab-ssh-config harvester-lab-wait-ssh harvester-lab-bootstrap-openbao harvester-lab-bootstrap-kubeadm harvester-lab-bootstrap-mcp harvester-lab-bootstrap-guests harvester-lab-verify-guests harvester-lab-wire-provider harvester-lab-wire-systemd harvester-lab-wire-static harvester-lab-wire-mcp harvester-lab-verify-kms harvester-lab-verify-recovery harvester-lab-verify-openbao-outage harvester-lab-verify-load harvester-lab-verify-decrypt-warmup harvester-lab-verify-decrypt-cold-start harvester-lab-verify-upgrade-rollback harvester-lab-verify-paired-restore harvester-lab-verify-mcp-recovery harvester-lab-production-gate harvester-lab-e2e harvester-lab-destroy
 
 GO_VERSION := $(shell cat .go-version)
 GO ?= go
@@ -98,6 +98,7 @@ help:
 	@printf '%s\n' '  test-e2e-provider-failure-openbao-ci Run provider/OpenBao failure-mode E2E tests'
 	@printf '%s\n' '  test-e2e-provider-ha-openbao-ci Run provider/OpenBao HA failover E2E tests'
 	@printf '%s\n' '  test-e2e-provider-decrypt-storm-openbao-ci Run provider/OpenBao decrypt storm smoke E2E tests'
+	@printf '%s\n' '  test-e2e-provider-decrypt-soak-openbao-ci Run provider/OpenBao sustained decrypt soak E2E tests'
 	@printf '%s\n' '  test-e2e-provider-load-soak-openbao-ci Run provider/OpenBao load-soak E2E tests'
 	@printf '%s\n' '  test-e2e-provider-restore-openbao-ci Run provider/OpenBao backend replacement and restore E2E tests'
 	@printf '%s\n' '  test-e2e-provider-rotation-openbao-ci Run provider/OpenBao Transit rotation E2E tests'
@@ -121,6 +122,8 @@ help:
 	@printf '%s\n' '  harvester-lab-wire-mcp Wire provider into optional multi-control-plane kubeadm VMs'
 	@printf '%s\n' '  harvester-lab-verify-kms Verify Kubernetes KMS v2 envelope storage'
 	@printf '%s\n' '  harvester-lab-verify-mcp-recovery Verify optional multi-control-plane kubeadm recovery'
+	@printf '%s\n' '  harvester-lab-verify-decrypt-warmup Run local-only kubeadm encrypted Secret decrypt warmup/load test'
+	@printf '%s\n' '  harvester-lab-verify-decrypt-cold-start Run local-only kubeadm cold decrypt sizing test'
 	@printf '%s\n' '  harvester-lab-production-gate Run local-only recovery, outage, restore, upgrade, and load checks'
 	@printf '%s\n' '  harvester-lab-e2e Run the full local-only Harvester kubeadm lab'
 	@printf '%s\n' '  harvester-lab-destroy Destroy local-only Harvester VM lab'
@@ -339,6 +342,10 @@ test-e2e-provider-decrypt-storm-openbao-ci: verify-e2e-manifest
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
 	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderDecryptStormSmokeE2E$$' -count=1 -timeout=5m
 
+test-e2e-provider-decrypt-soak-openbao-ci: verify-e2e-manifest
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderDecryptSoakE2E$$' -count=1 -timeout=7m
+
 test-e2e-provider-load-soak-openbao-ci: verify-e2e-manifest
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; fi
 	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderLoadSoakE2E$$' -count=1 -timeout=6m
@@ -554,6 +561,12 @@ harvester-lab-verify-openbao-outage:
 
 harvester-lab-verify-load:
 	@hack/harvester/lab.sh verify-load
+
+harvester-lab-verify-decrypt-warmup:
+	@hack/harvester/lab.sh verify-decrypt-warmup
+
+harvester-lab-verify-decrypt-cold-start:
+	@hack/harvester/lab.sh verify-decrypt-cold-start
 
 harvester-lab-verify-upgrade-rollback:
 	@hack/harvester/lab.sh verify-upgrade-rollback

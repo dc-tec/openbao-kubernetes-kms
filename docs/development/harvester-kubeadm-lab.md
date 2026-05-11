@@ -205,11 +205,86 @@ make harvester-lab-verify-upgrade-rollback
 make harvester-lab-verify-paired-restore
 make harvester-lab-verify-mcp-recovery
 make harvester-lab-verify-load
+make harvester-lab-verify-decrypt-warmup
+make harvester-lab-verify-decrypt-cold-start
 ```
 
 Set `HARVESTER_LOAD_SECRET_COUNT` to change the load-smoke size. The default is
 `25` Secrets per kubeadm cluster. These targets must remain local-only and must
 not be added to public pull-request CI.
+
+Use `harvester-lab-verify-decrypt-warmup` for the heavier micro-batching
+decision workload. It creates a larger corpus of KMS-encrypted Kubernetes
+Secrets, verifies sample raw etcd envelopes, optionally restarts kube-apiserver,
+then repeatedly lists the full Secret corpus through kube-apiserver so Kubernetes
+itself drives the encrypted Secret read path and the cold KMS decrypt warmup. The
+summary reports full list count and `secret_objects_read`; provider metrics
+should be checked separately when interpreting how many KMS RPCs reached the
+provider after kube-apiserver caching. When
+`HARVESTER_ENABLE_MULTI_CONTROL_PLANE=true`, the workload runs against the
+multi-control-plane kubeadm cluster through the per-control-plane kubeconfigs;
+otherwise it runs once against the systemd cluster and once against the static
+pod cluster.
+
+Use `harvester-lab-verify-decrypt-cold-start` for a bounded cold-cache sizing
+check. It prepares the same encrypted Secret corpus, captures provider metrics,
+restarts kube-apiserver, lists the full corpus once through every selected API
+server, captures provider metrics again, and reports list latency plus provider
+decrypt and Transit decrypt counter deltas. This is the preferred quick rerun
+after a large corpus already exists because it isolates the startup recovery
+window from a long soak.
+
+Default decrypt-warmup settings are intentionally heavier than the normal load
+smoke but still bounded for local use:
+
+```sh
+HARVESTER_DECRYPT_WARMUP_SECRET_COUNT=2500
+HARVESTER_DECRYPT_WARMUP_DURATION=10m
+HARVESTER_DECRYPT_WARMUP_WORKERS=<control-plane count>
+HARVESTER_DECRYPT_WARMUP_MAX_P95=30s
+HARVESTER_DECRYPT_WARMUP_MIN_LISTS=3
+HARVESTER_DECRYPT_WARMUP_RESTART_APISERVERS=true
+HARVESTER_DECRYPT_WARMUP_RESTART_PARALLEL=false
+HARVESTER_DECRYPT_WARMUP_REUSE_CORPUS=true
+HARVESTER_DECRYPT_WARMUP_SEED_BATCH_SIZE=500
+HARVESTER_DECRYPT_WARMUP_SEED_WORKERS=1
+HARVESTER_DECRYPT_COLD_START_MAX_P95=30s
+HARVESTER_DECRYPT_COLD_START_TIMEOUT=5m
+```
+
+The seeder creates the corpus in `HARVESTER_DECRYPT_WARMUP_SEED_BATCH_SIZE`
+chunks and prints progress after each chunk. If
+`HARVESTER_DECRYPT_WARMUP_REUSE_CORPUS=true` and the selected cluster already
+has the requested number of labeled Secrets, the lab reuses the existing corpus
+and verifies representative etcd envelopes without recreating all objects. Set
+`HARVESTER_DECRYPT_WARMUP_REUSE_CORPUS=false` or change the requested Secret
+count to rebuild the corpus. For large one-time corpus builds, set
+`HARVESTER_DECRYPT_WARMUP_SEED_WORKERS` above `1` to apply independent chunks in
+parallel; keep reruns on the reusable corpus once the target size exists.
+
+For the production-confidence micro-batching decision, use the multi-control
+plane lab and run a larger corpus for at least 30 minutes:
+
+```sh
+HARVESTER_ENABLE_MULTI_CONTROL_PLANE=true \
+HARVESTER_DECRYPT_WARMUP_SECRET_COUNT=10000 \
+HARVESTER_DECRYPT_WARMUP_DURATION=30m \
+HARVESTER_DECRYPT_WARMUP_WORKERS=3 \
+HARVESTER_DECRYPT_WARMUP_SEED_WORKERS=4 \
+HARVESTER_DECRYPT_WARMUP_RESTART_PARALLEL=true \
+make harvester-lab-verify-decrypt-warmup
+```
+
+To rerun only the cold-cache recovery slice against an existing production-sized
+corpus:
+
+```sh
+HARVESTER_ENABLE_MULTI_CONTROL_PLANE=true \
+HARVESTER_DECRYPT_WARMUP_SECRET_COUNT=10000 \
+HARVESTER_DECRYPT_WARMUP_REUSE_CORPUS=true \
+HARVESTER_DECRYPT_WARMUP_RESTART_PARALLEL=true \
+make harvester-lab-verify-decrypt-cold-start
+```
 
 When `HARVESTER_ENABLE_MULTI_CONTROL_PLANE=true`, the
 `harvester-lab-production-gate` target also runs the multi-control-plane

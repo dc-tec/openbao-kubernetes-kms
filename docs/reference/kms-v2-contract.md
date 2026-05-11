@@ -147,9 +147,9 @@ For the full annotation schema and AAD envelope shape see [Reference: Key ID And
 
 ## Decrypt Micro-Batching
 
-OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider includes decrypt micro-batching as a v0.1 performance feature, disabled by default until benchmarked. See `performance.decryptMicroBatching` in [Configuration](/reference/configuration/) for the field semantics.
+OpenBao Transit supports `batch_input` for encrypt and decrypt. For v0.1, the provider keeps KMS decrypt micro-batching disabled and rejects `performance.decryptMicroBatching.enabled: true` because the production-grade KMS coalescer is not part of the release boundary. Sustained direct decrypt soak is the release-gate evidence used to decide whether this remains deferred.
 
-When enabled, micro-batching adds request queueing, per-request deadlines, cancellation behavior, order preservation, fairness, and failure fan-out concerns. Keep it disabled until benchmarks show it improves API server startup behavior without violating the latency targets below.
+Micro-batching adds request queueing, per-request deadlines, cancellation behavior, order preservation, fairness, and failure fan-out concerns. Do not enable it until benchmarks show it improves API server startup behavior without violating the latency targets below.
 
 ## Error Semantics
 

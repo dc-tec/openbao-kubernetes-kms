@@ -90,7 +90,7 @@ The design problem is therefore not just “call Transit from Kubernetes.” The
 | Transit AAD | Enabled unless compatibility testing requires disabling. |
 | Auth token storage | Memory only. |
 | Socket path | /run/openbao-kms/kms.sock. |
-| Decrypt batching | Included in v0.1, disabled by default until benchmarked. |
+| Decrypt batching | Reserved behind config; rejected for v0.1 unless sustained direct decrypt soak shows a release-blocking need. |
 | Runtime hardening | systemd for hardened production mode where practical; static pod for kubeadm-compatible Kubernetes-native deployments. |
 
 ### 3.3 Optional enhancements
@@ -608,7 +608,7 @@ If the default mode is re-login instead of token renewal, these self-token capab
 | min_encryption_version | Useful rotation guard. |
 | min_decryption_version | Dangerous if raised too early; only after full migration and verification. |
 | disable_upsert | Recommended. |
-| batch_input | Included v0.1 performance feature, disabled by default until benchmarked. |
+| batch_input | Future optimization surface; not enabled for v0.1 unless sustained direct decrypt soak shows a release-blocking need. |
 | rewrap | Operational tool outside the Kubernetes KMS hot path. |
 
 ### 10.6 Features to avoid
@@ -768,7 +768,7 @@ Kubernetes KMS v2 documentation states that the plugin must verify the key_id du
 
 ### 11.5 Decrypt micro-batching
 
-Transit supports batch_input for encrypt/decrypt. This is included in v0.1 behind an explicit disabled-by-default setting because it can help during API server startup decrypt storms, but it adds complexity:
+Transit supports batch_input for encrypt/decrypt. The provider reserves this configuration surface, but rejects enablement for v0.1 unless sustained direct decrypt soak shows a release-blocking need for a production-grade coalescer. It can help during API server startup decrypt storms, but it adds complexity:
 
 * request queueing,
 * per-request deadlines,
@@ -788,7 +788,7 @@ performance:
     maxWait: 2ms
 ```
 
-Micro-batching should remain disabled unless benchmarks show it improves startup behavior without violating latency targets.
+Micro-batching remains disabled and configuration-rejected unless benchmarks show it improves startup behavior without violating latency targets.
 
 ---
 
@@ -1824,7 +1824,7 @@ v0.1 includes:
 * In-memory OpenBao token storage.
 * Cached Status.
 * Background OpenBao probes.
-* Decrypt micro-batching implementation with disabled-by-default config.
+* Decrypt micro-batching reserved behind disabled config.
 * Static pod example.
 * systemd example.
 * Prometheus metrics.
@@ -1868,7 +1868,7 @@ v0.3 includes:
 | What is the best openbao_instance_id source? | Prefer configured stable ID. Do not depend on unstable infrastructure names. |
 | Should Transit mount accessor be used? | Prefer configured mount ID. Accessor may be useful but must be hashed and migration-documented. |
 | How should verify-rotation inspect old key IDs? | Kubernetes API inspection may not expose enough detail; etcd inspection is powerful but sensitive. Needs implementation research. |
-| Is decrypt micro-batching worth the complexity? | Included behind disabled-by-default config; default enablement remains benchmark-dependent against realistic API server startup loads. |
+| Is decrypt micro-batching worth the complexity? | Reserved behind disabled configuration; v0.1 rejects enablement unless sustained direct decrypt soak plus local-only Harvester kubeadm decrypt-warmup and cold-start evidence shows a release-blocking need. |
 | Should JWT token renewal or re-login be the default? | Re-login is simpler and exercises JWT file refresh; renewal may reduce login load. Support both, default to re-login unless tests show otherwise. |
 | Can OpenBao safely run in the same cluster? | Not recommended for protecting that cluster’s own API server. A carefully isolated management cluster is preferable. |
 | Should KMS v1 be supported at all? | Not in the core binary. If needed, provide a separate legacy artifact. |

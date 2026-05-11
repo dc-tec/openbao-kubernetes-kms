@@ -79,7 +79,7 @@ The provider applies these rules to every metric:
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `openbao_kms_decrypt_batch_size` | histogram | none | Decrypt micro-batch sizes when batching is enabled. |
+| `openbao_kms_decrypt_batch_size` | histogram | none | Reserved decrypt micro-batch sizes; not emitted while v0.1 rejects batching enablement. |
 
 ### Runtime Health
 

@@ -173,7 +173,7 @@ performanceTargets:
 
 p99 values may be adjusted based on OpenBao and network reality. The test surfaces the trade-off explicitly.
 
-Decrypt micro-batching ships behind a disabled-by-default configuration. It remains disabled until tests prove benefit under realistic API server startup conditions.
+Decrypt micro-batching remains disabled and configuration-rejected for v0.1 unless sustained direct decrypt soak and the local-only Harvester kubeadm decrypt-warmup workload show a release-blocking need for a production-grade KMS coalescer. The direct-path soak prepares a fixed encrypted sample corpus, sustains concurrent decrypts through the real provider/OpenBao path, and enforces error, p95-latency, memory-growth, and goroutine/PID-growth bounds. The Harvester workload creates or reuses a larger corpus of real Kubernetes Secrets, restarts kube-apiserver, then repeatedly lists the full Secret corpus through kube-apiserver so Kubernetes drives the encrypted Secret read path and cold KMS decrypt warmup. A separate Harvester cold-start command reuses the same corpus, restarts kube-apiserver, performs one full list through every selected API server, and records provider decrypt counter deltas to separate Kubernetes object-read load from real KMS decrypt RPC load.
 
 ### Layer 8: Security Tests
 
@@ -274,7 +274,7 @@ transit:
   - xchacha20-poly1305 optional
   - aad-enabled
   - decrypt-microbatching-disabled-default
-  - decrypt-microbatching-enabled-benchmark
+  - decrypt-microbatching-future-benchmark
 ```
 
 The exact Kubernetes patch version and Kind node image digest live in `.ci/versions.yaml`. Additional Kubernetes or OpenBao versions remain future candidates until exact-pinned release-gate lanes exist; see [Reference: Compatibility](/reference/compatibility/).

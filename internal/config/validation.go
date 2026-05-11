@@ -210,6 +210,13 @@ func validateValues(cfg Config) []ValidationProblem {
 	if cfg.Rotation.Mode != defaultRotationMode {
 		appendProblem(&problems, "rotation.mode", "only observed is supported")
 	}
+	if cfg.Performance.DecryptMicroBatching.Enabled {
+		appendProblem(
+			&problems,
+			"performance.decryptMicroBatching.enabled",
+			"decrypt micro-batching is reserved for a future release and must remain false",
+		)
+	}
 	validatePositiveDuration(&problems, "openbao.timeout", cfg.OpenBao.Timeout)
 	validatePositiveDuration(&problems, "auth.minJwtRemainingTtl", cfg.Auth.MinJWTRemainingTTL)
 	validateNonNegativeDuration(&problems, "auth.clockSkewLeeway", cfg.Auth.ClockSkewLeeway)

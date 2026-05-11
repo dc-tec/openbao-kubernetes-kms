@@ -25,14 +25,19 @@ import (
 )
 
 const (
-	envKMSSocketPath         = "KMS_SOCKET_PATH"
-	envKMSClientMode         = "KMS_CLIENT_MODE"
-	envKMSSamplePath         = "KMS_SAMPLE_PATH"
-	envKMSRotationSamplePath = "KMS_ROTATION_SAMPLE_PATH"
-	envKMSLoadSoakDuration   = "KMS_LOAD_SOAK_DURATION"
-	envKMSLoadSoakWorkers    = "KMS_LOAD_SOAK_WORKERS"
-	envKMSLoadSoakMaxP95     = "KMS_LOAD_SOAK_MAX_P95"
-	envKMSLoadSoakMinOps     = "KMS_LOAD_SOAK_MIN_OPS"
+	envKMSSocketPath          = "KMS_SOCKET_PATH"
+	envKMSClientMode          = "KMS_CLIENT_MODE"
+	envKMSSamplePath          = "KMS_SAMPLE_PATH"
+	envKMSRotationSamplePath  = "KMS_ROTATION_SAMPLE_PATH"
+	envKMSLoadSoakDuration    = "KMS_LOAD_SOAK_DURATION"
+	envKMSLoadSoakWorkers     = "KMS_LOAD_SOAK_WORKERS"
+	envKMSLoadSoakMaxP95      = "KMS_LOAD_SOAK_MAX_P95"
+	envKMSLoadSoakMinOps      = "KMS_LOAD_SOAK_MIN_OPS"
+	envKMSDecryptSoakDuration = "KMS_DECRYPT_SOAK_DURATION"
+	envKMSDecryptSoakWorkers  = "KMS_DECRYPT_SOAK_WORKERS"
+	envKMSDecryptSoakMaxP95   = "KMS_DECRYPT_SOAK_MAX_P95"
+	envKMSDecryptSoakMinOps   = "KMS_DECRYPT_SOAK_MIN_OPS"
+	envKMSDecryptSoakSamples  = "KMS_DECRYPT_SOAK_SAMPLES"
 
 	modeFullStack               = "full-stack"
 	modeCreateStaleSocket       = "create-stale-socket"
@@ -47,26 +52,37 @@ const (
 	modeExpectRotationPromotion = "expect-rotation-promotion"
 	modeExpectRotationRollback  = "expect-rotation-rollback"
 	modeDecryptStorm            = "decrypt-storm"
+	modeDecryptSoak             = "decrypt-soak"
 	modeLoadSoak                = "load-soak"
 
-	jwtRefreshWait            = 7 * time.Second
-	loadSoakDurationDefault   = 20 * time.Second
-	loadSoakMaxP95Default     = 2 * time.Second
-	loadSoakMinOpsDefault     = 90
-	loadSoakWorkersDefault    = 4
-	samplePath                = "/kms-sample/encrypted-sample.json"
-	sampleMountRoot           = "/kms-sample"
-	rotationSamplePathDefault = "/kms-sample/rotated-sample.json"
-	plaintext                 = "kubernetes secret payload"
-	requestUID                = "provider-container-full-stack-e2e"
-	stormRequests             = 64
-	stormWorkers              = 8
+	jwtRefreshWait             = 7 * time.Second
+	loadSoakDurationDefault    = 20 * time.Second
+	loadSoakMaxP95Default      = 2 * time.Second
+	loadSoakMinOpsDefault      = 90
+	loadSoakWorkersDefault     = 4
+	decryptSoakDurationDefault = 30 * time.Second
+	decryptSoakMaxP95Default   = 2 * time.Second
+	decryptSoakMinOpsDefault   = 500
+	decryptSoakSamplesDefault  = 128
+	decryptSoakWorkersDefault  = 8
+	samplePath                 = "/kms-sample/encrypted-sample.json"
+	sampleMountRoot            = "/kms-sample"
+	rotationSamplePathDefault  = "/kms-sample/rotated-sample.json"
+	plaintext                  = "kubernetes secret payload"
+	requestUID                 = "provider-container-full-stack-e2e"
+	stormRequests              = 64
+	stormWorkers               = 8
 )
 
 type encryptedSample struct {
 	Ciphertext  []byte            `json:"ciphertext"`
 	KeyID       string            `json:"keyId"`
 	Annotations map[string][]byte `json:"annotations"`
+}
+
+type decryptSoakSample struct {
+	encrypted encryptedSample
+	plaintext string
 }
 
 type loadSoakSample struct {
@@ -96,6 +112,7 @@ var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceC
 	modeExpectRotationPromotion: expectRotationPromotion,
 	modeExpectRotationRollback:  expectRotationRollback,
 	modeDecryptStorm:            decryptStorm,
+	modeDecryptSoak:             decryptSoak,
 	modeLoadSoak:                loadSoak,
 }
 
@@ -295,6 +312,124 @@ func decryptStorm(ctx context.Context, client kmsapi.KeyManagementServiceClient)
 	}
 }
 
+func decryptSoak(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+	statusResponse := waitForHealthyStatus(ctx, client)
+
+	duration := durationFromEnv(envKMSDecryptSoakDuration, decryptSoakDurationDefault)
+	maxP95 := durationFromEnv(envKMSDecryptSoakMaxP95, decryptSoakMaxP95Default)
+	workers := intFromEnv(envKMSDecryptSoakWorkers, decryptSoakWorkersDefault)
+	minOps := intFromEnv(envKMSDecryptSoakMinOps, decryptSoakMinOpsDefault)
+	sampleCount := intFromEnv(envKMSDecryptSoakSamples, decryptSoakSamplesDefault)
+	if workers <= 0 {
+		failf("decrypt soak workers must be positive")
+	}
+	if sampleCount <= 0 {
+		failf("decrypt soak samples must be positive")
+	}
+
+	samples := prepareDecryptSoakSamples(ctx, client, statusResponse.GetKeyId(), sampleCount)
+	results := make(chan loadSoakSample, workers)
+	soakCtx, cancel := context.WithTimeout(ctx, duration)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	startedAt := time.Now()
+	for workerID := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runDecryptSoakWorker(soakCtx, client, workerID, workers, samples, results)
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	stats := collectLoadSoakStats(results)
+	stats.totalDuration = time.Since(startedAt)
+	operations := []string{"decrypt"}
+	printSoakSummary("decrypt_soak", stats, operations)
+	if stats.errorCount > 0 {
+		failf("decrypt soak recorded %d errors; first=%s", stats.errorCount, stats.firstError)
+	}
+	if stats.counts["decrypt"] < minOps {
+		failf("decrypt soak operations = %d, want at least %d", stats.counts["decrypt"], minOps)
+	}
+	p95 := percentileDuration(stats.durations["decrypt"], 95)
+	if p95 > maxP95 {
+		failf("decrypt soak p95 = %s, max %s", p95, maxP95)
+	}
+}
+
+func prepareDecryptSoakSamples(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	statusKeyID string,
+	count int,
+) []decryptSoakSample {
+	samples := make([]decryptSoakSample, 0, count)
+	for index := range count {
+		plain := fmt.Sprintf("%s-%d", plaintext, index)
+		encrypted, err := client.Encrypt(ctx, &kmsapi.EncryptRequest{
+			Plaintext: []byte(plain),
+			Uid:       requestUID,
+		})
+		if err != nil {
+			failf("prepare decrypt soak sample %d: %v", index, err)
+		}
+		if encrypted.GetKeyId() != statusKeyID {
+			failf("prepare decrypt soak sample %d key_id does not match status key_id", index)
+		}
+		samples = append(samples, decryptSoakSample{
+			encrypted: encryptedSample{
+				Ciphertext:  encrypted.GetCiphertext(),
+				KeyID:       encrypted.GetKeyId(),
+				Annotations: encrypted.GetAnnotations(),
+			},
+			plaintext: plain,
+		})
+	}
+	return samples
+}
+
+func runDecryptSoakWorker(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	workerID int,
+	workers int,
+	samples []decryptSoakSample,
+	results chan<- loadSoakSample,
+) {
+	iteration := 0
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		sample := samples[(workerID+(iteration*workers))%len(samples)]
+		iteration++
+		recordDecryptSoak(ctx, client, sample, results)
+	}
+}
+
+func recordDecryptSoak(
+	ctx context.Context,
+	client kmsapi.KeyManagementServiceClient,
+	sample decryptSoakSample,
+	results chan<- loadSoakSample,
+) {
+	_ = recordLoadSoakOperation(ctx, "decrypt", results, func(requestCtx context.Context) error {
+		decrypted, err := decryptStored(requestCtx, client, sample.encrypted)
+		if err != nil {
+			return err
+		}
+		if string(decrypted.GetPlaintext()) != sample.plaintext {
+			return fmt.Errorf("decrypt returned unexpected plaintext")
+		}
+		return nil
+	})
+}
+
 func loadSoak(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
 	waitForHealthyStatus(ctx, client)
 
@@ -323,7 +458,7 @@ func loadSoak(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
 	stats := collectLoadSoakStats(results)
 	stats.totalDuration = time.Since(startedAt)
 	operations := []string{"status", "encrypt", "decrypt"}
-	printLoadSoakSummary(stats, operations)
+	printSoakSummary("load_soak", stats, operations)
 	if stats.errorCount > 0 {
 		failf("load soak recorded %d errors; first=%s", stats.errorCount, stats.firstError)
 	}
@@ -468,9 +603,10 @@ func collectLoadSoakStats(results <-chan loadSoakSample) loadSoakStats {
 	return stats
 }
 
-func printLoadSoakSummary(stats loadSoakStats, operations []string) {
+func printSoakSummary(name string, stats loadSoakStats, operations []string) {
 	summary := fmt.Sprintf(
-		"load_soak duration=%s errors=%d",
+		"%s duration=%s errors=%d",
+		name,
 		stats.totalDuration.Round(time.Millisecond),
 		stats.errorCount,
 	)

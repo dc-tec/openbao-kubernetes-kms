@@ -159,7 +159,7 @@ Goal: provide a minimal, testable OpenBao client for Transit metadata, encrypt, 
 | WS03-T09 | P0 | done | Implement probe encrypt/decrypt with non-secret random data. | WS03-T05, WS03-T06 |
 | WS03-T10 | P0 | done | Implement `disable_upsert` read for `doctor`. | WS03-T03 |
 | WS03-T11 | P1 | done | Implement capability checks for policy diagnostics. | WS03-T01 |
-| WS03-T12 | P0 | done | Add decrypt micro-batching support behind disabled-by-default config. | WS03-T06 |
+| WS03-T12 | P0 | done | Reserve decrypt micro-batching configuration and reject enablement until a production-grade KMS coalescer is implemented. | WS03-T06 |
 | WS03-T13 | P2 | done | Add namespace support tests. | WS03-T01 |
 
 Acceptance criteria:
@@ -484,6 +484,9 @@ Goal: build confidence through layered tests before production claims.
 | WS11-T08 | P0 | done | Add rotation tests. | WS06-T03 |
 | WS11-T09 | P0 | done | Add decrypt storm performance smoke test. | WS05-T05 |
 | WS11-T09A | P0 | done | Add provider/OpenBao load-soak e2e with latency/error/resource checks. | WS11-T09 |
+| WS11-T09B | P0 | done | Add sustained direct decrypt soak e2e to decide whether micro-batching is needed before v0.1. | WS11-T09 |
+| WS11-T09C | P0 | done | Add local-only Harvester kubeadm decrypt-warmup workload with real encrypted Secret corpus, kube-apiserver restart, and sustained Kubernetes-driven decrypt lists. | WS11-T09B, WS11-T10D |
+| WS11-T09D | P0 | done | Add reusable Harvester encrypted Secret corpus seeding and cold-start provider decrypt counter measurement for the micro-batching decision. | WS11-T09C |
 | WS11-T10 | P1 | done | Add kubeadm VM e2e. | WS10-T01, WS10-T02 |
 | WS11-T10A | P0 | done | Add systemd and static-pod install script staging checks. | WS10-T07 |
 | WS11-T10B | P1 | done | Add local-only Harvester kubeadm production gate for provider restart, kube-apiserver restart, VM reboot, OpenBao cached and cold outage behavior, upgrade/rollback, and load smoke. | WS11-T10, WS10-T08 |
@@ -523,6 +526,7 @@ Implementation notes:
 - `test/e2e` has OpenBao/JWT auth assertions for bound issuer, audience, and subject rejection plus pinned public-key signing-key rollover with bounded overlap and prune.
 - `test/e2e` has provider/OpenBao failure-mode tests for OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, provider re-login after signing-key rollover, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
 - `test/e2e` has a provider/OpenBao decrypt storm smoke test that performs concurrent KMS v2 Decrypt calls through the real provider image against real OpenBao.
+- `test/e2e` has a sustained direct decrypt soak lane that prepares a fixed encrypted sample corpus, runs concurrent KMS v2 Decrypt calls through the real provider/OpenBao path, and checks client-visible errors, p95 latency, Docker memory growth, and provider PID growth.
 - `test/e2e` has a provider/OpenBao load-soak lane that runs sustained Status, Encrypt, and Decrypt traffic through the real provider/OpenBao path, fails on client-visible errors or high p95 latency, and checks Docker memory/PID growth across the run.
 - `test/e2e` has a provider/OpenBao HA failover lane that starts three integrated-raft OpenBao nodes, points the provider at a standby, writes ciphertext, removes the active node, waits for a surviving voter to become active, and verifies old ciphertext readback plus new KMS operations.
 - `test/e2e` has a provider/OpenBao rotation lane that runs OpenBao with integrated raft storage, writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies provider fail-closed behavior after the observed Transit version rollback.
@@ -643,7 +647,7 @@ Parallelizable early work:
 | RD-02 | Initial OpenBao validation target is `2.5.3`. | [ADR 0007](../adr/0007-pinned-ci-version-matrix.md) |
 | RD-03 | Initial Kubernetes validation target is the `1.34` release line; the Kind lane pins `1.34.3` by image digest while tracking upstream `1.34.7` as latest patch. | [ADR 0007](../adr/0007-pinned-ci-version-matrix.md) |
 | RD-04 | AAD is enabled and required for v0.1. | [ADR 0008](../adr/0008-aad-required-for-mvp.md) |
-| RD-05 | Decrypt micro-batching is included in v0.1 behind disabled-by-default config. | [ADR 0009](../adr/0009-include-decrypt-microbatching.md) |
+| RD-05 | Decrypt micro-batching is reserved behind disabled configuration and rejected for v0.1 unless sustained direct decrypt soak plus local-only Harvester kubeadm decrypt-warmup and cold-start evidence show a release-blocking need for a production-grade coalescer. | [ADR 0009](../adr/0009-include-decrypt-microbatching.md) |
 | RD-06 | Project name, binary name, Go version, Viper, Makefile, and version policy path are fixed for M0. | [ADR 0010](../adr/0010-project-naming-and-m0-foundation.md) |
 | RD-07 | Production Go uses typed models and forbids `map[string]any`, `map[string]interface{}`, and broad `any` outside reviewed boundary adapters. | [ADR 0011](../adr/0011-strict-typed-idiomatic-go.md) |
 
@@ -669,7 +673,7 @@ This checklist duplicates the release gates in implementation terms:
 - AAD mismatch decrypt is rejected.
 - AAD is required for v0.1 objects.
 - Transit encrypt uses explicit `key_version`.
-- Decrypt storm smoke coverage passes; decrypt micro-batching remains disabled by default until benchmarking justifies enabling it.
+- Decrypt storm smoke, sustained direct decrypt soak, and local-only Harvester kubeadm decrypt-warmup and cold-start coverage pass; decrypt micro-batching remains disabled and rejected unless release-gate evidence justifies implementing the production coalescer before v0.1.
 - Rotation v1 to v2 works without key ID flip-flop.
 - Old ciphertext remains decryptable after rotation.
 - JWT expiry/re-login, role claim binding, and signing-key rollover paths work.

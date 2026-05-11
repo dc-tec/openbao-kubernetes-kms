@@ -84,7 +84,22 @@ type labConfig struct {
 	staticPodHost    string
 	providerImage    string
 	providerAssetDir string
-	loadSecretCount  int
+
+	loadSecretCount int
+
+	decryptWarmupSecretCount       int
+	decryptWarmupDuration          time.Duration
+	decryptWarmupWorkers           int
+	decryptWarmupMaxP95            time.Duration
+	decryptWarmupMinLists          int
+	decryptWarmupRestartAPIServers bool
+	decryptWarmupRestartParallel   bool
+	decryptWarmupReuseCorpus       bool
+	decryptWarmupSeedBatchSize     int
+	decryptWarmupSeedWorkers       int
+
+	decryptColdStartMaxP95  time.Duration
+	decryptColdStartTimeout time.Duration
 }
 
 type versionsConfig struct {
@@ -166,6 +181,8 @@ var labCommands = []labCommand{
 	{name: "verify-recovery", run: labVerifyRecovery},
 	{name: "verify-openbao-outage", run: labVerifyOpenBaoOutage},
 	{name: "verify-load", run: labVerifyLoad},
+	{name: "verify-decrypt-warmup", run: labVerifyDecryptWarmup},
+	{name: "verify-decrypt-cold-start", run: labVerifyDecryptColdStart},
 	{name: "verify-upgrade-rollback", run: labVerifyUpgradeRollback},
 	{name: "verify-paired-restore", run: labVerifyPairedRestore},
 	{name: "verify-mcp-recovery", run: labVerifyMultiControlPlaneRecovery},
@@ -248,6 +265,47 @@ func newLabConfig() (*labConfig, error) {
 		providerImage:          envOrDefault("PROVIDER_IMAGE", providerImageDefault),
 		providerAssetDir:       envOrDefault("HARVESTER_PROVIDER_ASSET_DIR", filepath.Join(artifactDir, "provider")),
 		loadSecretCount:        envInt("HARVESTER_LOAD_SECRET_COUNT", 25),
+		decryptWarmupSecretCount: envInt(
+			"HARVESTER_DECRYPT_WARMUP_SECRET_COUNT",
+			2500,
+		),
+		decryptWarmupDuration: envDuration(
+			"HARVESTER_DECRYPT_WARMUP_DURATION",
+			10*time.Minute,
+		),
+		decryptWarmupWorkers: envInt("HARVESTER_DECRYPT_WARMUP_WORKERS", 0),
+		decryptWarmupMaxP95: envDuration(
+			"HARVESTER_DECRYPT_WARMUP_MAX_P95",
+			30*time.Second,
+		),
+		decryptWarmupMinLists: envInt("HARVESTER_DECRYPT_WARMUP_MIN_LISTS", 3),
+		decryptWarmupRestartAPIServers: envBoolDefault(
+			"HARVESTER_DECRYPT_WARMUP_RESTART_APISERVERS",
+			true,
+		),
+		decryptWarmupRestartParallel: envBool(
+			"HARVESTER_DECRYPT_WARMUP_RESTART_PARALLEL",
+		),
+		decryptWarmupReuseCorpus: envBoolDefault(
+			"HARVESTER_DECRYPT_WARMUP_REUSE_CORPUS",
+			true,
+		),
+		decryptWarmupSeedBatchSize: envInt(
+			"HARVESTER_DECRYPT_WARMUP_SEED_BATCH_SIZE",
+			500,
+		),
+		decryptWarmupSeedWorkers: envInt(
+			"HARVESTER_DECRYPT_WARMUP_SEED_WORKERS",
+			1,
+		),
+		decryptColdStartMaxP95: envDuration(
+			"HARVESTER_DECRYPT_COLD_START_MAX_P95",
+			30*time.Second,
+		),
+		decryptColdStartTimeout: envDuration(
+			"HARVESTER_DECRYPT_COLD_START_TIMEOUT",
+			5*time.Minute,
+		),
 	}
 	if cfg.openBaoVersion == "" || cfg.kubernetesVersion == "" || cfg.flannelVersion == "" {
 		return nil, errors.New("missing OpenBao or Kubernetes versions in .ci/versions.yaml")
@@ -307,18 +365,42 @@ func envBool(name string) bool {
 	return strings.EqualFold(os.Getenv(name), "true")
 }
 
+func envBoolDefault(name string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	return strings.EqualFold(value, "true")
+}
+
 func envDuration(name string, fallback time.Duration) time.Duration {
 	value := os.Getenv(name)
 	if value == "" {
 		return fallback
 	}
-	if seconds, err := time.ParseDuration(value + "s"); err == nil {
+	if isDigitsOnly(value) {
+		seconds, err := time.ParseDuration(value + "s")
+		if err != nil {
+			return fallback
+		}
 		return seconds
 	}
 	if duration, err := time.ParseDuration(value); err == nil {
 		return duration
 	}
 	return fallback
+}
+
+func isDigitsOnly(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func envInt(name string, fallback int) int {
@@ -377,6 +459,31 @@ func outputCmd(ctx context.Context, cfg *labConfig, name string, args ...string)
 		return nil, fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, stderr.String())
 	}
 	return output, nil
+}
+
+func outputCmdEnv(ctx context.Context, cfg *labConfig, env []string, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- local lab invokes configured developer tools.
+	cmd.Dir = cfg.root
+	cmd.Env = append(baseLabEnv(cfg), env...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, stderr.String())
+	}
+	return output, nil
+}
+
+func runCmdEnvDiscardOutput(ctx context.Context, cfg *labConfig, env []string, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- local lab invokes configured developer tools.
+	cmd.Dir = cfg.root
+	cmd.Env = append(baseLabEnv(cfg), env...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, stderr.String())
+	}
+	return nil
 }
 
 func baseLabEnv(cfg *labConfig) []string {

@@ -29,14 +29,14 @@ Required before a v0.1 engineering-preview release:
 15. Containerized OpenBao integrated raft snapshot restore decrypts ciphertext created before restore.
 16. Kind multi-control-plane convergence proves each API server can decrypt through its node-local provider.
 17. Kind static-pod upgrade and rollback preserve decrypt compatibility, and provider binary upgrade and rollback with distinct images preserve old and new ciphertext readback.
-18. Provider and OpenBao load-soak sustains Status, Encrypt, and Decrypt with bounded errors, latency, memory growth, and PID growth.
+18. Provider and OpenBao load-soak sustains Status, Encrypt, and Decrypt with bounded errors, latency, memory growth, and PID growth; sustained direct decrypt soak also passes with bounded p95 latency and resource growth.
 19. Kind DR runbook restores OpenBao raft data, rehydrates provider state and configuration, and proves Kubernetes Secret readback after replacement.
 20. systemd and static-pod install scripts stage expected files and permissions.
 21. `bao-kms-provider doctor` catches bad socket, bad JWT, bad policy, and bad Transit key configuration.
 22. Logs and metrics redaction tests pass.
 23. The static-pod manifest does not rely on Kubernetes API objects.
 24. The systemd unit starts the plugin before kubelet in a kubeadm-style test.
-25. Decrypt micro-batching is implemented behind configuration and benchmarked against the direct path.
+25. Decrypt micro-batching remains disabled and rejected by configuration for v0.1 unless sustained direct decrypt soak and the local-only Harvester kubeadm decrypt-warmup and cold-start workloads show a release-blocking need for a production-grade coalescer.
 26. The central CI version manifest pins OpenBao and Kubernetes test versions.
 27. SBOM, vulnerability scan, license check, and vendored dependency policy pass.
 
@@ -96,6 +96,7 @@ Target: under 10 minutes.
 - OpenBao HA failover tests,
 - OpenBao backend replacement and raft restore tests,
 - provider and OpenBao load-soak tests,
+- sustained direct decrypt soak tests,
 - Kind DR restore runbook tests,
 - performance smoke tests,
 - container image scan,

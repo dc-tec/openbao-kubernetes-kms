@@ -11,7 +11,7 @@ The E2E framework is intentionally smaller than the OpenBao Operator framework, 
 ## Goals
 
 - keep unit and hermetic integration tests free of external services,
-- provide PR-capable ephemeral OpenBao `2.5.3` CI coverage, provider full-stack OpenBao and KMS v2 socket coverage, provider failure-mode coverage, decrypt storm smoke, provider load-soak, provider backend replacement and raft restore coverage, provider Transit rotation coverage, provider binary upgrade and rollback coverage, pinned Kind KMS v2 smoke and convergence lanes, static-pod upgrade and rollback coverage, and a Kind DR runbook lane,
+- provide PR-capable ephemeral OpenBao `2.5.3` CI coverage, provider full-stack OpenBao and KMS v2 socket coverage, provider failure-mode coverage, decrypt storm smoke, sustained direct decrypt soak, provider load-soak, provider backend replacement and raft restore coverage, provider Transit rotation coverage, provider binary upgrade and rollback coverage, pinned Kind KMS v2 smoke and convergence lanes, static-pod upgrade and rollback coverage, and a Kind DR runbook lane,
 - avoid duplicated OpenBao and Kubernetes versions across workflows,
 - produce JUnit and Ginkgo JSON reports for CI summaries and release evidence.
 
@@ -27,6 +27,7 @@ The E2E framework is intentionally smaller than the OpenBao Operator framework, 
 | Provider OpenBao failure E2E | `make test-e2e-provider-failure-openbao-ci` | Docker-compatible container runtime |
 | Provider OpenBao HA failover E2E | `make test-e2e-provider-ha-openbao-ci` | Docker-compatible container runtime |
 | Provider decrypt storm E2E | `make test-e2e-provider-decrypt-storm-openbao-ci` | Docker-compatible container runtime |
+| Provider sustained direct decrypt soak E2E | `make test-e2e-provider-decrypt-soak-openbao-ci` | Docker-compatible container runtime |
 | Provider load-soak E2E | `make test-e2e-provider-load-soak-openbao-ci` | Docker-compatible container runtime |
 | Provider backend replacement and raft restore E2E | `make test-e2e-provider-restore-openbao-ci` | Docker-compatible container runtime |
 | Provider Transit rotation E2E | `make test-e2e-provider-rotation-openbao-ci` | Docker-compatible container runtime |
@@ -45,6 +46,8 @@ The provider failure slice reuses the same real OpenBao, provider, and KMS v2 so
 The OpenBao HA slice starts three integrated-raft OpenBao nodes, points the provider at a standby endpoint, writes ciphertext, stops the active node, waits for a surviving voter to become active, then verifies old ciphertext readback and new KMS operations.
 
 The decrypt storm slice performs concurrent KMS v2 decrypts through the provider against real OpenBao.
+
+The sustained direct decrypt soak slice prepares a fixed corpus of encrypted samples, then runs concurrent KMS v2 decrypts through the provider against real OpenBao with operation-count, p95-latency, memory-growth, and PID-growth checks. It provides the direct-path evidence used to decide whether decrypt micro-batching is needed for v0.1 or can remain disabled and deferred.
 
 The load-soak slice runs sustained Status, Encrypt, and Decrypt traffic through the real provider and OpenBao path. It checks zero client errors, p95 latency, Docker memory growth, and provider PID growth.
 
@@ -107,6 +110,7 @@ Current lanes:
 | `openbao-failure-ci` | active | Validate fail-closed behavior for OpenBao, policy, JWT, Transit key, and Status staleness failure modes. |
 | `openbao-ha-ci` | active | Validate provider behavior across OpenBao integrated-raft active-node failover. |
 | `openbao-decrypt-storm-ci` | active | Exercise concurrent provider decrypts against real OpenBao as a smoke test. |
+| `openbao-decrypt-soak-ci` | active | Validate sustained direct decrypt throughput with latency and resource checks. |
 | `openbao-load-soak-ci` | active | Validate sustained Status, Encrypt, and Decrypt traffic with latency and resource checks. |
 | `openbao-restore-ci` | active | Validate provider recovery after backend replacement and OpenBao integrated raft snapshot restore. |
 | `openbao-rotation-ci` | active | Validate Transit rotation promotion, old and new decrypt compatibility, and rollback rejection. |

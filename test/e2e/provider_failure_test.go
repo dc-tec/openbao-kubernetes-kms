@@ -34,6 +34,7 @@ const (
 	kmsClientModeExpectRotationPromotion = "expect-rotation-promotion"
 	kmsClientModeExpectRotationRollback  = "expect-rotation-rollback"
 	kmsClientModeDecryptStorm            = "decrypt-storm"
+	kmsClientModeDecryptSoak             = "decrypt-soak"
 	kmsClientModeLoadSoak                = "load-soak"
 	kmsClientSampleMount                 = "/kms-sample"
 	missingTransitKeyName                = "missing-kms-e2e-key"
@@ -504,5 +505,8 @@ func runKMSClientContainer(
 	if err != nil {
 		logs := dockerLogs(context.Background(), dockerPath, providerName)
 		t.Fatalf("run KMS client container %s: %v: %s\nprovider logs:\n%s", clientName, err, strings.TrimSpace(output), logs)
+	}
+	if trimmed := strings.TrimSpace(output); trimmed != "" {
+		t.Logf("KMS client container %s output: %s", clientName, trimmed)
 	}
 }

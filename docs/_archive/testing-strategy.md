@@ -426,7 +426,7 @@ performanceTargets:
 
 The p99 values may need adjustment based on OpenBao/network reality, but the test should make the tradeoff visible.
 
-Decrypt micro-batching is included in v0.1 behind disabled-by-default configuration. It must remain disabled by default unless tests prove benefit under realistic API server startup conditions.
+Decrypt micro-batching remains disabled and configuration-rejected for v0.1 unless sustained direct decrypt soak and the local-only Harvester kubeadm decrypt-warmup workload show a release-blocking need for a production-grade KMS coalescer. The direct-path soak prepares a fixed encrypted sample corpus, sustains concurrent decrypts through the real provider/OpenBao path, and enforces error, p95-latency, memory-growth, and goroutine/PID-growth bounds. The Harvester workload creates or reuses a larger corpus of real Kubernetes Secrets, restarts kube-apiserver, then repeatedly lists the full Secret corpus through kube-apiserver so Kubernetes drives the encrypted Secret read path and cold KMS decrypt warmup. A separate Harvester cold-start command reuses the same corpus, restarts kube-apiserver, performs one full list through every selected API server, and records provider decrypt counter deltas to separate Kubernetes object-read load from real KMS decrypt RPC load.
 
 ---
 
@@ -594,7 +594,7 @@ transit:
   - xchacha20-poly1305 optional
   - aad-enabled
   - decrypt-microbatching-disabled-default
-  - decrypt-microbatching-enabled-benchmark
+  - decrypt-microbatching-future-benchmark
 ```
 
 The exact Kubernetes patch version and Kind node image digest live in the central CI version policy. Upstream `1.34.7` is tracked as the latest `1.34` patch, but the initial Kind lane pins `1.34.3` because newer official Kind node images are unavailable. Additional Kubernetes or OpenBao versions should be future candidates until exact-pinned release-gate lanes exist.
@@ -622,7 +622,7 @@ For v0.1, I would make these blocking:
 15. Static pod manifest does not rely on API objects.
 16. Systemd unit starts plugin before kubelet in kubeadm-style test.
 17. AAD is required for v0.1 objects.
-18. Decrypt micro-batching is implemented behind disabled-by-default config and benchmarked.
+18. Sustained direct decrypt soak and local-only Harvester kubeadm decrypt-warmup and cold-start checks pass; decrypt micro-batching remains disabled and rejected unless benchmark evidence justifies implementing the production coalescer before v0.1.
 19. CI uses exact-pinned OpenBao, Kubernetes, and image versions.
 20. SBOM, vulnerability scan, license check, signatures, attestations, and release evidence gates pass.
 

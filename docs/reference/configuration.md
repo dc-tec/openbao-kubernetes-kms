@@ -252,6 +252,8 @@ The following must not be enabled in production without a written exception:
 - logging raw OpenBao paths
 - broad socket permissions
 
+For v0.1, `performance.decryptMicroBatching.enabled: true` is rejected by configuration validation. The field reserves the future compatibility surface while sustained direct decrypt soak determines whether a production-grade coalescer is needed before enabling the feature.
+
 For v0.1, `transit.useAssociatedData: false` is not a supported deployment mode. The field exists to reserve the compatibility surface for future testing and migration work.
 
 ## Environment Variables

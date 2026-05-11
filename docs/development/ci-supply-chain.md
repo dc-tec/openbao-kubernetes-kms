@@ -208,6 +208,7 @@ Nightly runs:
 - failure injection,
 - OpenBao HA failover,
 - provider load-soak with sustained Status, Encrypt, and Decrypt traffic,
+- sustained direct decrypt soak,
 - decrypt storm benchmark,
 - supply-chain checks,
 - optional kubeadm VM smoke when infrastructure is available.

@@ -336,6 +336,13 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			},
 		},
 		{
+			name:  "decrypt micro-batching enabled",
+			field: "performance.decryptMicroBatching.enabled",
+			mutate: func(cfg *Config) {
+				cfg.Performance.DecryptMicroBatching.Enabled = true
+			},
+		},
+		{
 			name:  "relative state path",
 			field: "state.path",
 			mutate: func(cfg *Config) {
