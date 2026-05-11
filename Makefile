@@ -491,7 +491,7 @@ docs-deps:
 	@GOFLAGS="-mod=mod" "$(GO)" install github.com/gohugoio/hugo@$(HUGO_VERSION)
 
 docs-build:
-	@$(HUGO_RUN) --source . --baseURL "$(DOCS_BASE_URL)" --destination "$(DOCS_OUT)" --gc --minify
+	@$(HUGO_RUN) --source . --baseURL "$(DOCS_BASE_URL)" --destination "$(DOCS_OUT)" --cleanDestinationDir --gc --minify
 
 docs-serve:
 	@$(HUGO_RUN) server --source . --baseURL http://localhost:1313/

@@ -21,6 +21,8 @@ Documentation=https://github.com/dc-tec/openbao-kubernetes-kms
 Wants=network-online.target
 After=network-online.target
 Before=kubelet.service
+StartLimitIntervalSec=60
+StartLimitBurst=10
 ConditionPathExists=/etc/openbao-kms/config.yaml
 ConditionPathExists=/var/lib/openbao-kms/identity.jwt
 ConditionPathIsDirectory=/run/openbao-kms
@@ -33,8 +35,6 @@ SupplementaryGroups=openbao-kms-socket
 ExecStart=/usr/bin/bao-kms-provider serve --config /etc/openbao-kms/config.yaml
 Restart=always
 RestartSec=5s
-StartLimitIntervalSec=60
-StartLimitBurst=10
 UMask=0027
 
 NoNewPrivileges=true
@@ -47,14 +47,14 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictRealtime=true
-SystemCallArchitectures=native
-ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state
-ReadOnlyPaths=/etc/openbao-kms
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
 LockPersonality=true
 MemoryDenyWriteExecute=true
 CapabilityBoundingSet=
 AmbientCapabilities=
+ReadOnlyPaths=/etc/openbao-kms
+ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state
 
 [Install]
 WantedBy=multi-user.target
@@ -63,6 +63,25 @@ WantedBy=multi-user.target
 The exact ordering depends on the Kubernetes distribution. For kubeadm-style hosts, the goal is that the plugin socket is available before kubelet starts the static-pod API server.
 
 Use `deploy/config/provider-systemd.yaml` as the starting provider configuration for host-service deployments.
+
+## Unit Settings
+
+| Setting | Purpose |
+|---|---|
+| `Before=kubelet.service` | Starts the provider before kubelet starts static-pod control-plane components on kubeadm-style hosts. |
+| `ConditionPathExists=` | Fails early when config or JWT material has not been staged. |
+| `ConditionPathIsDirectory=` | Requires the runtime socket directory to exist with packaging-controlled ownership. |
+| `Type=exec` | Surfaces `execve` failures before systemd marks the service started. |
+| `Restart=always` and restart limits | Restarts transient provider failures without hiding a fast crash loop. |
+| `UMask=0027` | Prevents permissive files created by the process. |
+| `NoNewPrivileges=true` | Blocks privilege escalation through setuid or file capabilities. |
+| `ProtectSystem=strict` | Makes the host filesystem read-only except explicitly allowed paths. |
+| `ReadOnlyPaths=/etc/openbao-kms` | Allows config and CA reads without making the directory writable. |
+| `ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state` | Limits writes to the socket directory and non-secret local registry state. |
+| `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6` | Allows Unix sockets plus IPv4 and IPv6 OpenBao traffic. |
+| `CapabilityBoundingSet=` and `AmbientCapabilities=` | Runs without Linux capabilities. |
+
+`network-online.target` is only an ordering hint. It does not prove DNS, routing, OpenBao TLS, or the OpenBao load balancer is ready. The provider's `bootstrap.graceTimeout` handles those boot races by retrying the initial status probe before exiting.
 
 ## Directory Setup
 
@@ -95,6 +114,14 @@ Run `doctor` before enabling kube-apiserver encryption:
 
 ```sh
 bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
+```
+
+After the Kubernetes `EncryptionConfiguration` is staged, include it in the check:
+
+```sh
+bao-kms-provider doctor \
+  --config /etc/openbao-kms/config.yaml \
+  --encryption-config /etc/kubernetes/encryption-config.yaml
 ```
 
 ## Hardening Checklist

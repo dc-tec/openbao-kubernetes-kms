@@ -27,12 +27,12 @@ variable "transit_key_name" {
 
 variable "transit_key_type" {
   type        = string
-  description = "Transit key type. aes256-gcm96 is the v0.1 recommended default."
+  description = "Transit key type. v0.1 supports aes256-gcm96."
   default     = "aes256-gcm96"
 
   validation {
-    condition     = contains(["aes256-gcm96", "xchacha20-poly1305"], var.transit_key_type)
-    error_message = "transit_key_type must be aes256-gcm96 or xchacha20-poly1305."
+    condition     = var.transit_key_type == "aes256-gcm96"
+    error_message = "transit_key_type must be aes256-gcm96 for v0.1."
   }
 }
 

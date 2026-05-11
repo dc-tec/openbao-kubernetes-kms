@@ -37,11 +37,9 @@ Recommended values and why each one is the way it is:
 
 `disable_upsert` is configured at the Transit mount level. If the mount is shared with other applications, enabling it would affect those callers. A dedicated Transit mount for Kubernetes KMS keys is therefore recommended.
 
-## Optional `xchacha20-poly1305`
+## Future Key Types
 
-`xchacha20-poly1305` is available as an optional non-FIPS hardened mode for environments that prefer XChaCha20-Poly1305 and have validated OpenBao and compliance implications.
-
-It does not replace `aes256-gcm96` as the default. AES-GCM is the conservative compatibility choice and is more likely to align with regulated environments.
+Other AEAD Transit key types may be evaluated in a future release. They must not replace `aes256-gcm96` in the supported matrix until the provider validation, OpenBao integration tests, compatibility policy, diagnostics, and release evidence explicitly cover them.
 
 ## Recommended Policy Surface
 
@@ -68,11 +66,11 @@ OpenBao policies are path-based and deny by default; capabilities are only what 
 | Transit feature | Use in this design |
 |---|---|
 | `key_version` | Required on every encrypt. Avoids implicit-latest races during rotation. |
-| `associated_data` | Required v0.1 AAD binding for supported AEAD key types; see [Reference: Key ID And AAD](/reference/key-id-and-aad/). |
+| `associated_data` | Required AAD binding for supported AEAD key types; see [Reference: Key ID And AAD](/reference/key-id-and-aad/). |
 | `min_encryption_version` | Useful as a guard after rotation to prevent encryption with retired versions. Operator-driven, not plugin-driven. |
 | `min_decryption_version` | Dangerous if raised too early; only after full migration and verification. See [Operations: Rotation: min_decryption_version](/operations/rotation/#min_decryption_version). |
 | `disable_upsert` | Enabled at the mount level. |
-| `batch_input` | Available as a v0.1 performance feature, disabled by default until benchmarked. |
+| `batch_input` | Reserved for a future decrypt micro-batching implementation; the current release line rejects enabling provider-side batching. |
 | `rewrap` | Operational tool outside the Kubernetes KMS hot path. |
 
 ## Features To Avoid

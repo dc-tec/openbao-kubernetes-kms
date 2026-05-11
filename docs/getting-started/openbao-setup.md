@@ -13,6 +13,7 @@ The provider expects an existing OpenBao deployment with the Transit secrets eng
 - A reachable OpenBao instance (HTTPS endpoint, valid TLS).
 - An OpenBao token with administrative capabilities for `sys/`, `auth/`, and `transit/` paths.
 - A deterministic name for the Kubernetes Transit key. The naming convention used in this guide is `k8s-<workload>-etcd`. Replace `workload-a` with your environment-specific identifier in every example below.
+- A stable OpenBao instance ID and Transit mount ID for provider configuration. These are non-secret identity values used in Kubernetes `key_id` and AAD derivation.
 
 For background on why each choice is made, see [Architecture: Transit Key Model](/architecture/transit-key-model/) and [Security: Auth Model](/security/auth-model/).
 
@@ -55,7 +56,7 @@ Recommended properties:
 | deletion allowed | `false` |
 | auto-rotate period | `0` (rotation is operator-driven) |
 
-`xchacha20-poly1305` is an optional non-FIPS alternative once integration testing has been done. The default for v0.1 is `aes256-gcm96`.
+For the current release line, `aes256-gcm96` is the only validated and supported key type. Other AEAD Transit key types require implementation and release evidence before they can be documented as supported.
 
 Once the key exists, do not enable `exportable`, `allow_plaintext_backup`, or `deletion_allowed` after the fact. OpenBao does not allow these flags to be turned off again, so the safety properties of the key cannot be restored.
 
@@ -63,11 +64,26 @@ Once the key exists, do not enable `exportable`, `allow_plaintext_backup`, or `d
 
 Generate a stable, non-secret identifier for this Transit key creation event:
 
-```text
-01HXEXAMPLEKEYLINEAGEID
+```sh
+openssl rand -hex 16
 ```
 
-Store the lineage ID in platform configuration management and supply it to the provider through the configuration file (see [Configuration](/reference/configuration/)).
+Example output:
+
+```text
+7d34fb7df15f4e4c95d6c2a50fe90d84
+```
+
+Store the lineage ID in platform configuration management and supply it to the provider through `transit.keyIdScope.keyLineageId` (see [Configuration](/reference/configuration/)).
+
+The lineage ID is not a secret. It must be:
+
+- generated once when the Transit key is created,
+- stable for the full lifetime of that key generation,
+- unique across deleted and recreated keys,
+- independent of the key name, mount path, OpenBao URL, or cluster name.
+
+An existing platform inventory ID or ULID can be used if it has the same properties. Do not derive the lineage ID from mutable topology strings.
 
 If the Transit key is deleted and recreated, generate a new lineage ID and treat the event as a destructive migration. The provider uses this ID to reject decrypt requests carrying ciphertext from a different key generation.
 
@@ -179,6 +195,15 @@ After installing the provider, `bao-kms-provider doctor` validates the OpenBao s
 - `disable_upsert` is enabled on the Transit mount.
 
 Doctor failures during initial setup are usually policy-related. See [Operations: Troubleshooting](/operations/troubleshooting/) for common cases.
+
+Before wiring Kubernetes encryption, run the focused key check as well:
+
+```sh
+bao-kms-provider verify-key \
+  --config /etc/openbao-kms/config.yaml
+```
+
+`verify-key` checks Transit metadata, key type, export settings, plaintext backup settings, deletion settings, and version restrictions. It is useful before changing API server encryption because it narrows OpenBao setup problems away from Kubernetes socket and API server wiring.
 
 ## Read Next
 

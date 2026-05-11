@@ -6,7 +6,7 @@ weight: 10
 
 # Threat Model
 
-This page is the v0.1 threat model for `bao-kms-provider`. It enumerates the assets, the trust boundaries the provider sits across, the attacker capabilities the design considers, and the security properties the design provides and does not provide.
+This page is the threat model for `bao-kms-provider`. It enumerates the assets, the trust boundaries the provider sits across, the attacker capabilities the design considers, and the security properties the design provides and does not provide.
 
 ## Assets
 
@@ -18,6 +18,7 @@ This page is the v0.1 threat model for `bao-kms-provider`. It enumerates the ass
 | OpenBao client token | High |
 | JWT identity file | High |
 | Plugin configuration | Medium to high |
+| Plugin local state | Medium, security-relevant |
 | KMS Unix socket | High local control-plane access |
 | Kubernetes `key_id` values | Non-secret, security-relevant |
 | KMS annotations | Non-secret, security-relevant |
@@ -31,8 +32,10 @@ This page is the v0.1 threat model for `bao-kms-provider`. It enumerates the ass
 - Plugin process to the OpenBao HTTPS endpoint.
 - OpenBao auth method to the external JWT issuer.
 - Plugin local filesystem to host users.
+- Plugin runtime directory to the API server identity.
 - OpenBao Transit policy to OpenBao administrators.
 - etcd backup storage to backup operators.
+- OpenBao backup storage to backup operators.
 
 ## Expected Attacker Capabilities
 
@@ -44,7 +47,7 @@ The design considers attackers who can:
 - access control-plane node files as a low-privilege user,
 - submit malformed KMS requests through a compromised local API server path,
 - cause OpenBao outages or network failures,
-- steal stale JWTs or OpenBao tokens from disk or logs if present,
+- steal stale JWTs from disk or OpenBao tokens from logs if controls fail,
 - modify configuration files when file permissions are wrong.
 
 The design does not defend against every action by:
@@ -71,12 +74,13 @@ The design does not defend against every action by:
 | Annotation tampering | Canonical AAD reconstruction and annotation hash checks. |
 | KMS socket path replacement | Provider-owned, non-group-writable runtime directory; filesystem socket permissions; live-socket collision checks; verified-dead stale socket cleanup only. |
 | Provider downgrade to plaintext | Remove `identity` fallback after migration; audit `EncryptionConfiguration`. |
+| Protected API server dependency loop | Use JWT auth without TokenReview and keep OpenBao outside the protected API-server dependency path. |
 | OpenBao MITM | TLS CA validation and server name verification. |
 | OpenBao outage | Cached Status with staleness limits, fail closed, bootstrap grace, jittered auth retry backoff, alerting. |
-| Malicious or compromised plugin binary | Signed binaries and images, host hardening, reproducible builds, attestation evidence. Defense is limited because the plugin sees KMS plaintext material in flight. |
+| Malicious or compromised plugin binary | Host hardening, pinned release artifacts, and signing, reproducibility, and attestation evidence before a production-ready claim. Defense is limited because the plugin sees KMS plaintext material in flight. |
 | Log leakage | Redaction rules and tests for plaintext, JWT, tokens, and ciphertext. |
 | Metrics leakage | Hashed `key_id` values; raw OpenBao paths and high-cardinality labels excluded. |
-| Static pod API dependency | Static pod manifests avoid ConfigMaps, Secrets, and ServiceAccounts. |
+| Static pod API dependency | Static pod manifests avoid ConfigMaps, Secrets, ServiceAccounts, and mounted service account tokens. |
 
 ## Security Properties Provided
 
@@ -104,7 +108,7 @@ The design does not provide:
 
 ## Review Requirements
 
-Before any v0.1 release:
+Before any public release:
 
 - security review of `key_id` derivation,
 - security review of AAD canonicalization,
@@ -114,4 +118,4 @@ Before any v0.1 release:
 - review of log and metric redaction,
 - failure-mode validation for key deletion, recreated keys, and premature `min_decryption_version`.
 
-The implementation-backed `WS12-T07` through `WS12-T10` review evidence is recorded under [Security Reviews](/security/reviews/).
+Implementation-backed security review evidence is part of the release evidence set and must be reviewed before a production-ready claim.

@@ -12,6 +12,14 @@ If etcd contains objects encrypted with a Transit key version that no longer exi
 
 For the design view of the failure modes addressed by this runbook, see [Architecture: Failure Modes](/architecture/failure-modes/).
 
+The recovery posture is conservative:
+
+- preserve encrypted etcd data while investigating,
+- restore OpenBao Transit key material before changing Kubernetes encryption configuration,
+- keep identity-bearing provider fields unchanged,
+- use `doctor` and `verify-key` to prove the KMS path before restarting API servers,
+- restore OpenBao and etcd from a compatible backup pair when key versions or ciphertext epochs no longer line up.
+
 ## Recovery Decision Flow
 
 ```mermaid
@@ -74,11 +82,18 @@ Preserve historical Transit versions for at least as long as any retained etcd b
 2. Verify OpenBao is unsealed and healthy.
 3. Verify the JWT auth method and role configuration.
 4. Verify the plugin policy.
-5. Run `bao-kms-provider verify-key`.
-6. Run a controlled probe encrypt and decrypt.
+5. Run the `verify-key` check below.
+6. Run the `doctor` check below.
 7. Start the plugin.
 8. Start or restart `kube-apiserver`.
 9. Validate reads of encrypted Kubernetes resources.
+
+Use the active provider configuration for both checks:
+
+```sh
+bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
+bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
+```
 
 If OpenBao is restored to a point before a Transit rotation but etcd contains data encrypted after that rotation, decrypt can fail. If etcd is restored to an earlier point and OpenBao is restored to a later compatible point, decrypt usually remains possible while old key versions are retained.
 
@@ -119,7 +134,7 @@ Recovery:
 1. Stop the plugin.
 2. Restore the original OpenBao key material from backup.
 3. Restore the original key lineage configuration.
-4. Run `bao-kms-provider verify-key`.
+4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
 5. Start the plugin.
 6. Restart the API server.
 
@@ -130,7 +145,7 @@ Do not accept a recreated key as compatible with data encrypted under the previo
 1. Restore configuration from configuration management.
 2. Verify the identity-bearing fields match the previous values; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
 3. Restore the CA bundle and the JWT file.
-4. Run `bao-kms-provider doctor`.
+4. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
 5. Start the plugin.
 6. Confirm the Status `key_id` hash matches other control-plane nodes or recorded backup metadata.
 
@@ -161,9 +176,11 @@ Avoid relying only on a Kubernetes ServiceAccount token from the protected clust
 4. Provision the JWT file.
 5. Create `/run/openbao-kms` with safe permissions.
 6. Ensure `kube-apiserver` can access the socket through the `openbao-kms-socket` group.
-7. Run `bao-kms-provider doctor`.
+7. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
 8. Start the plugin before the API server.
 9. Confirm the Status `key_id` hash matches existing nodes.
+
+For systemd deployments, restore the package, unit, users, groups, and `tmpfiles.d` runtime directory entry. For static-pod deployments, preload the provider image digest, restore the manifest, and ensure the numeric `openbao-kms-socket` GID matches `supplementalGroups` and `server.socketGroup`.
 
 ## API Server Cannot Start
 
@@ -172,7 +189,7 @@ Recovery order when the API server fails to start because the KMS path is unheal
 1. Do not delete encrypted etcd data.
 2. Inspect API server logs for KMS connection or decrypt errors.
 3. Restore the plugin, socket, OpenBao, and JWT first.
-4. Run `bao-kms-provider doctor` locally.
+4. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml` locally. Include `--encryption-config /etc/kubernetes/encryption-config.yaml` when the API server encryption config is available.
 5. Start the plugin and verify KMS Status.
 6. Restart the API server.
 7. If OpenBao key material is missing, restore the OpenBao backup.
@@ -208,5 +225,5 @@ Unsafe under any circumstance:
 - raising `min_decryption_version` during an incident,
 - recreating Transit keys with the same name,
 - changing the provider name to clear errors,
-- disabling AAD validation globally without understanding which key epochs are affected,
+- setting `transit.useAssociatedData: false` as a recovery shortcut,
 - logging plaintext during debugging.

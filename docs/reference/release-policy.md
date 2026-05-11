@@ -1,40 +1,68 @@
 ---
 title: "Release Policy"
-description: "Release channels, engineering preview rule, stable release rule, versioning, automation, and binary artifact policy for bao-kms-provider."
+description: "Event-driven release policy, validation cadence, release channels, versioning, automation, and artifact evidence for bao-kms-provider."
 weight: 100
 ---
 
 # Release Policy
 
-This page defines the release-channel policy for `bao-kms-provider`.
+This page defines when `bao-kms-provider` publishes releases, what each channel means, and which evidence every public release carries.
 
-## Current Status
+## Public Release Status
 
-The project is pre-release. No published release channel exists yet.
+Public releases are published from SemVer tags through the release workflow.
+The workflow publishes GitHub Release assets and a GHCR image, then signs,
+attests, verifies, and indexes the release evidence.
 
-release-please is configured to open release PRs and maintain the changelog. Release publishing is implemented as a separate tag workflow and remains gated by the release criteria.
+release-please opens release PRs and maintains the changelog. Release
+publishing is implemented as a separate tag workflow and remains gated by the
+release criteria.
 
-The first release ships as a v0.1 engineering preview unless every production-readiness gate passes.
+The current public release line is a preview line unless the release notes and
+[Support Policy](/reference/support-policy/) explicitly say otherwise.
+
+## Cadence
+
+The project does not use a fixed feature-release cadence. Public releases are
+event-driven and are cut only when there is a validated reason to publish.
+
+Release reasons:
+
+- security fixes,
+- correctness fixes,
+- dependency or base-image fixes,
+- packaging, signing, attestation, or provenance fixes,
+- support-matrix expansion,
+- completed release-validated capabilities,
+- documentation changes that materially affect installation, upgrade, recovery,
+  or security operation.
+
+Validation can run on a schedule. Scheduled validation does not imply scheduled
+publication.
 
 ## Channels
 
 | Channel | Use | Support expectation |
 |---|---|---|
 | PR | validation only | no public artifacts |
-| edge | main-branch integration signal | not production |
-| nightly | scheduled drift detection | not production |
-| prerelease | release candidate soak | staging or evaluation only |
-| stable | supported release line | only after release gates pass |
+| main | integration signal for merged code | no production support |
+| nightly | scheduled drift detection | no production support |
+| release candidate | pre-release soak for an intended tag | staging or evaluation only |
+| preview | tagged release for controlled validation | not production |
+| stable | production-ready release line | only after production-readiness gates pass |
 
-## Engineering Preview Rule
+## Preview Release Rule
 
-v0.1 ships only after [Development: Release Gates](/development/release-gates/) are satisfied.
+Preview releases ship only after the release workflow completes the required
+test, supply-chain, signing, attestation, and evidence steps. See
+[Development: CI And Supply Chain](/development/ci-supply-chain/) for the
+pipeline and evidence requirements.
 
-v0.1 must not claim production readiness. It is suitable for engineering evaluation and lab validation of:
+A preview release is suitable for engineering evaluation and controlled validation of:
 
 - KMS v2 protocol behavior,
-- OpenBao `2.5.3` CI e2e validation,
-- Kubernetes `1.34.3` Kind e2e for the initial release-line lane,
+- exact-pinned OpenBao CI e2e validation,
+- exact-pinned Kubernetes Kind e2e validation,
 - rotation behavior,
 - bootstrap and recovery runbooks,
 - CI and supply-chain evidence.
@@ -43,7 +71,7 @@ v0.1 must not claim production readiness. It is suitable for engineering evaluat
 
 A stable production-ready release requires:
 
-- an exact-pinned Kubernetes and OpenBao release-gate matrix,
+- an exact-pinned Kubernetes and OpenBao validation matrix,
 - kubeadm VM systemd and static pod tests,
 - OpenBao HA and failover tests,
 - disaster recovery restore tests,
@@ -57,7 +85,17 @@ A stable production-ready release requires:
 
 ## Versioning
 
-Semantic versioning applies once release artifacts exist.
+Release artifacts use SemVer tags without a leading `v`, for example `0.1.0`.
+
+Patch releases are used for security, correctness, dependency, packaging, or
+release-evidence fixes that do not change the support envelope.
+
+Minor releases are used for validated feature additions or support-matrix
+expansion.
+
+Major releases are reserved for breaking changes to configuration, `key_id`,
+annotations, AAD canonicalization, operational support policy, or migration
+behavior.
 
 Before beta:
 
@@ -83,7 +121,7 @@ The release-please workflow is PR-only:
 - it does not publish GitHub Releases,
 - it does not build, sign, attest, or upload artifacts.
 
-Publishing is a separate release workflow concern. Release workflows consume the release-please version, run release gates, build the release artifacts, generate checksums, create SBOMs, sign, attest, verify byte reproducibility, and publish evidence.
+Publishing is a separate release workflow concern. Release workflows consume the release-please version, run validation, build the release artifacts, generate checksums, create SBOMs, sign, attest, verify byte reproducibility, and publish evidence.
 
 The workflow expects a GitHub App token so release PR updates can trigger normal PR checks. Configure these repository secrets:
 
@@ -129,25 +167,28 @@ Checksums are written to:
 dist/release/checksums.txt
 ```
 
-The checksum file uses SHA-256 and contains one line per published release artifact. `release-artifacts` builds the Linux binary matrix, `release-packages` builds `.deb` and `.rpm` packages for systemd hosts, and `release-bundles` builds deterministic systemd and static-pod tarballs.
+The published release asset is `checksums.txt`. The checksum file uses SHA-256 and contains one line per published release artifact. `release-artifacts` builds the Linux binary matrix, `release-packages` builds `.deb` and `.rpm` packages for systemd hosts, and `release-bundles` builds deterministic systemd and static-pod tarballs.
 
 ## Release Evidence
 
-Every stable release retains:
+Every public release publishes or retains:
 
 - the source commit,
-- a signed tag,
+- the release tag,
 - the workflow run reference,
 - the OpenBao and Kubernetes version matrix,
 - image and binary digests,
 - systemd packages and static-pod bundle digests,
-- checksums,
-- SBOMs,
+- `checksums.txt`,
+- `checksums.txt.bundle`,
+- SBOMs for published binaries and images,
 - a vulnerability scan summary,
-- signatures,
-- attestations,
+- image signature verification output,
+- checksum signature verification output,
+- GitHub provenance attestations,
+- release artifact attestation verification output,
 - a reproducibility report,
-- a provenance index,
+- `provenance-index.json`,
 - release notes.
 
 For the full supply-chain controls see [Development: CI And Supply Chain](/development/ci-supply-chain/).

@@ -6,7 +6,7 @@ weight: 10
 
 # CLI
 
-This page documents every command and flag supported by `bao-kms-provider` in v0.1. Commands print stable text output and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
+This page documents every command and flag supported by `bao-kms-provider`. Commands print stable text output and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
 
 ## serve
 
@@ -102,7 +102,7 @@ Measures:
 - Transit decrypt latency,
 - non-secret Transit round-trip smoke behavior.
 
-Benchmark output redacts sensitive data. Expanded local KMS gRPC, decrypt storm, token lifecycle, and micro-batching comparisons are release-gate work.
+Benchmark output redacts sensitive data. Expanded local KMS gRPC, decrypt storm, token lifecycle, and micro-batching comparisons are release-validation work.
 
 ## rotation-plan
 
@@ -163,6 +163,23 @@ bao-kms-provider config schema
 ```
 
 The schema rejects unknown top-level and nested fields and reserves `configVersion: v1alpha1`.
+
+## version
+
+Print build metadata for the running binary.
+
+```sh
+bao-kms-provider version
+```
+
+Output fields:
+
+- `version`
+- `commit`
+- `buildDate`
+- `dirty`
+
+Use this command when comparing control-plane nodes during upgrades, rollback checks, and incident response.
 
 ## policy openbao
 

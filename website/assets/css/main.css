@@ -453,21 +453,37 @@ a:focus-visible {
 }
 
 .prose table {
+  display: block;
   width: 100%;
-  border-collapse: collapse;
+  overflow-x: auto;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.98rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .prose thead th {
   text-align: left;
-  padding: 0 0 0.8rem;
+  padding: 0 1rem 0.8rem;
   border-bottom: 1px solid var(--ds-border-strong);
+  white-space: nowrap;
 }
 
 .prose tbody td {
-  padding: 0.9rem 0;
+  min-width: 8rem;
+  padding: 0.9rem 1rem;
   border-bottom: 1px solid var(--ds-border);
   vertical-align: top;
+}
+
+.prose th:first-child,
+.prose td:first-child {
+  padding-left: 0;
+}
+
+.prose th:last-child,
+.prose td:last-child {
+  padding-right: 0;
 }
 
 .prose blockquote {

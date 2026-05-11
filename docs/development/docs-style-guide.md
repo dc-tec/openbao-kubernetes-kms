@@ -16,7 +16,7 @@ The published documentation should read like a coherent operator and maintainer 
 - Avoid hollow openers: "However", "It is important to note", "In essence", "Simply put".
 - Avoid "simply", "just", "easily", "obviously". They mislead operators about real cost.
 - Use Title Case for headings, matching the existing reference docs.
-- Use OpenBao terminology in public docs, never the upstream Vault product name.
+- Use OpenBao terminology for this project. Mention Vault only when naming related work or upstream compatibility context; do not describe this provider as a Vault provider.
 - Use the binary name `bao-kms-provider` everywhere in prose. Earlier or longer name variants must not appear in docs; the GitHub repository URL is the only allowed exception and lives in `hugo.toml` rather than in any page.
 
 The voice anchors for the rewrite are `docs/_archive/kms-v2-contract.md` and `docs/_archive/configuration.md`. New or rewritten pages should match that tone: short paragraphs, dense factual content, no marketing voice.
@@ -62,10 +62,9 @@ flowchart TD
 ## Repository Contracts
 
 - Every Markdown page under `docs/<section>/` must be reachable from the section's `_index.md` (either via `browse` or as a direct child page Hugo auto-discovers).
-- `docs/_archive/` is a frozen snapshot of the v0.1 implementation docs. Do not modify files there. Reference it only as source material when rewriting.
-- `docs/design.md` is the v0.1 design source-of-truth for content not yet sliced into focused pages. As a topic is rewritten into its target section, the corresponding slice is removed from `design.md` in the same change.
-- `docs/research-notes.md` follows the same slice-and-remove rule.
-- `docs/adr/` and `docs/workstreams/` are internal implementation artifacts. They are not mounted into the Hugo site and are removed once v0.1 implementation closes.
+- `docs/_archive/` is a frozen snapshot of the implementation-time source material. Do not modify files there during normal docs polishing. Reference it only as historical source material when a public page needs correction.
+- Public pages under `docs/<section>/` are the maintained documentation source. Update them directly when behavior, release policy, compatibility, deployment, or operations change.
+- Historical ADRs and workstream notes stay archived. Public docs may link to current reference, architecture, or development pages instead of archived planning artifacts.
 - Internal links use absolute paths from the site root, for example `/operations/rotation/` rather than relative or `.md` paths.
 - Generated reference pages, when added, keep the generated-note contract at the top of the file.
 - Front matter on every page includes `title`, `description`, and `weight`. Section landings include a `browse` array listing the intended page order.

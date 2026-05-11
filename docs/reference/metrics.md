@@ -30,14 +30,14 @@ The provider applies these rules to every metric:
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `openbao_kms_grpc_requests_total` | counter | `method`, `status` | KMS v2 gRPC method invocations and outcomes (`Status`, `Encrypt`, `Decrypt`). |
+| `openbao_kms_grpc_requests_total` | counter | `method`, `status` | KMS v2 gRPC method invocations and outcomes (`status`, `encrypt`, `decrypt`). |
 | `openbao_kms_grpc_duration_seconds` | histogram | `method` | Per-method latency for KMS v2 gRPC handlers. |
 
 ### OpenBao Calls
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `openbao_kms_openbao_requests_total` | counter | `operation`, `status` | OpenBao API call counts by operation (`auth.login`, `auth.renew`, `transit.encrypt`, `transit.decrypt`, `transit.metadata`) and outcome. |
+| `openbao_kms_openbao_requests_total` | counter | `operation`, `status` | OpenBao API call counts by operation (`jwt_login`, `token_renew_self`, `transit_metadata_read`, `transit_disable_upsert_read`, `transit_encrypt`, `transit_decrypt`, `transit_batch_decrypt`, `capabilities_self`) and outcome. |
 | `openbao_kms_openbao_duration_seconds` | histogram | `operation` | Per-operation latency for OpenBao calls. |
 
 ### Auth And Token
@@ -66,7 +66,7 @@ The provider applies these rules to every metric:
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `openbao_kms_rotation_state` | gauge | `state` | Reports `1` for the current rotation state (`ObservedOld`, `NewVersionObserved`, `PendingStability`, `PendingActivationDelay`, `Active`, `Rejected`). |
+| `openbao_kms_rotation_state` | gauge | `state` | Reports `1` for the current bounded rotation state (`active`, `pending`, `unknown`). Use `rotation-plan` for detailed promotion state. |
 
 ### Validation Errors
 
@@ -79,7 +79,7 @@ The provider applies these rules to every metric:
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `openbao_kms_decrypt_batch_size` | histogram | none | Reserved decrypt micro-batch sizes; not emitted while v0.1 rejects batching enablement. |
+| `openbao_kms_decrypt_batch_size` | histogram | none | Reserved decrypt micro-batch sizes; not emitted while batching enablement is rejected. |
 
 ### Runtime Health
 
@@ -90,13 +90,13 @@ The provider applies these rules to every metric:
 
 ## Log Fields
 
-Stable JSON log fields. Operators can rely on these names across v0.1 patch releases.
+Stable JSON log fields. Operators can rely on these names across preview patch releases.
 
 | Field | Type | Description |
 |---|---|---|
 | `ts` | string | RFC 3339 timestamp. |
 | `level` | string | Log level (`debug`, `info`, `warn`, `error`). |
-| `operation` | string | Logical operation name (`kms.encrypt`, `kms.decrypt`, `kms.status`, `openbao.encrypt`, `openbao.decrypt`, `openbao.metadata`, `auth.login`, `auth.renew`). |
+| `operation` | string | Logical operation name in logs (`kms.encrypt`, `kms.decrypt`, `kms.status`, `openbao.encrypt`, `openbao.decrypt`, `openbao.metadata`, `auth.login`, `auth.renew`). |
 | `status` | string | Operation outcome (`ok`, `error`). |
 | `duration_ms` | number | Operation latency in milliseconds. |
 | `key_id_hash` | string | `base64url-sha256` of the active `key_id`. Never the raw `key_id`. |

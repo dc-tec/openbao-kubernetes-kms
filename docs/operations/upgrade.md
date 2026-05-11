@@ -14,10 +14,11 @@ For wire-format compatibility expectations and the upgrade-window history, see [
 
 Verify:
 
-- the new binary or image is fetched and verified per [Install: Verify The Artifact](/getting-started/install/#verify-the-artifact),
-- the cluster is not mid-rotation (check `bao-kms-provider rotation-plan`),
+- the new binary or image is fetched and verified per [Install: Verify Release Evidence](/getting-started/install/#verify-release-evidence),
+- the cluster is not mid-rotation (check `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`),
 - OpenBao is healthy and the JWT credentials on every node are valid,
 - the existing plugin reports a stable `key_id` hash on every control-plane node,
+- `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` passes,
 - the previous binary or image is still available on every node in case of rollback.
 
 Record:
@@ -33,20 +34,21 @@ Upgrade one control-plane node at a time. Do not upgrade all plugin instances si
 
 For each node:
 
-1. Run `bao-kms-provider doctor` with the new binary or image. Resolve any failed checks before continuing.
+1. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` with the new binary or image. Resolve any failed checks before continuing.
 2. Stop the plugin on the target node.
 3. Replace the binary or image with the new version.
 4. Start the plugin.
 5. Verify KMS Status and the active `key_id` hash:
 
    ```sh
-   curl -sf http://127.0.0.1:9090/metrics \
+   curl -sf http://127.0.0.1:8081/metrics \
      | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_grpc_requests_total'
    ```
 
-6. Confirm the `key_id` hash matches the other control-plane nodes.
-7. Restart the local API server only if required by the new release notes.
-8. Repeat for the next node.
+6. Confirm `/ready` returns HTTP 200 on the target node.
+7. Confirm the `key_id` hash matches the other control-plane nodes.
+8. Restart the local API server only if required by the new release notes.
+9. Repeat for the next node.
 
 After every node has been upgraded, confirm the metric `openbao_kms_status_key_id_hash` reports the same hash on every node.
 
@@ -64,12 +66,14 @@ For each node:
 
 1. Stop the plugin on the target node.
 2. Replace the binary or image with the previous version.
-3. Run `bao-kms-provider doctor` with the previous version.
+3. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` with the previous version.
 4. Start the plugin.
 5. Verify Status and the `key_id` hash match the rest of the fleet.
 6. Restart the API server only if required.
 
-If rollback produces unknown-`key_id` errors, return to the newer version and investigate per [Operations: Troubleshooting](/operations/troubleshooting/#unknown-key_id).
+If rollback produces unknown-`key_id` errors, return to the newer version and investigate per [Operations: Troubleshooting](/operations/troubleshooting/#unknown-key-id).
+
+For systemd deployments, rollback means replacing the host binary or package and restarting `bao-kms-provider.service`. For static-pod deployments, rollback means restoring the previous image digest in the manifest and verifying that image is already present or pullable on the node.
 
 ## When Not To Upgrade
 

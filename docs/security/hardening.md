@@ -1,12 +1,12 @@
 ---
 title: "Hardening"
-description: "Required and recommended hardening for production deployments of bao-kms-provider: OpenBao, plugin host, file permissions, JWT, logging, metrics, and Kubernetes-side."
+description: "Required and recommended hardening for production-oriented deployments of bao-kms-provider: OpenBao, plugin host, file permissions, JWT, logging, metrics, and Kubernetes-side."
 weight: 20
 ---
 
 # Hardening
 
-This page lists hardening requirements for production deployments. For the threat coverage see [Threat Model](/security/threat-model/). For the file ownership and group model the host-side requirements rely on, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+This page lists hardening requirements for production-oriented deployments. For the threat coverage see [Threat Model](/security/threat-model/). For the file ownership and group model the host-side requirements rely on, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
 ## OpenBao
 
@@ -18,13 +18,14 @@ Required:
 - Transit key export disabled,
 - plaintext backup disabled,
 - key deletion disabled,
-- Transit upsert disabled at the dedicated mount where feasible,
+- OpenBao HA deployment outside the protected Kubernetes dependency path,
+- Transit upsert disabled at the dedicated mount,
 - plugin policy limited to metadata read, encrypt update, decrypt update, and `disable_upsert` inspection,
+- no Transit create, delete, rotate, export, backup, or configuration write permissions for the plugin token,
 - audit logging enabled and monitored.
 
 Recommended:
 
-- OpenBao HA deployment outside the protected Kubernetes dependency path,
 - tested OpenBao backup and restore procedure,
 - a separate Transit key per Kubernetes cluster or trust domain,
 - a separate JWT auth role per cluster or trust domain,
@@ -39,6 +40,8 @@ Required:
 - socket writable only by the plugin and the API server identity,
 - metrics and health endpoints bound to localhost by default,
 - no debug endpoints in production,
+- `server.unsafeDebugEndpoints: false`,
+- debug correlation disabled except during bounded incident response,
 - time synchronized through NTP or chrony.
 
 Recommended:
@@ -46,6 +49,7 @@ Recommended:
 - systemd sandboxing where systemd mode is used,
 - distroless non-root image and read-only container filesystem where static-pod mode is used,
 - immutable image digests,
+- pinned release artifacts with verified checksums,
 - host audit for configuration and JWT changes,
 - one-node-at-a-time upgrades.
 
@@ -70,9 +74,12 @@ Required:
 
 - bound issuer,
 - bound audience,
-- bound subject,
+- bound subject or strong bound claims,
+- no default policy on the OpenBao token,
+- one dedicated Transit policy,
 - expiry checked before login,
 - JWT file re-read before re-login,
+- OpenBao client token stored in memory only,
 - no JWT logging.
 
 Recommended:
@@ -129,15 +136,22 @@ Recommended:
 
 - `identity` fallback only during migration,
 - `EncryptionConfiguration` audited after migration,
+- provider name, socket path, and `EncryptionConfiguration` consistent across all control-plane nodes,
 - API server restart tested after enabling encryption,
 - etcd plaintext inspection performed in a controlled environment.
 
 ## Static Pod Specific
 
 - Do not reference ConfigMaps, Secrets, or ServiceAccounts.
+- Set `automountServiceAccountToken: false`.
 - Use hostPath mounts for all required files.
 - Preload images in air-gapped environments.
 - Use read-only mounts for configuration, CA, and JWT.
+- Run as a non-root numeric user and numeric supplemental group that matches the host socket group.
+- Set `seccompProfile: RuntimeDefault`.
+- Set `allowPrivilegeEscalation: false`.
+- Drop all Linux capabilities.
+- Set `readOnlyRootFilesystem: true`.
 - Keep the previous image available for rollback.
 
 ## systemd Specific
@@ -148,9 +162,28 @@ Recommended hardening directives:
 - `ProtectSystem=strict`
 - `ProtectHome=true`
 - `PrivateTmp=true`
+- `PrivateDevices=true`
 - `MemoryDenyWriteExecute=true`
 - `LockPersonality=true`
+- `RestrictSUIDSGID=true`
+- `RestrictRealtime=true`
 - `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`
+- `SystemCallArchitectures=native`
+- `CapabilityBoundingSet=`
+- `AmbientCapabilities=`
+- `ReadOnlyPaths=/etc/openbao-kms`
 - minimal `ReadWritePaths`
 
 Verify hardening does not prevent access to the configuration file, JWT, CA bundle, socket directory, or the optional state file.
+
+## Validate Hardening
+
+Run these checks before enabling the provider in an API server:
+
+```sh
+bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
+bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml
+curl -sf http://127.0.0.1:8082/ready
+```
+
+After the API server is configured, confirm that newly written Secret data is not stored as plaintext in etcd and that the provider metrics on `127.0.0.1:8081` show successful KMS `encrypt` and `decrypt` requests.

@@ -54,13 +54,13 @@ Do not store etcd output in logs or untrusted shells. Do not run this inspection
 
 ## Step 3: Confirm The Provider Signals Are Healthy
 
-The provider exposes health endpoints and Prometheus metrics on the addresses configured in `config.yaml`. Replace the addresses below with the values from `server.healthAddress` and `server.metricsAddress`.
+The provider exposes health endpoints and Prometheus metrics on the addresses configured in `config.yaml`. The commands below use the default addresses: `server.healthAddress` on `127.0.0.1:8082` and `server.metricsAddress` on `127.0.0.1:8081`.
 
 Check liveness and readiness:
 
 ```sh
-curl -sf http://127.0.0.1:8181/live
-curl -sf http://127.0.0.1:8181/ready
+curl -sf http://127.0.0.1:8082/live
+curl -sf http://127.0.0.1:8082/ready
 ```
 
 Both endpoints should return HTTP 200. `/ready` reports OpenBao reachability, auth validity, Transit metadata freshness, active key snapshot availability, and cached KMS Status freshness. A non-200 response on `/ready` is the first signal that something is wrong even when kubectl reads still succeed against the API server cache.
@@ -68,7 +68,7 @@ Both endpoints should return HTTP 200. `/ready` reports OpenBao reachability, au
 Confirm key_id stability through the metric:
 
 ```sh
-curl -sf http://127.0.0.1:9090/metrics | grep openbao_kms_status_key_id_hash
+curl -sf http://127.0.0.1:8081/metrics | grep openbao_kms_status_key_id_hash
 ```
 
 Expected output: one line with a single hash value, for example
@@ -82,10 +82,10 @@ The same hash must be reported by every control-plane node. Different hashes acr
 Confirm encrypt and decrypt are landing on the provider:
 
 ```sh
-curl -sf http://127.0.0.1:9090/metrics | grep -E 'openbao_kms_grpc_requests_total\{method="(Encrypt|Decrypt)"'
+curl -sf http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_grpc_requests_total\{method="(encrypt|decrypt)"'
 ```
 
-Both counters should increase as the API server services subsequent requests against the encrypted resources.
+The encrypt counter should increase when the probe Secret is written. The decrypt counter may not increase on every read because the Kubernetes API server can serve some reads from cache. After API server restart or cold-cache reads, decrypt counters should reflect real provider traffic.
 
 For the full metric and log catalog see [Reference: Observability](/reference/observability/) and [Reference: Metrics](/reference/metrics/).
 
@@ -97,7 +97,7 @@ Delete the probe Secret:
 kubectl delete secret openbao-kms-first-encrypt
 ```
 
-## What Success Looks Like
+## Validation Checklist
 
 After this page:
 
@@ -105,7 +105,7 @@ After this page:
 - The same Secret is stored in etcd as a `k8s:enc:kms:v2:` envelope, with no plaintext leaking.
 - The provider reports a single stable key_id hash on every control-plane node.
 - The provider's `/ready` endpoint returns HTTP 200.
-- The provider's encrypt and decrypt request counters increment on real API server traffic.
+- The provider's encrypt counter increments on the probe write, and decrypt counters remain available for cold-cache or API server restart validation.
 
 ## Read Next
 

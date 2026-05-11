@@ -58,7 +58,7 @@ Hugo runs through `go run` so a separate Hugo install is not required. The Makef
 
 ```sh
 make docs-deps    # install pinned Hugo into GOBIN once
-make docs-build   # build into public/ with --gc --minify
+make docs-build   # build into public/ with --cleanDestinationDir --gc --minify
 make docs-serve   # serve locally on http://localhost:1313/
 ```
 

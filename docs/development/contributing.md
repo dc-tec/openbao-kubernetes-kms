@@ -45,23 +45,15 @@ test/deployment
 
 ## Local Development
 
-Every PR should run:
+Every PR should run the local core gate:
 
 ```sh
-go test ./...
-go test -race ./internal/...
-go vet ./...
-staticcheck ./...
-gofmt -w .
+make ci-core
 ```
 
-Once feature packages exist, also run:
-
-- KMS v2 fake conformance tests,
-- redaction tests,
-- configuration validation tests,
-- fuzz smoke tests,
-- key ID and AAD golden tests.
+Run focused E2E lanes when a change touches OpenBao, Kubernetes, deployment,
+rotation, failure injection, or release packaging behavior. The lane commands
+live in [Development: E2E Framework](/development/e2e-framework/).
 
 ## OpenBao Integration Tests
 
@@ -79,7 +71,9 @@ OpenBao E2E validation uses the ephemeral CI lane. E2E specs use Ginkgo v2 and G
 make test-e2e-openbao-ci
 ```
 
-The OpenBao CI target builds the provider image, starts real OpenBao, bootstraps JWT auth, runs the provider container, and exercises the Unix socket from a second container with the Kubernetes KMS v2 protobuf client.
+The OpenBao CI target starts real OpenBao, bootstraps JWT auth, runs the
+provider, and exercises the Unix socket with the Kubernetes KMS v2 protobuf
+client.
 
 For the full E2E framework, label routing, suite manifest rules, and report artifacts see [Development: E2E Framework](/development/e2e-framework/).
 

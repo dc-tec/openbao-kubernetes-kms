@@ -10,7 +10,7 @@ This page is the authoritative reference for the Kubernetes KMS v2 protocol beha
 
 ## Baseline
 
-The provider implements Kubernetes KMS v2. KMS v1 is out of scope for the v0.1 implementation.
+The provider implements Kubernetes KMS v2. KMS v1 is out of scope for the current implementation.
 
 Kubernetes KMS v2 is stable from Kubernetes 1.29. Kubernetes recommends KMS v2 for current clusters; KMS v1 is deprecated and disabled by default in Kubernetes 1.29 and later.
 
@@ -116,7 +116,7 @@ Required behavior:
 - never log plaintext,
 - never log full ciphertext.
 
-For v0.1 the provider requires valid AAD annotations. A future bounded compatibility mode may support known pre-AAD epochs; it must be explicit, observable, and time-bound. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
+The provider requires valid AAD annotations. A future bounded compatibility mode may support known pre-AAD epochs; it must be explicit, observable, and time-bound. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
 
 ## Annotations
 
@@ -147,7 +147,7 @@ For the full annotation schema and AAD envelope shape see [Reference: Key ID And
 
 ## Decrypt Micro-Batching
 
-OpenBao Transit supports `batch_input` for encrypt and decrypt. For v0.1, the provider keeps KMS decrypt micro-batching disabled and rejects `performance.decryptMicroBatching.enabled: true` because the production-grade KMS coalescer is not part of the release boundary. Sustained direct decrypt soak is the release-gate evidence used to decide whether this remains deferred.
+OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider keeps KMS decrypt micro-batching disabled and rejects `performance.decryptMicroBatching.enabled: true` because the production-grade KMS coalescer is not part of the release boundary. Sustained direct decrypt soak is the release evidence used to decide whether this remains deferred.
 
 Micro-batching adds request queueing, per-request deadlines, cancellation behavior, order preservation, fairness, and failure fan-out concerns. Do not enable it until benchmarks show it improves API server startup behavior without violating the latency targets below.
 
@@ -169,12 +169,14 @@ Errors map to stable classes in logs and metrics:
 - `annotation_invalid`
 - `status_stale`
 - `timeout`
+- `canceled`
+- `unknown`
 
 Errors returned to Kubernetes are specific enough for diagnosis but contain no secrets, tokens, plaintext, full ciphertext, or raw sensitive paths. See [Reference: Observability: Error Classes](/reference/observability/#error-classes).
 
 ## Latency Targets
 
-Initial v0.1 targets (subject to validation against real OpenBao and Kubernetes API server tests):
+Initial latency targets (subject to validation against real OpenBao and Kubernetes API server tests):
 
 ```yaml
 status:

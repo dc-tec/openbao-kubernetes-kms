@@ -1,15 +1,14 @@
----
-title: "Harvester Kubeadm Lab"
-description: "Local-only Harvester VM harness for kubeadm, systemd, static-pod, and OpenBao release-gate testing."
-weight: 55
----
-
 # Harvester Kubeadm Lab
 
 The Harvester kubeadm lab is a local-only release-gate harness. It is not part
 of CI and must not be wired into pull-request checks. It creates real Harvester
 VMs so host-level kubeadm, kubelet, systemd, package install, reboot, and static
 pod behavior can be tested outside Kind.
+
+This runbook intentionally lives next to the local harness code instead of the
+public documentation site. Public docs describe the release evidence and gates;
+this file describes the project-maintainer infrastructure used to collect some
+of that evidence.
 
 The harness uses Helm to create Harvester/KubeVirt VM resources. Helm is used
 only for the outer lab substrate. It is not used to install the KMS provider into

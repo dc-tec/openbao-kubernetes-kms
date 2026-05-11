@@ -1,6 +1,6 @@
 ---
 title: "Compatibility"
-description: "Kubernetes, OpenBao, OS, deployment mode, Transit key type, and CI version policy supported by bao-kms-provider in v0.1, plus breaking-change rules."
+description: "Kubernetes, OpenBao, OS, deployment mode, Transit key type, and CI version policy supported by bao-kms-provider, plus breaking-change rules."
 weight: 80
 ---
 
@@ -10,11 +10,13 @@ This page defines the compatibility matrix for `bao-kms-provider`. Support claim
 
 ## Current Claim
 
-Status: no tested compatibility claims yet. v0.1 design target:
+The support envelope is intentionally narrow. A tagged release claims only the exact versions and deployment lanes recorded in that release's evidence bundle.
 
-- Kubernetes 1.34 release line,
+The initial public release envelope is:
+
+- Kubernetes `1.34` release line, with exact patch pins recorded in `.ci/versions.yaml`,
 - Kubernetes KMS v2,
-- OpenBao 2.5.3,
+- OpenBao `2.5.3`,
 - OpenBao Transit,
 - JWT auth,
 - Linux control-plane nodes with filesystem Unix domain sockets.
@@ -23,11 +25,11 @@ Status: no tested compatibility claims yet. v0.1 design target:
 
 | Version | Status |
 |---|---|
-| `< 1.34` | Not targeted for v0.1. |
-| `1.34.3` | Initial Kind e2e target pinned by image digest in `.ci/versions.yaml`. |
-| `1.34.4`–`1.34.7` | Tracked as part of the upstream `1.34` line; not validated by Kind until a runnable exact-pinned lane exists. |
-| `1.35.x` | Future candidate. Not a v0.1 support claim until release-gated. |
-| `1.36.x` | Future candidate. Not a v0.1 support claim until release-gated. |
+| `< 1.34` | Not targeted for the current release line. |
+| `1.34.3` | Initial Kind e2e target pinned by node-image digest in `.ci/versions.yaml`. |
+| Other `1.34.x` patches | Candidate within the same release line; claimed only after an exact-pinned lane exists in release evidence. |
+| `1.35.x` | Future candidate. Not a support claim until release evidence exists. |
+| `1.36.x` | Future candidate. Not a support claim until release evidence exists. |
 
 KMS v1 is not part of the primary implementation.
 
@@ -35,9 +37,9 @@ KMS v1 is not part of the primary implementation.
 
 | Version | Status |
 |---|---|
-| `2.5.3` | Initial v0.1 validation target. |
+| `2.5.3` | Initial validation target. |
 | Other `2.5.x` | Future compatibility candidate; not claimed until tested. |
-| `2.4.x` | Not targeted for v0.1. |
+| `2.4.x` | Not targeted for the current release line. |
 
 The design requires OpenBao Transit features:
 
@@ -59,7 +61,7 @@ Targeted:
 - filesystem Unix domain sockets,
 - systemd or kubelet-managed static pod runtime.
 
-Not targeted for v0.1:
+Not targeted for the current release line:
 
 - Windows control-plane nodes,
 - abstract Unix sockets,
@@ -67,7 +69,7 @@ Not targeted for v0.1:
 
 ## Deployment Modes
 
-| Mode | v0.1 status |
+| Mode | Current status |
 |---|---|
 | systemd | Targeted. |
 | Static pod | Targeted. |
@@ -80,9 +82,9 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 
 | Key type | Status |
 |---|---|
-| `aes256-gcm96` | Recommended default. |
-| `xchacha20-poly1305` | Optional after testing. |
-| Derived or convergent keys | Not recommended. |
+| `aes256-gcm96` | Supported and recommended default. |
+| Other AEAD Transit key types | Not supported. |
+| Derived or convergent keys | Not supported for the Kubernetes KMS path. |
 
 ## Compatibility Promises
 
@@ -104,7 +106,7 @@ The implementation uses a central version manifest at `.ci/versions.yaml` for:
 - OpenBao image tag and digest,
 - Kubernetes exact patch version,
 - Kind node image digest,
-- release-gate matrix rows,
+- release matrix rows,
 - future candidate versions.
 
 For the full CI and supply-chain controls see [Development: CI And Supply Chain](/development/ci-supply-chain/).

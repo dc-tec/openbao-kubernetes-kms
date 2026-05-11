@@ -8,7 +8,7 @@ browse:
   - "/architecture/transit-key-model"
   - "/architecture/rotation-model"
   - "/architecture/failure-modes"
-  - "/architecture/prior-art"
+  - "/architecture/related-work"
 ---
 
 # Architecture
@@ -22,7 +22,7 @@ These pages explain why the provider is shaped the way it is. They are maintaine
 - [Transit Key Model](/architecture/transit-key-model/) for the OpenBao Transit key, policy, and isolation design.
 - [Rotation Model](/architecture/rotation-model/) for the rotation invariants the provider enforces against the Transit key version.
 - [Failure Modes](/architecture/failure-modes/) for the catalog of failure scenarios, observability signals, and design responses.
-- [Prior Art](/architecture/prior-art/) for the comparison against existing Vault Transit KMS plugin implementations and the reasons for an OpenBao-native rewrite.
+- [Related Work](/architecture/related-work/) for existing Vault Transit KMS plugin work and the design influences this project carries forward.
 
 ## Use Another Section If
 

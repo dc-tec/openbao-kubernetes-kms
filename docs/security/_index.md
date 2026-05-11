@@ -13,6 +13,8 @@ browse:
 
 These pages cover trust boundaries, authentication, hardening, and the security view of decrypt validation. Use them when the question is about scope, trust, or a sensitive failure mode rather than a workflow step.
 
+The security section documents the intended hardened posture for `bao-kms-provider`. For the current maturity statement see [Reference: Support Policy](/reference/support-policy/), and for release evidence expectations see [Development: CI And Supply Chain](/development/ci-supply-chain/).
+
 ## Topics
 
 - [Threat Model](/security/threat-model/) for in-scope and out-of-scope threats, attacker capabilities, and mitigations.

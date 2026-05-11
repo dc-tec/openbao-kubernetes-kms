@@ -6,7 +6,7 @@ weight: 10
 
 # Overview
 
-This page is the maintainer-facing description of how `bao-kms-provider` is shaped. For the upstream protocol and Transit primer that this design rests on, see [Background](/architecture/background/). For the comparison to existing Vault Transit KMS plugins, see [Prior Art](/architecture/prior-art/).
+This page is the maintainer-facing description of how `bao-kms-provider` is shaped. For the upstream protocol and Transit primer that this design rests on, see [Background](/architecture/background/). For existing Vault Transit KMS plugin work that informed this design, see [Related Work](/architecture/related-work/).
 
 ## Purpose
 
@@ -17,6 +17,8 @@ kube-apiserver
   -> Unix domain socket
   -> bao-kms-provider
   -> OpenBao Transit
+  -> bao-kms-provider
+  -> kube-apiserver
   -> encrypted Kubernetes API resource data in etcd
 ```
 
@@ -27,6 +29,8 @@ The provider participates in Kubernetes envelope encryption for selected API res
 ```mermaid
 flowchart LR
     API["kube-apiserver<br/>EncryptionConfiguration<br/>etcd storage path"]
+    Etcd["etcd<br/>encrypted API resources"]
+    StateFile["local registry state<br/>non-secret JSON"]
 
     subgraph Plugin["bao-kms-provider"]
         KMS["KMS v2 server"]
@@ -45,10 +49,12 @@ flowchart LR
     end
 
     API <-->|gRPC KMS v2<br/>Status / Encrypt / Decrypt<br/>Unix domain socket| KMS
+    API -->|stores ciphertext<br/>key_id / annotations| Etcd
     KMS --> Registry
     KMS --> AAD
     KMS --> StatusCache
     KMS --> TransitClient
+    Registry <--> StateFile
     TransitClient --> AuthManager
     AuthManager -->|JWT login| JWTAuth
     TransitClient -->|HTTPS<br/>TLS verify| Transit
@@ -69,6 +75,7 @@ The plugin process:
 
 - serves the Kubernetes KMS v2 gRPC API over a Unix domain socket,
 - maintains the active key snapshot,
+- persists non-secret registry state,
 - returns cached KMS Status,
 - validates decrypt `key_id` and annotations,
 - constructs Transit associated data when enabled,
@@ -158,7 +165,7 @@ The provider sits across these boundaries:
 - Kubernetes API server to local plugin socket.
 - Plugin host process to OpenBao HTTPS endpoint.
 - OpenBao policy boundary for Transit operations.
-- Local host filesystem boundary for configuration, JWT file, CA bundle, and socket.
+- Local host filesystem boundary for configuration, JWT file, CA bundle, socket, and registry state.
 - etcd persistence boundary for ciphertext and KMS annotations.
 
 The plugin sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog see [Threat Model](/security/threat-model/).
@@ -167,17 +174,21 @@ The plugin sees plaintext material passing through KMS calls. Treat it as a cont
 
 ```go
 type KeySnapshot struct {
-    KubernetesKeyID         string
-    TransitMountHash        string
-    TransitKeyHash          string
+    ProviderName            string
+    ClusterID               string
+    OpenBaoInstanceID       string
+    TransitMountID          string
+    TransitKeyLineageID     string
     TransitVersion          int
     TransitVersionCreatedAt time.Time
     CreatedAt               time.Time
-    State                   string // Active, Pending, Retired, Rejected, DisasterRecovery
+    KubernetesKeyID         string
+    State                   SnapshotState // active, pending, retired, rejected, disaster_recovery
+    AADMode                 AADMode       // aad.required
 }
 ```
 
-The active snapshot is computed by a background key watcher, not during hot-path Status calls. The implementation prefers deriving historical `key_id` values from stable configuration plus Transit metadata. A small local key registry state file with strict permissions persists rotation decisions across restart; see [Reference: Key ID And AAD: Local Registry State](/reference/key-id-and-aad/#local-registry-state).
+The fields are non-secret identity and Transit metadata used to derive Kubernetes `key_id` values and reconstruct AAD. The active snapshot is computed by a background key watcher, not during hot-path Status calls. The implementation prefers deriving historical `key_id` values from stable configuration plus Transit metadata. A small local key registry state file with strict permissions persists rotation decisions across restart; see [Reference: Key ID And AAD: Local Registry State](/reference/key-id-and-aad/#local-registry-state).
 
 ## Implementation Guardrails
 
@@ -204,6 +215,8 @@ For the supporting policy see [Development: Code Quality](/development/code-qual
 
 ## Startup Sequence
 
+`bao-kms-provider` performs one successful bootstrap status probe before binding the Unix socket. Startup fails closed rather than exposing a socket without a fresh active snapshot.
+
 Recommended systemd sequence:
 
 ```mermaid
@@ -228,7 +241,7 @@ Recommended static-pod sequence:
 flowchart TD
     A["host boot"]
     B["kubelet starts"]
-    C["kubelet starts openbao-kms static pod"]
+    C["kubelet starts bao-kms-provider static pod"]
     D["kubelet starts kube-apiserver static pod"]
     E["plugin creates socket"]
     F["kube-apiserver connects or retries"]
@@ -238,7 +251,7 @@ flowchart TD
     B --> D --> F
 ```
 
-Static-pod ordering must be tested because kubelet does not provide a strong dependency graph between static pods. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model selection rationale and [Deployment: Static Pod Deployment](/deployment/static-pod/) for the manifest and bootstrap risks.
+Static-pod ordering must be tested because kubelet does not provide a strong dependency graph between static pods. The API server may start before the provider socket exists and must retry while the provider completes bootstrap. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model selection rationale and [Deployment: Static Pod Deployment](/deployment/static-pod/) for the manifest and bootstrap risks.
 
 ## Multi-Control-Plane Operation
 
@@ -256,6 +269,8 @@ All instances share:
 - the same `key_id` derivation algorithm.
 
 Instances may have different JWTs and OpenBao client tokens.
+
+Each instance also owns its own local registry state file. The content should converge to the same active `key_id`, while pending or recovered snapshots can differ temporarily during failover or rotation recovery.
 
 Promotion of a new Transit key version is stable across all control-plane nodes. If one node promotes early and another does not, API server behavior can become inconsistent. The activation delay and stable observation count reduce this risk; operational monitoring still checks for `key_id` convergence. See [Architecture: Rotation Model](/architecture/rotation-model/).
 

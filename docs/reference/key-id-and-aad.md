@@ -103,7 +103,7 @@ key-id-hash.kms.openbao.org: "<base64url-sha256-key-id>"
 transit-key-version.kms.openbao.org: "2"
 transit-mount-hash.kms.openbao.org: "<base64url-sha256-mount-id>"
 transit-key-hash.kms.openbao.org: "<base64url-sha256-key-lineage-id>"
-plugin-version.kms.openbao.org: "v0.1.0"
+plugin-version.kms.openbao.org: "0.1.0"
 aad-version.kms.openbao.org: "v1"
 ```
 
@@ -160,9 +160,9 @@ Serialization rules:
 
 | Mode | Behavior | Intended use |
 |---|---|---|
-| `aad.required` | Encrypt and decrypt require valid AAD metadata. | Required v0.1 mode. |
+| `aad.required` | Encrypt and decrypt require valid AAD metadata. | Required mode. |
 | `aad.optional-read` | Encrypt with AAD; decrypt configured pre-AAD epochs without AAD. | Future migration mode only. |
-| `aad.disabled` | Send no Transit associated data. | Compatibility testing only; not a v0.1 supported mode. |
+| `aad.disabled` | Send no Transit associated data. | Compatibility testing only; not a supported mode. |
 
 Compatibility modes:
 
@@ -184,7 +184,7 @@ Unknown `key_id` values fail before step 6.
 
 The implementation exposes a decrypt preflight helper that returns the resolved snapshot, parsed annotations, canonical AAD bytes, and Transit `associated_data` only after steps 1 through 5 have passed.
 
-For v0.1, snapshots use `aad.required`. `aad.optional-read` and `aad.disabled` are modeled as future compatibility modes; encrypt and decrypt preparation reject them in v0.1.
+Snapshots use `aad.required`. `aad.optional-read` and `aad.disabled` are modeled as future compatibility modes; encrypt and decrypt preparation reject them.
 
 ## Local Registry State
 

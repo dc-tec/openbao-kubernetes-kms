@@ -6,7 +6,7 @@ weight: 20
 
 # Configuration
 
-This page is the authoritative reference for the v0.1 `bao-kms-provider` configuration file. Identity-bearing fields and default values are stable across v0.1 patch releases.
+This page is the authoritative reference for the `bao-kms-provider` configuration file. Identity-bearing fields and default values are stable across preview patch releases.
 
 ## Example
 
@@ -252,9 +252,9 @@ The following must not be enabled in production without a written exception:
 - logging raw OpenBao paths
 - broad socket permissions
 
-For v0.1, `performance.decryptMicroBatching.enabled: true` is rejected by configuration validation. The field reserves the future compatibility surface while sustained direct decrypt soak determines whether a production-grade coalescer is needed before enabling the feature.
+`performance.decryptMicroBatching.enabled: true` is rejected by configuration validation. The field reserves the future compatibility surface while sustained direct decrypt soak determines whether a production-grade coalescer is needed before enabling the feature.
 
-For v0.1, `transit.useAssociatedData: false` is not a supported deployment mode. The field exists to reserve the compatibility surface for future testing and migration work.
+`transit.useAssociatedData: false` is not a supported deployment mode. The field exists to reserve the compatibility surface for future testing and migration work.
 
 ## Environment Variables
 
@@ -275,7 +275,7 @@ The CLI prints the JSON Schema used by documentation and tooling:
 bao-kms-provider config schema
 ```
 
-The schema rejects unknown top-level and nested fields, reserves `configVersion: v1alpha1`, and documents the supported v0.1 surface.
+The schema rejects unknown top-level and nested fields, reserves `configVersion: v1alpha1`, and documents the supported configuration surface.
 
 ## Source References
 

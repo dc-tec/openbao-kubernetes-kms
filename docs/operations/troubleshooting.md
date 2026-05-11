@@ -8,6 +8,19 @@ weight: 40
 
 This page maps common symptoms to likely causes and recovery steps. For the comprehensive failure-mode catalog with detection signals, mitigations, and impact analysis, see [Architecture: Failure Modes](/architecture/failure-modes/).
 
+Start with the least destructive checks:
+
+```sh
+curl -sf http://127.0.0.1:8082/live
+curl -sf http://127.0.0.1:8082/ready
+curl -sf http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_status_cache_age_seconds'
+bao-kms-provider doctor \
+  --config /etc/openbao-kms/config.yaml \
+  --encryption-config /etc/kubernetes/encryption-config.yaml
+```
+
+Do not change identity-bearing fields, recreate Transit keys, or change Kubernetes encryption configuration until the failing layer is known.
+
 ## API Server Cannot Connect To KMS
 
 Symptoms:
@@ -20,9 +33,13 @@ Check:
 
 ```sh
 systemctl status bao-kms-provider.service
+journalctl -u kubelet --since -10m
+crictl ps --name bao-kms-provider
 ls -l /run/openbao-kms
 bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
 ```
+
+Use the systemd command for host-service deployments. Use kubelet and container-runtime tooling for static-pod deployments.
 
 Recovery:
 
@@ -51,9 +68,10 @@ Recovery:
 
 1. Ensure the API server runtime identity is a member of `openbao-kms-socket`.
 2. Set the runtime directory group to `openbao-kms-socket` and mode `2750`.
-3. Set the socket mode to `0660`.
-4. Restart the plugin.
-5. Restart `kube-apiserver` if it does not reconnect.
+3. In static-pod mode, ensure the numeric socket group GID matches `spec.securityContext.supplementalGroups` and `server.socketGroup`.
+4. Set the socket mode to `0660`.
+5. Restart the plugin.
+6. Restart `kube-apiserver` if it does not reconnect.
 
 ## OpenBao Unavailable Or Sealed
 
@@ -68,6 +86,7 @@ Check:
 
 ```sh
 bao status
+curl -sf http://127.0.0.1:8082/ready
 bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
 ```
 
@@ -76,7 +95,7 @@ Recovery:
 1. Restore OpenBao reachability.
 2. Unseal or repair OpenBao.
 3. Verify TLS and DNS.
-4. Run `bao-kms-provider verify-key`.
+4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
 5. Restart the plugin only if it does not recover on its own after OpenBao is healthy.
 
 ## JWT Login Fails
@@ -100,7 +119,7 @@ Recovery:
 1. Replace the JWT with a valid token.
 2. Fix OpenBao JWT role constraints if they are wrong.
 3. Fix issuer, JWKS, or OIDC discovery reachability.
-4. Restart the plugin or signal it to re-login.
+4. Restart the plugin if the current in-memory token does not recover. The provider re-reads the JWT file before re-login.
 
 ## Transit Key Missing
 
@@ -119,7 +138,7 @@ Recovery:
 
 Do not recreate the key with the same name and expect old data to decrypt. Recreated keys produce a new lineage; old ciphertext is bound to the previous lineage.
 
-## Unknown key_id
+## Unknown Key ID
 
 Symptoms:
 
@@ -156,18 +175,17 @@ Likely causes:
 
 - annotations were modified or corrupted,
 - provider, cluster, or key scope changed,
-- a compatibility mode is missing for an old object epoch,
 - a bug in canonical AAD serialization.
 
 Recovery:
 
-1. Do not disable AAD globally as a first response.
+1. Do not disable AAD globally.
 2. Compare object annotations with the expected key snapshot hashes.
 3. Restore the correct configuration.
-4. Enable a bounded compatibility mode only for known pre-AAD epochs if appropriate.
+4. Do not set `transit.useAssociatedData: false`; the provider rejects that mode and it is unsafe as an incident response.
 5. File a bug if canonical serialization changed unexpectedly.
 
-## Status key_id Differs From Encrypt key_id
+## Status Key ID Differs From Encrypt Key ID
 
 Symptoms:
 
@@ -221,6 +239,8 @@ Recovery:
 3. Set image pull policy appropriately for air-gapped environments.
 4. Restart kubelet if needed.
 
+See [Deployment: Static Pod Deployment](/deployment/static-pod/) for the image preload and digest-pinning rules.
+
 ## Identity Fallback Issues
 
 If `identity` fallback remains enabled too long:
@@ -246,4 +266,4 @@ Recovery:
 - Do not change the provider name to clear errors.
 - Do not raise `min_decryption_version`.
 - Do not log plaintext or full ciphertext.
-- Do not disable AAD globally without identifying which key epochs are affected.
+- Do not disable AAD globally.

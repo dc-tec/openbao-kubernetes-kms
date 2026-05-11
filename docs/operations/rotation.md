@@ -10,6 +10,8 @@ This runbook covers OpenBao Transit key rotation for `bao-kms-provider`. Transit
 
 For the design rationale behind the rotation state machine, including the flip-flop guards and observation thresholds, see [Architecture: Rotation Model](/architecture/rotation-model/).
 
+Rotation changes the active Transit version under an existing Transit key. It must not change the provider name, cluster ID, OpenBao instance ID, Transit mount ID, key lineage ID, mount path, or key name. Those fields are identity-bearing and changing them requires a migration plan; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+
 ## Before Rotation
 
 Verify:
@@ -18,7 +20,7 @@ Verify:
 - etcd backup is current.
 - The plugin is healthy on every control-plane node.
 - All nodes report the same active `key_id` hash.
-- `bao-kms-provider doctor` passes on every control-plane node.
+- `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` passes on every control-plane node.
 - No `identity` fallback remains unexpectedly in the API server `EncryptionConfiguration`.
 - OpenBao `min_decryption_version` allows every version still present in etcd and backups.
 
@@ -58,11 +60,11 @@ Watch the rotation state from the CLI:
 bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml
 ```
 
-Watch the metric across all control-plane nodes:
+Watch the metric on each control-plane node:
 
 ```sh
-curl -sf http://127.0.0.1:9090/metrics \
-  | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_rotation_state'
+curl -sf http://127.0.0.1:8081/metrics \
+  | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_key_version|openbao_kms_rotation_state'
 ```
 
 Expected state:
@@ -71,6 +73,8 @@ Expected state:
 - the new version becomes active once the stability window passes,
 - every control-plane node converges to the same `key_id` hash,
 - no node flips back to the old `key_id`.
+
+The rotation metric is intentionally bounded to `state="active"`, `state="pending"`, and `state="unknown"`. Use `rotation-plan` for the detailed promotion reason and timing.
 
 ## Migrate Kubernetes Data
 
@@ -92,6 +96,7 @@ bao-kms-provider verify-rotation --config /etc/openbao-kms/config.yaml
 
 Then:
 
+- run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml`,
 - restart one API server and verify reads succeed,
 - verify new writes carry the new `key_id`,
 - check the provider decrypt-error metrics on every control-plane node,
@@ -110,18 +115,18 @@ Do not raise OpenBao `min_decryption_version` until:
 - restore testing has proved that the remaining backup set can decrypt,
 - `verify-rotation` confidence is acceptable.
 
-Raising `min_decryption_version` too early can make old Kubernetes data unreadable even when the Transit key still exists. The operation is not reversible without restoring backups.
+Raising `min_decryption_version` too early can make old Kubernetes data unreadable even when the Transit key still exists. Lowering the value may help only when the old key version still exists and policy allows it. Treat this as an emergency recovery step, not a rollback plan.
 
 ## Rollback
 
 If new encrypt or decrypt behavior fails before migration completes:
 
-1. Stop promotion if the rotation state machine has not yet activated the new version.
+1. Stop promotion by restoring the previous known-good plugin configuration and version if the rotation state machine has not yet activated the new version.
 2. Keep old Transit key versions decryptable. Do not raise `min_decryption_version`.
 3. Restore the previous plugin version and configuration if the failure is plugin-related.
 4. Do not delete the new Transit version.
 5. Do not recreate the Transit key.
-6. Use `doctor` and the metric catalog in [Reference: Observability](/reference/observability/) to identify the failing layer.
+6. Use `doctor`, `rotation-plan`, and the metric catalog in [Reference: Observability](/reference/observability/) to identify the failing layer.
 
 If objects have already been rewritten with the new version, rollback still requires the new Transit version to remain decryptable.
 

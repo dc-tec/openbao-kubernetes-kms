@@ -67,6 +67,8 @@ The provider tags every failed operation with one of these stable error classes.
 - `annotation_invalid`
 - `status_stale`
 - `timeout`
+- `canceled`
+- `unknown`
 
 ## Health Endpoints
 
