@@ -29,7 +29,7 @@ Required before a v0.1 engineering-preview release:
 15. Containerized OpenBao integrated raft snapshot restore decrypts ciphertext created before restore.
 16. Kind multi-control-plane convergence proves each API server can decrypt through its node-local provider.
 17. Kind static-pod upgrade and rollback preserve decrypt compatibility, and provider binary upgrade and rollback with distinct images preserve old and new ciphertext readback.
-18. Provider and OpenBao load-soak sustains Status, Encrypt, and Decrypt with bounded errors, latency, memory growth, and PID growth; sustained direct decrypt soak also passes with bounded p95 latency and resource growth.
+18. Provider and OpenBao load-soak sustains Status, Encrypt, and Decrypt with bounded errors, latency, memory growth, and PID growth; sustained direct decrypt soak also passes with bounded p95 latency and resource growth. Captured results are recorded in [Benchmark Results](/development/benchmark-results/).
 19. Kind DR runbook restores OpenBao raft data, rehydrates provider state and configuration, and proves Kubernetes Secret readback after replacement.
 20. systemd and static-pod install scripts stage expected files and permissions.
 21. `bao-kms-provider doctor` catches bad socket, bad JWT, bad policy, and bad Transit key configuration.

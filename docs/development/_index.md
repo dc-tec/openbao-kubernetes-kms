@@ -8,6 +8,7 @@ browse:
   - "/development/testing"
   - "/development/e2e-framework"
   - "/development/harvester-kubeadm-lab"
+  - "/development/benchmark-results"
   - "/development/ci-supply-chain"
   - "/development/release-gates"
   - "/development/docs-style-guide"
@@ -25,6 +26,7 @@ These pages cover local development, CI, release process, and how the docs site 
 - [Testing](/development/testing/) for the unit, integration, and end-to-end testing strategy.
 - [E2E Framework](/development/e2e-framework/) for the Ginkgo and Gomega suite layout, manifest routing, and reports.
 - [Harvester Kubeadm Lab](/development/harvester-kubeadm-lab/) for local-only VM release-gate setup.
+- [Benchmark Results](/development/benchmark-results/) for captured performance and recovery evidence.
 - [CI And Supply Chain](/development/ci-supply-chain/) for the CI pipeline, version pinning, and supply-chain controls.
 - [Release Gates](/development/release-gates/) for the release process and the gates a release must pass.
 - [Docs Style Guide](/development/docs-style-guide/) for the writing rules, IA contracts, and verification commands enforced on the docs.
