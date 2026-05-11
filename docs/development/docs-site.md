@@ -21,7 +21,6 @@ docs/
   security/           threat model, hardening, auth, AAD
   architecture/       maintainer-facing rationale
   development/        contributor-facing
-  _archive/           frozen v0.1 source material, not published
 website/
   content/            homepage, error pages, search
   layouts/            Hugo templates
@@ -30,7 +29,7 @@ website/
 hugo.toml             site config and module mounts
 ```
 
-`docs/_archive/` is a frozen snapshot of the v0.1 implementation-time source material. It is not mounted into the site and is referenced only when rewriting pages.
+Historical planning material is not carried in the live documentation tree. Use repository history when older design notes or implementation planning context are needed.
 
 ## Mount Configuration
 
@@ -73,7 +72,7 @@ make docs-build
 make docs-check
 ```
 
-`make docs-build` runs the full Hugo build and must complete without warnings. `make docs-check` enforces forbidden-string and em-dash gates against `docs/`, with `docs/_archive/` excluded. The current rules:
+`make docs-build` runs the full Hugo build and must complete without warnings. `make docs-check` enforces forbidden-string and em-dash gates against `docs/`. The current rules:
 
 - no object replacement character (octal `\357\277\274`) in `docs/` or `README.md`,
 - no three-em dash (`U+2E3B`) in `docs/` or `README.md`,

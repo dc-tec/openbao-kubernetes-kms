@@ -1,6 +1,6 @@
 apiVersion: v2
 name: openbao-kms-harvester-lab
-description: Local-only Harvester VM lab for OpenBao Kubernetes KMS kubeadm release-gate testing
+description: Local-only Harvester VM lab for OpenBao Kubernetes KMS kubeadm validation
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

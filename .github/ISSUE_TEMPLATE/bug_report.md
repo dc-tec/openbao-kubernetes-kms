@@ -11,16 +11,15 @@ labels: bug
 
 ## Actual Behavior
 
-## Workstream
-
-- Related workstream ID:
-
 ## Environment
 
 - OpenBao version:
 - Kubernetes version:
 - Deployment mode:
+- Provider version or commit:
+
+## Reproduction
 
 ## Notes
 
-Do not include plaintext, JWTs, OpenBao tokens, full ciphertext, or sensitive cluster data.
+Do not include plaintext, JWTs, OpenBao tokens, full ciphertext, kubeconfigs, or sensitive cluster data. For security-sensitive reports, use private vulnerability reporting instead of a public issue.

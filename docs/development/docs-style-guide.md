@@ -18,8 +18,7 @@ The published documentation should read like a coherent operator and maintainer 
 - Use Title Case for headings, matching the existing reference docs.
 - Use OpenBao terminology for this project. Mention Vault only when naming related work or upstream compatibility context; do not describe this provider as a Vault provider.
 - Use the binary name `bao-kms-provider` everywhere in prose. Earlier or longer name variants must not appear in docs; the GitHub repository URL is the only allowed exception and lives in `hugo.toml` rather than in any page.
-
-The voice anchors for the rewrite are `docs/_archive/kms-v2-contract.md` and `docs/_archive/configuration.md`. New or rewritten pages should match that tone: short paragraphs, dense factual content, no marketing voice.
+- Match the tone of the maintained reference pages: short paragraphs, dense factual content, no marketing voice.
 
 ## Section Shapes
 
@@ -62,9 +61,8 @@ flowchart TD
 ## Repository Contracts
 
 - Every Markdown page under `docs/<section>/` must be reachable from the section's `_index.md` (either via `browse` or as a direct child page Hugo auto-discovers).
-- `docs/_archive/` is a frozen snapshot of the implementation-time source material. Do not modify files there during normal docs polishing. Reference it only as historical source material when a public page needs correction.
 - Public pages under `docs/<section>/` are the maintained documentation source. Update them directly when behavior, release policy, compatibility, deployment, or operations change.
-- Historical ADRs and workstream notes stay archived. Public docs may link to current reference, architecture, or development pages instead of archived planning artifacts.
+- Historical ADRs and planning notes are available through repository history. Public docs link to current reference, architecture, or development pages instead of old planning artifacts.
 - Internal links use absolute paths from the site root, for example `/operations/rotation/` rather than relative or `.md` paths.
 - Generated reference pages, when added, keep the generated-note contract at the top of the file.
 - Front matter on every page includes `title`, `description`, and `weight`. Section landings include a `browse` array listing the intended page order.
@@ -90,4 +88,4 @@ make docs-build
 make docs-check
 ```
 
-`make docs-build` runs the full Hugo build and must complete without warnings. `make docs-check` enforces forbidden-string and em-dash gates against the live docs tree, with `docs/_archive/` excluded.
+`make docs-build` runs the full Hugo build and must complete without warnings. `make docs-check` enforces forbidden-string and em-dash gates against the live docs tree.
