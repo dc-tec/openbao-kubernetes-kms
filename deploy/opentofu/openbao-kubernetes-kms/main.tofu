@@ -1,27 +1,48 @@
 locals {
   transit_mount_path = trim(var.transit_mount_path, "/")
 
-  provider_policy_hcl = <<-EOT
-    # Read Transit key metadata.
-    path "${local.transit_mount_path}/keys/${var.transit_key_name}" {
-      capabilities = ["read"]
-    }
+  transit_policy_hcl = <<-EOT
+  # Read Transit key metadata.
+  path "${local.transit_mount_path}/keys/${var.transit_key_name}" {
+    capabilities = ["read"]
+  }
 
-    # Encrypt with the existing key.
-    path "${local.transit_mount_path}/encrypt/${var.transit_key_name}" {
-      capabilities = ["update"]
-    }
+  # Encrypt with the existing key.
+  path "${local.transit_mount_path}/encrypt/${var.transit_key_name}" {
+    capabilities = ["update"]
+  }
 
-    # Decrypt existing ciphertext.
-    path "${local.transit_mount_path}/decrypt/${var.transit_key_name}" {
-      capabilities = ["update"]
-    }
+  # Decrypt existing ciphertext.
+  path "${local.transit_mount_path}/decrypt/${var.transit_key_name}" {
+    capabilities = ["update"]
+  }
 
-    # Inspect Transit disable_upsert.
-    path "${local.transit_mount_path}/config/keys" {
-      capabilities = ["read"]
-    }
+  # Inspect Transit disable_upsert.
+  path "${local.transit_mount_path}/config/keys" {
+    capabilities = ["read"]
+  }
+
+  # Allow bao-kms-provider doctor to inspect the token's effective capabilities.
+  path "sys/capabilities-self" {
+    capabilities = ["update"]
+  }
   EOT
+
+  token_renewal_policy_hcl = <<-EOT
+  # Allow in-process OpenBao token renewal when the JWT role disables the default policy.
+  path "auth/token/lookup-self" {
+    capabilities = ["read"]
+  }
+
+  path "auth/token/renew-self" {
+    capabilities = ["update"]
+  }
+  EOT
+
+  provider_policy_hcl = join("\n\n", compact([
+    trimspace(local.transit_policy_hcl),
+    var.include_token_renewal_capabilities ? trimspace(local.token_renewal_policy_hcl) : "",
+  ]))
 }
 
 resource "vault_mount" "transit" {

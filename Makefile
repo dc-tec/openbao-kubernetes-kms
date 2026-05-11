@@ -246,7 +246,9 @@ release-bundles:
 		-image-ref "$$image_ref" \
 		-source-date-epoch "$$source_date_epoch"
 
-release-distribution: release-packages release-bundles
+release-distribution: release-artifacts
+	@$(MAKE) release-packages
+	@$(MAKE) release-bundles
 	@$(MAKE) checksums
 
 checksums:

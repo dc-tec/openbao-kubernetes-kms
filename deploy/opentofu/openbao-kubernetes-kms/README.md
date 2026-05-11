@@ -5,7 +5,8 @@ This module skeleton configures the OpenBao-side primitives required by `bao-kms
 - Transit secrets engine mount,
 - Transit key with safe Kubernetes KMS defaults,
 - Transit `disable_upsert` mount policy,
-- least-privilege OpenBao policy for the provider token.
+- least-privilege OpenBao policy for the provider token, including `doctor`
+  capability checks and optional token-renewal self paths.
 
 It intentionally does not render provider config files, render Kubernetes `EncryptionConfiguration`, configure JWT auth roles, rotate Transit keys, or publish Kubernetes API objects.
 
@@ -26,6 +27,11 @@ module "openbao_kubernetes_kms" {
   policy_name        = "openbao-kms-workload-a"
 }
 ```
+
+`include_token_renewal_capabilities` defaults to `true` because the maintained
+provider configuration samples enable token renewal. Set it to `false` only when
+the deployment uses re-login instead of renewal and the JWT role does not need
+`auth/token/lookup-self` or `auth/token/renew-self`.
 
 Outputs:
 

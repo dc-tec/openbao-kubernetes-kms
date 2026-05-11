@@ -27,12 +27,12 @@ variable "transit_key_name" {
 
 variable "transit_key_type" {
   type        = string
-  description = "Transit key type. v0.1 supports aes256-gcm96."
+  description = "Transit key type supported by the provider."
   default     = "aes256-gcm96"
 
   validation {
     condition     = var.transit_key_type == "aes256-gcm96"
-    error_message = "transit_key_type must be aes256-gcm96 for v0.1."
+    error_message = "transit_key_type must be aes256-gcm96."
   }
 }
 
@@ -45,5 +45,11 @@ variable "policy_name" {
 variable "disable_transit_key_upsert" {
   type        = bool
   description = "Write Transit mount key configuration with disable_upsert=true."
+  default     = true
+}
+
+variable "include_token_renewal_capabilities" {
+  type        = bool
+  description = "Add auth/token/lookup-self and auth/token/renew-self to the provider policy for token renewal."
   default     = true
 }
