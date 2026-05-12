@@ -166,7 +166,7 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	if hasState {
 		result, err = c.observer.Observe(state, profile, now)
 	} else {
-		if !canAutoBootstrapState(profile) {
+		if !CanAutoBootstrapState(profile) {
 			c.store.PublishUnhealthy(now)
 			return fmt.Errorf(
 				"%w: local registry state is absent for non-initial Transit metadata",
@@ -196,7 +196,8 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	return nil
 }
 
-func canAutoBootstrapState(profile openbao.KeyProfile) bool {
+// CanAutoBootstrapState reports whether absent local state may be synthesized from Transit metadata.
+func CanAutoBootstrapState(profile openbao.KeyProfile) bool {
 	return profile.LatestVersion == initialTransitVersion &&
 		profile.MinAvailableVersion <= initialTransitVersion &&
 		profile.MinDecryptionVersion <= initialTransitVersion

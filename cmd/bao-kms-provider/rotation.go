@@ -11,6 +11,7 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
 	"github.com/spf13/cobra"
 )
@@ -124,13 +125,28 @@ func buildRotationReport(ctx context.Context, cfg config.Config, name string) (r
 		}
 		return rotationReport{}, err
 	}
+	return applyTransitProfileToRotationReport(cfg, report, profile, time.Now().UTC())
+}
+
+func applyTransitProfileToRotationReport(
+	cfg config.Config,
+	report rotationReport,
+	profile openbao.KeyProfile,
+	now time.Time,
+) (rotationReport, error) {
 	report.LatestTransitVersion = profile.LatestVersion
 	if !report.StateLoaded {
+		if !status.CanAutoBootstrapState(profile) {
+			return rotationReport{}, fmt.Errorf(
+				"%w: local registry state is absent for non-initial Transit metadata",
+				status.ErrStateUnavailable,
+			)
+		}
 		observer, observerErr := status.NewObserver(snapshotScope(cfg), rotationPolicy(cfg))
 		if observerErr != nil {
 			return rotationReport{}, observerErr
 		}
-		rebuilt, rebuildErr := observer.RebuildState(profile, time.Now().UTC())
+		rebuilt, rebuildErr := observer.RebuildState(profile, now)
 		if rebuildErr != nil {
 			return rotationReport{}, rebuildErr
 		}

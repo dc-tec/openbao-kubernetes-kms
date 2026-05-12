@@ -115,15 +115,17 @@ bao-kms-provider rotation-plan \
 
 Reports:
 
+- whether local registry state was loaded,
+- registry generation and state hash when available,
 - current active Transit version,
 - current Kubernetes `key_id` hash,
 - latest observed Transit version,
 - pending promotion status,
-- estimated promotion time,
-- current `min_encryption_version`,
-- current `min_decryption_version`,
-- storage migration reminder,
-- backup warnings.
+- estimated promotion time when a pending version has become stable.
+
+If local registry state is missing, `rotation-plan` only synthesizes initial
+bootstrap state from initial Transit metadata. It fails instead of reporting an
+active key hash from live Transit metadata after rotation.
 
 ## verify-rotation
 
@@ -134,14 +136,11 @@ bao-kms-provider verify-rotation \
   --config /etc/openbao-kms/config.yaml
 ```
 
-Strategies the command may use:
-
-- inspect API server encryption migration status if available,
-- scan Kubernetes resources through the API server where possible,
-- inspect etcd only in controlled administrative environments,
-- compare observed KMS key ID hashes from plugin metrics and logs.
-
-This command cannot prove absence of old ciphertext if it cannot inspect every encrypted resource and backup. It reports the confidence level and the inspection coverage achieved.
+The command reports the same local registry and Transit metadata view as
+`rotation-plan`, plus a limited confidence marker. It does not scan Kubernetes
+resources, inspect etcd, or prove that every encrypted resource and backup has
+been rewritten. Treat it as a local preflight signal, not as proof that old
+ciphertext no longer exists.
 
 ## config
 
