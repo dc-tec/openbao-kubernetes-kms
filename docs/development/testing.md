@@ -36,6 +36,7 @@ For captured load and cold-start evidence, see [Performance Evidence](/developme
 | Unit and golden tests | Validate key registry decisions, AAD construction, config validation, socket handling, logging redaction, and stable wire-format fixtures. | `go test ./...`, golden fixtures under `testdata/` |
 | KMS v2 conformance | Start the real Unix-socket server path with fake OpenBao behavior and exercise Kubernetes KMS v2 protobuf requests. | fast local and PR checks |
 | OpenBao client integration | Verify Transit, JWT auth, TLS, policy diagnostics, and OpenBao error handling without external credentials. | hermetic integration tests and OpenBao CI E2E |
+| Operator CLI E2E | Run provider image CLI diagnostics against real OpenBao/config/state and assert redacted hardening failures. | provider CLI E2E |
 | Kubernetes API server E2E | Prove real API server encryption, raw etcd envelope storage, restart readback, and multi-control-plane convergence. | Kind lanes and local kubeadm VM validation |
 | Rotation and compatibility | Prove Transit version promotion, old ciphertext readback, new ciphertext write path, historical decryptability guards, missing-state fail-closed behavior, and rollback rejection. | OpenBao rotation E2E |
 | Failure injection | Exercise OpenBao outage, sealed state, failover, bad policy, expired or identity-drifted JWT, missing Transit key, stale socket, and startup failures. | provider failure and HA E2E lanes |

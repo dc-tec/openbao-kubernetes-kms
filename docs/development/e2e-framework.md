@@ -22,6 +22,7 @@ behavior.
 | Full enabled E2E suite | `make test-e2e` | Runs the enabled Ginkgo E2E specs selected by labels. | Depends on selected labels |
 | OpenBao CI | `make test-e2e-openbao-ci` | Transit, JWT auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
 | Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and JWT auth. | Docker-compatible runtime |
+| Provider CLI | `make test-e2e-provider-cli-openbao-ci` | Provider image CLI commands against real OpenBao/config/state, including diagnostics and hardening failures. | Docker-compatible runtime |
 | Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted JWT, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
 | OpenBao HA failover | `make test-e2e-provider-ha-openbao-ci` | Integrated-raft active node failover while preserving old decrypt and new KMS operations. | Docker-compatible runtime |
 | Decrypt storm smoke | `make test-e2e-provider-decrypt-storm-openbao-ci` | Concurrent KMS v2 decrypts through the provider and real OpenBao. | Docker-compatible runtime |
@@ -80,6 +81,7 @@ Current lane IDs:
 |---|---|
 | `openbao-ci` | active |
 | `openbao-failure-ci` | active |
+| `openbao-provider-cli-ci` | active |
 | `openbao-ha-ci` | active |
 | `openbao-decrypt-storm-ci` | active |
 | `openbao-decrypt-soak-ci` | active |
@@ -110,6 +112,7 @@ test/e2e/
   kind_dr_test.go
   kind_smoke_test.go
   openbao_transit_test.go
+  provider_cli_test.go
   provider_container_test.go
   provider_failure_test.go
   provider_ha_test.go

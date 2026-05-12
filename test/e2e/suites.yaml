@@ -74,6 +74,22 @@ lanes:
     status: active
     reports: true
 
+  - id: openbao-provider-cli-ci
+    name: OpenBao Provider CLI CI
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && cli && ci
+    prScope: main
+    environment: local-openbao
+    isolation: local-container
+    timeout: 12m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
   - id: openbao-ha-ci
     name: OpenBao HA Failover CI
     package: ./test/e2e

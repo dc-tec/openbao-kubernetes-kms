@@ -16,6 +16,14 @@ make test-e2e-provider-openbao-ci
 
 That target builds `E2E_PROVIDER_IMAGE` and runs the provider plus KMS v2 socket client in Docker containers. Set `E2E_PROVIDER_BUILD=false` to test a prebuilt image tag.
 
+Run only the provider CLI slice with:
+
+```sh
+make test-e2e-provider-cli-openbao-ci
+```
+
+That target runs the real provider image CLI against mounted provider config, TLS/JWT files, local state, and real OpenBao. It covers `doctor`, `verify-key`, `rotation-plan`, `verify-rotation`, `config`, and `policy openbao`, plus JWT claim drift redaction, unsupported Transit key type diagnostics, and missing-state-after-rotation fail-closed behavior.
+
 Run only the provider/OpenBao failure-mode slice with:
 
 ```sh

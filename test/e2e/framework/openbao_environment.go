@@ -59,19 +59,20 @@ const (
 var ErrDockerUnavailable = errors.New("docker is not available")
 
 type OpenBaoEnvironmentConfig struct {
-	Image         string
-	TransitMount  string
-	TransitKey    string
-	StartupWait   time.Duration
-	DockerBinary  string
-	NetworkName   string
-	StorageVolume string
-	JWTTTL        time.Duration
-	JWTTokenTTL   string
-	JWTMaxTTL     string
-	JWTIssuer     string
-	JWTAudience   string
-	JWTSubject    string
+	Image          string
+	TransitMount   string
+	TransitKey     string
+	TransitKeyType string
+	StartupWait    time.Duration
+	DockerBinary   string
+	NetworkName    string
+	StorageVolume  string
+	JWTTTL         time.Duration
+	JWTTokenTTL    string
+	JWTMaxTTL      string
+	JWTIssuer      string
+	JWTAudience    string
+	JWTSubject     string
 }
 
 type OpenBaoEnvironment struct {
@@ -85,22 +86,23 @@ type OpenBaoEnvironment struct {
 	AuthRole      string
 	JWTFile       string
 
-	image         string
-	containerName string
-	certDir       string
-	dockerBinary  string
-	networkName   string
-	storageVolume string
-	unsealKey     string
-	jwtPrivateKey *rsa.PrivateKey
-	jwtPublicKey  string
-	jwtPublicKeys []string
-	jwtTTL        time.Duration
-	jwtTokenTTL   string
-	jwtMaxTTL     string
-	jwtIssuer     string
-	jwtAudience   string
-	jwtSubject    string
+	image          string
+	containerName  string
+	certDir        string
+	dockerBinary   string
+	networkName    string
+	storageVolume  string
+	transitKeyType string
+	unsealKey      string
+	jwtPrivateKey  *rsa.PrivateKey
+	jwtPublicKey   string
+	jwtPublicKeys  []string
+	jwtTTL         time.Duration
+	jwtTokenTTL    string
+	jwtMaxTTL      string
+	jwtIssuer      string
+	jwtAudience    string
+	jwtSubject     string
 }
 
 type mountRequestBody struct {
@@ -231,24 +233,25 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 	containerName := "bao-kms-e2e-" + suffix
 
 	environment := &OpenBaoEnvironment{
-		TLSServerName: openBaoTLSServerName,
-		Token:         token,
-		TransitMount:  cfg.TransitMount,
-		TransitKey:    cfg.TransitKey,
-		AuthMount:     openBaoJWTAuthMount,
-		AuthRole:      openBaoJWTAuthRole,
-		image:         cfg.Image,
-		containerName: containerName,
-		certDir:       certDir,
-		dockerBinary:  dockerPath,
-		networkName:   cfg.NetworkName,
-		storageVolume: cfg.StorageVolume,
-		jwtTTL:        cfg.JWTTTL,
-		jwtTokenTTL:   cfg.JWTTokenTTL,
-		jwtMaxTTL:     cfg.JWTMaxTTL,
-		jwtIssuer:     cfg.JWTIssuer,
-		jwtAudience:   cfg.JWTAudience,
-		jwtSubject:    cfg.JWTSubject,
+		TLSServerName:  openBaoTLSServerName,
+		Token:          token,
+		TransitMount:   cfg.TransitMount,
+		TransitKey:     cfg.TransitKey,
+		AuthMount:      openBaoJWTAuthMount,
+		AuthRole:       openBaoJWTAuthRole,
+		image:          cfg.Image,
+		containerName:  containerName,
+		certDir:        certDir,
+		dockerBinary:   dockerPath,
+		networkName:    cfg.NetworkName,
+		storageVolume:  cfg.StorageVolume,
+		transitKeyType: cfg.TransitKeyType,
+		jwtTTL:         cfg.JWTTTL,
+		jwtTokenTTL:    cfg.JWTTokenTTL,
+		jwtMaxTTL:      cfg.JWTMaxTTL,
+		jwtIssuer:      cfg.JWTIssuer,
+		jwtAudience:    cfg.JWTAudience,
+		jwtSubject:     cfg.JWTSubject,
 	}
 	if err := environment.startContainer(ctx, cfg.Image); err != nil {
 		_ = environment.Close(context.Background())
@@ -576,6 +579,9 @@ func defaultOpenBaoEnvironmentConfig(cfg OpenBaoEnvironmentConfig) OpenBaoEnviro
 	}
 	if cfg.TransitKey == "" {
 		cfg.TransitKey = DefaultOpenBaoTransitKey
+	}
+	if cfg.TransitKeyType == "" {
+		cfg.TransitKeyType = openBaoTransitKeyType
 	}
 	if cfg.StartupWait <= 0 {
 		cfg.StartupWait = 45 * time.Second
@@ -1116,7 +1122,7 @@ func (f *OpenBaoEnvironment) bootstrapTransit(ctx context.Context) error {
 	if err := f.write(ctx, httpClient, "sys/mounts/"+f.TransitMount, mountRequestBody{Type: "transit"}); err != nil {
 		return err
 	}
-	if err := f.write(ctx, httpClient, f.TransitMount+"/keys/"+f.TransitKey, transitKeyRequestBody{Type: openBaoTransitKeyType}); err != nil {
+	if err := f.write(ctx, httpClient, f.TransitMount+"/keys/"+f.TransitKey, transitKeyRequestBody{Type: f.transitKeyType}); err != nil {
 		return err
 	}
 	if err := f.write(ctx, httpClient, f.TransitMount+"/config/keys", disableUpsertRequestBody{DisableUpsert: true}); err != nil {
