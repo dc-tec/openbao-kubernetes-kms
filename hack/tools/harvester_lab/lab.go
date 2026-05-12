@@ -508,7 +508,7 @@ func ensureValues(cfg *labConfig) error {
 	// #nosec G304 -- local lab reads the configured values file.
 	data, err := os.ReadFile(cfg.valuesPath)
 	if err != nil {
-		return fmt.Errorf("values file not found: %s; run: make harvester-lab-values", cfg.valuesPath)
+		return fmt.Errorf("values file not found: %s; run: make -C hack/harvester values", cfg.valuesPath)
 	}
 	if strings.Contains(string(data), defaultHarvesterImageName) {
 		return errors.New("HARVESTER_IMAGE_NAME must be set to an existing Harvester image before creating VMs")
@@ -637,7 +637,7 @@ func labCreate(ctx context.Context, cfg *labConfig, _ []string) error {
 	if err := runCmd(ctx, cfg, "helm", helmArgs(cfg, args...)...); err != nil {
 		return err
 	}
-	fmt.Println("VM resources submitted. Run: make harvester-lab-status")
+	fmt.Println("VM resources submitted. Run: make -C hack/harvester status")
 	return nil
 }
 
@@ -1418,10 +1418,10 @@ func requireProviderInputs(cfg *labConfig) (string, error) {
 		return "", errors.New("could not resolve OpenBao host IP from SSH config")
 	}
 	if _, err := os.Stat(filepath.Join(cfg.artifactDir, "openbao-ca.crt")); err != nil {
-		return "", fmt.Errorf("OpenBao CA not found; run: make harvester-lab-bootstrap-openbao")
+		return "", fmt.Errorf("OpenBao CA not found; run: make -C hack/harvester bootstrap-openbao")
 	}
 	if _, err := os.Stat(filepath.Join(cfg.identityDir, "identity.jwt")); err != nil {
-		return "", fmt.Errorf("lab identity JWT not found; run: make harvester-lab-bootstrap-openbao")
+		return "", fmt.Errorf("lab identity JWT not found; run: make -C hack/harvester bootstrap-openbao")
 	}
 	return openBaoIP, nil
 }

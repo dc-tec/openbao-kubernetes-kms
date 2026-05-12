@@ -9,5 +9,4 @@ include mk/e2e.mk
 include mk/security.mk
 include mk/docs.mk
 include mk/deployment.mk
-include mk/harvester.mk
 include mk/ci.mk
