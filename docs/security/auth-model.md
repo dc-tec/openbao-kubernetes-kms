@@ -53,7 +53,6 @@ auth:
   expectedIssuer: ""
   expectedAudience: []
   expectedSubject: ""
-  tokenStorage: memory
 ```
 
 The provider keeps the OpenBao client token in memory only. The JWT file is re-read before re-login, so the on-disk credential can be rotated without restarting the process when the issuer and role bindings remain compatible.

@@ -70,7 +70,7 @@ OpenBao policies are path-based and deny by default; capabilities are only what 
 | `min_encryption_version` | Useful as a guard after rotation to prevent encryption with retired versions. Operator-driven, not plugin-driven. |
 | `min_decryption_version` | Dangerous if raised too early; only after full migration and verification. See [Operations: Rotation: min_decryption_version](/operations/rotation/#min_decryption_version). |
 | `disable_upsert` | Enabled at the mount level. |
-| `batch_input` | Reserved for a future decrypt micro-batching implementation; the current release line rejects enabling provider-side batching. |
+| `batch_input` | Outside the provider runtime for this release line; future decrypt coalescing must be introduced with explicit benchmarks and failure semantics. |
 | `rewrap` | Operational tool outside the Kubernetes KMS hot path. |
 
 ## Features To Avoid

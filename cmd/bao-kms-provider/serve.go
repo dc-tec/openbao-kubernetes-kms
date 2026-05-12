@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os/user"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
@@ -212,6 +214,7 @@ func buildStatusRuntime(
 		ProviderName:        cfg.Transit.KeyIDScope.ProviderName,
 		ClusterID:           cfg.Transit.KeyIDScope.ClusterID,
 		OpenBaoInstanceID:   cfg.OpenBao.InstanceID,
+		OpenBaoNamespace:    cfg.OpenBao.Namespace,
 		TransitMountID:      cfg.Transit.KeyIDScope.TransitMountID,
 		TransitKeyLineageID: cfg.Transit.KeyIDScope.KeyLineageID,
 		AADMode:             keyregistry.AADModeRequired,
@@ -437,23 +440,52 @@ func (r readinessAdapter) Ready(ctx context.Context) (status.Diagnostics, error)
 	return r.store.Diagnostics(ctx)
 }
 
-type diagnosticTransit struct{}
+type diagnosticTransit struct {
+	mu      sync.Mutex
+	records map[string]diagnosticTransitRecord
+}
 
-func (diagnosticTransit) Encrypt(
+type diagnosticTransitRecord struct {
+	plaintext      []byte
+	associatedData []byte
+}
+
+func (d *diagnosticTransit) Encrypt(
 	_ context.Context,
 	req kmsv2.TransitEncryptRequest,
 ) (kmsv2.TransitEncryptResponse, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.records == nil {
+		d.records = make(map[string]diagnosticTransitRecord)
+	}
+	ciphertext := fmt.Sprintf("%s-%d", diagnosticCiphertext, len(d.records)+1)
+	d.records[ciphertext] = diagnosticTransitRecord{
+		plaintext:      append([]byte(nil), req.Plaintext...),
+		associatedData: append([]byte(nil), req.AssociatedData...),
+	}
 	return kmsv2.TransitEncryptResponse{
-		Ciphertext: []byte(diagnosticCiphertext),
+		Ciphertext: []byte(ciphertext),
 		KeyVersion: req.KeyVersion,
 	}, nil
 }
 
-func (diagnosticTransit) Decrypt(
+func (d *diagnosticTransit) Decrypt(
 	_ context.Context,
-	_ kmsv2.TransitDecryptRequest,
+	req kmsv2.TransitDecryptRequest,
 ) (kmsv2.TransitDecryptResponse, error) {
-	return kmsv2.TransitDecryptResponse{}, fmt.Errorf("diagnostic decrypt is not implemented")
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	record, ok := d.records[string(req.Ciphertext)]
+	if !ok {
+		return kmsv2.TransitDecryptResponse{}, fmt.Errorf("diagnostic ciphertext not found")
+	}
+	if !bytes.Equal(record.associatedData, req.AssociatedData) {
+		return kmsv2.TransitDecryptResponse{}, fmt.Errorf("diagnostic associated data mismatch")
+	}
+	return kmsv2.TransitDecryptResponse{
+		Plaintext: append([]byte(nil), record.plaintext...),
+	}, nil
 }
 
 func commandContext(cmd *cobra.Command) context.Context {

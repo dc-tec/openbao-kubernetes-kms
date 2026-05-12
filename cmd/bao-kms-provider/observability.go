@@ -140,10 +140,6 @@ func (o observability) ObserveOpenBaoRequest(ctx context.Context, obs openbao.Re
 	o.logger.Warn(ctx, logMessageOpenBao, attrs...)
 }
 
-func (o observability) ObserveOpenBaoDecryptBatchSize(size int) {
-	o.metrics.RecordDecryptBatchSize(size)
-}
-
 func (o observability) ObserveAuthLogin(ctx context.Context, authStatus string) {
 	o.metrics.RecordAuthLogin(authStatus)
 	attrs := []slog.Attr{
@@ -203,9 +199,8 @@ func appendStringAttr(attrs []slog.Attr, key string, value string) []slog.Attr {
 }
 
 var (
-	_ kmsv2.Observer               = observability{}
-	_ openbao.RequestObserver      = observability{}
-	_ openbao.DecryptBatchObserver = observability{}
-	_ auth.Observer                = observability{}
-	_ status.ProbeObserver         = observability{}
+	_ kmsv2.Observer          = observability{}
+	_ openbao.RequestObserver = observability{}
+	_ auth.Observer           = observability{}
+	_ status.ProbeObserver    = observability{}
 )

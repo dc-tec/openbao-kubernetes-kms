@@ -27,9 +27,6 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Auth.Method != "jwt" {
 		t.Fatalf("unexpected auth method: %q", cfg.Auth.Method)
 	}
-	if !cfg.Transit.UseAssociatedData {
-		t.Fatal("associated data should default to enabled")
-	}
 	if cfg.Status.ProbeInterval != 30*time.Second {
 		t.Fatalf("unexpected probe interval: %s", cfg.Status.ProbeInterval)
 	}
@@ -68,6 +65,7 @@ server:
   metricsAddress: "127.0.0.1:18081"
 openbao:
   address: https://bao.example.internal:8200
+  namespace: admin/workload-a
   caCertFile: /etc/openbao-kms/tls/ca.crt
   tlsServerName: bao.example.internal
   timeout: 3s
@@ -92,7 +90,6 @@ transit:
     clusterId: workload-a
     transitMountId: transit-prod-primary
     keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
-  useAssociatedData: true
 status:
   probeInterval: 45s
 bootstrap:
@@ -118,6 +115,7 @@ func TestLoadEnvironmentOverridesAreAllowlisted(t *testing.T) {
 	t.Setenv(envServerMetricsAddress, "127.0.0.1:19081")
 	t.Setenv(envServerHealthAddress, "127.0.0.1:19082")
 	t.Setenv("BAO_KMS_PROVIDER_AUTH_EXPECTEDISSUER", "https://evil.example.internal")
+	t.Setenv("BAO_KMS_PROVIDER_OPENBAO_NAMESPACE", "evil-namespace")
 	t.Setenv("BAO_KMS_PROVIDER_TRANSIT_KEYIDSCOPE_CLUSTERID", "evil-cluster")
 
 	cfg, err := Load(NewRuntime(), LoadOptions{Path: "../../test/testdata/config/valid.yaml"})
@@ -136,6 +134,9 @@ func TestLoadEnvironmentOverridesAreAllowlisted(t *testing.T) {
 	if cfg.Auth.ExpectedIssuer == "https://evil.example.internal" {
 		t.Fatal("identity-bearing auth issuer was overridden from the environment")
 	}
+	if cfg.OpenBao.Namespace != "" {
+		t.Fatalf("identity-bearing OpenBao namespace was overridden: %q", cfg.OpenBao.Namespace)
+	}
 	if cfg.Transit.KeyIDScope.ClusterID != "workload-a" {
 		t.Fatalf("identity-bearing cluster ID was overridden: %q", cfg.Transit.KeyIDScope.ClusterID)
 	}
@@ -152,6 +153,9 @@ func assertLoadedConfigFile(t *testing.T, cfg Config) {
 	}
 	if cfg.OpenBao.Timeout != 3*time.Second {
 		t.Fatalf("unexpected OpenBao timeout: %s", cfg.OpenBao.Timeout)
+	}
+	if cfg.OpenBao.Namespace != "admin/workload-a" {
+		t.Fatalf("unexpected OpenBao namespace: %q", cfg.OpenBao.Namespace)
 	}
 	if cfg.Status.ProbeInterval != 45*time.Second {
 		t.Fatalf("unexpected probe interval: %s", cfg.Status.ProbeInterval)
@@ -357,6 +361,27 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			},
 		},
 		{
+			name:  "OpenBao namespace with leading slash",
+			field: "openbao.namespace",
+			mutate: func(cfg *Config) {
+				cfg.OpenBao.Namespace = "/admin"
+			},
+		},
+		{
+			name:  "OpenBao namespace with dot segment",
+			field: "openbao.namespace",
+			mutate: func(cfg *Config) {
+				cfg.OpenBao.Namespace = "admin/../workload-a"
+			},
+		},
+		{
+			name:  "OpenBao namespace with percent encoding",
+			field: "openbao.namespace",
+			mutate: func(cfg *Config) {
+				cfg.OpenBao.Namespace = "admin%2Fworkload-a"
+			},
+		},
+		{
 			name:  "bad socket path",
 			field: "server.socketPath",
 			mutate: func(cfg *Config) {
@@ -368,20 +393,6 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			field: "server.socketMode",
 			mutate: func(cfg *Config) {
 				cfg.Server.SocketMode = "0666"
-			},
-		},
-		{
-			name:  "AAD disabled",
-			field: "transit.useAssociatedData",
-			mutate: func(cfg *Config) {
-				cfg.Transit.UseAssociatedData = false
-			},
-		},
-		{
-			name:  "decrypt micro-batching enabled",
-			field: "performance.decryptMicroBatching.enabled",
-			mutate: func(cfg *Config) {
-				cfg.Performance.DecryptMicroBatching.Enabled = true
 			},
 		},
 		{
@@ -594,6 +605,16 @@ func TestIdentityFingerprintIsStableAndSensitiveToIdentity(t *testing.T) {
 	}
 	if changed == first {
 		t.Fatal("fingerprint did not change after identity-bearing field changed")
+	}
+
+	cfg = loadValidConfig(t)
+	cfg.OpenBao.Namespace = "admin/workload-a"
+	namespaced, err := IdentityFingerprint(cfg)
+	if err != nil {
+		t.Fatalf("fingerprint namespaced config: %v", err)
+	}
+	if namespaced == first {
+		t.Fatal("fingerprint did not change after OpenBao namespace changed")
 	}
 }
 

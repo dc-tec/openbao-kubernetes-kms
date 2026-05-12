@@ -151,7 +151,7 @@ Do not accept a recreated key as compatible with data encrypted under the previo
 6. Start the plugin.
 7. Confirm the Status `key_id` hash matches other control-plane nodes or recorded backup metadata.
 
-Changing provider name, cluster ID, OpenBao instance ID, Transit mount ID, key lineage ID, mount path, or key name causes `key_id` and AAD mismatches.
+Changing provider name, cluster ID, OpenBao instance ID, OpenBao namespace, Transit mount ID, key lineage ID, mount path, or key name causes `key_id` and AAD mismatches.
 
 ## JWT Issuer Loss
 
@@ -236,5 +236,5 @@ Unsafe under any circumstance:
 - raising `min_decryption_version` during an incident,
 - recreating Transit keys with the same name,
 - changing the provider name to clear errors,
-- setting `transit.useAssociatedData: false` as a recovery shortcut,
+- attempting to bypass AAD as a recovery shortcut,
 - logging plaintext during debugging.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
 
@@ -109,6 +111,40 @@ func TestDoctorJWTLocalCheckUsesExpectedClaims(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "system:openbao-kms:workload-a") {
 		t.Fatalf("JWT validation leaked raw subject: %v", err)
+	}
+}
+
+func TestDiagnosticTransitLoopbackDecrypt(t *testing.T) {
+	transit := &diagnosticTransit{}
+	plaintext := []byte("diagnostic plaintext")
+	associatedData := []byte("diagnostic aad")
+
+	encrypted, err := transit.Encrypt(context.Background(), kmsv2.TransitEncryptRequest{
+		Plaintext:      plaintext,
+		AssociatedData: associatedData,
+		KeyVersion:     3,
+	})
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	plaintext[0] = 'X'
+	associatedData[0] = 'X'
+
+	decrypted, err := transit.Decrypt(context.Background(), kmsv2.TransitDecryptRequest{
+		Ciphertext:     encrypted.Ciphertext,
+		AssociatedData: []byte("diagnostic aad"),
+	})
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if !bytes.Equal(decrypted.Plaintext, []byte("diagnostic plaintext")) {
+		t.Fatalf("unexpected loopback plaintext: %q", decrypted.Plaintext)
+	}
+	if _, err := transit.Decrypt(context.Background(), kmsv2.TransitDecryptRequest{
+		Ciphertext:     encrypted.Ciphertext,
+		AssociatedData: []byte("wrong aad"),
+	}); err == nil {
+		t.Fatal("expected associated data mismatch to fail")
 	}
 }
 

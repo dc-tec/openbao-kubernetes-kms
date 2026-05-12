@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -48,5 +50,38 @@ func TestRotationReportAllowsMissingStateForInitialBootstrap(t *testing.T) {
 	}
 	if report.ActiveTransitVersion != 1 || report.ActiveKeyIDHash == "" {
 		t.Fatalf("expected synthesized initial active version in report: %#v", report)
+	}
+}
+
+func TestRotationReportJSONOutput(t *testing.T) {
+	report := rotationReport{
+		Name:                 "rotation-plan",
+		StateLoaded:          true,
+		StateGeneration:      4,
+		StateHash:            "state-hash",
+		ActiveKeyIDHash:      "active-hash",
+		ActiveTransitVersion: 3,
+		LatestTransitVersion: 4,
+		RotationState:        status.RotationStatePending,
+		PendingKeyIDHash:     "pending-hash",
+		PendingVersion:       4,
+		PendingStableCount:   2,
+		PendingPromotesAfter: time.Unix(1_778_277_660, 0).UTC(),
+	}
+
+	var out bytes.Buffer
+	if err := printRotationReport(&out, report, outputFormatJSON); err != nil {
+		t.Fatalf("print JSON: %v", err)
+	}
+
+	var decoded rotationReportJSON
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("rotation report JSON is invalid: %v\n%s", err, out.String())
+	}
+	if decoded.Name != report.Name || decoded.RotationState != report.RotationState {
+		t.Fatalf("unexpected decoded report: %#v", decoded)
+	}
+	if decoded.PendingPromotesAfter == "" {
+		t.Fatalf("pending promotion time missing: %#v", decoded)
 	}
 }

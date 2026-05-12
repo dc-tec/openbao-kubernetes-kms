@@ -95,7 +95,7 @@ After the first stable release, these surfaces remain backward compatible within
 - AAD canonicalization,
 - configuration field meanings for identity-bearing values,
 - decrypt support for historical `key_id` values,
-- CLI JSON output once marked stable.
+- CLI JSON report shape for report-style commands.
 
 ## CI Version Policy
 
@@ -128,7 +128,7 @@ Examples of breaking changes:
 - dropping a historical annotation version,
 - changing the default AAD mode,
 - changing provider-name handling,
-- removing decrypt support for old key epochs.
+- removing decrypt support for retained historical `key_id` values.
 
 ## Source References
 

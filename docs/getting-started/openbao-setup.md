@@ -14,6 +14,7 @@ The provider expects an existing OpenBao deployment with the Transit secrets eng
 - An OpenBao token with administrative capabilities for `sys/`, `auth/`, and `transit/` paths.
 - A deterministic name for the Kubernetes Transit key. The naming convention used in this guide is `k8s-<workload>-etcd`. Replace `workload-a` with your environment-specific identifier in every example below.
 - A stable OpenBao instance ID and Transit mount ID for provider configuration. These are non-secret identity values used in Kubernetes `key_id` and AAD derivation.
+- Optional: an OpenBao namespace for this Kubernetes cluster when a single OpenBao cluster serves multiple Kubernetes clusters. Configure it as `openbao.namespace`; auth and Transit paths in this guide remain relative to that namespace.
 
 For background on why each choice is made, see [Architecture: Transit Key Model](/architecture/transit-key-model/) and [Security: Auth Model](/security/auth-model/).
 

@@ -99,7 +99,7 @@ results.
 
 ## Micro-Batching Decision
 
-Decrypt micro-batching remains disabled and rejected by configuration.
+Decrypt micro-batching is not implemented in the provider runtime.
 The evidence so far points to these conclusions:
 
 - Kubernetes object list cost grows with corpus size.

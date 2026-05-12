@@ -21,11 +21,11 @@ type snapshotFixture struct {
 	ProviderName                string `json:"providerName"`
 	ClusterID                   string `json:"clusterId"`
 	OpenBaoInstanceID           string `json:"openbaoInstanceId"`
+	OpenBaoNamespace            string `json:"openbaoNamespace"`
 	TransitMountID              string `json:"transitMountId"`
 	TransitKeyLineageID         string `json:"transitKeyLineageId"`
 	TransitVersion              int    `json:"transitVersion"`
 	TransitVersionCreatedAtUnix int64  `json:"transitVersionCreatedAtUnix"`
-	KeyEpoch                    string `json:"keyEpoch"`
 	State                       string `json:"state"`
 	AADMode                     string `json:"aadMode"`
 }
@@ -84,6 +84,13 @@ func TestDeriveKeyIDChangesForIdentityFields(t *testing.T) {
 			},
 		},
 		{
+			name: "OpenBao namespace",
+			change: func(snapshot keyregistry.KeySnapshot) keyregistry.KeySnapshot {
+				snapshot.OpenBaoNamespace = "admin/workload-a"
+				return snapshot
+			},
+		},
+		{
 			name: "Transit mount ID",
 			change: func(snapshot keyregistry.KeySnapshot) keyregistry.KeySnapshot {
 				snapshot.TransitMountID = "transit-prod-secondary"
@@ -108,13 +115,6 @@ func TestDeriveKeyIDChangesForIdentityFields(t *testing.T) {
 			name: "Transit version creation time",
 			change: func(snapshot keyregistry.KeySnapshot) keyregistry.KeySnapshot {
 				snapshot.TransitVersionCreatedAt = snapshot.TransitVersionCreatedAt.Add(time.Hour)
-				return snapshot
-			},
-		},
-		{
-			name: "key epoch",
-			change: func(snapshot keyregistry.KeySnapshot) keyregistry.KeySnapshot {
-				snapshot.KeyEpoch = "emergency-epoch-1"
 				return snapshot
 			},
 		},
@@ -378,6 +378,48 @@ func TestStateFileFromRecordsRejectsInvalidRotationObservationState(t *testing.T
 	}
 }
 
+func TestStateFileFromRecordsRejectsStrippedStateSurfaces(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	normalized, err := active.Normalize()
+	if err != nil {
+		t.Fatalf("normalize active: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*keyregistry.SnapshotStateRecord)
+	}{
+		{
+			name: "disaster recovery state",
+			mutate: func(record *keyregistry.SnapshotStateRecord) {
+				record.State = "disaster_recovery"
+			},
+		},
+		{
+			name: "AAD disabled mode",
+			mutate: func(record *keyregistry.SnapshotStateRecord) {
+				record.AADMode = "aad.disabled"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			record := keyregistry.SnapshotStateRecordFromSnapshot(normalized)
+			tt.mutate(&record)
+			_, err := keyregistry.NewStateFileFromRecords(
+				normalized.KubernetesKeyID,
+				[]keyregistry.SnapshotStateRecord{record},
+				7,
+				"",
+			)
+			if err == nil {
+				t.Fatal("expected stripped state surface to be rejected")
+			}
+		})
+	}
+}
+
 func TestLoadStateFileRejectsUnsafePermissions(t *testing.T) {
 	path := saveValidStateFile(t)
 	// #nosec G302 -- this test intentionally creates unsafe state-file permissions.
@@ -558,11 +600,11 @@ func (s snapshotFixture) keySnapshot() keyregistry.KeySnapshot {
 		ProviderName:            s.ProviderName,
 		ClusterID:               s.ClusterID,
 		OpenBaoInstanceID:       s.OpenBaoInstanceID,
+		OpenBaoNamespace:        s.OpenBaoNamespace,
 		TransitMountID:          s.TransitMountID,
 		TransitKeyLineageID:     s.TransitKeyLineageID,
 		TransitVersion:          s.TransitVersion,
 		TransitVersionCreatedAt: time.Unix(s.TransitVersionCreatedAtUnix, 0).UTC(),
-		KeyEpoch:                s.KeyEpoch,
 		State:                   keyregistry.SnapshotState(s.State),
 		AADMode:                 keyregistry.AADMode(s.AADMode),
 	}

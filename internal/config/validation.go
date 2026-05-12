@@ -108,6 +108,7 @@ func IdentityFingerprint(cfg Config) (string, error) {
 		ProviderName:      cfg.Transit.KeyIDScope.ProviderName,
 		ClusterID:         cfg.Transit.KeyIDScope.ClusterID,
 		OpenBaoInstanceID: cfg.OpenBao.InstanceID,
+		OpenBaoNamespace:  cfg.OpenBao.Namespace,
 		TransitMountID:    cfg.Transit.KeyIDScope.TransitMountID,
 		KeyLineageID:      cfg.Transit.KeyIDScope.KeyLineageID,
 		TransitMountPath:  cfg.Transit.MountPath,
@@ -139,6 +140,7 @@ type configIdentityMaterial struct {
 	ProviderName      string `json:"provider_name"`
 	ClusterID         string `json:"cluster_id"`
 	OpenBaoInstanceID string `json:"openbao_instance_id"`
+	OpenBaoNamespace  string `json:"openbao_namespace,omitempty"`
 	TransitMountID    string `json:"transit_mount_id"`
 	KeyLineageID      string `json:"key_lineage_id"`
 	TransitMountPath  string `json:"transit_mount_path"`
@@ -174,11 +176,9 @@ func validateValues(cfg Config) []ValidationProblem {
 		appendProblem(&problems, "configVersion", "must be v1alpha1")
 	}
 	validateOpenBaoAddress(&problems, cfg.OpenBao.Address)
+	validateOpenBaoNamespace(&problems, cfg.OpenBao.Namespace)
 	validateAddress(&problems, "server.metricsAddress", cfg.Server.MetricsAddress)
 	validateAddress(&problems, "server.healthAddress", cfg.Server.HealthAddress)
-	if cfg.Server.AdminAddress != "" {
-		validateAddress(&problems, "server.adminAddress", cfg.Server.AdminAddress)
-	}
 	validateMountPath(&problems, "auth.mountPath", cfg.Auth.MountPath)
 	validateIdentifier(&problems, "auth.role", cfg.Auth.Role)
 	validateClaimExpectation(&problems, "auth.expectedIssuer", cfg.Auth.ExpectedIssuer)
@@ -201,21 +201,8 @@ func validateValues(cfg Config) []ValidationProblem {
 	if cfg.Auth.Method != defaultAuthMethod {
 		appendProblem(&problems, "auth.method", "only jwt is supported")
 	}
-	if cfg.Auth.TokenStorage != defaultTokenStorage {
-		appendProblem(&problems, "auth.tokenStorage", "only memory is supported")
-	}
-	if !cfg.Transit.UseAssociatedData {
-		appendProblem(&problems, "transit.useAssociatedData", "AAD is required for v0.1")
-	}
 	if cfg.Rotation.Mode != defaultRotationMode {
 		appendProblem(&problems, "rotation.mode", "only observed is supported")
-	}
-	if cfg.Performance.DecryptMicroBatching.Enabled {
-		appendProblem(
-			&problems,
-			"performance.decryptMicroBatching.enabled",
-			"decrypt micro-batching is reserved for a future release and must remain false",
-		)
 	}
 	validatePositiveDuration(&problems, "openbao.timeout", cfg.OpenBao.Timeout)
 	validatePositiveDuration(&problems, "auth.minJwtRemainingTtl", cfg.Auth.MinJWTRemainingTTL)
@@ -230,16 +217,8 @@ func validateValues(cfg Config) []ValidationProblem {
 	validatePositiveDuration(&problems, "status.statusMaxStaleness", cfg.Status.StatusMaxStaleness)
 	validateAbsolutePath(&problems, "state.path", cfg.State.Path)
 	validatePositiveDuration(&problems, "rotation.activationDelay", cfg.Rotation.ActivationDelay)
-	validatePositiveDuration(
-		&problems,
-		"performance.decryptMicroBatching.maxWait",
-		cfg.Performance.DecryptMicroBatching.MaxWait,
-	)
 	if cfg.Rotation.RequireStableObservationCount <= 0 {
 		appendProblem(&problems, "rotation.requireStableObservationCount", "must be positive")
-	}
-	if cfg.Performance.DecryptMicroBatching.MaxBatchSize <= 0 {
-		appendProblem(&problems, "performance.decryptMicroBatching.maxBatchSize", "must be positive")
 	}
 	switch cfg.Logging.Level {
 	case "debug", "info", "warn", "error":
@@ -376,6 +355,26 @@ func validateMountPath(problems *[]ValidationProblem, field string, value string
 	for _, segment := range strings.Split(value, "/") {
 		if segment == "." || segment == ".." || segment == "" {
 			appendProblem(problems, field, "must not contain empty, dot, or dot-dot path segments")
+			return
+		}
+	}
+}
+
+func validateOpenBaoNamespace(problems *[]ValidationProblem, value string) {
+	if value == "" {
+		return
+	}
+	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t") {
+		appendProblem(problems, "openbao.namespace", "must not contain control characters or surrounding whitespace")
+		return
+	}
+	if strings.HasPrefix(value, "/") || strings.Contains(value, "//") || strings.Contains(value, "%") {
+		appendProblem(problems, "openbao.namespace", "must be a relative OpenBao namespace path without percent encoding")
+		return
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "." || segment == ".." || segment == "" {
+			appendProblem(problems, "openbao.namespace", "must not contain empty, dot, or dot-dot path segments")
 			return
 		}
 	}

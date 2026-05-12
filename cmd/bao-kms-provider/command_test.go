@@ -158,3 +158,30 @@ func TestDoctorPrintsReportForInvalidConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestDoctorPrintsJSONReportForInvalidConfig(t *testing.T) {
+	output, err := executeCommand(t, "doctor", "--output", "json")
+	if err == nil {
+		t.Fatalf("expected doctor without config to fail, output:\n%s", output)
+	}
+	if got := cli.ProcessExitCode(err); got != int(cli.ExitConfig) {
+		t.Fatalf("unexpected doctor exit code: %d", got)
+	}
+
+	var report cli.Report
+	if jsonErr := json.Unmarshal([]byte(output), &report); jsonErr != nil {
+		t.Fatalf("doctor JSON output is not a report: %v\n%s", jsonErr, output)
+	}
+	if report.Name != reportNameDoctor {
+		t.Fatalf("unexpected report name: %q", report.Name)
+	}
+	if len(report.Checks) < 2 {
+		t.Fatalf("expected config checks in report: %#v", report.Checks)
+	}
+	if report.Checks[0].ID != checkConfigLoad || report.Checks[0].Status != cli.CheckPass {
+		t.Fatalf("unexpected first check: %#v", report.Checks[0])
+	}
+	if report.Checks[1].ID != checkConfigValidate || report.Checks[1].Status != cli.CheckFail {
+		t.Fatalf("unexpected second check: %#v", report.Checks[1])
+	}
+}

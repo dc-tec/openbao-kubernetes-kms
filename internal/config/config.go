@@ -26,7 +26,6 @@ const (
 	defaultHealthAddress          = "127.0.0.1:8082"
 	defaultOpenBaoTimeout         = 2 * time.Second
 	defaultAuthMethod             = "jwt"
-	defaultTokenStorage           = "memory"
 	defaultMinJWTRemainingTTL     = 2 * time.Minute
 	defaultClockSkewLeeway        = 30 * time.Second
 	defaultLoginBeforeExpiry      = 5 * time.Minute
@@ -40,11 +39,8 @@ const (
 	defaultRotationMode           = "observed"
 	defaultActivationDelay        = 2 * time.Minute
 	defaultStableObservation      = 3
-	defaultMicroBatchSize         = 32
-	defaultMicroBatchMaxWait      = 2 * time.Millisecond
 	defaultLogLevel               = "info"
 	defaultLogFormat              = "json"
-	defaultRedactOpenBaoPaths     = true
 	defaultLogOpenBaoRequestIDs   = true
 	defaultDebugCorrelationTTL    = 15 * time.Minute
 )
@@ -61,28 +57,25 @@ type LoadOptions struct {
 
 // Config is the typed provider configuration model.
 type Config struct {
-	ConfigVersion string            `mapstructure:"configVersion"`
-	Server        ServerConfig      `mapstructure:"server"`
-	OpenBao       OpenBaoConfig     `mapstructure:"openbao"`
-	Auth          AuthConfig        `mapstructure:"auth"`
-	Transit       TransitConfig     `mapstructure:"transit"`
-	Bootstrap     BootstrapConfig   `mapstructure:"bootstrap"`
-	Status        StatusConfig      `mapstructure:"status"`
-	State         StateConfig       `mapstructure:"state"`
-	Rotation      RotationConfig    `mapstructure:"rotation"`
-	Performance   PerformanceConfig `mapstructure:"performance"`
-	Logging       LoggingConfig     `mapstructure:"logging"`
+	ConfigVersion string          `mapstructure:"configVersion"`
+	Server        ServerConfig    `mapstructure:"server"`
+	OpenBao       OpenBaoConfig   `mapstructure:"openbao"`
+	Auth          AuthConfig      `mapstructure:"auth"`
+	Transit       TransitConfig   `mapstructure:"transit"`
+	Bootstrap     BootstrapConfig `mapstructure:"bootstrap"`
+	Status        StatusConfig    `mapstructure:"status"`
+	State         StateConfig     `mapstructure:"state"`
+	Rotation      RotationConfig  `mapstructure:"rotation"`
+	Logging       LoggingConfig   `mapstructure:"logging"`
 }
 
 // ServerConfig contains local listener and socket settings.
 type ServerConfig struct {
-	SocketPath           string `mapstructure:"socketPath"`
-	SocketMode           string `mapstructure:"socketMode"`
-	SocketGroup          string `mapstructure:"socketGroup"`
-	MetricsAddress       string `mapstructure:"metricsAddress"`
-	HealthAddress        string `mapstructure:"healthAddress"`
-	AdminAddress         string `mapstructure:"adminAddress"`
-	UnsafeDebugEndpoints bool   `mapstructure:"unsafeDebugEndpoints"`
+	SocketPath     string `mapstructure:"socketPath"`
+	SocketMode     string `mapstructure:"socketMode"`
+	SocketGroup    string `mapstructure:"socketGroup"`
+	MetricsAddress string `mapstructure:"metricsAddress"`
+	HealthAddress  string `mapstructure:"healthAddress"`
 }
 
 // OpenBaoConfig contains OpenBao client settings.
@@ -109,15 +102,13 @@ type AuthConfig struct {
 	ExpectedIssuer         string        `mapstructure:"expectedIssuer"`
 	ExpectedAudience       []string      `mapstructure:"expectedAudience"`
 	ExpectedSubject        string        `mapstructure:"expectedSubject"`
-	TokenStorage           string        `mapstructure:"tokenStorage"`
 }
 
 // TransitConfig contains Transit key and AAD settings.
 type TransitConfig struct {
-	MountPath         string           `mapstructure:"mountPath"`
-	KeyName           string           `mapstructure:"keyName"`
-	KeyIDScope        KeyIDScopeConfig `mapstructure:"keyIdScope"`
-	UseAssociatedData bool             `mapstructure:"useAssociatedData"`
+	MountPath  string           `mapstructure:"mountPath"`
+	KeyName    string           `mapstructure:"keyName"`
+	KeyIDScope KeyIDScopeConfig `mapstructure:"keyIdScope"`
 }
 
 // BootstrapConfig contains fail-fast startup probe grace settings.
@@ -154,23 +145,10 @@ type RotationConfig struct {
 	RejectVersionRollback         bool          `mapstructure:"rejectVersionRollback"`
 }
 
-// PerformanceConfig contains optional performance feature settings.
-type PerformanceConfig struct {
-	DecryptMicroBatching DecryptMicroBatchingConfig `mapstructure:"decryptMicroBatching"`
-}
-
-// DecryptMicroBatchingConfig contains decrypt batch tuning.
-type DecryptMicroBatchingConfig struct {
-	Enabled      bool          `mapstructure:"enabled"`
-	MaxBatchSize int           `mapstructure:"maxBatchSize"`
-	MaxWait      time.Duration `mapstructure:"maxWait"`
-}
-
 // LoggingConfig contains structured logging settings.
 type LoggingConfig struct {
 	Level                string                 `mapstructure:"level"`
 	Format               string                 `mapstructure:"format"`
-	RedactOpenBaoPaths   bool                   `mapstructure:"redactOpenBaoPaths"`
 	LogOpenBaoRequestIDs bool                   `mapstructure:"logOpenBaoRequestIDs"`
 	DebugCorrelation     DebugCorrelationConfig `mapstructure:"debugCorrelation"`
 }
@@ -261,17 +239,14 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("server.socketMode", defaultSocketMode)
 	runtime.v.SetDefault("server.metricsAddress", defaultMetricsAddress)
 	runtime.v.SetDefault("server.healthAddress", defaultHealthAddress)
-	runtime.v.SetDefault("server.unsafeDebugEndpoints", false)
 	runtime.v.SetDefault("openbao.timeout", defaultOpenBaoTimeout)
 	runtime.v.SetDefault("auth.method", defaultAuthMethod)
-	runtime.v.SetDefault("auth.tokenStorage", defaultTokenStorage)
 	runtime.v.SetDefault("auth.minJwtRemainingTtl", defaultMinJWTRemainingTTL)
 	runtime.v.SetDefault("auth.clockSkewLeeway", defaultClockSkewLeeway)
 	runtime.v.SetDefault("auth.loginBeforeTokenExpiry", defaultLoginBeforeExpiry)
 	runtime.v.SetDefault("auth.tokenRenewalIncrement", defaultTokenRenewalIncrement)
 	runtime.v.SetDefault("bootstrap.graceTimeout", defaultBootstrapGraceTimeout)
 	runtime.v.SetDefault("bootstrap.retryInterval", defaultBootstrapRetryInterval)
-	runtime.v.SetDefault("transit.useAssociatedData", true)
 	runtime.v.SetDefault("status.probeInterval", defaultProbeInterval)
 	runtime.v.SetDefault("status.deepProbeInterval", defaultDeepProbeInterval)
 	runtime.v.SetDefault("status.statusMaxStaleness", defaultStatusMaxStaleness)
@@ -280,12 +255,8 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("rotation.activationDelay", defaultActivationDelay)
 	runtime.v.SetDefault("rotation.requireStableObservationCount", defaultStableObservation)
 	runtime.v.SetDefault("rotation.rejectVersionRollback", true)
-	runtime.v.SetDefault("performance.decryptMicroBatching.enabled", false)
-	runtime.v.SetDefault("performance.decryptMicroBatching.maxBatchSize", defaultMicroBatchSize)
-	runtime.v.SetDefault("performance.decryptMicroBatching.maxWait", defaultMicroBatchMaxWait)
 	runtime.v.SetDefault("logging.level", defaultLogLevel)
 	runtime.v.SetDefault("logging.format", defaultLogFormat)
-	runtime.v.SetDefault("logging.redactOpenBaoPaths", defaultRedactOpenBaoPaths)
 	runtime.v.SetDefault("logging.logOpenBaoRequestIDs", defaultLogOpenBaoRequestIDs)
 	runtime.v.SetDefault("logging.debugCorrelation.enabled", false)
 	runtime.v.SetDefault("logging.debugCorrelation.ttl", defaultDebugCorrelationTTL)

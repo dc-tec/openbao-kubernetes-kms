@@ -29,6 +29,8 @@ const (
 	KeyTransitMountHash = "transit-mount-hash.kms.openbao.org"
 	// KeyTransitKeyHash is the KMS annotation key for the hashed Transit key lineage ID.
 	KeyTransitKeyHash = "transit-key-hash.kms.openbao.org"
+	// KeyOpenBaoNamespaceHash is the KMS annotation key for the hashed OpenBao namespace.
+	KeyOpenBaoNamespaceHash = "openbao-namespace-hash.kms.openbao.org"
 	// KeyPluginVersion is the KMS annotation key for the provider plugin version.
 	KeyPluginVersion = "plugin-version.kms.openbao.org"
 	// KeyAADVersion is the KMS annotation key for the AAD schema version.
@@ -53,26 +55,28 @@ type SnapshotLookup interface {
 
 // ParsedAnnotations contains the validated values from the KMS annotation map.
 type ParsedAnnotations struct {
-	Provider          string
-	KeyIDHash         string
-	TransitKeyVersion int
-	TransitMountHash  string
-	TransitKeyHash    string
-	PluginVersion     string
-	AADVersion        string
+	Provider             string
+	KeyIDHash            string
+	TransitKeyVersion    int
+	TransitMountHash     string
+	TransitKeyHash       string
+	OpenBaoNamespaceHash string
+	PluginVersion        string
+	AADVersion           string
 }
 
 type aadEnvelopeV1 struct {
-	AADVersion          string `json:"aad_version"`
-	Purpose             string `json:"purpose"`
-	Provider            string `json:"provider"`
-	ProviderName        string `json:"provider_name"`
-	ClusterIDHash       string `json:"cluster_id_hash"`
-	OpenBaoInstanceHash string `json:"openbao_instance_hash"`
-	TransitMountHash    string `json:"transit_mount_hash"`
-	TransitKeyHash      string `json:"transit_key_hash"`
-	KeyIDHash           string `json:"key_id_hash"`
-	KeyVersion          string `json:"key_version"`
+	AADVersion           string `json:"aad_version"`
+	Purpose              string `json:"purpose"`
+	Provider             string `json:"provider"`
+	ProviderName         string `json:"provider_name"`
+	ClusterIDHash        string `json:"cluster_id_hash"`
+	OpenBaoInstanceHash  string `json:"openbao_instance_hash"`
+	OpenBaoNamespaceHash string `json:"openbao_namespace_hash,omitempty"`
+	TransitMountHash     string `json:"transit_mount_hash"`
+	TransitKeyHash       string `json:"transit_key_hash"`
+	KeyIDHash            string `json:"key_id_hash"`
+	KeyVersion           string `json:"key_version"`
 }
 
 // DecryptAAD contains the validated snapshot and AAD bytes needed for Transit decrypt.
@@ -97,7 +101,7 @@ func BuildAnnotations(snapshot keyregistry.KeySnapshot, pluginVersion string) (m
 		return nil, err
 	}
 
-	return map[string]string{
+	annotations := map[string]string{
 		KeyProvider:          ProviderValue,
 		KeyKeyIDHash:         HashValue(normalized.KubernetesKeyID),
 		KeyTransitKeyVersion: strconv.Itoa(normalized.TransitVersion),
@@ -105,7 +109,11 @@ func BuildAnnotations(snapshot keyregistry.KeySnapshot, pluginVersion string) (m
 		KeyTransitKeyHash:    HashValue(normalized.TransitKeyLineageID),
 		KeyPluginVersion:     pluginVersion,
 		KeyAADVersion:        AADVersionV1,
-	}, nil
+	}
+	if normalized.OpenBaoNamespace != "" {
+		annotations[KeyOpenBaoNamespaceHash] = HashValue(normalized.OpenBaoNamespace)
+	}
+	return annotations, nil
 }
 
 // ParseAnnotations validates the required KMS annotation keys and values.
@@ -137,6 +145,10 @@ func ParseAnnotations(annotations map[string]string) (ParsedAnnotations, error) 
 	if err != nil {
 		return ParsedAnnotations{}, err
 	}
+	namespaceHash, err := optionalHash(annotations, KeyOpenBaoNamespaceHash)
+	if err != nil {
+		return ParsedAnnotations{}, err
+	}
 
 	versionText, err := requiredValue(annotations, KeyTransitKeyVersion)
 	if err != nil {
@@ -161,13 +173,14 @@ func ParseAnnotations(annotations map[string]string) (ParsedAnnotations, error) 
 	}
 
 	return ParsedAnnotations{
-		Provider:          provider,
-		KeyIDHash:         keyIDHash,
-		TransitKeyVersion: transitVersion,
-		TransitMountHash:  transitMountHash,
-		TransitKeyHash:    transitKeyHash,
-		PluginVersion:     pluginVersion,
-		AADVersion:        aadVersion,
+		Provider:             provider,
+		KeyIDHash:            keyIDHash,
+		TransitKeyVersion:    transitVersion,
+		TransitMountHash:     transitMountHash,
+		TransitKeyHash:       transitKeyHash,
+		OpenBaoNamespaceHash: namespaceHash,
+		PluginVersion:        pluginVersion,
+		AADVersion:           aadVersion,
 	}, nil
 }
 
@@ -198,6 +211,13 @@ func ValidateForSnapshot(snapshot keyregistry.KeySnapshot, annotations ParsedAnn
 	}
 	if annotations.TransitKeyHash != HashValue(normalized.TransitKeyLineageID) {
 		return fmt.Errorf("%w: transit key hash mismatch", ErrAnnotationMismatch)
+	}
+	expectedNamespaceHash := ""
+	if normalized.OpenBaoNamespace != "" {
+		expectedNamespaceHash = HashValue(normalized.OpenBaoNamespace)
+	}
+	if annotations.OpenBaoNamespaceHash != expectedNamespaceHash {
+		return fmt.Errorf("%w: OpenBao namespace hash mismatch", ErrAnnotationMismatch)
 	}
 
 	return nil
@@ -262,16 +282,17 @@ func buildCanonicalFromParsed(snapshot keyregistry.KeySnapshot, parsed ParsedAnn
 	}
 
 	envelope := aadEnvelopeV1{
-		AADVersion:          AADVersionV1,
-		Purpose:             purposeValue,
-		Provider:            ProviderValue,
-		ProviderName:        normalized.ProviderName,
-		ClusterIDHash:       HashValue(normalized.ClusterID),
-		OpenBaoInstanceHash: HashValue(normalized.OpenBaoInstanceID),
-		TransitMountHash:    parsed.TransitMountHash,
-		TransitKeyHash:      parsed.TransitKeyHash,
-		KeyIDHash:           parsed.KeyIDHash,
-		KeyVersion:          strconv.Itoa(normalized.TransitVersion),
+		AADVersion:           AADVersionV1,
+		Purpose:              purposeValue,
+		Provider:             ProviderValue,
+		ProviderName:         normalized.ProviderName,
+		ClusterIDHash:        HashValue(normalized.ClusterID),
+		OpenBaoInstanceHash:  HashValue(normalized.OpenBaoInstanceID),
+		OpenBaoNamespaceHash: parsed.OpenBaoNamespaceHash,
+		TransitMountHash:     parsed.TransitMountHash,
+		TransitKeyHash:       parsed.TransitKeyHash,
+		KeyIDHash:            parsed.KeyIDHash,
+		KeyVersion:           strconv.Itoa(normalized.TransitVersion),
 	}
 
 	canonical, err := json.Marshal(envelope)
@@ -339,6 +360,17 @@ func requiredHash(annotations map[string]string, key string) (string, error) {
 	value, err := requiredValue(annotations, key)
 	if err != nil {
 		return "", err
+	}
+	if err := validateHashValue(value); err != nil {
+		return "", fmt.Errorf("%w: %s is invalid", ErrInvalidAnnotations, key)
+	}
+	return value, nil
+}
+
+func optionalHash(annotations map[string]string, key string) (string, error) {
+	value, ok := annotations[key]
+	if !ok {
+		return "", nil
 	}
 	if err := validateHashValue(value); err != nil {
 		return "", fmt.Errorf("%w: %s is invalid", ErrInvalidAnnotations, key)

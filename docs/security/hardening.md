@@ -40,7 +40,6 @@ Required:
 - socket writable only by the plugin and the API server identity,
 - metrics and health endpoints bound to localhost by default,
 - no debug endpoints in production,
-- `server.unsafeDebugEndpoints: false`,
 - debug correlation disabled except during bounded incident response,
 - time synchronized through NTP or chrony.
 

@@ -32,7 +32,6 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 	recorder.RecordTransitMetadataObservation("ok")
 	recorder.RecordAADValidationError("annotation_invalid")
 	recorder.RecordDecryptKeyIDError("key_id_unknown")
-	recorder.RecordDecryptBatchSize(4)
 	recorder.RecordSocketRestart()
 
 	output := scrapeMetrics(t, recorder.Handler())

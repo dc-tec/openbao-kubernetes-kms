@@ -6,7 +6,9 @@ weight: 10
 
 # CLI
 
-This page documents every command and flag supported by `bao-kms-provider`. Commands print stable text output and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
+This page documents every command and flag supported by `bao-kms-provider`.
+Commands print stable text or JSON output where documented and use stable exit
+codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
 
 ## serve
 
@@ -36,7 +38,8 @@ Run preflight checks before promoting the binary or before changing the API serv
 ```sh
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
-  --encryption-config /etc/kubernetes/encryption-config.yaml
+  --encryption-config /etc/kubernetes/encryption-config.yaml \
+  --output json
 ```
 
 Checks:
@@ -63,7 +66,9 @@ Checks:
 | EncryptionConfiguration | Points to the socket, uses KMS v2, and the provider name matches. |
 | Fallback | Warns if `identity` fallback remains enabled after migration. |
 
-`doctor` prints a text report with stable check IDs and exits non-zero when any check fails.
+`doctor` prints a report with stable check IDs and exits non-zero when any
+check fails. Use `--output text` for the default human-readable report or
+`--output json` for automation.
 
 ## verify-key
 
@@ -71,7 +76,8 @@ Verify Transit key suitability against the recommended profile.
 
 ```sh
 bao-kms-provider verify-key \
-  --config /etc/openbao-kms/config.yaml
+  --config /etc/openbao-kms/config.yaml \
+  --output json
 ```
 
 Checks:
@@ -110,7 +116,8 @@ Report rotation state without performing rotation.
 
 ```sh
 bao-kms-provider rotation-plan \
-  --config /etc/openbao-kms/config.yaml
+  --config /etc/openbao-kms/config.yaml \
+  --output json
 ```
 
 Reports:
@@ -133,7 +140,8 @@ Verify whether rotation migration has rewritten enough resources to proceed safe
 
 ```sh
 bao-kms-provider verify-rotation \
-  --config /etc/openbao-kms/config.yaml
+  --config /etc/openbao-kms/config.yaml \
+  --output json
 ```
 
 The command reports the same local registry and Transit metadata view as
@@ -204,7 +212,14 @@ Common flags supported across commands:
 
 `--config` selects the provider configuration file. The other common flags override the corresponding configuration values for the current invocation.
 
-Stable JSON output is not implemented yet. It remains tracked as a follow-up for automation consumers; text output is the supported CLI surface today.
+Report-style commands also support:
+
+```text
+--output text|json
+```
+
+`doctor`, `verify-key`, `rotation-plan`, and `verify-rotation` support stable
+JSON reports for automation consumers. `text` remains the default.
 
 ## Exit Codes
 

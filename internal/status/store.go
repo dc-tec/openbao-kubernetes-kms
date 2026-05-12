@@ -225,7 +225,7 @@ func runtimeRegistry(state keyregistry.StateFile) (keyregistry.KeySnapshot, keyr
 			continue
 		}
 		switch snapshot.State {
-		case keyregistry.StateRetired, keyregistry.StateDisasterRecovery:
+		case keyregistry.StateRetired:
 			historical = append(historical, snapshot)
 		case keyregistry.StatePending, keyregistry.StateRejected:
 		default:

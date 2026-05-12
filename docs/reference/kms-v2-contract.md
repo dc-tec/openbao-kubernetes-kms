@@ -116,7 +116,8 @@ Required behavior:
 - never log plaintext,
 - never log full ciphertext.
 
-The provider requires valid AAD annotations. A future bounded compatibility mode may support known pre-AAD epochs; it must be explicit, observable, and time-bound. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
+The provider requires valid AAD annotations. There is no supported mode that
+decrypts without AAD. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
 
 ## Annotations
 
@@ -129,6 +130,7 @@ Allowed annotation content:
 - Transit key version,
 - hash of Transit mount ID,
 - hash of Transit key lineage ID,
+- hash of OpenBao namespace when configured,
 - plugin version,
 - AAD version.
 
@@ -147,9 +149,16 @@ For the full annotation schema and AAD envelope shape see [Reference: Key ID And
 
 ## Decrypt Micro-Batching
 
-OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider keeps KMS decrypt micro-batching disabled and rejects `performance.decryptMicroBatching.enabled: true` because the production-grade KMS coalescer is not part of the release boundary. Sustained direct decrypt soak is the release evidence used to decide whether this remains deferred.
+OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider
+does not implement KMS decrypt micro-batching in this release line because the
+production-grade KMS coalescer is not part of the release boundary. Sustained
+direct decrypt soak is the release evidence used to decide whether this remains
+deferred.
 
-Micro-batching adds request queueing, per-request deadlines, cancellation behavior, order preservation, fairness, and failure fan-out concerns. Do not enable it until benchmarks show it improves API server startup behavior without violating the latency targets below.
+Micro-batching adds request queueing, per-request deadlines, cancellation
+behavior, order preservation, fairness, and failure fan-out concerns. Do not add
+or enable it until benchmarks show it improves API server startup behavior
+without violating the latency targets below.
 
 ## Error Semantics
 

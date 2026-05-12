@@ -182,7 +182,7 @@ Recovery:
 1. Do not disable AAD globally.
 2. Compare object annotations with the expected key snapshot hashes.
 3. Restore the correct configuration.
-4. Do not set `transit.useAssociatedData: false`; the provider rejects that mode and it is unsafe as an incident response.
+4. Do not modify code or local state to bypass AAD; that is unsafe as an incident response.
 5. File a bug if canonical serialization changed unexpectedly.
 
 ## Status Key ID Differs From Encrypt Key ID

@@ -44,12 +44,6 @@ func TestProviderAndEncryptionSamplesValidate(t *testing.T) {
 func requireHardenedAuthConfig(t *testing.T, name string, cfg config.Config) {
 	t.Helper()
 
-	if cfg.Server.UnsafeDebugEndpoints {
-		t.Fatalf("%s provider config must not enable unsafe debug endpoints", name)
-	}
-	if cfg.Auth.TokenStorage != "memory" {
-		t.Fatalf("%s provider config should keep OpenBao tokens in memory, got %q", name, cfg.Auth.TokenStorage)
-	}
 	if cfg.Auth.ExpectedIssuer == "" {
 		t.Fatalf("%s provider config should set auth.expectedIssuer", name)
 	}
@@ -58,9 +52,6 @@ func requireHardenedAuthConfig(t *testing.T, name string, cfg config.Config) {
 	}
 	if cfg.Auth.ExpectedSubject == "" {
 		t.Fatalf("%s provider config should set auth.expectedSubject", name)
-	}
-	if !cfg.Logging.RedactOpenBaoPaths {
-		t.Fatalf("%s provider config should redact OpenBao paths in logs", name)
 	}
 }
 

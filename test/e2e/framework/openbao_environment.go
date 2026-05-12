@@ -60,6 +60,7 @@ var ErrDockerUnavailable = errors.New("docker is not available")
 
 type OpenBaoEnvironmentConfig struct {
 	Image          string
+	Namespace      string
 	TransitMount   string
 	TransitKey     string
 	TransitKeyType string
@@ -82,6 +83,7 @@ type OpenBaoEnvironment struct {
 	Token         string
 	TransitMount  string
 	TransitKey    string
+	Namespace     string
 	AuthMount     string
 	AuthRole      string
 	JWTFile       string
@@ -235,6 +237,7 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 	environment := &OpenBaoEnvironment{
 		TLSServerName:  openBaoTLSServerName,
 		Token:          token,
+		Namespace:      cfg.Namespace,
 		TransitMount:   cfg.TransitMount,
 		TransitKey:     cfg.TransitKey,
 		AuthMount:      openBaoJWTAuthMount,
@@ -280,6 +283,10 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 		}
 	}
 	if bootstrapRequired {
+		if err := environment.bootstrapNamespace(ctx); err != nil {
+			_ = environment.Close(context.Background())
+			return nil, err
+		}
 		if err := environment.bootstrapTransit(ctx); err != nil {
 			_ = environment.Close(context.Background())
 			return nil, err
@@ -311,6 +318,7 @@ func (f *OpenBaoEnvironment) NewClientWithTokenSource(tokenSource openbao.TokenS
 		TLSServerName: f.TLSServerName,
 		Timeout:       5 * time.Second,
 		TokenSource:   tokenSource,
+		Namespace:     f.Namespace,
 	})
 }
 
@@ -320,6 +328,7 @@ func (f *OpenBaoEnvironment) NewAuthClient() (*openbao.AuthClient, error) {
 		CACertFile:    f.CACertFile,
 		TLSServerName: f.TLSServerName,
 		Timeout:       5 * time.Second,
+		Namespace:     f.Namespace,
 	})
 }
 
@@ -424,7 +433,7 @@ func (f *OpenBaoEnvironment) Seal(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return f.write(ctx, httpClient, "sys/seal", emptyRequestBody{})
+	return f.writeRoot(ctx, httpClient, "sys/seal", emptyRequestBody{})
 }
 
 func (f *OpenBaoEnvironment) RotateTransitKey(ctx context.Context) error {
@@ -1114,6 +1123,22 @@ func (f *OpenBaoEnvironment) probeHealth(ctx context.Context) error {
 	return nil
 }
 
+func (f *OpenBaoEnvironment) bootstrapNamespace(ctx context.Context) error {
+	if f.Namespace == "" {
+		return nil
+	}
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	for _, namespace := range namespacePrefixes(f.Namespace) {
+		if err := f.writeRoot(ctx, httpClient, "sys/namespaces/"+namespace, emptyRequestBody{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (f *OpenBaoEnvironment) bootstrapTransit(ctx context.Context) error {
 	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
 	if err != nil {
@@ -1298,6 +1323,20 @@ func encodeJWTClaims(value jwtClaims) (string, error) {
 }
 
 func (f *OpenBaoEnvironment) write(ctx context.Context, httpClient *http.Client, apiPath string, body environmentSetupPayload) error {
+	return f.writeWithNamespace(ctx, httpClient, apiPath, body, f.Namespace)
+}
+
+func (f *OpenBaoEnvironment) writeRoot(ctx context.Context, httpClient *http.Client, apiPath string, body environmentSetupPayload) error {
+	return f.writeWithNamespace(ctx, httpClient, apiPath, body, "")
+}
+
+func (f *OpenBaoEnvironment) writeWithNamespace(
+	ctx context.Context,
+	httpClient *http.Client,
+	apiPath string,
+	body environmentSetupPayload,
+	namespace string,
+) error {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("encode OpenBao environment setup request: %w", err)
@@ -1313,6 +1352,9 @@ func (f *OpenBaoEnvironment) write(ctx context.Context, httpClient *http.Client,
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Vault-Token", f.Token)
+	if namespace != "" {
+		request.Header.Set("X-Vault-Namespace", namespace)
+	}
 	response, err := httpClient.Do(request)
 	if err != nil {
 		return err
@@ -1325,6 +1367,15 @@ func (f *OpenBaoEnvironment) write(ctx context.Context, httpClient *http.Client,
 		return fmt.Errorf("OpenBao environment setup %q status %d", apiPath, response.StatusCode)
 	}
 	return nil
+}
+
+func namespacePrefixes(namespace string) []string {
+	segments := strings.Split(namespace, "/")
+	prefixes := make([]string, 0, len(segments))
+	for i := range segments {
+		prefixes = append(prefixes, strings.Join(segments[:i+1], "/"))
+	}
+	return prefixes
 }
 
 func findOpenBaoEnvironmentCA(dir string) (string, error) {

@@ -76,7 +76,7 @@ These are test targets, not published service-level guarantees. The release
 evidence can adjust thresholds when OpenBao or network behavior justifies it,
 but the trade-off must remain explicit.
 
-Decrypt micro-batching remains disabled and configuration-rejected.
+Decrypt micro-batching is not implemented in the provider runtime.
 The current direct-path evidence did not show provider or OpenBao decrypt fan-out
 proportional to Kubernetes object count. A production coalescer should only move
 into the release scope if sustained direct decrypt soak or local kubeadm VM

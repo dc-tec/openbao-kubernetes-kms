@@ -26,11 +26,11 @@ type snapshotFixture struct {
 	ProviderName                string `json:"providerName"`
 	ClusterID                   string `json:"clusterId"`
 	OpenBaoInstanceID           string `json:"openbaoInstanceId"`
+	OpenBaoNamespace            string `json:"openbaoNamespace"`
 	TransitMountID              string `json:"transitMountId"`
 	TransitKeyLineageID         string `json:"transitKeyLineageId"`
 	TransitVersion              int    `json:"transitVersion"`
 	TransitVersionCreatedAtUnix int64  `json:"transitVersionCreatedAtUnix"`
-	KeyEpoch                    string `json:"keyEpoch"`
 	State                       string `json:"state"`
 	AADMode                     string `json:"aadMode"`
 }
@@ -146,6 +146,37 @@ func TestAnnotationMismatchFails(t *testing.T) {
 	}
 }
 
+func TestNamespaceIsBoundThroughAnnotationsAndAAD(t *testing.T) {
+	fixture := loadGoldenFixture(t)
+	snapshot := fixture.Snapshot.keySnapshot()
+	snapshot.OpenBaoNamespace = "admin/workload-a"
+
+	annotations, err := aad.BuildAnnotations(snapshot, fixture.PluginVersion)
+	if err != nil {
+		t.Fatalf("build annotations: %v", err)
+	}
+	namespaceHash := aad.HashValue(snapshot.OpenBaoNamespace)
+	if annotations[aad.KeyOpenBaoNamespaceHash] != namespaceHash {
+		t.Fatalf("unexpected namespace hash annotation: %q", annotations[aad.KeyOpenBaoNamespaceHash])
+	}
+
+	canonical, err := aad.BuildCanonical(snapshot, annotations)
+	if err != nil {
+		t.Fatalf("build canonical AAD: %v", err)
+	}
+	if !strings.Contains(string(canonical), namespaceHash) {
+		t.Fatalf("canonical AAD does not include namespace hash: %s", canonical)
+	}
+	if strings.Contains(string(canonical), snapshot.OpenBaoNamespace) {
+		t.Fatalf("canonical AAD exposed raw namespace: %s", canonical)
+	}
+
+	delete(annotations, aad.KeyOpenBaoNamespaceHash)
+	if _, err := aad.BuildCanonical(snapshot, annotations); !errors.Is(err, aad.ErrAnnotationMismatch) {
+		t.Fatalf("expected missing namespace hash to fail closed, got %v", err)
+	}
+}
+
 func TestPrepareDecryptBuildsGoldenAAD(t *testing.T) {
 	fixture := loadGoldenFixture(t)
 	registry := newRegistry(t, fixture.Snapshot.keySnapshot())
@@ -193,35 +224,6 @@ func TestPrepareDecryptRejectsUnknownKeyIDBeforeAnnotations(t *testing.T) {
 	}
 }
 
-func TestAADRequiredModeRejectsCompatibilityModes(t *testing.T) {
-	fixture := loadGoldenFixture(t)
-	for _, mode := range []keyregistry.AADMode{
-		keyregistry.AADModeOptionalRead,
-		keyregistry.AADModeDisabled,
-	} {
-		t.Run(string(mode), func(t *testing.T) {
-			snapshot := fixture.Snapshot.keySnapshot()
-			snapshot.AADMode = mode
-
-			if _, err := aad.BuildAnnotations(snapshot, fixture.PluginVersion); !errors.Is(err, aad.ErrAADRequired) {
-				t.Fatalf("expected BuildAnnotations to reject mode %q, got %v", mode, err)
-			}
-			if _, err := aad.BuildCanonical(snapshot, fixture.ExpectedAnnotations); !errors.Is(err, aad.ErrAADRequired) {
-				t.Fatalf("expected BuildCanonical to reject mode %q, got %v", mode, err)
-			}
-
-			registry := newRegistry(t, snapshot)
-			keyID, err := keyregistry.DeriveKeyID(snapshot)
-			if err != nil {
-				t.Fatalf("derive key ID: %v", err)
-			}
-			if _, err := aad.PrepareDecrypt(registry, keyID, fixture.ExpectedAnnotations); !errors.Is(err, aad.ErrAADRequired) {
-				t.Fatalf("expected PrepareDecrypt to reject mode %q, got %v", mode, err)
-			}
-		})
-	}
-}
-
 func TestAnnotationsAndAADDoNotExposeRawTopology(t *testing.T) {
 	fixture := loadGoldenFixture(t)
 	snapshot := fixture.Snapshot.keySnapshot()
@@ -240,7 +242,11 @@ func TestAnnotationsAndAADDoNotExposeRawTopology(t *testing.T) {
 		snapshot.TransitMountID,
 		snapshot.TransitKeyLineageID,
 		snapshot.OpenBaoInstanceID,
+		snapshot.OpenBaoNamespace,
 	} {
+		if raw == "" {
+			continue
+		}
 		if strings.Contains(annotationValues, raw) {
 			t.Fatalf("annotations exposed raw topology value %q", raw)
 		}
@@ -327,11 +333,11 @@ func (s snapshotFixture) keySnapshot() keyregistry.KeySnapshot {
 		ProviderName:            s.ProviderName,
 		ClusterID:               s.ClusterID,
 		OpenBaoInstanceID:       s.OpenBaoInstanceID,
+		OpenBaoNamespace:        s.OpenBaoNamespace,
 		TransitMountID:          s.TransitMountID,
 		TransitKeyLineageID:     s.TransitKeyLineageID,
 		TransitVersion:          s.TransitVersion,
 		TransitVersionCreatedAt: time.Unix(s.TransitVersionCreatedAtUnix, 0).UTC(),
-		KeyEpoch:                s.KeyEpoch,
 		State:                   keyregistry.SnapshotState(s.State),
 		AADMode:                 keyregistry.AADMode(s.AADMode),
 	}

@@ -323,9 +323,6 @@ func (c *Client) BatchDecrypt(ctx context.Context, req BatchDecryptRequest) (Bat
 	if len(req.Items) == 0 {
 		return BatchDecryptResponse{}, fmt.Errorf("batch decrypt requires at least one item")
 	}
-	if observer, ok := c.observer.(DecryptBatchObserver); ok {
-		observer.ObserveOpenBaoDecryptBatchSize(len(req.Items))
-	}
 	items := make([]batchDecryptRequestItem, 0, len(req.Items))
 	for _, item := range req.Items {
 		if item.Ciphertext == "" {

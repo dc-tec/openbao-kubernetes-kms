@@ -121,7 +121,6 @@ func printConfigSummary(out io.Writer, cfg config.Config) {
 	_, _ = fmt.Fprintf(out, "metricsAddress: %s\n", cfg.Server.MetricsAddress)
 	_, _ = fmt.Fprintf(out, "healthAddress: %s\n", cfg.Server.HealthAddress)
 	_, _ = fmt.Fprintf(out, "authMethod: %s\n", cfg.Auth.Method)
-	_, _ = fmt.Fprintf(out, "transitAssociatedData: %t\n", cfg.Transit.UseAssociatedData)
 	if fingerprint, err := config.IdentityFingerprint(cfg); err == nil {
 		_, _ = fmt.Fprintf(out, "identityFingerprint: %s\n", fingerprint)
 	}

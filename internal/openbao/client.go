@@ -96,11 +96,6 @@ type RequestObserver interface {
 	ObserveOpenBaoRequest(context.Context, RequestObservation)
 }
 
-// DecryptBatchObserver receives bounded Transit batch size observations.
-type DecryptBatchObserver interface {
-	ObserveOpenBaoDecryptBatchSize(int)
-}
-
 // NewClient builds an OpenBao client with pinned CA roots and server-name validation.
 func NewClient(cfg ClientConfig) (*Client, error) {
 	httpClient, err := NewHTTPClient(cfg.CACertFile, cfg.TLSServerName, cfg.Timeout)

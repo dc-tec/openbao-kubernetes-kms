@@ -55,11 +55,11 @@ type SnapshotStateRecord struct {
 	ProviderName                string `json:"providerName"`
 	ClusterID                   string `json:"clusterId"`
 	OpenBaoInstanceID           string `json:"openbaoInstanceId"`
+	OpenBaoNamespace            string `json:"openbaoNamespace,omitempty"`
 	TransitMountID              string `json:"transitMountId"`
 	TransitKeyLineageID         string `json:"transitKeyLineageId"`
 	TransitVersion              int    `json:"transitVersion"`
 	TransitVersionCreatedAtUnix int64  `json:"transitVersionCreatedAtUnix"`
-	KeyEpoch                    string `json:"keyEpoch"`
 	KubernetesKeyID             string `json:"kubernetesKeyId"`
 	State                       string `json:"state"`
 	AADMode                     string `json:"aadMode"`
@@ -192,11 +192,11 @@ func SnapshotStateRecordFromSnapshot(snapshot KeySnapshot) SnapshotStateRecord {
 		ProviderName:                snapshot.ProviderName,
 		ClusterID:                   snapshot.ClusterID,
 		OpenBaoInstanceID:           snapshot.OpenBaoInstanceID,
+		OpenBaoNamespace:            snapshot.OpenBaoNamespace,
 		TransitMountID:              snapshot.TransitMountID,
 		TransitKeyLineageID:         snapshot.TransitKeyLineageID,
 		TransitVersion:              snapshot.TransitVersion,
 		TransitVersionCreatedAtUnix: snapshot.TransitVersionCreatedAt.Unix(),
-		KeyEpoch:                    snapshot.KeyEpoch,
 		KubernetesKeyID:             snapshot.KubernetesKeyID,
 		State:                       string(snapshot.State),
 		AADMode:                     string(snapshot.AADMode),
@@ -211,11 +211,11 @@ func normalizeStateRecord(record SnapshotStateRecord) (SnapshotStateRecord, erro
 	record.ProviderName = snapshot.ProviderName
 	record.ClusterID = snapshot.ClusterID
 	record.OpenBaoInstanceID = snapshot.OpenBaoInstanceID
+	record.OpenBaoNamespace = snapshot.OpenBaoNamespace
 	record.TransitMountID = snapshot.TransitMountID
 	record.TransitKeyLineageID = snapshot.TransitKeyLineageID
 	record.TransitVersion = snapshot.TransitVersion
 	record.TransitVersionCreatedAtUnix = snapshot.TransitVersionCreatedAt.Unix()
-	record.KeyEpoch = snapshot.KeyEpoch
 	record.KubernetesKeyID = snapshot.KubernetesKeyID
 	record.State = string(snapshot.State)
 	record.AADMode = string(snapshot.AADMode)
@@ -231,11 +231,11 @@ func (r SnapshotStateRecord) Snapshot() (KeySnapshot, error) {
 		ProviderName:            r.ProviderName,
 		ClusterID:               r.ClusterID,
 		OpenBaoInstanceID:       r.OpenBaoInstanceID,
+		OpenBaoNamespace:        r.OpenBaoNamespace,
 		TransitMountID:          r.TransitMountID,
 		TransitKeyLineageID:     r.TransitKeyLineageID,
 		TransitVersion:          r.TransitVersion,
 		TransitVersionCreatedAt: time.Unix(r.TransitVersionCreatedAtUnix, 0).UTC(),
-		KeyEpoch:                r.KeyEpoch,
 		KubernetesKeyID:         r.KubernetesKeyID,
 		State:                   SnapshotState(r.State),
 		AADMode:                 AADMode(r.AADMode),
@@ -315,7 +315,7 @@ func (s StateFile) Registry() (Registry, error) {
 	decryptableHistorical := make([]KeySnapshot, 0, len(historical))
 	for _, snapshot := range historical {
 		switch snapshot.State {
-		case StateRetired, StateDisasterRecovery:
+		case StateRetired:
 			decryptableHistorical = append(decryptableHistorical, snapshot)
 		case StatePending, StateRejected:
 		default:

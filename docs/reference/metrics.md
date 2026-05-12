@@ -75,12 +75,6 @@ The provider applies these rules to every metric:
 | `openbao_kms_aad_validation_errors_total` | counter | `reason` | AAD validation failures during decrypt. |
 | `openbao_kms_decrypt_key_id_errors_total` | counter | `reason` | Decrypt rejections caused by unknown, malformed, or stale-disallowed `key_id`. |
 
-### Performance
-
-| Metric | Type | Labels | Description |
-|---|---|---|---|
-| `openbao_kms_decrypt_batch_size` | histogram | none | Reserved decrypt micro-batch sizes; not emitted while batching enablement is rejected. |
-
 ### Runtime Health
 
 | Metric | Type | Labels | Description |

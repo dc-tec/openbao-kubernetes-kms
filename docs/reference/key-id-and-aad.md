@@ -15,7 +15,7 @@ This page is the authoritative reference for the Kubernetes `key_id` format, KMS
 - Ensure `key_id` values are stable across plugin restart.
 - Ensure `key_id` changes when the active Transit key version changes.
 - Keep old `key_id` values decryptable while old Transit versions are allowed.
-- Bind ciphertext to provider, cluster, key lineage, and key version through AAD.
+- Bind ciphertext to provider, cluster, OpenBao namespace, key lineage, and key version through AAD.
 
 ## Kubernetes `key_id` Properties
 
@@ -25,7 +25,7 @@ This page is the authoritative reference for the Kubernetes `key_id` format, KMS
 - deterministic from stable non-secret inputs,
 - safe to log,
 - stable across plugin restarts,
-- unique across provider, cluster, OpenBao, Transit mount, key lineage, and key version scope,
+- unique across provider, cluster, OpenBao namespace, Transit mount, key lineage, and key version scope,
 - never reused,
 - changed when the active Transit key version changes,
 - not a raw Transit key name,
@@ -51,11 +51,11 @@ sha256(
   provider_name || 0x00 ||
   cluster_id || 0x00 ||
   openbao_instance_id || 0x00 ||
+  openbao_namespace || 0x00 || # only when configured
   transit_mount_id || 0x00 ||
   transit_key_lineage_id || 0x00 ||
   transit_key_version || 0x00 ||
-  transit_version_created_at_unix || 0x00 ||
-  key_epoch
+  transit_version_created_at_unix
 )
 ```
 
@@ -66,11 +66,11 @@ Inputs:
 | `provider_name` | Plugin configuration and Kubernetes `EncryptionConfiguration` | Immutable after use. |
 | `cluster_id` | Plugin configuration | Stable cluster or trust-domain ID. |
 | `openbao_instance_id` | Plugin configuration | Stable OpenBao trust-domain ID. |
+| `openbao_namespace` | Optional plugin configuration | Stable namespace routing scope. Empty for the root namespace. |
 | `transit_mount_id` | Plugin configuration | Stable opaque mount ID, not the raw path. |
 | `transit_key_lineage_id` | Plugin configuration or platform metadata | Changes when the key is deleted and recreated. |
 | `transit_key_version` | Transit metadata | Active version used for encryption. |
 | `transit_version_created_at_unix` | Transit metadata | Distinguishes historical versions and restored lineages. |
-| `key_epoch` | Optional configuration | Manual emergency discriminator. |
 
 ## Mount Accessor Vs Configured Mount ID
 
@@ -103,6 +103,7 @@ key-id-hash.kms.openbao.org: "<base64url-sha256-key-id>"
 transit-key-version.kms.openbao.org: "2"
 transit-mount-hash.kms.openbao.org: "<base64url-sha256-mount-id>"
 transit-key-hash.kms.openbao.org: "<base64url-sha256-key-lineage-id>"
+openbao-namespace-hash.kms.openbao.org: "<base64url-sha256-namespace>" # only when configured
 plugin-version.kms.openbao.org: "0.1.0"
 aad-version.kms.openbao.org: "v1"
 ```
@@ -140,6 +141,7 @@ Canonical AAD payload before base64 encoding:
   "provider_name": "openbao-kms-workload-a",
   "cluster_id_hash": "base64url-sha256(cluster-id)",
   "openbao_instance_hash": "base64url-sha256(openbao-instance-id)",
+  "openbao_namespace_hash": "base64url-sha256(openbao-namespace)",
   "transit_mount_hash": "base64url-sha256(transit-mount-id)",
   "transit_key_hash": "base64url-sha256(transit-key-lineage-id)",
   "key_id_hash": "base64url-sha256(kubernetes-key-id)",
@@ -153,23 +155,18 @@ Serialization rules:
 - do not include secrets,
 - do not include raw OpenBao paths,
 - do not include raw key names,
+- include only a namespace hash when `openbao.namespace` is configured,
 - include enough annotation data to reconstruct the same bytes during decrypt,
 - treat missing required fields as decrypt failure.
 
-## Compatibility Modes
+## AAD Mode
 
 | Mode | Behavior | Intended use |
 |---|---|---|
 | `aad.required` | Encrypt and decrypt require valid AAD metadata. | Required mode. |
-| `aad.optional-read` | Encrypt with AAD; decrypt configured pre-AAD epochs without AAD. | Future migration mode only. |
-| `aad.disabled` | Send no Transit associated data. | Compatibility testing only; not a supported mode. |
 
-Compatibility modes:
-
-- are explicit in configuration,
-- are visible in metrics and logs,
-- are limited to known key epochs,
-- are removed after migration.
+The current release only recognizes `aad.required`. There is no configuration
+switch to disable AAD or select compatibility read modes.
 
 ## Decrypt Validation Order
 
@@ -184,7 +181,8 @@ Unknown `key_id` values fail before step 6.
 
 The implementation exposes a decrypt preflight helper that returns the resolved snapshot, parsed annotations, canonical AAD bytes, and Transit `associated_data` only after steps 1 through 5 have passed.
 
-Snapshots use `aad.required`. `aad.optional-read` and `aad.disabled` are modeled as future compatibility modes; encrypt and decrypt preparation reject them.
+Snapshots use `aad.required`. Any other AAD mode in local state is rejected
+during state validation.
 
 ## Local Registry State
 
@@ -196,7 +194,7 @@ The local registry is a non-secret JSON file that records:
 - active Kubernetes `key_id`,
 - observed and promoted key snapshots.
 
-The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. A small adjacent checkpoint file records the last accepted generation and hash so a replayed older state file is rejected when the checkpoint survives. Neither file contains key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths.
+The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. A small adjacent checkpoint file records the last accepted generation and hash so a replayed older state file is rejected when the checkpoint survives. Neither file contains key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths. When `openbao.namespace` is configured, the namespace is persisted as non-secret identity scope so namespace drift fails closed during state validation.
 
 State-file invariants enforced at load:
 
@@ -210,7 +208,7 @@ State-file invariants enforced at load:
 - pending and rejected snapshots are retained in state but excluded from decrypt lookup,
 - the checkpoint rejects older generations and same-generation hash mismatches,
 - the active Transit version must not move backwards during normal promotion,
-- loaded state must match the current provider, cluster, OpenBao instance, Transit mount, lineage, key epoch, and AAD mode,
+- loaded state must match the current provider, cluster, OpenBao instance, OpenBao namespace, Transit mount, lineage, key name, and AAD mode,
 - active and retained historical Transit version creation times must match current Transit metadata,
 - `min_available_version` and `min_decryption_version` must not block active or retained historical versions,
 - `min_encryption_version` must not block the active version.
@@ -224,7 +222,6 @@ The implementation maintains golden fixtures for:
 - key snapshot to `key_id` derivation,
 - annotations to AAD reconstruction,
 - historical key snapshots after rotation,
-- pre-AAD compatibility objects,
 - malformed annotation rejection.
 
 Changing `key_id` or AAD derivation is a wire-format compatibility change. See [Reference: Compatibility: Breaking Changes](/reference/compatibility/#breaking-changes).

@@ -879,7 +879,6 @@ auth:
   loginBeforeTokenExpiry: 30s
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
-  tokenStorage: memory
 transit:
   mountPath: %q
   keyName: %q
@@ -888,7 +887,6 @@ transit:
     clusterId: workload-a
     transitMountId: transit-ci-primary
     keyLineageId: 01HXEXAMPLEKEYLINEAGEID
-  useAssociatedData: true
 bootstrap:
   graceTimeout: 60s
   retryInterval: 5s
@@ -903,15 +901,9 @@ rotation:
   activationDelay: 1s
   requireStableObservationCount: 1
   rejectVersionRollback: true
-performance:
-  decryptMicroBatching:
-    enabled: false
-    maxBatchSize: 32
-    maxWait: 2ms
 logging:
   level: info
   format: json
-  redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
   debugCorrelation:
     enabled: false

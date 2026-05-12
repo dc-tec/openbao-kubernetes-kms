@@ -85,6 +85,7 @@ func TestProviderContainerFullStackE2E(t *testing.T) {
 
 	environment, err = framework.StartOpenBaoEnvironment(ctx, framework.OpenBaoEnvironmentConfig{
 		NetworkName: networkName,
+		Namespace:   "admin",
 	})
 	if errors.Is(err, framework.ErrDockerUnavailable) {
 		t.Skip(err.Error())
@@ -207,6 +208,7 @@ server:
   healthAddress: ""
 openbao:
   address: %q
+  namespace: %q
   caCertFile: %q
   tlsServerName: %q
   timeout: %s
@@ -221,7 +223,6 @@ auth:
   loginBeforeTokenExpiry: %s
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
-  tokenStorage: memory
 %s
 transit:
   mountPath: %q
@@ -231,7 +232,6 @@ transit:
     clusterId: workload-a
     transitMountId: transit-ci-primary
     keyLineageId: 01HXEXAMPLEKEYLINEAGEID
-  useAssociatedData: true
 bootstrap:
   graceTimeout: 60s
   retryInterval: 5s
@@ -246,21 +246,16 @@ rotation:
   activationDelay: 1s
   requireStableObservationCount: 1
   rejectVersionRollback: true
-performance:
-  decryptMicroBatching:
-    enabled: false
-    maxBatchSize: 32
-    maxWait: 2ms
 logging:
   level: info
   format: json
-  redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
   debugCorrelation:
     enabled: false
     ttl: 15m
 `, containerSocketPath,
 		opts.OpenBaoAddress,
+		environment.Namespace,
 		containerCAPath,
 		environment.TLSServerName,
 		opts.OpenBaoTimeout,

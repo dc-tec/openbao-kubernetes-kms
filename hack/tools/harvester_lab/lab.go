@@ -1684,8 +1684,6 @@ server:
   socketGroup: "%s"
   metricsAddress: "127.0.0.1:8081"
   healthAddress: "127.0.0.1:8082"
-  adminAddress: ""
-  unsafeDebugEndpoints: false
 openbao:
   address: https://%s:8200
   namespace: ""
@@ -1707,7 +1705,6 @@ auth:
   expectedAudience:
     - bao-kms-provider
   expectedSubject: system:openbao-kms:workload-a
-  tokenStorage: memory
 transit:
   mountPath: transit
   keyName: k8s-workload-a-etcd
@@ -1716,7 +1713,6 @@ transit:
     clusterId: %s
     transitMountId: transit-harvester-lab
     keyLineageId: 01HXEXAMPLEKEYLINEAGEID
-  useAssociatedData: true
 bootstrap:
   graceTimeout: 60s
   retryInterval: 5s
@@ -1731,15 +1727,9 @@ rotation:
   activationDelay: 1s
   requireStableObservationCount: 1
   rejectVersionRollback: true
-performance:
-  decryptMicroBatching:
-    enabled: false
-    maxBatchSize: 32
-    maxWait: 2ms
 logging:
   level: info
   format: json
-  redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
   debugCorrelation:
     enabled: false

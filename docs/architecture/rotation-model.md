@@ -88,10 +88,10 @@ The flip-flop guard is critical because Kubernetes treats Status `key_id` change
 
 Runtime status probes validate `min_decryption_version` and
 `min_available_version` against every retained active, retired, and
-disaster-recovery snapshot in the local registry. If any retained historical
-version is blocked, Status becomes unhealthy instead of advertising a decrypt
-registry that OpenBao can no longer serve. `min_encryption_version` is checked
-against the active version only.
+historical snapshot in the local registry. If any retained historical version is
+blocked, Status becomes unhealthy instead of advertising a decrypt registry that
+OpenBao can no longer serve. `min_encryption_version` is checked against the
+active version only.
 
 The operator runbook for raising `min_decryption_version` lives at [Operations: Rotation: min_decryption_version](/operations/rotation/#min_decryption_version).
 

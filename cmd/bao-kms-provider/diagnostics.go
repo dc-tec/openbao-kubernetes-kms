@@ -77,6 +77,7 @@ type transitDiagnostics struct {
 
 func newDoctorCommand(runtimeConfig *config.Runtime, configPath *string, info version.Info) *cobra.Command {
 	var encryptionConfigPath string
+	var output string
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -84,7 +85,9 @@ func newDoctorCommand(runtimeConfig *config.Runtime, configPath *string, info ve
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			report, err := runDoctor(commandContext(cmd), runtimeConfig, *configPath, encryptionConfigPath, info)
-			cli.PrintText(cmd.OutOrStdout(), report)
+			if printErr := printCLIReport(cmd.OutOrStdout(), report, output); printErr != nil {
+				return printErr
+			}
 			if err != nil {
 				return err
 			}
@@ -97,23 +100,29 @@ func newDoctorCommand(runtimeConfig *config.Runtime, configPath *string, info ve
 		"",
 		"Path to Kubernetes EncryptionConfiguration for provider validation",
 	)
+	addOutputFlag(cmd, &output)
 	return cmd
 }
 
 func newVerifyKeyCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.Command {
-	return &cobra.Command{
+	var output string
+	cmd := &cobra.Command{
 		Use:   "verify-key",
 		Short: "Verify Transit key suitability",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			report, err := runVerifyKey(commandContext(cmd), runtimeConfig, *configPath)
-			cli.PrintText(cmd.OutOrStdout(), report)
+			if printErr := printCLIReport(cmd.OutOrStdout(), report, output); printErr != nil {
+				return printErr
+			}
 			if err != nil {
 				return err
 			}
 			return reportError(report, messageVerifyKeyChecksFailed)
 		},
 	}
+	addOutputFlag(cmd, &output)
+	return cmd
 }
 
 func runDoctor(
@@ -500,7 +509,7 @@ func checkStatusEncryptConsistency(
 	server, err := kmsv2.NewServer(kmsv2.Options{
 		StatusCache:   store,
 		Registry:      store,
-		Transit:       diagnosticTransit{},
+		Transit:       &diagnosticTransit{},
 		PluginVersion: diagnosticPluginVersion(info),
 	})
 	if err != nil {
@@ -551,7 +560,7 @@ func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, pro
 			continue
 		}
 		switch snapshot.State {
-		case keyregistry.StateActive, keyregistry.StateRetired, keyregistry.StateDisasterRecovery:
+		case keyregistry.StateActive, keyregistry.StateRetired:
 			if profile.MinAvailableVersion > snapshot.TransitVersion {
 				failures = append(failures, "minimum available version blocks required historical version")
 			}
@@ -594,6 +603,7 @@ func snapshotScope(cfg config.Config) status.SnapshotScope {
 		ProviderName:        cfg.Transit.KeyIDScope.ProviderName,
 		ClusterID:           cfg.Transit.KeyIDScope.ClusterID,
 		OpenBaoInstanceID:   cfg.OpenBao.InstanceID,
+		OpenBaoNamespace:    cfg.OpenBao.Namespace,
 		TransitMountID:      cfg.Transit.KeyIDScope.TransitMountID,
 		TransitKeyLineageID: cfg.Transit.KeyIDScope.KeyLineageID,
 		AADMode:             keyregistry.AADModeRequired,

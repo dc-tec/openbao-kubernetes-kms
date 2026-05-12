@@ -20,9 +20,9 @@ type SnapshotScope struct {
 	ProviderName        string
 	ClusterID           string
 	OpenBaoInstanceID   string
+	OpenBaoNamespace    string
 	TransitMountID      string
 	TransitKeyLineageID string
-	KeyEpoch            string
 	AADMode             keyregistry.AADMode
 }
 
@@ -200,11 +200,11 @@ func (s SnapshotScope) snapshot(
 		ProviderName:            s.ProviderName,
 		ClusterID:               s.ClusterID,
 		OpenBaoInstanceID:       s.OpenBaoInstanceID,
+		OpenBaoNamespace:        s.OpenBaoNamespace,
 		TransitMountID:          s.TransitMountID,
 		TransitKeyLineageID:     s.TransitKeyLineageID,
 		TransitVersion:          version,
 		TransitVersionCreatedAt: createdAt.UTC(),
-		KeyEpoch:                s.KeyEpoch,
 		State:                   state,
 		AADMode:                 s.AADMode,
 	}
@@ -236,12 +236,12 @@ func (o *Observer) validateStateScope(state keyregistry.StateFile) error {
 			return fmt.Errorf("%w: persisted state cluster ID differs from current configuration", ErrConfigInvalid)
 		case snapshot.OpenBaoInstanceID != o.scope.OpenBaoInstanceID:
 			return fmt.Errorf("%w: persisted state OpenBao instance ID differs from current configuration", ErrConfigInvalid)
+		case snapshot.OpenBaoNamespace != o.scope.OpenBaoNamespace:
+			return fmt.Errorf("%w: persisted state OpenBao namespace differs from current configuration", ErrConfigInvalid)
 		case snapshot.TransitMountID != o.scope.TransitMountID:
 			return fmt.Errorf("%w: persisted state Transit mount ID differs from current configuration", ErrConfigInvalid)
 		case snapshot.TransitKeyLineageID != o.scope.TransitKeyLineageID:
 			return fmt.Errorf("%w: persisted state Transit key lineage ID differs from current configuration", ErrConfigInvalid)
-		case snapshot.KeyEpoch != o.scope.KeyEpoch:
-			return fmt.Errorf("%w: persisted state key epoch differs from current configuration", ErrConfigInvalid)
 		case snapshot.AADMode != o.scope.AADMode:
 			return fmt.Errorf("%w: persisted state AAD mode differs from current configuration", ErrConfigInvalid)
 		}
@@ -286,7 +286,7 @@ func validateProfileForState(profile openbao.KeyProfile, state keyregistry.State
 			if err := validateActiveSnapshot(profile, snapshot); err != nil {
 				return err
 			}
-		case keyregistry.StateRetired, keyregistry.StateDisasterRecovery:
+		case keyregistry.StateRetired:
 			if err := validateHistoricalSnapshot(profile, snapshot); err != nil {
 				return err
 			}
@@ -576,7 +576,7 @@ func recordSortKey(activeKeyID string, record keyregistry.SnapshotStateRecord) r
 		switch keyregistry.SnapshotState(record.State) {
 		case keyregistry.StatePending:
 			priority = 1
-		case keyregistry.StateRetired, keyregistry.StateDisasterRecovery:
+		case keyregistry.StateRetired:
 			priority = 2
 		case keyregistry.StateRejected:
 			priority = 3

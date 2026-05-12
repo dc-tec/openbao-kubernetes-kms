@@ -28,10 +28,7 @@ const (
 	labelStatus    = "status"
 )
 
-var (
-	requestDurationBuckets = prometheus.ExponentialBuckets(0.001, 2, 12)
-	decryptBatchBuckets    = []float64{1, 2, 4, 8, 16, 32, 64, 128}
-)
+var requestDurationBuckets = prometheus.ExponentialBuckets(0.001, 2, 12)
 
 // StatusProvider exposes redacted status diagnostics for collection.
 type StatusProvider interface {
@@ -53,7 +50,6 @@ type Recorder struct {
 	openbaoDuration      *prometheus.HistogramVec
 	authRenewal          *prometheus.CounterVec
 	authLogin            *prometheus.CounterVec
-	decryptBatchSize     prometheus.Histogram
 	socketRestarts       prometheus.Counter
 	metadataObservation  *prometheus.CounterVec
 	aadValidationErrors  *prometheus.CounterVec
@@ -109,13 +105,6 @@ func NewRecorder() (*Recorder, error) {
 				Help: "Total OpenBao JWT login attempts by bounded status.",
 			},
 			[]string{labelStatus},
-		),
-		decryptBatchSize: prometheus.NewHistogram(
-			prometheus.HistogramOpts{
-				Name:    "openbao_kms_decrypt_batch_size",
-				Help:    "Observed OpenBao Transit decrypt batch sizes.",
-				Buckets: decryptBatchBuckets,
-			},
 		),
 		socketRestarts: prometheus.NewCounter(
 			prometheus.CounterOpts{
@@ -212,14 +201,6 @@ func (r *Recorder) RecordAuthRenewal(requestStatus string) {
 	r.authRenewal.WithLabelValues(normalizeStatus(requestStatus)).Inc()
 }
 
-// RecordDecryptBatchSize records one Transit batch decrypt size.
-func (r *Recorder) RecordDecryptBatchSize(size int) {
-	if size <= 0 {
-		return
-	}
-	r.decryptBatchSize.Observe(float64(size))
-}
-
 // RecordSocketRestart records one verified-dead stale socket cleanup.
 func (r *Recorder) RecordSocketRestart() {
 	r.socketRestarts.Inc()
@@ -248,7 +229,6 @@ func (r *Recorder) registerBaseCollectors() error {
 		r.openbaoDuration,
 		r.authRenewal,
 		r.authLogin,
-		r.decryptBatchSize,
 		r.socketRestarts,
 		r.metadataObservation,
 		r.aadValidationErrors,

@@ -18,8 +18,6 @@ server:
   socketGroup: openbao-kms-socket
   metricsAddress: "127.0.0.1:8081"
   healthAddress: "127.0.0.1:8082"
-  adminAddress: ""
-  unsafeDebugEndpoints: false
 
 openbao:
   address: https://bao.example.internal:8200
@@ -42,7 +40,6 @@ auth:
   expectedIssuer: ""
   expectedAudience: []
   expectedSubject: ""
-  tokenStorage: memory
 
 transit:
   mountPath: transit
@@ -52,7 +49,6 @@ transit:
     clusterId: workload-a
     transitMountId: transit-prod-primary
     keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
-  useAssociatedData: true
 
 bootstrap:
   graceTimeout: 60s
@@ -72,16 +68,9 @@ rotation:
   requireStableObservationCount: 3
   rejectVersionRollback: true
 
-performance:
-  decryptMicroBatching:
-    enabled: false
-    maxBatchSize: 32
-    maxWait: 2ms
-
 logging:
   level: info
   format: json
-  redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
   debugCorrelation:
     enabled: false
@@ -116,6 +105,10 @@ The following fields must be set explicitly:
 validation rejects `/` and `%` in the key name so the provider, diagnostics,
 and generated policy paths all address the same Transit key.
 
+`openbao.namespace` is optional. Leave it empty for the root namespace. When
+set, it is sent as `X-Vault-Namespace` on OpenBao auth and Transit requests and
+is treated as identity-bearing provider scope.
+
 ## Defaults
 
 | Field | Default |
@@ -125,8 +118,6 @@ and generated policy paths all address the same Transit key.
 | `server.socketMode` | `"0660"` |
 | `server.metricsAddress` | `127.0.0.1:8081` |
 | `server.healthAddress` | `127.0.0.1:8082` |
-| `server.adminAddress` | empty |
-| `server.unsafeDebugEndpoints` | `false` |
 | `openbao.timeout` | `2s` |
 | `auth.method` | `jwt` |
 | `auth.minJwtRemainingTtl` | `2m` |
@@ -137,8 +128,6 @@ and generated policy paths all address the same Transit key.
 | `auth.expectedIssuer` | empty |
 | `auth.expectedAudience` | empty |
 | `auth.expectedSubject` | empty |
-| `auth.tokenStorage` | `memory` |
-| `transit.useAssociatedData` | `true` |
 | `bootstrap.graceTimeout` | `60s` |
 | `bootstrap.retryInterval` | `5s` |
 | `status.probeInterval` | `30s` |
@@ -149,12 +138,8 @@ and generated policy paths all address the same Transit key.
 | `rotation.activationDelay` | `2m` |
 | `rotation.requireStableObservationCount` | `3` |
 | `rotation.rejectVersionRollback` | `true` |
-| `performance.decryptMicroBatching.enabled` | `false` |
-| `performance.decryptMicroBatching.maxBatchSize` | `32` |
-| `performance.decryptMicroBatching.maxWait` | `2ms` |
 | `logging.level` | `info` |
 | `logging.format` | `json` |
-| `logging.redactOpenBaoPaths` | `true` |
 | `logging.logOpenBaoRequestIDs` | `true` |
 | `logging.debugCorrelation.enabled` | `false` |
 | `logging.debugCorrelation.ttl` | `15m` |
@@ -190,6 +175,7 @@ Changing these fields after encryption begins can make existing data unreadable 
 - `transit.keyIdScope.providerName`
 - `transit.keyIdScope.clusterId`
 - `openbao.instanceId`
+- `openbao.namespace`
 - `transit.keyIdScope.transitMountId`
 - `transit.keyIdScope.keyLineageId`
 - `transit.keyName`
@@ -197,6 +183,13 @@ Changing these fields after encryption begins can make existing data unreadable 
 - Kubernetes `EncryptionConfiguration` provider name
 
 Treat these values as immutable. Any change requires a documented migration plan; see [Operations: Disaster Recovery](/operations/disaster-recovery/) for the procedure.
+
+Use `openbao.namespace` when one OpenBao cluster serves multiple Kubernetes
+clusters through separate namespaces. The namespace must be a relative OpenBao
+namespace path such as `admin/workload-a`; validation rejects leading slashes,
+empty segments, dot segments, surrounding whitespace, control characters, and
+percent encoding. Auth and Transit mount paths remain relative to that
+namespace and must not include the namespace prefix.
 
 The implementation exposes an identity fingerprint for these fields. Record it during rollout and compare it during troubleshooting without exposing raw cluster, OpenBao, or Transit topology values.
 
@@ -219,12 +212,12 @@ Startup fails closed when any of the following conditions hold:
 - provider name is empty,
 - cluster ID is empty,
 - OpenBao instance ID is empty,
+- OpenBao namespace is malformed,
 - Transit mount ID is empty,
 - key lineage ID is empty,
 - Transit mount or key names are empty,
-- AAD is enabled and required scope inputs are missing,
+- required AAD scope inputs are missing,
 - socket mode is broader than configured policy allows,
-- an unsupported compatibility mode is configured.
 
 ## Permissions
 
@@ -247,18 +240,16 @@ For the full identity model and rationale see [Deployment: Linux Identity Model]
 
 ## Unsafe Options
 
-The following must not be enabled in production without a written exception:
+The provider intentionally does not expose runtime switches for unsupported
+release-boundary behavior. In particular, there is no config field to:
 
-- `server.unsafeDebugEndpoints`
-- `performance.decryptMicroBatching.enabled`
-- `transit.useAssociatedData: false`
-- compatibility mode without explicit allowed epochs
-- logging raw OpenBao paths
-- broad socket permissions
+- enable unsafe debug endpoints,
+- disable Transit associated data,
+- enable KMS decrypt micro-batching,
+- select AAD compatibility modes,
+- log raw OpenBao paths.
 
-`performance.decryptMicroBatching.enabled: true` is rejected by configuration validation. The field reserves the future compatibility surface while sustained direct decrypt soak determines whether a production-grade coalescer is needed before enabling the feature.
-
-`transit.useAssociatedData: false` is not a supported deployment mode. The field exists to reserve the compatibility surface for future testing and migration work.
+Broad socket permissions remain rejected by validation.
 
 ## Environment Variables
 
@@ -272,7 +263,7 @@ Allowed environment overrides are limited to:
 - health listen address: `BAO_KMS_PROVIDER_SERVER_HEALTH_ADDRESS` or `BAO_KMS_PROVIDER_SERVER_HEALTHADDRESS`,
 - feature flags used only in tests.
 
-Identity-bearing fields such as `auth.expectedIssuer`,
+Identity-bearing fields such as `openbao.namespace`, `auth.expectedIssuer`,
 `auth.expectedAudience`, `auth.expectedSubject`, `transit.keyName`,
 `transit.mountPath`, and `transit.keyIdScope.*` are not environment
 overrides. Keep them in the reviewed config file so deployment environments

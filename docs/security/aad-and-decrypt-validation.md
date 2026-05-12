@@ -36,23 +36,20 @@ For the exact field-by-field validation steps see [Reference: Key ID And AAD](/r
 
 ## Compatibility Modes
 
-The active mode is `aad.required`. The other modes describe reserved compatibility surfaces for future migration work.
-
 | Mode | Behavior | Acceptable use |
 |---|---|---|
 | `aad.required` | Encrypt and decrypt require valid AAD metadata. | The required mode for new deployments. |
-| `aad.optional-read` | Encrypt with AAD; decrypt configured pre-AAD epochs without AAD. | Future migration mode only. Would need an explicit key epoch list. |
-| `aad.disabled` | Send no associated data. | Future compatibility testing only. Not a supported deployment mode. |
 
-`aad.required` is the only supported mode. Configuration validation rejects `transit.useAssociatedData: false`, and encrypt/decrypt preparation rejects non-required AAD modes.
+`aad.required` is the only supported mode. The provider does not expose a config
+switch to disable AAD, and state validation rejects non-required AAD modes.
 
 ## Compatibility-Mode Misuse
 
 Disabling AAD globally as an incident response is unsafe. Specifically:
 
-- Setting `transit.useAssociatedData: false` is rejected by configuration validation. It would also expose the decrypt path to ciphertext that was not bound to the current cluster, key lineage, or provider name.
-- Switching to `aad.disabled` re-enables the cross-cluster replay class of threats that AAD prevents.
-- Any future `aad.optional-read` mode must require an explicit allowed-epoch list. Without that bound, it would expand the trust boundary to all historical objects, including ones that may never have existed in this cluster.
+- bypassing AAD would expose the decrypt path to ciphertext that was not bound to the current cluster, key lineage, or provider name,
+- accepting an AAD-disabled state re-enables the cross-cluster replay class of threats that AAD prevents,
+- future compatibility read modes must require explicit retained historical evidence before they are introduced.
 
 If decrypt is failing during an incident, follow [Operations: Troubleshooting: AAD Mismatch](/operations/troubleshooting/#aad-mismatch) instead of disabling AAD.
 

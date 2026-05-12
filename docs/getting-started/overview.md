@@ -64,7 +64,7 @@ The implementation is intentionally narrow. These are implementation defaults an
 - Local registry state at `/var/lib/openbao-kms/state/key-registry.json`.
 - Provider socket at `/run/openbao-kms/kms.sock` with mode `0660`.
 - Metrics on `127.0.0.1:8081` and health on `127.0.0.1:8082`.
-- Decrypt micro-batching disabled and rejected by configuration.
+- Direct decrypt path without provider-side micro-batching.
 - systemd and static-pod deployment models supported.
 
 ## Recommended Deployment Defaults
@@ -93,7 +93,7 @@ The current release line does not include:
 - Legacy KMS v1.
 - A DaemonSet deployment running inside the protected cluster.
 - A Helm chart that installs the provider into the protected cluster.
-- Enabled decrypt micro-batching.
+- Provider-side decrypt micro-batching.
 - Production-ready support claims before release evidence covers the required exact-version, HA, recovery, upgrade, and supply-chain gates.
 
 ## Read Next

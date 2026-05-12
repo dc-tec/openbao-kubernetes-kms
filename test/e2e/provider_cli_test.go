@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -18,11 +19,15 @@ func TestProviderCLIHappyPathE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
 	defer cancel()
 
-	stack := startProviderFailureStack(t, ctx, "obk-e2e-cli", providerFailureStackOptions{})
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-cli", providerFailureStackOptions{
+		Environment: framework.OpenBaoEnvironmentConfig{
+			Namespace: "admin",
+		},
+	})
 	stack.runClient(ctx, "write-client", kmsClientModeWriteSample, sampleReadWrite)
 
 	configOutput := stack.runProviderCLI(ctx, "cli-config", "config", "--config", containerConfigPath)
-	assertOutputContains(t, configOutput, "identityFingerprint:", "transitAssociatedData: true")
+	assertOutputContains(t, configOutput, "identityFingerprint:")
 
 	policyOutput := stack.runProviderCLI(ctx, "cli-policy", "policy", "openbao", "--config", containerConfigPath)
 	assertOutputContains(
@@ -72,6 +77,21 @@ func TestProviderCLIHappyPathE2E(t *testing.T) {
 		"stateLoaded: true",
 		"confidence: limited",
 	)
+
+	doctorJSON := stack.runProviderCLI(ctx, "cli-doctor-json", "doctor", "--config", containerConfigPath, "--output", "json")
+	assertCLIJSONReport(t, doctorJSON, "doctor", "openbao.auth", "pass")
+	assertCLIJSONReport(t, doctorJSON, "doctor", "kms.status_encrypt", "pass")
+
+	verifyKeyJSON := stack.runProviderCLI(ctx, "cli-verify-key-json", "verify-key", "--config", containerConfigPath, "--output", "json")
+	assertCLIJSONReport(t, verifyKeyJSON, "verify-key", "registry.state", "pass")
+	assertCLIJSONReport(t, verifyKeyJSON, "verify-key", "transit.version_restrictions", "pass")
+
+	rotationPlanJSON := stack.runProviderCLI(ctx, "cli-rotation-plan-json", "rotation-plan", "--config", containerConfigPath, "--output", "json")
+	assertRotationJSONReport(t, rotationPlanJSON, "rotation-plan", "active")
+
+	verifyRotationJSON := stack.runProviderCLI(ctx, "cli-verify-rotation-json", "verify-rotation", "--config", containerConfigPath, "--output", "json")
+	assertRotationJSONReport(t, verifyRotationJSON, "verify-rotation", "active")
+	assertOutputContains(t, verifyRotationJSON, `"confidence": "limited"`)
 }
 
 func TestProviderCLIJWTClaimDriftRedactedE2E(t *testing.T) {
@@ -206,5 +226,55 @@ func assertOutputNotContains(t *testing.T, output string, values ...string) {
 		if value != "" && strings.Contains(output, value) {
 			t.Fatalf("output contains %q:\n%s", value, output)
 		}
+	}
+}
+
+type cliJSONReport struct {
+	Name   string         `json:"name"`
+	Checks []cliJSONCheck `json:"checks"`
+}
+
+type cliJSONCheck struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+func assertCLIJSONReport(t *testing.T, output string, name string, checkID string, status string) {
+	t.Helper()
+
+	var report cliJSONReport
+	if err := json.Unmarshal([]byte(output), &report); err != nil {
+		t.Fatalf("invalid CLI JSON report: %v\n%s", err, output)
+	}
+	if report.Name != name {
+		t.Fatalf("unexpected report name: got %q want %q\n%s", report.Name, name, output)
+	}
+	for _, check := range report.Checks {
+		if check.ID == checkID {
+			if check.Status != status {
+				t.Fatalf("unexpected status for %s: got %q want %q\n%s", checkID, check.Status, status, output)
+			}
+			return
+		}
+	}
+	t.Fatalf("JSON report missing check %q:\n%s", checkID, output)
+}
+
+type rotationJSONReport struct {
+	Name            string `json:"name"`
+	StateLoaded     bool   `json:"stateLoaded"`
+	RotationState   string `json:"rotationState"`
+	ActiveKeyIDHash string `json:"activeKeyIdHash"`
+}
+
+func assertRotationJSONReport(t *testing.T, output string, name string, state string) {
+	t.Helper()
+
+	var report rotationJSONReport
+	if err := json.Unmarshal([]byte(output), &report); err != nil {
+		t.Fatalf("invalid rotation JSON report: %v\n%s", err, output)
+	}
+	if report.Name != name || !report.StateLoaded || report.RotationState != state || report.ActiveKeyIDHash == "" {
+		t.Fatalf("unexpected rotation JSON report: %#v\n%s", report, output)
 	}
 }

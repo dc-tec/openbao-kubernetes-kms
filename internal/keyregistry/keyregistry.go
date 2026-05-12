@@ -38,14 +38,12 @@ const (
 	StateRetired SnapshotState = "retired"
 	// StateRejected marks a snapshot rejected by validation or rollback checks.
 	StateRejected SnapshotState = "rejected"
-	// StateDisasterRecovery marks a snapshot accepted only under explicit recovery handling.
-	StateDisasterRecovery SnapshotState = "disaster_recovery"
 )
 
 // Valid reports whether the state is one of the recognized snapshot states.
 func (s SnapshotState) Valid() bool {
 	switch s {
-	case StateActive, StatePending, StateRetired, StateRejected, StateDisasterRecovery:
+	case StateActive, StatePending, StateRetired, StateRejected:
 		return true
 	default:
 		return false
@@ -58,16 +56,12 @@ type AADMode string
 const (
 	// AADModeRequired requires valid AAD annotations for encrypt and decrypt.
 	AADModeRequired AADMode = "aad.required"
-	// AADModeOptionalRead is reserved for future bounded pre-AAD compatibility reads.
-	AADModeOptionalRead AADMode = "aad.optional-read"
-	// AADModeDisabled is reserved for compatibility testing only.
-	AADModeDisabled AADMode = "aad.disabled"
 )
 
 // Valid reports whether the mode is one of the recognized AAD compatibility modes.
 func (m AADMode) Valid() bool {
 	switch m {
-	case AADModeRequired, AADModeOptionalRead, AADModeDisabled:
+	case AADModeRequired:
 		return true
 	default:
 		return false
@@ -79,11 +73,11 @@ type KeySnapshot struct {
 	ProviderName            string
 	ClusterID               string
 	OpenBaoInstanceID       string
+	OpenBaoNamespace        string
 	TransitMountID          string
 	TransitKeyLineageID     string
 	TransitVersion          int
 	TransitVersionCreatedAt time.Time
-	KeyEpoch                string
 	KubernetesKeyID         string
 	State                   SnapshotState
 	AADMode                 AADMode
@@ -100,11 +94,13 @@ func DeriveKeyID(snapshot KeySnapshot) (string, error) {
 	input = appendPart(input, snapshot.ProviderName)
 	input = appendPart(input, snapshot.ClusterID)
 	input = appendPart(input, snapshot.OpenBaoInstanceID)
+	if snapshot.OpenBaoNamespace != "" {
+		input = appendPart(input, snapshot.OpenBaoNamespace)
+	}
 	input = appendPart(input, snapshot.TransitMountID)
 	input = appendPart(input, snapshot.TransitKeyLineageID)
 	input = appendPart(input, strconv.Itoa(snapshot.TransitVersion))
 	input = appendPart(input, strconv.FormatInt(snapshot.TransitVersionCreatedAt.Unix(), 10))
-	input = appendPart(input, snapshot.KeyEpoch)
 
 	sum := sha256.Sum256(input)
 	return keyIDPrefix + base64.RawURLEncoding.EncodeToString(sum[:]), nil
@@ -243,6 +239,27 @@ func validateSnapshotIdentity(snapshot KeySnapshot) error {
 	}
 	if snapshot.TransitVersionCreatedAt.IsZero() {
 		return fmt.Errorf("transit version creation time is required")
+	}
+	if err := validateOpenBaoNamespace(snapshot.OpenBaoNamespace); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateOpenBaoNamespace(value string) error {
+	if value == "" {
+		return nil
+	}
+	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t") {
+		return fmt.Errorf("OpenBao namespace must not contain control characters or surrounding whitespace")
+	}
+	if strings.HasPrefix(value, "/") || strings.Contains(value, "//") || strings.Contains(value, "%") {
+		return fmt.Errorf("OpenBao namespace must be a relative OpenBao namespace path without percent encoding")
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "." || segment == ".." || segment == "" {
+			return fmt.Errorf("OpenBao namespace must not contain empty, dot, or dot-dot path segments")
+		}
 	}
 	return nil
 }

@@ -259,6 +259,50 @@ func TestRotationRejectsPersistedStateScopeDrift(t *testing.T) {
 	}
 }
 
+func TestRotationRejectsPersistedNamespaceScopeDrift(t *testing.T) {
+	clock := newFakeClock()
+	observer, err := status.NewObserver(status.SnapshotScope{
+		ProviderName:        "openbao-kms-workload-a",
+		ClusterID:           "workload-a",
+		OpenBaoInstanceID:   "bao-prod-a",
+		OpenBaoNamespace:    "admin/workload-a",
+		TransitMountID:      "transit-prod-primary",
+		TransitKeyLineageID: "01HXEXAMPLEKEYLINEAGEID",
+		AADMode:             keyregistry.AADModeRequired,
+	}, status.RotationPolicy{
+		ActivationDelay:               time.Minute,
+		RequireStableObservationCount: 3,
+		RejectVersionRollback:         true,
+	})
+	if err != nil {
+		t.Fatalf("new observer: %v", err)
+	}
+	profileV1 := profileForLatest(1, clock.Now())
+	state := rebuildState(t, observer, profileV1, clock.Now())
+
+	drifted, err := status.NewObserver(status.SnapshotScope{
+		ProviderName:        "openbao-kms-workload-a",
+		ClusterID:           "workload-a",
+		OpenBaoInstanceID:   "bao-prod-a",
+		OpenBaoNamespace:    "admin/workload-b",
+		TransitMountID:      "transit-prod-primary",
+		TransitKeyLineageID: "01HXEXAMPLEKEYLINEAGEID",
+		AADMode:             keyregistry.AADModeRequired,
+	}, status.RotationPolicy{
+		ActivationDelay:               time.Minute,
+		RequireStableObservationCount: 3,
+		RejectVersionRollback:         true,
+	})
+	if err != nil {
+		t.Fatalf("new drifted observer: %v", err)
+	}
+
+	_, err = drifted.Observe(state, profileV1, clock.Now())
+	if !errors.Is(err, status.ErrConfigInvalid) {
+		t.Fatalf("expected namespace scope drift to fail closed, got %v", err)
+	}
+}
+
 func TestRotationRejectsActiveVersionCreationTimeDrift(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, time.Minute)

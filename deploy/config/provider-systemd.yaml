@@ -5,8 +5,6 @@ server:
   socketGroup: openbao-kms-socket
   metricsAddress: "127.0.0.1:8081"
   healthAddress: "127.0.0.1:8082"
-  adminAddress: ""
-  unsafeDebugEndpoints: false
 openbao:
   address: https://bao.example.internal:8200
   namespace: ""
@@ -28,7 +26,6 @@ auth:
   expectedAudience:
     - bao-kms-provider
   expectedSubject: system:openbao-kms:workload-a
-  tokenStorage: memory
 transit:
   mountPath: transit
   keyName: k8s-workload-a-etcd
@@ -37,7 +34,6 @@ transit:
     clusterId: workload-a
     transitMountId: transit-prod-primary
     keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
-  useAssociatedData: true
 bootstrap:
   graceTimeout: 60s
   retryInterval: 5s
@@ -52,15 +48,9 @@ rotation:
   activationDelay: 2m
   requireStableObservationCount: 3
   rejectVersionRollback: true
-performance:
-  decryptMicroBatching:
-    enabled: false
-    maxBatchSize: 32
-    maxWait: 2ms
 logging:
   level: info
   format: json
-  redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
   debugCorrelation:
     enabled: false

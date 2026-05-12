@@ -23,9 +23,7 @@ const configSchemaJSON = `{
         "socketMode": {"type": "string", "pattern": "^0[0-7]{3}$"},
         "socketGroup": {"type": "string", "minLength": 1},
         "metricsAddress": {"type": "string"},
-        "healthAddress": {"type": "string"},
-        "adminAddress": {"type": "string"},
-        "unsafeDebugEndpoints": {"type": "boolean"}
+        "healthAddress": {"type": "string"}
       }
     },
     "openbao": {
@@ -34,7 +32,7 @@ const configSchemaJSON = `{
       "required": ["address", "caCertFile", "tlsServerName", "instanceId"],
       "properties": {
         "address": {"type": "string", "format": "uri"},
-        "namespace": {"type": "string"},
+        "namespace": {"type": "string", "pattern": "^$|^[^/%\\s]+(?:/[^/%\\s]+)*$"},
         "caCertFile": {"type": "string"},
         "tlsServerName": {"type": "string", "minLength": 1},
         "timeout": {"type": "string"},
@@ -60,8 +58,7 @@ const configSchemaJSON = `{
 	          "type": "array",
 	          "items": {"type": "string", "minLength": 1}
 	        },
-	        "expectedSubject": {"type": "string"},
-	        "tokenStorage": {"type": "string", "const": "memory"}
+	        "expectedSubject": {"type": "string"}
 	      }
 	    },
     "transit": {
@@ -81,9 +78,8 @@ const configSchemaJSON = `{
             "transitMountId": {"type": "string", "minLength": 1},
             "keyLineageId": {"type": "string", "minLength": 1}
           }
-        },
-	        "useAssociatedData": {"type": "boolean", "const": true}
-	      }
+        }
+      }
 	    },
 	    "bootstrap": {
 	      "type": "object",
@@ -119,28 +115,12 @@ const configSchemaJSON = `{
         "rejectVersionRollback": {"type": "boolean"}
       }
     },
-    "performance": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "decryptMicroBatching": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": {"type": "boolean"},
-            "maxBatchSize": {"type": "integer", "minimum": 1},
-            "maxWait": {"type": "string"}
-          }
-        }
-      }
-    },
     "logging": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "level": {"type": "string", "enum": ["debug", "info", "warn", "error"]},
         "format": {"type": "string", "enum": ["json", "text"]},
-        "redactOpenBaoPaths": {"type": "boolean"},
         "logOpenBaoRequestIDs": {"type": "boolean"},
         "debugCorrelation": {
           "type": "object",

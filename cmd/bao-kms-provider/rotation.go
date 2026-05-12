@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -41,7 +42,8 @@ type rotationReport struct {
 }
 
 func newRotationPlanCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.Command {
-	return &cobra.Command{
+	var output string
+	cmd := &cobra.Command{
 		Use:   "rotation-plan",
 		Short: "Report rotation state",
 		Args:  cobra.NoArgs,
@@ -54,14 +56,16 @@ func newRotationPlanCommand(runtimeConfig *config.Runtime, configPath *string) *
 			if err != nil {
 				return cli.WithExitCode(cli.ExitCheckFailed, err)
 			}
-			printRotationReport(cmd.OutOrStdout(), report)
-			return nil
+			return printRotationReport(cmd.OutOrStdout(), report, output)
 		},
 	}
+	addOutputFlag(cmd, &output)
+	return cmd
 }
 
 func newVerifyRotationCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.Command {
-	return &cobra.Command{
+	var output string
+	cmd := &cobra.Command{
 		Use:   "verify-rotation",
 		Short: "Verify rotation migration state",
 		Args:  cobra.NoArgs,
@@ -76,10 +80,11 @@ func newVerifyRotationCommand(runtimeConfig *config.Runtime, configPath *string)
 			}
 			report.Confidence = rotationConfidenceLimited
 			report.Limitations = rotationLimitationsLocal
-			printRotationReport(cmd.OutOrStdout(), report)
-			return nil
+			return printRotationReport(cmd.OutOrStdout(), report, output)
 		},
 	}
+	addOutputFlag(cmd, &output)
+	return cmd
 }
 
 func buildRotationReport(ctx context.Context, cfg config.Config, name string) (rotationReport, error) {
@@ -179,7 +184,19 @@ func pendingSnapshot(state keyregistry.StateFile) (keyregistry.SnapshotStateReco
 	return keyregistry.SnapshotStateRecord{}, false
 }
 
-func printRotationReport(out io.Writer, report rotationReport) {
+func printRotationReport(out io.Writer, report rotationReport, output string) error {
+	switch normalizeOutputFormat(output) {
+	case outputFormatText:
+		printRotationReportText(out, report)
+		return nil
+	case outputFormatJSON:
+		return printRotationReportJSON(out, report)
+	default:
+		return unsupportedOutputFormat(output)
+	}
+}
+
+func printRotationReportText(out io.Writer, report rotationReport) {
 	_, _ = fmt.Fprintln(out, report.Name)
 	_, _ = fmt.Fprintf(out, "stateLoaded: %t\n", report.StateLoaded)
 	if report.StateLoaded {
@@ -204,4 +221,45 @@ func printRotationReport(out io.Writer, report rotationReport) {
 	if report.Limitations != "" {
 		_, _ = fmt.Fprintf(out, "limitations: %s\n", report.Limitations)
 	}
+}
+
+type rotationReportJSON struct {
+	Name                          string               `json:"name"`
+	StateLoaded                   bool                 `json:"stateLoaded"`
+	StateGeneration               uint64               `json:"stateGeneration,omitempty"`
+	StateHash                     string               `json:"stateHash,omitempty"`
+	ActiveKeyIDHash               string               `json:"activeKeyIdHash,omitempty"`
+	ActiveTransitVersion          int                  `json:"activeTransitVersion,omitempty"`
+	LatestTransitVersion          int                  `json:"latestTransitVersion,omitempty"`
+	RotationState                 status.RotationState `json:"rotationState"`
+	PendingKeyIDHash              string               `json:"pendingKeyIdHash,omitempty"`
+	PendingTransitVersion         int                  `json:"pendingTransitVersion,omitempty"`
+	PendingStableObservationCount int                  `json:"pendingStableObservationCount,omitempty"`
+	PendingPromotesAfter          string               `json:"pendingPromotesAfter,omitempty"`
+	Confidence                    string               `json:"confidence,omitempty"`
+	Limitations                   string               `json:"limitations,omitempty"`
+}
+
+func printRotationReportJSON(out io.Writer, report rotationReport) error {
+	jsonReport := rotationReportJSON{
+		Name:                          report.Name,
+		StateLoaded:                   report.StateLoaded,
+		StateGeneration:               report.StateGeneration,
+		StateHash:                     report.StateHash,
+		ActiveKeyIDHash:               report.ActiveKeyIDHash,
+		ActiveTransitVersion:          report.ActiveTransitVersion,
+		LatestTransitVersion:          report.LatestTransitVersion,
+		RotationState:                 report.RotationState,
+		PendingKeyIDHash:              report.PendingKeyIDHash,
+		PendingTransitVersion:         report.PendingVersion,
+		PendingStableObservationCount: report.PendingStableCount,
+		Confidence:                    report.Confidence,
+		Limitations:                   report.Limitations,
+	}
+	if !report.PendingPromotesAfter.IsZero() {
+		jsonReport.PendingPromotesAfter = report.PendingPromotesAfter.Format(time.RFC3339)
+	}
+	encoder := json.NewEncoder(out)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(jsonReport)
 }
