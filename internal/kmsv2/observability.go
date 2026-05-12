@@ -21,6 +21,8 @@ const (
 	errorClassAnnotationInvalid   = "annotation_invalid"
 	errorClassKeyIDMalformed      = "key_id_malformed"
 	errorClassKeyIDUnknown        = "key_id_unknown"
+	errorClassOpenBaoRateLimited  = "openbao_rate_limited"
+	errorClassOpenBaoSealed       = "openbao_sealed"
 	errorClassOpenBaoUnavailable  = "openbao_unavailable"
 	errorClassStatusStale         = "status_stale"
 	errorClassTimeout             = "timeout"

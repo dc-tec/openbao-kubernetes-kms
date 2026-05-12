@@ -507,9 +507,11 @@ func openBaoKMSClass(class openbao.ErrorClass) string {
 		return errorClassTransitKeyMissing
 	case openbao.ErrorClassDecryptFailed:
 		return errorClassAADMismatched
-	case openbao.ErrorClassSealed,
-		openbao.ErrorClassUnavailable,
-		openbao.ErrorClassRateLimited:
+	case openbao.ErrorClassRateLimited:
+		return errorClassOpenBaoRateLimited
+	case openbao.ErrorClassSealed:
+		return errorClassOpenBaoSealed
+	case openbao.ErrorClassUnavailable:
 		return errorClassOpenBaoUnavailable
 	default:
 		return errorClassUnknown

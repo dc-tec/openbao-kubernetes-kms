@@ -159,6 +159,8 @@ Errors map to stable classes in logs and metrics:
 - `socket_unavailable`
 - `auth_failed`
 - `auth_expired`
+- `openbao_rate_limited`
+- `openbao_sealed`
 - `openbao_unavailable`
 - `transit_key_missing`
 - `transit_policy_denied`

@@ -330,14 +330,14 @@ func TestTransitOpenBaoErrorsPreserveKMSBoundaryClasses(t *testing.T) {
 			method:    "encrypt",
 			class:     openbao.ErrorClassRateLimited,
 			code:      codes.ResourceExhausted,
-			errorType: "openbao_unavailable",
+			errorType: "openbao_rate_limited",
 		},
 		{
 			name:      "sealed",
 			method:    "encrypt",
 			class:     openbao.ErrorClassSealed,
 			code:      codes.Unavailable,
-			errorType: "openbao_unavailable",
+			errorType: "openbao_sealed",
 		},
 		{
 			name:      "decrypt failed",
