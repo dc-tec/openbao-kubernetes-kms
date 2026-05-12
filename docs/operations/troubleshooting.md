@@ -153,13 +153,13 @@ Likely causes:
 - OpenBao instance ID changed,
 - Transit mount ID changed,
 - key lineage ID changed,
-- the local key registry or history file is missing or corrupted,
+- the local key registry state or checkpoint is missing, corrupted, or rolled back,
 - the object was encrypted by a different provider.
 
 Recovery:
 
 1. Restore the original identity-bearing configuration; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
-2. Restore the key registry state file if it was lost.
+2. Restore the key registry state file and checkpoint if they were lost.
 3. Verify active and historical key snapshots are present.
 4. Restart the plugin.
 5. Retry the Kubernetes read.

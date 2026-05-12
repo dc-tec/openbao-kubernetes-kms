@@ -196,7 +196,7 @@ The local registry is a non-secret JSON file that records:
 - active Kubernetes `key_id`,
 - observed and promoted key snapshots.
 
-The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. It does not contain key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths.
+The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. A small adjacent checkpoint file records the last accepted generation and hash so a replayed older state file is rejected when the checkpoint survives. Neither file contains key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths.
 
 State-file invariants enforced at load:
 
@@ -205,10 +205,15 @@ State-file invariants enforced at load:
 - the parent directory must not be group or world writable,
 - JSON is decoded with unknown-field rejection,
 - the current hash must match the typed state body,
-- generation and hash expectations can reject replayed state,
-- the active Transit version must not move backwards during normal promotion.
+- malformed previous or current hashes are rejected,
+- duplicate persisted `key_id` records are rejected,
+- pending and rejected snapshots are retained in state but excluded from decrypt lookup,
+- the checkpoint rejects older generations and same-generation hash mismatches,
+- the active Transit version must not move backwards during normal promotion,
+- loaded state must match the current provider, cluster, OpenBao instance, Transit mount, lineage, key epoch, and AAD mode,
+- the active Transit version creation time must match current Transit metadata.
 
-If the state file is missing, it can be rebuilt from trusted configuration plus current and historical Transit metadata when the caller can prove the metadata set is complete enough for the recovery operation.
+If both the state file and checkpoint are missing, the provider may rebuild state from trusted configuration plus Transit metadata only when the metadata contains creation times for every available version from `min_available_version` through `latest_version`. The rebuilt state marks the latest version active and older available versions retired. If the checkpoint exists but the state file is missing or older than the checkpoint, startup fails closed.
 
 ## Golden Fixtures
 

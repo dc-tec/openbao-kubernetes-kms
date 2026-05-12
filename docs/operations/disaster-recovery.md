@@ -57,6 +57,7 @@ Back up:
 - OpenBao storage snapshots,
 - Transit key metadata and versions through OpenBao backup,
 - plugin configuration,
+- local key registry state and its adjacent checkpoint,
 - key lineage IDs,
 - OpenBao JWT auth configuration,
 - OpenBao policies,
@@ -144,10 +145,11 @@ Do not accept a recreated key as compatible with data encrypted under the previo
 
 1. Restore configuration from configuration management.
 2. Verify the identity-bearing fields match the previous values; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
-3. Restore the CA bundle and the JWT file.
-4. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
-5. Start the plugin.
-6. Confirm the Status `key_id` hash matches other control-plane nodes or recorded backup metadata.
+3. Restore the local key registry state and its checkpoint when available.
+4. Restore the CA bundle and the JWT file.
+5. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
+6. Start the plugin.
+7. Confirm the Status `key_id` hash matches other control-plane nodes or recorded backup metadata.
 
 Changing provider name, cluster ID, OpenBao instance ID, Transit mount ID, key lineage ID, mount path, or key name causes `key_id` and AAD mismatches.
 
@@ -172,13 +174,16 @@ Avoid relying only on a Kubernetes ServiceAccount token from the protected clust
 
 1. Install the plugin binary or preload the static pod image.
 2. Restore `/etc/openbao-kms/config.yaml`.
-3. Restore the CA bundle.
-4. Provision the JWT file.
-5. Create `/run/openbao-kms` with safe permissions.
-6. Ensure `kube-apiserver` can access the socket through the `openbao-kms-socket` group.
-7. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
-8. Start the plugin before the API server.
-9. Confirm the Status `key_id` hash matches existing nodes.
+3. Restore the local key registry state and checkpoint from the replaced node when available.
+4. Restore the CA bundle.
+5. Provision the JWT file.
+6. Create `/run/openbao-kms` with safe permissions.
+7. Ensure `kube-apiserver` can access the socket through the `openbao-kms-socket` group.
+8. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
+9. Start the plugin before the API server.
+10. Confirm the Status `key_id` hash matches existing nodes.
+
+If both local registry files are unavailable, startup can rebuild only from complete available Transit metadata. The metadata must include creation times for every version from `min_available_version` through `latest_version`; otherwise restore the registry files or a compatible backup pair before starting the API server.
 
 For systemd deployments, restore the package, unit, users, groups, and `tmpfiles.d` runtime directory entry. For static-pod deployments, preload the provider image digest, restore the manifest, and ensure the numeric `openbao-kms-socket` GID matches `supplementalGroups` and `server.socketGroup`.
 
