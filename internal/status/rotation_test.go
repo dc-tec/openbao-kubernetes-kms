@@ -182,6 +182,18 @@ func TestRotationRejectsMetadataThatCannotServeHistoricalVersion(t *testing.T) {
 	}
 }
 
+func TestRotationRejectsUnsupportedTransitKeyType(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, time.Minute)
+	profile := profileForLatest(1, clock.Now())
+	profile.Type = "chacha20-poly1305"
+
+	_, err := observer.RebuildState(profile, clock.Now())
+	if !errors.Is(err, status.ErrTransitKeyUnusable) {
+		t.Fatalf("expected unsupported Transit key type to fail closed, got %v", err)
+	}
+}
+
 func TestRebuildStateIncludesHistoricalVersionsFromMetadata(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, time.Minute)

@@ -24,8 +24,6 @@ import (
 )
 
 const (
-	transitKeyTypeAESGCM = "aes256-gcm96"
-
 	reportNameDoctor    = "doctor"
 	reportNameVerifyKey = "verify-key"
 
@@ -426,9 +424,6 @@ func hasAnyCapability(caps openbao.CapabilitiesResult, capabilityPath string, ca
 
 func keyProfileFindings(profile openbao.KeyProfile) []string {
 	findings := make([]string, 0)
-	if profile.Type != transitKeyTypeAESGCM {
-		findings = append(findings, "key type is not aes256-gcm96")
-	}
 	if profile.LatestVersion <= 0 {
 		findings = append(findings, "latest version is not positive")
 	}

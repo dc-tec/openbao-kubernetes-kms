@@ -45,7 +45,7 @@ func TestReadKeyProfileParsesMetadataAndFindings(t *testing.T) {
 		t.Fatalf("read key profile: %v", err)
 	}
 
-	if profile.Name != testKeyName || profile.Type != "aes256-gcm96" || profile.LatestVersion != 1 {
+	if profile.Name != testKeyName || profile.Type != TransitKeyTypeAES256GCM96 || profile.LatestVersion != 1 {
 		t.Fatalf("unexpected profile: %#v", profile)
 	}
 	if len(profile.VersionCreationTimes) != 1 || profile.VersionCreationTimes[0].Version != 1 {
@@ -64,6 +64,18 @@ func TestReadKeyProfileParsesMetadataAndFindings(t *testing.T) {
 		if !slices.Contains(findings, want) {
 			t.Fatalf("expected finding %q in %#v", want, findings)
 		}
+	}
+}
+
+func TestAssessKeyProfileFlagsUnsupportedKeyType(t *testing.T) {
+	findings := findingCodes(AssessKeyProfile(KeyProfile{
+		Type:               "chacha20-poly1305",
+		LatestVersion:      1,
+		SupportsEncryption: true,
+		SupportsDecryption: true,
+	}))
+	if !slices.Contains(findings, findingCodeUnsupportedType) {
+		t.Fatalf("expected unsupported key type finding in %#v", findings)
 	}
 }
 

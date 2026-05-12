@@ -26,6 +26,10 @@ const (
 	transitPathSegmentDecrypt = "decrypt"
 	capabilitiesSelfPath      = "sys/capabilities-self"
 
+	// TransitKeyTypeAES256GCM96 is the only Transit key type supported by this release line.
+	TransitKeyTypeAES256GCM96 = "aes256-gcm96"
+
+	findingCodeUnsupportedType          = "unsupported_type"
 	findingCodeExportable               = "exportable"
 	findingCodePlaintextBackup          = "plaintext_backup"
 	findingCodeDeletionAllowed          = "deletion_allowed"
@@ -35,6 +39,7 @@ const (
 	findingCodeMinDecryptionVersion     = "min_decryption_version"
 	findingCodeEncryptionUnsupported    = "encryption_unsupported"
 	findingCodeDecryptionUnsupported    = "decryption_unsupported"
+	findingMessageUnsupportedType       = "key type is not aes256-gcm96"
 	findingMessageExportable            = "key material export is enabled"
 	findingMessagePlaintextBackup       = "plaintext backup is enabled"
 	findingMessageDeletionAllowed       = "key deletion is allowed"
@@ -94,6 +99,12 @@ type KeyProfileFinding struct {
 // AssessKeyProfile returns policy findings for dangerous Transit key settings.
 func AssessKeyProfile(profile KeyProfile) []KeyProfileFinding {
 	findings := make([]KeyProfileFinding, 0)
+	if profile.Type != TransitKeyTypeAES256GCM96 {
+		findings = append(findings, KeyProfileFinding{
+			Code:    findingCodeUnsupportedType,
+			Message: findingMessageUnsupportedType,
+		})
+	}
 	if profile.Exportable {
 		findings = append(findings, KeyProfileFinding{Code: findingCodeExportable, Message: findingMessageExportable})
 	}

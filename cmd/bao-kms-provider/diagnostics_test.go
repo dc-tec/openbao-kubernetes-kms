@@ -139,7 +139,7 @@ func copyJWTFixture(t *testing.T) string {
 func commandTestProfile(mutate func(*openbao.KeyProfile)) openbao.KeyProfile {
 	profile := openbao.KeyProfile{
 		Name:                 "k8s-workload-a-etcd",
-		Type:                 transitKeyTypeAESGCM,
+		Type:                 openbao.TransitKeyTypeAES256GCM96,
 		LatestVersion:        1,
 		MinAvailableVersion:  0,
 		MinEncryptionVersion: 0,
