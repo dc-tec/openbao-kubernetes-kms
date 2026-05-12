@@ -69,6 +69,18 @@ func TestPolicyOpenBaoCommand(t *testing.T) {
 	}
 }
 
+func TestConfigCommandUsesConfigPathEnvironment(t *testing.T) {
+	t.Setenv(envConfigPath, "../../test/testdata/config/valid.yaml")
+
+	output, err := executeCommand(t, "policy", "openbao")
+	if err != nil {
+		t.Fatalf("expected command to use env config path: %v", err)
+	}
+	if !strings.Contains(output, `path "transit/keys/k8s-workload-a-etcd"`) {
+		t.Fatalf("policy output did not use env config path:\n%s", output)
+	}
+}
+
 func TestLookupGroupIDAcceptsNumericGID(t *testing.T) {
 	gid, err := lookupGroupID("1234")
 	if err != nil {

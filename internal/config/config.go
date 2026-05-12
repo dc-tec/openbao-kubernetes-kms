@@ -12,6 +12,13 @@ import (
 )
 
 const (
+	envLogLevel                      = "BAO_KMS_PROVIDER_LOG_LEVEL"
+	envLoggingLevel                  = "BAO_KMS_PROVIDER_LOGGING_LEVEL"
+	envServerHealthAddress           = "BAO_KMS_PROVIDER_SERVER_HEALTH_ADDRESS"
+	envServerHealthAddressCanonical  = "BAO_KMS_PROVIDER_SERVER_HEALTHADDRESS"
+	envServerMetricsAddress          = "BAO_KMS_PROVIDER_SERVER_METRICS_ADDRESS"
+	envServerMetricsAddressCanonical = "BAO_KMS_PROVIDER_SERVER_METRICSADDRESS"
+
 	defaultConfigVersion          = "v1alpha1"
 	defaultSocketPath             = "/run/openbao-kms/kms.sock"
 	defaultSocketMode             = "0660"
@@ -181,10 +188,31 @@ func NewRuntime() *Runtime {
 	v.SetConfigType("yaml")
 	v.SetEnvPrefix("BAO_KMS_PROVIDER")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-	v.AutomaticEnv()
+	bindAllowedEnv(v)
 	runtime := &Runtime{v: v}
 	applyDefaults(runtime)
 	return runtime
+}
+
+func bindAllowedEnv(v *viper.Viper) {
+	envBindings := []struct {
+		key  string
+		envs []string
+	}{
+		{key: "logging.level", envs: []string{envLogLevel, envLoggingLevel}},
+		{key: "server.metricsAddress", envs: []string{
+			envServerMetricsAddress,
+			envServerMetricsAddressCanonical,
+		}},
+		{key: "server.healthAddress", envs: []string{
+			envServerHealthAddress,
+			envServerHealthAddressCanonical,
+		}},
+	}
+	for _, binding := range envBindings {
+		args := append([]string{binding.key}, binding.envs...)
+		_ = v.BindEnv(args...)
+	}
 }
 
 // BindRootFlags binds supported root flags into the config runtime.

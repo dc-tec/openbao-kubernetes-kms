@@ -112,6 +112,10 @@ The following fields must be set explicitly:
 - `transit.keyIdScope.transitMountId`
 - `transit.keyIdScope.keyLineageId`
 
+`transit.keyName` is treated as one OpenBao path segment. Configuration
+validation rejects `/` and `%` in the key name so the provider, diagnostics,
+and generated policy paths all address the same Transit key.
+
 ## Defaults
 
 | Field | Default |
@@ -262,10 +266,17 @@ The primary configuration source is the config file. Environment variables may b
 
 Allowed environment overrides are limited to:
 
-- config path,
-- log level,
-- listen addresses for metrics and health,
+- config path: `BAO_KMS_PROVIDER_CONFIG` or `BAO_KMS_PROVIDER_CONFIG_PATH`,
+- log level: `BAO_KMS_PROVIDER_LOG_LEVEL` or `BAO_KMS_PROVIDER_LOGGING_LEVEL`,
+- metrics listen address: `BAO_KMS_PROVIDER_SERVER_METRICS_ADDRESS` or `BAO_KMS_PROVIDER_SERVER_METRICSADDRESS`,
+- health listen address: `BAO_KMS_PROVIDER_SERVER_HEALTH_ADDRESS` or `BAO_KMS_PROVIDER_SERVER_HEALTHADDRESS`,
 - feature flags used only in tests.
+
+Identity-bearing fields such as `auth.expectedIssuer`,
+`auth.expectedAudience`, `auth.expectedSubject`, `transit.keyName`,
+`transit.mountPath`, and `transit.keyIdScope.*` are not environment
+overrides. Keep them in the reviewed config file so deployment environments
+cannot silently drift the KMS identity contract.
 
 ## Schema Export
 

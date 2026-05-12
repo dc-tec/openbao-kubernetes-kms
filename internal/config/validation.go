@@ -191,7 +191,7 @@ func validateValues(cfg Config) []ValidationProblem {
 		validateClaimExpectation(&problems, "auth.expectedAudience", audience)
 	}
 	validateMountPath(&problems, "transit.mountPath", cfg.Transit.MountPath)
-	validateIdentifier(&problems, "transit.keyName", cfg.Transit.KeyName)
+	validateTransitKeyName(&problems, cfg.Transit.KeyName)
 	validateIdentifier(&problems, "transit.keyIdScope.providerName", cfg.Transit.KeyIDScope.ProviderName)
 	validateIdentifier(&problems, "transit.keyIdScope.clusterId", cfg.Transit.KeyIDScope.ClusterID)
 	validateIdentifier(&problems, "transit.keyIdScope.transitMountId", cfg.Transit.KeyIDScope.TransitMountID)
@@ -387,6 +387,16 @@ func validateIdentifier(problems *[]ValidationProblem, field string, value strin
 	}
 	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t") {
 		appendProblem(problems, field, "must not contain control characters or surrounding whitespace")
+	}
+}
+
+func validateTransitKeyName(problems *[]ValidationProblem, value string) {
+	validateIdentifier(problems, "transit.keyName", value)
+	if value == "" {
+		return
+	}
+	if strings.ContainsAny(value, "/%") {
+		appendProblem(problems, "transit.keyName", "must be a single OpenBao path segment without / or %")
 	}
 }
 

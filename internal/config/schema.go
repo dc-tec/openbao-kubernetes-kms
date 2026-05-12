@@ -70,7 +70,7 @@ const configSchemaJSON = `{
       "required": ["mountPath", "keyName", "keyIdScope"],
       "properties": {
         "mountPath": {"type": "string", "minLength": 1},
-        "keyName": {"type": "string", "minLength": 1},
+        "keyName": {"type": "string", "minLength": 1, "pattern": "^[^/%]+$"},
         "keyIdScope": {
           "type": "object",
           "additionalProperties": false,

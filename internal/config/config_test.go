@@ -113,6 +113,34 @@ state:
 	assertLoadedConfigFile(t, cfg)
 }
 
+func TestLoadEnvironmentOverridesAreAllowlisted(t *testing.T) {
+	t.Setenv(envLogLevel, testDebugLogLevel)
+	t.Setenv(envServerMetricsAddress, "127.0.0.1:19081")
+	t.Setenv(envServerHealthAddress, "127.0.0.1:19082")
+	t.Setenv("BAO_KMS_PROVIDER_AUTH_EXPECTEDISSUER", "https://evil.example.internal")
+	t.Setenv("BAO_KMS_PROVIDER_TRANSIT_KEYIDSCOPE_CLUSTERID", "evil-cluster")
+
+	cfg, err := Load(NewRuntime(), LoadOptions{Path: "../../test/testdata/config/valid.yaml"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Logging.Level != testDebugLogLevel {
+		t.Fatalf("expected log level env override, got %q", cfg.Logging.Level)
+	}
+	if cfg.Server.MetricsAddress != "127.0.0.1:19081" {
+		t.Fatalf("expected metrics env override, got %q", cfg.Server.MetricsAddress)
+	}
+	if cfg.Server.HealthAddress != "127.0.0.1:19082" {
+		t.Fatalf("expected health env override, got %q", cfg.Server.HealthAddress)
+	}
+	if cfg.Auth.ExpectedIssuer == "https://evil.example.internal" {
+		t.Fatal("identity-bearing auth issuer was overridden from the environment")
+	}
+	if cfg.Transit.KeyIDScope.ClusterID != "workload-a" {
+		t.Fatalf("identity-bearing cluster ID was overridden: %q", cfg.Transit.KeyIDScope.ClusterID)
+	}
+}
+
 func assertLoadedConfigFile(t *testing.T, cfg Config) {
 	t.Helper()
 
@@ -312,6 +340,20 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			field: "auth.mountPath",
 			mutate: func(cfg *Config) {
 				cfg.Auth.MountPath = " auth/k8s-workload-a-jwt"
+			},
+		},
+		{
+			name:  "transit key name with slash",
+			field: "transit.keyName",
+			mutate: func(cfg *Config) {
+				cfg.Transit.KeyName = "team-a/k8s"
+			},
+		},
+		{
+			name:  "transit key name with percent",
+			field: "transit.keyName",
+			mutate: func(cfg *Config) {
+				cfg.Transit.KeyName = "team-a%2Fk8s"
 			},
 		},
 		{
