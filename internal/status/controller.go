@@ -166,6 +166,13 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	if hasState {
 		result, err = c.observer.Observe(state, profile, now)
 	} else {
+		if !canAutoBootstrapState(profile) {
+			c.store.PublishUnhealthy(now)
+			return fmt.Errorf(
+				"%w: local registry state is absent for non-initial Transit metadata",
+				ErrStateUnavailable,
+			)
+		}
 		rebuilt, rebuildErr := c.observer.RebuildState(profile, now)
 		err = rebuildErr
 		result = ObservationResult{State: rebuilt, Changed: true}
@@ -187,6 +194,12 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	}
 	c.recordProbeSuccess()
 	return nil
+}
+
+func canAutoBootstrapState(profile openbao.KeyProfile) bool {
+	return profile.LatestVersion == initialTransitVersion &&
+		profile.MinAvailableVersion <= initialTransitVersion &&
+		profile.MinDecryptionVersion <= initialTransitVersion
 }
 
 // DeepProbeOnce performs a non-secret Transit round trip for the active cached version.

@@ -12,6 +12,7 @@ import (
 const (
 	scopeValidationVersion       = 1
 	scopeValidationCreatedAtUnix = 1
+	initialTransitVersion        = 1
 )
 
 // SnapshotScope contains the identity-bearing inputs used for key_id derivation.
@@ -104,7 +105,14 @@ func (o *Observer) RebuildState(profile openbao.KeyProfile, now time.Time) (keyr
 		records = append(records, recordFromSnapshot(snapshot, now, time.Time{}, 0, promotedAt))
 	}
 
-	return keyregistry.NewStateFileFromRecords(activeKeyID, orderedRecords(activeKeyID, records), 1, "")
+	state, err := keyregistry.NewStateFileFromRecords(activeKeyID, orderedRecords(activeKeyID, records), 1, "")
+	if err != nil {
+		return keyregistry.StateFile{}, err
+	}
+	if err := validateProfileForState(profile, state); err != nil {
+		return keyregistry.StateFile{}, err
+	}
+	return state, nil
 }
 
 // Observe advances rotation state for one successful metadata observation.
@@ -136,7 +144,7 @@ func (o *Observer) Observe(
 		}
 		return ObservationResult{State: state}, nil
 	}
-	if err := validateProfileForActive(profile, active); err != nil {
+	if err := validateProfileForState(profile, state); err != nil {
 		return ObservationResult{}, err
 	}
 
@@ -267,22 +275,56 @@ func validateProfile(profile openbao.KeyProfile) error {
 	return nil
 }
 
-func validateProfileForActive(profile openbao.KeyProfile, active keyregistry.KeySnapshot) error {
-	if profile.MinAvailableVersion > active.TransitVersion {
-		return fmt.Errorf("%w: active Transit version is unavailable", ErrTransitKeyUnusable)
+func validateProfileForState(profile openbao.KeyProfile, state keyregistry.StateFile) error {
+	for _, record := range state.Snapshots {
+		snapshot, err := record.Snapshot()
+		if err != nil {
+			return err
+		}
+		switch snapshot.State {
+		case keyregistry.StateActive:
+			if err := validateActiveSnapshot(profile, snapshot); err != nil {
+				return err
+			}
+		case keyregistry.StateRetired, keyregistry.StateDisasterRecovery:
+			if err := validateHistoricalSnapshot(profile, snapshot); err != nil {
+				return err
+			}
+		case keyregistry.StatePending, keyregistry.StateRejected:
+		default:
+			return fmt.Errorf("%w: unsupported snapshot state", ErrTransitMetadataInvalid)
+		}
 	}
-	if profile.MinEncryptionVersion > active.TransitVersion {
+	return nil
+}
+
+func validateActiveSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot) error {
+	if profile.MinEncryptionVersion > snapshot.TransitVersion {
 		return fmt.Errorf("%w: active Transit version cannot encrypt", ErrTransitKeyUnusable)
 	}
-	if profile.MinDecryptionVersion > active.TransitVersion {
-		return fmt.Errorf("%w: active Transit version cannot decrypt", ErrTransitKeyUnusable)
+	if err := validateDecryptableSnapshot(profile, snapshot, "active"); err != nil {
+		return err
 	}
-	createdAt, err := versionCreatedAt(profile, active.TransitVersion)
+	return nil
+}
+
+func validateHistoricalSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot) error {
+	return validateDecryptableSnapshot(profile, snapshot, "historical")
+}
+
+func validateDecryptableSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot, label string) error {
+	if profile.MinAvailableVersion > snapshot.TransitVersion {
+		return fmt.Errorf("%w: %s Transit version is unavailable", ErrTransitKeyUnusable, label)
+	}
+	if profile.MinDecryptionVersion > snapshot.TransitVersion {
+		return fmt.Errorf("%w: %s Transit version cannot decrypt", ErrTransitKeyUnusable, label)
+	}
+	createdAt, err := versionCreatedAt(profile, snapshot.TransitVersion)
 	if err != nil {
 		return err
 	}
-	if !createdAt.Equal(active.TransitVersionCreatedAt.UTC()) {
-		return fmt.Errorf("%w: active Transit version creation time changed", ErrTransitMetadataInvalid)
+	if !createdAt.Equal(snapshot.TransitVersionCreatedAt.UTC()) {
+		return fmt.Errorf("%w: %s Transit version creation time changed", ErrTransitMetadataInvalid, label)
 	}
 	return nil
 }

@@ -95,6 +95,56 @@ func TestControllerMetadataFailureMarksUnhealthyWithoutPromoting(t *testing.T) {
 	}
 }
 
+func TestControllerFailsClosedWhenStateMissingAfterTransitRotation(t *testing.T) {
+	clock := newFakeClock()
+	store := newTestStore(t, clock)
+	observer := newTestObserver(t, clock, 3, 2*time.Minute)
+	auth := &fakeAuth{}
+	transit := &fakeTransit{profile: profileForLatest(4, clock.Now())}
+	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+
+	err := controller.ProbeOnce(context.Background())
+	if !errors.Is(err, status.ErrStateUnavailable) {
+		t.Fatalf("expected missing-state recovery failure, got %v", err)
+	}
+	if stateStore.saveCalls != 0 {
+		t.Fatalf("missing rotated state should not be rebuilt, got %d saves", stateStore.saveCalls)
+	}
+	current, currentErr := store.Current(context.Background())
+	if currentErr != nil {
+		t.Fatalf("current status: %v", currentErr)
+	}
+	if current.Healthz != kmsv2.HealthUnhealthy || current.KeyID != "" {
+		t.Fatalf("expected unhealthy status without key ID, got %+v", current)
+	}
+}
+
+func TestControllerAuthRefreshFailureSkipsTransitMetadata(t *testing.T) {
+	clock := newFakeClock()
+	store := newTestStore(t, clock)
+	observer := newTestObserver(t, clock, 3, 2*time.Minute)
+	auth := &fakeAuth{err: errors.New("fresh auth failed")}
+	transit := &fakeTransit{profile: profileForLatest(1, clock.Now())}
+	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+
+	err := controller.ProbeOnce(context.Background())
+	if !errors.Is(err, status.ErrProbeFailed) {
+		t.Fatalf("expected auth probe failure, got %v", err)
+	}
+	if transit.readCalls != 0 {
+		t.Fatalf("auth failure should skip Transit metadata, got %d reads", transit.readCalls)
+	}
+	current, currentErr := store.Current(context.Background())
+	if currentErr != nil {
+		t.Fatalf("current status: %v", currentErr)
+	}
+	if current.Healthz != kmsv2.HealthUnhealthy {
+		t.Fatalf("expected unhealthy status after auth failure, got %s", current.Healthz)
+	}
+}
+
 func TestControllerCircuitBreakerSkipsProbesWhileOpen(t *testing.T) {
 	clock := newFakeClock()
 	store := newTestStore(t, clock)

@@ -183,7 +183,13 @@ Avoid relying only on a Kubernetes ServiceAccount token from the protected clust
 9. Start the plugin before the API server.
 10. Confirm the Status `key_id` hash matches existing nodes.
 
-If both local registry files are unavailable, startup can rebuild only from complete available Transit metadata. The metadata must include creation times for every version from `min_available_version` through `latest_version`; otherwise restore the registry files or a compatible backup pair before starting the API server.
+If both local registry files are unavailable, normal startup auto-bootstraps
+only when OpenBao still reports initial Transit metadata (`latest_version` 1)
+that can decrypt version 1. A replacement node after any Transit rotation must
+restore the registry state and checkpoint, or use an operator-controlled
+recovery flow with complete version metadata and cross-node `key_id` evidence.
+Otherwise startup fails closed before the API server is allowed to rely on a
+new active `key_id`.
 
 For systemd deployments, restore the package, unit, users, groups, and `tmpfiles.d` runtime directory entry. For static-pod deployments, preload the provider image digest, restore the manifest, and ensure the numeric `openbao-kms-socket` GID matches `supplementalGroups` and `server.socketGroup`.
 

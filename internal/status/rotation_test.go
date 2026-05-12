@@ -160,6 +160,28 @@ func TestRotationRejectsMetadataThatCannotServeActiveVersion(t *testing.T) {
 	}
 }
 
+func TestRotationRejectsMetadataThatCannotServeHistoricalVersion(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 1, 0)
+	profileV1 := profileForLatest(1, clock.Now())
+	state := rebuildState(t, observer, profileV1, clock.Now())
+	profileV2 := profileForLatest(2, clock.Now())
+	pending, err := observer.Observe(state, profileV2, clock.Now())
+	if err != nil {
+		t.Fatalf("observe pending v2: %v", err)
+	}
+	promoted, err := observer.Observe(pending.State, profileV2, clock.Now())
+	if err != nil {
+		t.Fatalf("promote v2: %v", err)
+	}
+	profileV2.MinDecryptionVersion = 2
+
+	_, err = observer.Observe(promoted.State, profileV2, clock.Now())
+	if !errors.Is(err, status.ErrTransitKeyUnusable) {
+		t.Fatalf("expected historical version unusable error, got %v", err)
+	}
+}
+
 func TestRebuildStateIncludesHistoricalVersionsFromMetadata(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, time.Minute)
@@ -183,6 +205,18 @@ func TestRebuildStateRejectsIncompleteHistoricalMetadata(t *testing.T) {
 	_, err := observer.RebuildState(profile, clock.Now())
 	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
 		t.Fatalf("expected incomplete metadata to fail rebuild, got %v", err)
+	}
+}
+
+func TestRebuildStateRejectsHistoricallyUndecryptableMetadata(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, time.Minute)
+	profile := profileForLatest(3, clock.Now())
+	profile.MinDecryptionVersion = 3
+
+	_, err := observer.RebuildState(profile, clock.Now())
+	if !errors.Is(err, status.ErrTransitKeyUnusable) {
+		t.Fatalf("expected historical decryptability error, got %v", err)
 	}
 }
 
