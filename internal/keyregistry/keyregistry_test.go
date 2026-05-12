@@ -251,6 +251,59 @@ func TestStateFileRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStateFileRegistryExcludesPendingAndRejectedSnapshots(t *testing.T) {
+	active, err := loadGoldenFixture(t).Snapshot.keySnapshot().Normalize()
+	if err != nil {
+		t.Fatalf("normalize active: %v", err)
+	}
+	pending := active
+	pending.TransitVersion++
+	pending.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(time.Hour)
+	pending.KubernetesKeyID = ""
+	pending.State = keyregistry.StatePending
+	pending, err = pending.Normalize()
+	if err != nil {
+		t.Fatalf("normalize pending: %v", err)
+	}
+	rejected := active
+	rejected.TransitVersion += 2
+	rejected.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(2 * time.Hour)
+	rejected.KubernetesKeyID = ""
+	rejected.State = keyregistry.StateRejected
+	rejected, err = rejected.Normalize()
+	if err != nil {
+		t.Fatalf("normalize rejected: %v", err)
+	}
+
+	state, err := keyregistry.NewStateFileFromRecords(
+		active.KubernetesKeyID,
+		[]keyregistry.SnapshotStateRecord{
+			keyregistry.SnapshotStateRecordFromSnapshot(active),
+			keyregistry.SnapshotStateRecordFromSnapshot(pending),
+			keyregistry.SnapshotStateRecordFromSnapshot(rejected),
+		},
+		1,
+		"",
+	)
+	if err != nil {
+		t.Fatalf("new state file: %v", err)
+	}
+	registry, err := state.Registry()
+	if err != nil {
+		t.Fatalf("registry from state: %v", err)
+	}
+
+	if _, err := registry.Lookup(active.KubernetesKeyID); err != nil {
+		t.Fatalf("lookup active key ID: %v", err)
+	}
+	for _, keyID := range []string{pending.KubernetesKeyID, rejected.KubernetesKeyID} {
+		_, err := registry.Lookup(keyID)
+		if !errors.Is(err, keyregistry.ErrUnknownKeyID) {
+			t.Fatalf("expected non-decryptable key ID to be excluded, got %v", err)
+		}
+	}
+}
+
 func TestMissingStateFileCanBeRebuiltFromMetadata(t *testing.T) {
 	active := loadGoldenFixture(t).Snapshot.keySnapshot()
 	historical := historicalSnapshot(active)
@@ -397,6 +450,44 @@ func TestStateReplayAndRollbackDetection(t *testing.T) {
 	lower.State = keyregistry.StateActive
 	if _, err := keyregistry.PromoteState(previous, lower, nil); !errors.Is(err, keyregistry.ErrStateRollback) {
 		t.Fatalf("expected active version rollback error, got %v", err)
+	}
+}
+
+func TestStateCheckpointRejectsRollbackAndSameGenerationHashMismatch(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	previous, err := keyregistry.NewStateFile(active, nil, 1, "")
+	if err != nil {
+		t.Fatalf("new previous state: %v", err)
+	}
+	nextActive := active
+	nextActive.TransitVersion++
+	nextActive.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(time.Hour)
+	nextActive.KubernetesKeyID = ""
+	nextActive.State = keyregistry.StateActive
+	next, err := keyregistry.PromoteState(previous, nextActive, []keyregistry.KeySnapshot{historicalSnapshot(nextActive)})
+	if err != nil {
+		t.Fatalf("promote state: %v", err)
+	}
+	checkpoint, err := keyregistry.NewStateCheckpoint(next)
+	if err != nil {
+		t.Fatalf("new checkpoint: %v", err)
+	}
+
+	if err := checkpoint.ValidateState(previous); !errors.Is(err, keyregistry.ErrStateRollback) {
+		t.Fatalf("expected checkpoint to reject older generation, got %v", err)
+	}
+
+	alternateActive := active
+	alternateActive.TransitVersion += 2
+	alternateActive.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(2 * time.Hour)
+	alternateActive.KubernetesKeyID = ""
+	alternateActive.State = keyregistry.StateActive
+	alternate, err := keyregistry.NewStateFile(alternateActive, nil, next.Generation, next.PreviousHash)
+	if err != nil {
+		t.Fatalf("new alternate state: %v", err)
+	}
+	if err := checkpoint.ValidateState(alternate); !errors.Is(err, keyregistry.ErrStateRollback) {
+		t.Fatalf("expected checkpoint to reject same-generation hash mismatch, got %v", err)
 	}
 }
 

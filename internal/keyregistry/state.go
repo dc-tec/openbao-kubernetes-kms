@@ -9,13 +9,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 const (
-	stateFileVersion = "keyregistry.openbao-kms/v1alpha1"
-	stateHashPrefix  = "krs1."
-	stateFileMode    = os.FileMode(0o640)
+	stateFileVersion       = "keyregistry.openbao-kms/v1alpha1"
+	stateCheckpointVersion = "keyregistry.openbao-kms/checkpoint/v1alpha1"
+	stateHashPrefix        = "krs1."
+	stateFileMode          = os.FileMode(0o640)
 
 	stateFileDisallowedMode = os.FileMode(0o137)
 )
@@ -39,6 +41,13 @@ type StateFile struct {
 	CurrentHash   string                `json:"currentHash"`
 	ActiveKeyID   string                `json:"activeKeyId"`
 	Snapshots     []SnapshotStateRecord `json:"snapshots"`
+}
+
+// StateCheckpoint is the small replay anchor saved next to the registry state file.
+type StateCheckpoint struct {
+	SchemaVersion string `json:"schemaVersion"`
+	Generation    uint64 `json:"generation"`
+	CurrentHash   string `json:"currentHash"`
 }
 
 // SnapshotStateRecord is the JSON representation of one observed or promoted snapshot.
@@ -276,6 +285,14 @@ func (s StateFile) Validate() error {
 	if len(s.Snapshots) == 0 {
 		return fmt.Errorf("%w: snapshots are required", ErrStateCorrupt)
 	}
+	if s.PreviousHash != "" {
+		if err := validateStateHash(s.PreviousHash); err != nil {
+			return err
+		}
+	}
+	if err := validateStateHash(s.CurrentHash); err != nil {
+		return err
+	}
 	hash, err := s.computeHash()
 	if err != nil {
 		return err
@@ -289,13 +306,23 @@ func (s StateFile) Validate() error {
 	return nil
 }
 
-// Registry returns an in-memory registry from the persisted state.
+// Registry returns a decryptable in-memory registry from the persisted state.
 func (s StateFile) Registry() (Registry, error) {
 	active, historical, err := s.snapshots()
 	if err != nil {
 		return Registry{}, err
 	}
-	return NewRegistry(active, historical)
+	decryptableHistorical := make([]KeySnapshot, 0, len(historical))
+	for _, snapshot := range historical {
+		switch snapshot.State {
+		case StateRetired, StateDisasterRecovery:
+			decryptableHistorical = append(decryptableHistorical, snapshot)
+		case StatePending, StateRejected:
+		default:
+			return Registry{}, fmt.Errorf("%w: snapshot state %q is invalid", ErrStateCorrupt, snapshot.State)
+		}
+	}
+	return NewRegistry(active, decryptableHistorical)
 }
 
 // ActiveSnapshot returns the promoted active snapshot from the state.
@@ -330,7 +357,7 @@ func ValidateStateProgress(previous StateFile, next StateFile) error {
 	if err != nil {
 		return err
 	}
-	if nextActive.State != StateDisasterRecovery && nextActive.TransitVersion < previousActive.TransitVersion {
+	if nextActive.TransitVersion < previousActive.TransitVersion {
 		return fmt.Errorf("%w: active Transit version decreased", ErrStateRollback)
 	}
 	return nil
@@ -377,6 +404,113 @@ func SaveStateFile(path string, state StateFile) error {
 		return err
 	}
 
+	if err := saveEncodedFile(path, func(encoder *json.Encoder) error {
+		return encoder.Encode(state)
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// StateCheckpointPath returns the replay-checkpoint path associated with a state path.
+func StateCheckpointPath(statePath string) string {
+	return statePath + ".checkpoint"
+}
+
+// NewStateCheckpoint builds a validated replay checkpoint for a state file.
+func NewStateCheckpoint(state StateFile) (StateCheckpoint, error) {
+	if err := state.Validate(); err != nil {
+		return StateCheckpoint{}, err
+	}
+	checkpoint := StateCheckpoint{
+		SchemaVersion: stateCheckpointVersion,
+		Generation:    state.Generation,
+		CurrentHash:   state.CurrentHash,
+	}
+	if err := checkpoint.Validate(); err != nil {
+		return StateCheckpoint{}, err
+	}
+	return checkpoint, nil
+}
+
+// Validate verifies checkpoint schema and hash shape.
+func (c StateCheckpoint) Validate() error {
+	if c.SchemaVersion != stateCheckpointVersion {
+		return fmt.Errorf("%w: unsupported state checkpoint schema version", ErrStateCorrupt)
+	}
+	if c.Generation == 0 {
+		return fmt.Errorf("%w: checkpoint generation must be positive", ErrStateCorrupt)
+	}
+	if err := validateStateHash(c.CurrentHash); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ValidateState rejects state older than the checkpoint or with a mismatched same-generation hash.
+func (c StateCheckpoint) ValidateState(state StateFile) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	if err := state.Validate(); err != nil {
+		return err
+	}
+	if state.Generation < c.Generation {
+		return fmt.Errorf("%w: generation below checkpoint", ErrStateRollback)
+	}
+	if state.Generation == c.Generation && state.CurrentHash != c.CurrentHash {
+		return fmt.Errorf("%w: current hash differs from checkpoint", ErrStateRollback)
+	}
+	return nil
+}
+
+// LoadStateCheckpoint loads and validates the replay checkpoint from disk.
+func LoadStateCheckpoint(path string) (StateCheckpoint, error) {
+	if err := validateStateFilePath(path); err != nil {
+		return StateCheckpoint{}, err
+	}
+
+	// #nosec G304 -- checkpoint path is derived from operator-controlled local state configuration.
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return StateCheckpoint{}, ErrStateNotFound
+		}
+		return StateCheckpoint{}, fmt.Errorf("open registry state checkpoint: %w", err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+	var checkpoint StateCheckpoint
+	if err := decoder.Decode(&checkpoint); err != nil {
+		return StateCheckpoint{}, fmt.Errorf("%w: checkpoint decode failed: %w", ErrStateCorrupt, err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return StateCheckpoint{}, fmt.Errorf("%w: checkpoint trailing content", ErrStateCorrupt)
+	}
+	if err := checkpoint.Validate(); err != nil {
+		return StateCheckpoint{}, err
+	}
+	return checkpoint, nil
+}
+
+// SaveStateCheckpoint writes a replay checkpoint durably.
+func SaveStateCheckpoint(path string, checkpoint StateCheckpoint) error {
+	if err := checkpoint.Validate(); err != nil {
+		return err
+	}
+	if err := validateStateFileWritePath(path); err != nil {
+		return err
+	}
+	return saveEncodedFile(path, func(encoder *json.Encoder) error {
+		return encoder.Encode(checkpoint)
+	})
+}
+
+func saveEncodedFile(path string, encode func(*json.Encoder) error) error {
 	dir := filepath.Dir(path)
 	name := filepath.Base(path)
 	tempPath := filepath.Join(dir, "."+name+".tmp")
@@ -389,23 +523,33 @@ func SaveStateFile(path string, state StateFile) error {
 	}
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	encodeErr := encoder.Encode(state)
-	closeErr := file.Close()
+	encodeErr := encode(encoder)
 	if encodeErr != nil {
+		_ = file.Close()
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("encode registry state: %w", encodeErr)
 	}
+	if err := file.Chmod(stateFileMode); err != nil {
+		_ = file.Close()
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("chmod registry state temp file: %w", err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		_ = os.Remove(tempPath)
+		return fmt.Errorf("sync registry state temp file: %w", err)
+	}
+	closeErr := file.Close()
 	if closeErr != nil {
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("close registry state temp file: %w", closeErr)
 	}
-	if err := os.Chmod(tempPath, stateFileMode); err != nil {
-		_ = os.Remove(tempPath)
-		return fmt.Errorf("chmod registry state temp file: %w", err)
-	}
 	if err := os.Rename(tempPath, path); err != nil {
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("rename registry state file: %w", err)
+	}
+	if err := syncParentDir(path); err != nil {
+		return err
 	}
 	return nil
 }
@@ -438,11 +582,16 @@ func (s StateFile) snapshots() (KeySnapshot, []KeySnapshot, error) {
 	historical := make([]KeySnapshot, 0, len(s.Snapshots)-1)
 	var active KeySnapshot
 	activeSeen := false
+	seen := make(map[string]struct{}, len(s.Snapshots))
 	for _, record := range s.Snapshots {
 		snapshot, err := record.Snapshot()
 		if err != nil {
 			return KeySnapshot{}, nil, fmt.Errorf("%w: invalid snapshot: %w", ErrStateCorrupt, err)
 		}
+		if _, ok := seen[snapshot.KubernetesKeyID]; ok {
+			return KeySnapshot{}, nil, fmt.Errorf("%w: duplicate key_id", ErrStateCorrupt)
+		}
+		seen[snapshot.KubernetesKeyID] = struct{}{}
 		if snapshot.KubernetesKeyID == s.ActiveKeyID {
 			if snapshot.State != StateActive {
 				return KeySnapshot{}, nil, fmt.Errorf("%w: active key_id must have active state", ErrStateCorrupt)
@@ -487,6 +636,17 @@ func validateLoadedState(state StateFile, opts StateLoadOptions) error {
 	}
 	if opts.ExpectedHash != "" && state.CurrentHash != opts.ExpectedHash {
 		return fmt.Errorf("%w: current hash differs from expected hash", ErrStateRollback)
+	}
+	return nil
+}
+
+func validateStateHash(hash string) error {
+	if !strings.HasPrefix(hash, stateHashPrefix) {
+		return fmt.Errorf("%w: state hash prefix is invalid", ErrStateCorrupt)
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(hash, stateHashPrefix))
+	if err != nil || len(decoded) != sha256.Size {
+		return fmt.Errorf("%w: state hash encoding is invalid", ErrStateCorrupt)
 	}
 	return nil
 }
@@ -545,6 +705,22 @@ func validateStateParent(path string) error {
 	}
 	if info.Mode().Perm()&0o022 != 0 {
 		return fmt.Errorf("%w: parent directory must not be group/world writable", ErrStatePermission)
+	}
+	return nil
+}
+
+func syncParentDir(path string) error {
+	parent := filepath.Dir(path)
+	// #nosec G304 -- parent path is derived from operator-controlled local state configuration.
+	dir, err := os.Open(parent)
+	if err != nil {
+		return fmt.Errorf("open registry state parent directory: %w", err)
+	}
+	defer func() {
+		_ = dir.Close()
+	}()
+	if err := dir.Sync(); err != nil {
+		return fmt.Errorf("sync registry state parent directory: %w", err)
 	}
 	return nil
 }

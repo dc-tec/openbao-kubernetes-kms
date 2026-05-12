@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
 )
 
@@ -156,6 +157,73 @@ func TestRotationRejectsMetadataThatCannotServeActiveVersion(t *testing.T) {
 	_, err := observer.Observe(state, profileV2, clock.Now())
 	if !errors.Is(err, status.ErrTransitKeyUnusable) {
 		t.Fatalf("expected active version unusable error, got %v", err)
+	}
+}
+
+func TestRebuildStateIncludesHistoricalVersionsFromMetadata(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, time.Minute)
+
+	state := rebuildState(t, observer, profileForLatest(3, clock.Now()), clock.Now())
+
+	assertActiveVersion(t, state, 3)
+	assertRetiredVersion(t, state, 2)
+	assertRetiredVersion(t, state, 1)
+}
+
+func TestRebuildStateRejectsIncompleteHistoricalMetadata(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, time.Minute)
+	profile := profileForLatest(3, clock.Now())
+	profile.VersionCreationTimes = []openbao.KeyVersion{
+		profile.VersionCreationTimes[0],
+		profile.VersionCreationTimes[2],
+	}
+
+	_, err := observer.RebuildState(profile, clock.Now())
+	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
+		t.Fatalf("expected incomplete metadata to fail rebuild, got %v", err)
+	}
+}
+
+func TestRotationRejectsPersistedStateScopeDrift(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, time.Minute)
+	profileV1 := profileForLatest(1, clock.Now())
+	state := rebuildState(t, observer, profileV1, clock.Now())
+	drifted, err := status.NewObserver(status.SnapshotScope{
+		ProviderName:        "openbao-kms-workload-a",
+		ClusterID:           "workload-b",
+		OpenBaoInstanceID:   "bao-prod-a",
+		TransitMountID:      "transit-prod-primary",
+		TransitKeyLineageID: "01HXEXAMPLEKEYLINEAGEID",
+		AADMode:             keyregistry.AADModeRequired,
+	}, status.RotationPolicy{
+		ActivationDelay:               time.Minute,
+		RequireStableObservationCount: 3,
+		RejectVersionRollback:         true,
+	})
+	if err != nil {
+		t.Fatalf("new drifted observer: %v", err)
+	}
+
+	_, err = drifted.Observe(state, profileV1, clock.Now())
+	if !errors.Is(err, status.ErrConfigInvalid) {
+		t.Fatalf("expected scope drift to fail closed, got %v", err)
+	}
+}
+
+func TestRotationRejectsActiveVersionCreationTimeDrift(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, time.Minute)
+	profileV1 := profileForLatest(1, clock.Now())
+	state := rebuildState(t, observer, profileV1, clock.Now())
+	driftedProfile := profileForLatest(1, clock.Now())
+	driftedProfile.VersionCreationTimes[0].CreatedAt = driftedProfile.VersionCreationTimes[0].CreatedAt.Add(time.Hour)
+
+	_, err := observer.Observe(state, driftedProfile, clock.Now())
+	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
+		t.Fatalf("expected Transit creation time drift to fail closed, got %v", err)
 	}
 }
 
