@@ -15,8 +15,9 @@ work before production claims.
 ## Current Conclusion
 
 The captured runs do not show a release-blocking need for decrypt
-micro-batching in the current release line. Direct provider decrypt paths are covered by CI soak
-tests, and the local kubeadm VM cold-start runs show that increasing the
+micro-batching in the current release line. Direct provider decrypt paths are
+covered by E2E soak tests in the repository, and the local kubeadm VM
+cold-start runs show that increasing the
 Kubernetes Secret corpus from 10,000 to 50,000 objects increased API server
 list latency while provider and OpenBao decrypt counter deltas stayed small.
 
@@ -35,6 +36,8 @@ creation and large Secret list handling. It was not provider decrypt fan-out.
 | OpenBao deployment | Single external OpenBao instance for the captured runs |
 | KMS mode | Kubernetes KMS v2 over node-local Unix sockets |
 
+These runs do not validate OpenBao HA failover behavior under cold-start load.
+
 ## Summary
 
 | Run | Date | Secret corpus | API endpoints | Object reads | Errors | p95 | Max | Provider decrypt delta | Transit decrypt delta | Result |
@@ -48,6 +51,14 @@ Kubernetes transport errors during a 30 minute list loop. The cluster,
 providers, and OpenBao remained healthy after the run. The cold-start runs are
 the cleaner evidence for API server restart behavior because they capture
 provider counters before and after the restart window.
+
+`Object reads` means Kubernetes Secret objects returned by API server list
+responses. It is not the number of KMS Decrypt RPCs observed by the provider.
+For cold-start runs, each API endpoint performs one full-corpus list operation,
+so the percentile sample set is intentionally small and p95 may equal max.
+Provider decrypt deltas were calculated from provider Prometheus metrics before
+and after the restart window. Transit decrypt deltas were calculated from
+OpenBao Transit metrics over the same window.
 
 ## Kubeadm VM Cold Start
 
@@ -66,7 +77,8 @@ RPCs and zero decrypt errors.
 
 This run read 150,000 Secret objects across three API server endpoints after
 parallel kube-apiserver restart. The provider recorded the same successful
-decrypt RPC delta as the 10,000 Secret run and zero decrypt errors.
+decrypt RPC delta as the 10,000 Secret run and zero decrypt errors. OpenBao
+Transit decrypt delta remained small at 24 requests.
 
 The 50,000 Secret run exposed setup cost in the VM validation environment:
 serial seeding and large Kubernetes deletes were slow enough that the helper
