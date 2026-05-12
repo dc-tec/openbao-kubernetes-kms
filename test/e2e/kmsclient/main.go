@@ -45,7 +45,7 @@ const (
 	modeReadSample              = "read-sample"
 	modeExpectOutage            = "expect-outage"
 	modeExpectUnhealthy         = "expect-unhealthy"
-	modeExpectTransitFailure    = "expect-transit-failure"
+	modeExpectPolicyDenied      = "expect-policy-denied"
 	modeExpectSocketUnavailable = "expect-socket-unavailable"
 	modeExpectStatusStaleness   = "expect-status-staleness"
 	modeExpectJWTRefresh        = "expect-jwt-refresh"
@@ -105,7 +105,7 @@ var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceC
 	modeReadSample:              readEncryptedSample,
 	modeExpectOutage:            expectOutage,
 	modeExpectUnhealthy:         expectUnhealthy,
-	modeExpectTransitFailure:    expectTransitFailure,
+	modeExpectPolicyDenied:      expectPolicyDenied,
 	modeExpectSocketUnavailable: expectSocketUnavailable,
 	modeExpectStatusStaleness:   expectStatusStaleness,
 	modeExpectJWTRefresh:        expectJWTRefresh,
@@ -223,29 +223,21 @@ func expectUnhealthy(ctx context.Context, client kmsapi.KeyManagementServiceClie
 	assertCode(err, codes.FailedPrecondition, "encrypt while provider is unhealthy")
 }
 
-func expectTransitFailure(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+func expectPolicyDenied(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
 	sample := readSample()
 
 	_, err := client.Encrypt(ctx, &kmsapi.EncryptRequest{
 		Plaintext: []byte(plaintext),
 		Uid:       requestUID,
 	})
-	assertAnyCode(
-		err,
-		[]codes.Code{codes.Unavailable, codes.DeadlineExceeded, codes.FailedPrecondition},
-		"encrypt with Transit failure",
-	)
+	assertCode(err, codes.PermissionDenied, "encrypt with reduced Transit policy")
 
 	_, err = client.Decrypt(ctx, &kmsapi.DecryptRequest{
 		Ciphertext:  sample.Ciphertext,
 		KeyId:       sample.KeyID,
 		Annotations: sample.Annotations,
 	})
-	assertAnyCode(
-		err,
-		[]codes.Code{codes.Unavailable, codes.DeadlineExceeded, codes.FailedPrecondition},
-		"decrypt with Transit failure",
-	)
+	assertCode(err, codes.PermissionDenied, "decrypt with reduced Transit policy")
 }
 
 func expectSocketUnavailable(ctx context.Context, client kmsapi.KeyManagementServiceClient) {

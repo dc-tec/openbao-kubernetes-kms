@@ -37,8 +37,8 @@ For captured load and cold-start evidence, see [Performance Evidence](/developme
 | KMS v2 conformance | Start the real Unix-socket server path with fake OpenBao behavior and exercise Kubernetes KMS v2 protobuf requests. | fast local and PR checks |
 | OpenBao client integration | Verify Transit, JWT auth, TLS, policy diagnostics, and OpenBao error handling without external credentials. | hermetic integration tests and OpenBao CI E2E |
 | Kubernetes API server E2E | Prove real API server encryption, raw etcd envelope storage, restart readback, and multi-control-plane convergence. | Kind lanes and local kubeadm VM validation |
-| Rotation and compatibility | Prove Transit version promotion, old ciphertext readback, new ciphertext write path, and rollback rejection. | OpenBao rotation E2E |
-| Failure injection | Exercise OpenBao outage, sealed state, failover, bad policy, expired JWT, missing Transit key, stale socket, and startup failures. | provider failure and HA E2E lanes |
+| Rotation and compatibility | Prove Transit version promotion, old ciphertext readback, new ciphertext write path, historical decryptability guards, missing-state fail-closed behavior, and rollback rejection. | OpenBao rotation E2E |
+| Failure injection | Exercise OpenBao outage, sealed state, failover, bad policy, expired or identity-drifted JWT, missing Transit key, stale socket, and startup failures. | provider failure and HA E2E lanes |
 | Performance and load | Bound Status, Encrypt, Decrypt, direct decrypt soak, startup decrypt, and resource growth behavior. | provider load lanes and performance evidence |
 | Security and supply chain | Run redaction checks, fuzz targets, static analysis, vulnerability scan, license check, SBOM, and vendor verification. | `make ci-core`, security CI, release workflow |
 | Disaster recovery | Validate OpenBao raft restore, provider state rehydration, etcd restore pairing, and Kubernetes readback after replacement. | Kind DR, OpenBao restore, and local VM validation |

@@ -115,6 +115,10 @@ type transitKeyRequestBody struct {
 	Type string `json:"type"`
 }
 
+type transitKeyConfigRequestBody struct {
+	MinDecryptionVersion int `json:"min_decryption_version,omitempty"`
+}
+
 type policyRequestBody struct {
 	Policy string `json:"policy"`
 }
@@ -181,13 +185,14 @@ type environmentSetupPayload interface {
 	environmentSetupPayload()
 }
 
-func (mountRequestBody) environmentSetupPayload()         {}
-func (disableUpsertRequestBody) environmentSetupPayload() {}
-func (transitKeyRequestBody) environmentSetupPayload()    {}
-func (policyRequestBody) environmentSetupPayload()        {}
-func (emptyRequestBody) environmentSetupPayload()         {}
-func (jwtAuthConfigRequestBody) environmentSetupPayload() {}
-func (jwtAuthRoleRequestBody) environmentSetupPayload()   {}
+func (mountRequestBody) environmentSetupPayload()            {}
+func (disableUpsertRequestBody) environmentSetupPayload()    {}
+func (transitKeyRequestBody) environmentSetupPayload()       {}
+func (transitKeyConfigRequestBody) environmentSetupPayload() {}
+func (policyRequestBody) environmentSetupPayload()           {}
+func (emptyRequestBody) environmentSetupPayload()            {}
+func (jwtAuthConfigRequestBody) environmentSetupPayload()    {}
+func (jwtAuthRoleRequestBody) environmentSetupPayload()      {}
 
 func OpenBaoCIEnabled() bool {
 	return strings.EqualFold(os.Getenv(EnvOpenBaoCI), "true")
@@ -425,6 +430,19 @@ func (f *OpenBaoEnvironment) RotateTransitKey(ctx context.Context) error {
 		return err
 	}
 	return f.write(ctx, httpClient, path.Join(f.TransitMount, "keys", f.TransitKey, "rotate"), emptyRequestBody{})
+}
+
+func (f *OpenBaoEnvironment) SetTransitMinDecryptionVersion(ctx context.Context, version int) error {
+	if version <= 0 {
+		return fmt.Errorf("OpenBao Transit min_decryption_version must be positive")
+	}
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, path.Join(f.TransitMount, "keys", f.TransitKey, "config"), transitKeyConfigRequestBody{
+		MinDecryptionVersion: version,
+	})
 }
 
 func (f *OpenBaoEnvironment) Close(ctx context.Context) error {

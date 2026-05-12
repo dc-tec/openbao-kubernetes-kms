@@ -37,13 +37,13 @@ $(1): verify-e2e-manifest
 endef
 
 $(eval $(call provider-e2e-target,test-e2e-provider-openbao-ci,^TestProviderContainerFullStackE2E$$$$,4m))
-$(eval $(call provider-e2e-target,test-e2e-provider-failure-openbao-ci,^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|ExpiredJWTFailsClosed|JWTFileRotation|JWTSigningKeyRollover|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$$$$,10m))
+$(eval $(call provider-e2e-target,test-e2e-provider-failure-openbao-ci,^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|ExpiredJWTFailsClosed|JWTExpectedClaimDriftFailsClosed|JWTFileRotation|JWTSigningKeyRollover|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$$$$,12m))
 $(eval $(call provider-e2e-target,test-e2e-provider-ha-openbao-ci,^TestProviderOpenBaoHAFailoverE2E$$$$,7m))
 $(eval $(call provider-e2e-target,test-e2e-provider-decrypt-storm-openbao-ci,^TestProviderDecryptStormSmokeE2E$$$$,5m))
 $(eval $(call provider-e2e-target,test-e2e-provider-decrypt-soak-openbao-ci,^TestProviderDecryptSoakE2E$$$$,7m))
 $(eval $(call provider-e2e-target,test-e2e-provider-load-soak-openbao-ci,^TestProviderLoadSoakE2E$$$$,6m))
 $(eval $(call provider-e2e-target,test-e2e-provider-restore-openbao-ci,^TestProvider(OpenBaoBackendReplacement|ContainerizedDRRestore)E2E$$$$,8m))
-$(eval $(call provider-e2e-target,test-e2e-provider-rotation-openbao-ci,^TestProviderTransitRotationE2E$$$$,8m))
+$(eval $(call provider-e2e-target,test-e2e-provider-rotation-openbao-ci,^TestProvider(TransitRotation|TransitMinDecryptionVersionBlocksHistorical|MissingStateAfterRotationFailsClosed)E2E$$$$,18m))
 
 .PHONY: test-e2e-provider-upgrade-rollback-openbao-ci
 test-e2e-provider-upgrade-rollback-openbao-ci: verify-e2e-manifest

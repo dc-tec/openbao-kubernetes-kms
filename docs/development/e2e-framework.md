@@ -22,13 +22,13 @@ behavior.
 | Full enabled E2E suite | `make test-e2e` | Runs the enabled Ginkgo E2E specs selected by labels. | Depends on selected labels |
 | OpenBao CI | `make test-e2e-openbao-ci` | Transit, JWT auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
 | Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and JWT auth. | Docker-compatible runtime |
-| Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or rotated JWT, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
+| Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted JWT, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
 | OpenBao HA failover | `make test-e2e-provider-ha-openbao-ci` | Integrated-raft active node failover while preserving old decrypt and new KMS operations. | Docker-compatible runtime |
 | Decrypt storm smoke | `make test-e2e-provider-decrypt-storm-openbao-ci` | Concurrent KMS v2 decrypts through the provider and real OpenBao. | Docker-compatible runtime |
 | Sustained direct decrypt soak | `make test-e2e-provider-decrypt-soak-openbao-ci` | Direct decrypt latency, error bounds, memory growth, and PID growth. | Docker-compatible runtime |
 | Provider load soak | `make test-e2e-provider-load-soak-openbao-ci` | Sustained Status, Encrypt, and Decrypt traffic with latency and resource checks. | Docker-compatible runtime |
 | OpenBao restore | `make test-e2e-provider-restore-openbao-ci` | Backend replacement and integrated-raft snapshot restore with old ciphertext readback. | Docker-compatible runtime |
-| Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Key version promotion, old and new ciphertext decrypt, and observed rollback rejection. | Docker-compatible runtime |
+| Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Key version promotion, old and new ciphertext decrypt, historical decryptability enforcement, missing-state fail-closed behavior, and observed rollback rejection. | Docker-compatible runtime |
 | Provider upgrade and rollback | `make test-e2e-provider-upgrade-rollback-openbao-ci` | Old and new provider images over the same state volume preserve decrypt compatibility. | Docker-compatible runtime |
 | Kind smoke | `make test-e2e-kind-smoke` | Real API server KMS v2 encryption, raw etcd envelope storage, API server restart, and readback. | Docker-compatible runtime, Kind, kubectl |
 | Kind convergence | `make test-e2e-kind-convergence` | Three control-plane API servers decrypt through node-local providers and converge on KMS state. | Docker-compatible runtime, Kind, kubectl |

@@ -141,6 +141,9 @@ type providerContainerConfigOptions struct {
 	OpenBaoTimeout         string
 	OpenBaoAddress         string
 	TransitKeyName         string
+	ExpectedIssuer         string
+	ExpectedAudience       string
+	ExpectedSubject        string
 	ProbeInterval          string
 	DeepProbeInterval      string
 	StatusMaxStaleness     string
@@ -180,11 +183,20 @@ func writeProviderContainerConfigWithOptions(
 	if opts.LoginBeforeTokenExpiry == "" {
 		opts.LoginBeforeTokenExpiry = "30s"
 	}
+	if opts.ExpectedIssuer == "" {
+		opts.ExpectedIssuer = environment.JWTIssuer()
+	}
+	if opts.ExpectedAudience == "" {
+		opts.ExpectedAudience = environment.JWTAudience()
+	}
+	if opts.ExpectedSubject == "" {
+		opts.ExpectedSubject = environment.JWTSubject()
+	}
 	expectedClaims := fmt.Sprintf(`  expectedIssuer: %q
   expectedAudience:
     - %q
   expectedSubject: %q
-`, environment.JWTIssuer(), environment.JWTAudience(), environment.JWTSubject())
+`, opts.ExpectedIssuer, opts.ExpectedAudience, opts.ExpectedSubject)
 
 	raw := fmt.Sprintf(`configVersion: v1alpha1
 server:

@@ -27,7 +27,7 @@ const (
 	kmsClientModeReadSample              = "read-sample"
 	kmsClientModeExpectOutage            = "expect-outage"
 	kmsClientModeExpectUnhealthy         = "expect-unhealthy"
-	kmsClientModeExpectTransitFailure    = "expect-transit-failure"
+	kmsClientModeExpectPolicyDenied      = "expect-policy-denied"
 	kmsClientModeExpectSocketUnavailable = "expect-socket-unavailable"
 	kmsClientModeExpectStatusStaleness   = "expect-status-staleness"
 	kmsClientModeExpectJWTRefresh        = "expect-jwt-refresh"
@@ -75,14 +75,18 @@ func TestProviderBadPolicyFailsClosedE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
 	defer cancel()
 
-	stack := startProviderFailureStack(t, ctx, "obk-e2e-policy", providerFailureStackOptions{})
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-policy", providerFailureStackOptions{
+		Config: providerContainerConfigOptions{
+			DeepProbeInterval: "10m",
+		},
+	})
 	stack.runClient(ctx, "write-client", kmsClientModeWriteSample, sampleReadWrite)
 
 	if err := stack.environment.InstallProviderPolicy(ctx, stack.environment.MetadataOnlyProviderPolicy()); err != nil {
 		t.Fatalf("install reduced OpenBao provider policy: %v", err)
 	}
 
-	stack.runClient(ctx, "policy-client", kmsClientModeExpectTransitFailure, sampleReadOnly)
+	stack.runClient(ctx, "policy-client", kmsClientModeExpectPolicyDenied, sampleReadOnly)
 }
 
 func TestProviderExpiredJWTFailsClosedE2E(t *testing.T) {
@@ -99,6 +103,25 @@ func TestProviderExpiredJWTFailsClosedE2E(t *testing.T) {
 	})
 
 	stack.runClient(ctx, "expired-jwt-client", kmsClientModeExpectSocketUnavailable, sampleNotMounted)
+}
+
+func TestProviderJWTExpectedClaimDriftFailsClosedE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
+	defer cancel()
+
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-jwt-claim-drift", providerFailureStackOptions{
+		Config: providerContainerConfigOptions{
+			ExpectedSubject: "system:serviceaccount:unexpected:provider",
+		},
+	})
+
+	stack.runClient(ctx, "jwt-claim-drift-client", kmsClientModeExpectSocketUnavailable, sampleNotMounted)
+	stack.assertProviderLogsDoNotContain(
+		ctx,
+		stack.environment.JWTIssuer(),
+		stack.environment.JWTAudience(),
+		stack.environment.JWTSubject(),
+	)
 }
 
 func TestProviderJWTFileRotationE2E(t *testing.T) {
@@ -408,6 +431,45 @@ func (s *providerFailureStack) restartProvider(ctx context.Context, image string
 	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
 	startProviderContainer(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes)
 	s.providerImage = image
+}
+
+func (s *providerFailureStack) restartProviderWithEmptyState(ctx context.Context, image string) {
+	s.t.Helper()
+	if image == "" {
+		s.t.Fatal("provider restart image is empty")
+	}
+	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
+	s.clearProviderState(ctx)
+	startProviderContainer(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes)
+	s.providerImage = image
+}
+
+func (s *providerFailureStack) clearProviderState(ctx context.Context) {
+	s.t.Helper()
+
+	script := `set -eu
+rm -f /var/lib/openbao-kms/state/*
+chown -R 65532:65532 /var/lib/openbao-kms/state
+chmod 0700 /var/lib/openbao-kms/state
+`
+	runDocker(s.t, ctx, s.dockerPath,
+		"run", "--rm",
+		"--entrypoint", "/bin/sh",
+		"--volume", s.volumes.state+":/var/lib/openbao-kms/state",
+		s.openBaoImage,
+		"-c", script,
+	)
+}
+
+func (s *providerFailureStack) assertProviderLogsDoNotContain(ctx context.Context, values ...string) {
+	s.t.Helper()
+
+	logs := dockerLogs(ctx, s.dockerPath, s.providerName)
+	for _, value := range values {
+		if value != "" && strings.Contains(logs, value) {
+			s.t.Fatalf("provider logs contain sensitive JWT claim value %q:\n%s", value, logs)
+		}
+	}
 }
 
 func (s *providerFailureStack) runClientWithEnv(

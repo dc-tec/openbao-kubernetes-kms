@@ -22,7 +22,7 @@ Run only the provider/OpenBao failure-mode slice with:
 make test-e2e-provider-failure-openbao-ci
 ```
 
-That target uses real OpenBao Transit/JWT auth and the real provider image. It covers OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, provider re-login after signing-key rollover, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
+That target uses real OpenBao Transit/JWT auth and the real provider image. It covers OpenBao down, OpenBao sealed, reduced provider policy with `PermissionDenied` KMS errors, expired JWT and expected-claim drift startup fail-closed behavior, JWT file rotation and re-login, provider re-login after signing-key rollover, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
 
 Run only the provider/OpenBao HA failover slice with:
 
@@ -70,7 +70,7 @@ Run only the provider/OpenBao Transit rotation slice with:
 make test-e2e-provider-rotation-openbao-ci
 ```
 
-That target runs OpenBao with integrated raft storage in Docker. It writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies the provider rejects the observed Transit version rollback.
+That target runs OpenBao with integrated raft storage in Docker. It writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, rejects Transit `min_decryption_version` changes that strand retained historical versions, fails closed when local provider state disappears after rotation, restores the pre-rotation snapshot, and verifies the provider rejects the observed Transit version rollback.
 
 Run only the provider binary upgrade/rollback slice with:
 
