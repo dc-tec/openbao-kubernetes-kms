@@ -238,13 +238,13 @@ func ValidateClaims(claims Claims, opts JWTValidationOptions) error {
 
 func validateExpectedIdentity(claims Claims, opts JWTValidationOptions) error {
 	if opts.ExpectedIssuer != "" && claims.Issuer != opts.ExpectedIssuer {
-		return fmt.Errorf("%w: got %q", ErrJWTIssuerMismatch, claims.Issuer)
+		return ErrJWTIssuerMismatch
 	}
 	if len(opts.ExpectedAudience) > 0 && !hasExpectedAudience(claims.Audience, opts.ExpectedAudience) {
-		return fmt.Errorf("%w: got %q", ErrJWTAudienceMismatch, claims.Audience)
+		return ErrJWTAudienceMismatch
 	}
 	if opts.ExpectedSubject != "" && claims.Subject != opts.ExpectedSubject {
-		return fmt.Errorf("%w: got %q", ErrJWTSubjectMismatch, claims.Subject)
+		return ErrJWTSubjectMismatch
 	}
 	return nil
 }

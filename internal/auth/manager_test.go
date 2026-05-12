@@ -264,6 +264,76 @@ func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 	}
 }
 
+func TestManagerRefreshReturnsFreshLoginErrorWithCurrentToken(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
+	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
+	client := &fakes.OpenBaoAuthClient{
+		LoginResponses: []openbao.AuthToken{{
+			ClientToken:   testBaoToken1,
+			LeaseDuration: time.Minute,
+		}},
+	}
+	manager := newTestManager(t, jwtPath, client, clock, false)
+
+	if _, err := manager.Token(context.Background()); err != nil {
+		t.Fatalf("initial token: %v", err)
+	}
+	client.LoginErr = errors.New("login endpoint unavailable")
+
+	err := manager.Refresh(context.Background())
+	if !errors.Is(err, ErrAuthFailed) {
+		t.Fatalf("expected forced refresh auth failure, got %v", err)
+	}
+	state := manager.State()
+	if state.Status != StatusUnhealthy || state.LastError == "" {
+		t.Fatalf("expected unhealthy state after forced refresh failure: %#v", state)
+	}
+
+	token, err := manager.Token(context.Background())
+	if err != nil {
+		t.Fatalf("current token should remain usable after failed forced refresh: %v", err)
+	}
+	if token != testBaoToken1 {
+		t.Fatalf("unexpected token after failed forced refresh")
+	}
+}
+
+func TestManagerStateRedactsJWTIdentityMismatchValues(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
+	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))
+	manager, err := NewManager(ManagerConfig{
+		MountPath:              testAuthMountPath,
+		Role:                   testAuthRole,
+		JWTFile:                jwtPath,
+		MinJWTRemainingTTL:     testMinJWTRemainingTTL,
+		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
+		TokenRenewalIncrement:  testRenewalIncrement,
+		ExpectedIssuer:         "https://wrong-issuer.example.internal",
+		ExpectedAudience:       []string{"wrong-audience"},
+		ExpectedSubject:        "system:serviceaccount:secret-namespace:other-sa",
+	}, &fakes.OpenBaoAuthClient{}, ManagerOptions{
+		Clock:              clock,
+		RefreshRetryJitter: noRetryJitter,
+	})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	_, err = manager.Token(context.Background())
+	if !errors.Is(err, ErrJWTIssuerMismatch) {
+		t.Fatalf("expected JWT issuer mismatch, got %v", err)
+	}
+	state := manager.State()
+	if state.Status != StatusUnhealthy || state.LastError == "" {
+		t.Fatalf("expected unhealthy state after JWT mismatch: %#v", state)
+	}
+	for _, leaked := range []string{testIssuer, testAudienceOpenBao, testSubject} {
+		if strings.Contains(state.LastError, leaked) {
+			t.Fatalf("state error leaked JWT claim value %q: %q", leaked, state.LastError)
+		}
+	}
+}
+
 func TestManagerUsesExponentialRefreshBackoff(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0).UTC()}
 	jwtPath := writeJWTFile(t, loadJWTFixture(t, validJWTFixture))

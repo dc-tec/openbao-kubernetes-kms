@@ -149,16 +149,19 @@ func runDoctor(
 		report.Pass(checkSocketGroup, "Socket group", "configured group resolves locally")
 	}
 
-	if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWTFile, auth.JWTValidationOptions{
-		MinRemainingTTL: cfg.Auth.MinJWTRemainingTTL,
-		ClockSkewLeeway: cfg.Auth.ClockSkewLeeway,
-	}); err != nil {
+	jwtValid := true
+	if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWTFile, jwtValidationOptions(cfg)); err != nil {
+		jwtValid = false
 		report.Fail(checkJWTLocal, "JWT file", safeMessage(err))
 	} else {
 		report.Pass(checkJWTLocal, "JWT file", "readable and locally valid")
 	}
 
 	checkEncryptionConfiguration(&report, cfg, encryptionConfigPath)
+	if !jwtValid {
+		report.Skip(checkOpenBaoAuth, "OpenBao JWT login", "local JWT validation failed")
+		return report, nil
+	}
 
 	clients, ok := authenticateForDiagnostics(ctx, &report, cfg)
 	if !ok {
@@ -169,6 +172,16 @@ func runDoctor(
 		checkStatusEncryptConsistency(ctx, &report, diag.state, info)
 	}
 	return report, nil
+}
+
+func jwtValidationOptions(cfg config.Config) auth.JWTValidationOptions {
+	return auth.JWTValidationOptions{
+		MinRemainingTTL:  cfg.Auth.MinJWTRemainingTTL,
+		ClockSkewLeeway:  cfg.Auth.ClockSkewLeeway,
+		ExpectedIssuer:   cfg.Auth.ExpectedIssuer,
+		ExpectedAudience: cfg.Auth.ExpectedAudience,
+		ExpectedSubject:  cfg.Auth.ExpectedSubject,
+	}
 }
 
 func runVerifyKey(

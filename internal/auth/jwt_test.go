@@ -221,6 +221,11 @@ func TestValidateClaimsChecksExpectedIdentity(t *testing.T) {
 			if !errors.Is(err, tt.wantError) {
 				t.Fatalf("expected %v, got %v", tt.wantError, err)
 			}
+			if strings.Contains(err.Error(), testIssuer) ||
+				strings.Contains(err.Error(), testAudienceOpenBao) ||
+				strings.Contains(err.Error(), testSubject) {
+				t.Fatalf("JWT mismatch leaked raw claim values: %v", err)
+			}
 		})
 	}
 }

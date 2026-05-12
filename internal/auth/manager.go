@@ -262,7 +262,7 @@ func (m *Manager) ensureToken(ctx context.Context, forceLogin bool) (currentToke
 		result := m.performRefresh(ctx, action)
 
 		m.mu.Lock()
-		token, err := m.applyRefreshResultLocked(result)
+		token, err := m.applyRefreshResultLocked(result, forceLogin)
 		m.refreshing = false
 		m.refreshDone = nil
 		close(done)
@@ -388,7 +388,7 @@ func (m *Manager) renew(ctx context.Context, action refreshAction) (currentToken
 	return token, now, nil
 }
 
-func (m *Manager) applyRefreshResultLocked(result refreshResult) (currentToken, error) {
+func (m *Manager) applyRefreshResultLocked(result refreshResult, forceLogin bool) (currentToken, error) {
 	now := m.clock.Now()
 	if result.renewalErr != nil {
 		m.lastRenewalErr = result.renewalErr
@@ -397,6 +397,9 @@ func (m *Manager) applyRefreshResultLocked(result refreshResult) (currentToken, 
 		m.lastErr = result.err
 		m.consecutiveFailures++
 		m.nextRetryAt = now.Add(m.nextRetryBackoffLocked())
+		if forceLogin {
+			return m.current, result.err
+		}
 		if m.current.value != "" && now.Before(m.current.expiresAt) {
 			return m.current, nil
 		}
@@ -619,6 +622,14 @@ func authStatus(err error) string {
 func safeErrorMessage(err error) string {
 	if err == nil {
 		return ""
+	}
+	switch {
+	case errors.Is(err, ErrJWTIssuerMismatch):
+		return ErrJWTIssuerMismatch.Error()
+	case errors.Is(err, ErrJWTAudienceMismatch):
+		return ErrJWTAudienceMismatch.Error()
+	case errors.Is(err, ErrJWTSubjectMismatch):
+		return ErrJWTSubjectMismatch.Error()
 	}
 	var openBaoErr *openbao.Error
 	if errors.As(err, &openBaoErr) {

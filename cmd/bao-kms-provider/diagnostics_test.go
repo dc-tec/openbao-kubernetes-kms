@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
@@ -94,6 +98,20 @@ func TestTransitDiagnosticsFlagsDangerousCapabilities(t *testing.T) {
 	}
 }
 
+func TestDoctorJWTLocalCheckUsesExpectedClaims(t *testing.T) {
+	cfg := loadCommandConfig(t)
+	cfg.Auth.JWTFile = copyJWTFixture(t)
+	cfg.Auth.ExpectedSubject = "system:serviceaccount:secret-namespace:other-sa"
+
+	_, err := auth.ReadAndValidateJWT(cfg.Auth.JWTFile, jwtValidationOptions(cfg))
+	if !errors.Is(err, auth.ErrJWTSubjectMismatch) {
+		t.Fatalf("expected local JWT subject mismatch, got %v", err)
+	}
+	if strings.Contains(err.Error(), "system:openbao-kms:workload-a") {
+		t.Fatalf("JWT validation leaked raw subject: %v", err)
+	}
+}
+
 func loadCommandConfig(t *testing.T) config.Config {
 	t.Helper()
 	cfg, err := config.Load(config.NewRuntime(), config.LoadOptions{Path: "../../test/testdata/config/valid.yaml"})
@@ -101,6 +119,21 @@ func loadCommandConfig(t *testing.T) config.Config {
 		t.Fatalf("load config: %v", err)
 	}
 	return cfg
+}
+
+func copyJWTFixture(t *testing.T) string {
+	t.Helper()
+
+	content, err := os.ReadFile(filepath.Join("../../test/testdata/auth", "valid.jwt"))
+	if err != nil {
+		t.Fatalf("read JWT fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "identity.jwt")
+	// #nosec G306,G703 -- test fixture is copied to a t.TempDir path controlled by this test.
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write JWT fixture: %v", err)
+	}
+	return path
 }
 
 func commandTestProfile(mutate func(*openbao.KeyProfile)) openbao.KeyProfile {
