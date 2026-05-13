@@ -243,7 +243,7 @@ func releaseGateKubernetesMatrix(versionsPath string, selectedLine string) ([]ku
 		entries = append(entries, entry)
 	}
 	if selectedLine != "" && len(entries) == 0 {
-		return nil, fmt.Errorf("Kubernetes release gate line %q is not configured", selectedLine)
+		return nil, fmt.Errorf("kubernetes release gate line %q is not configured", selectedLine)
 	}
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("%s has no Kubernetes previewMatrix entries with releaseGate=true", versionsPath)
@@ -253,19 +253,19 @@ func releaseGateKubernetesMatrix(versionsPath string, selectedLine string) ([]ku
 
 func validateKubernetesPreviewEntry(entry kubernetesPreviewEntry) error {
 	if entry.Line == "" {
-		return errors.New("Kubernetes previewMatrix entry is missing line")
+		return errors.New("kubernetes previewMatrix entry is missing line")
 	}
 	if entry.ExactVersion == "" {
-		return fmt.Errorf("Kubernetes previewMatrix line %q is missing exactVersion", entry.Line)
+		return fmt.Errorf("kubernetes previewMatrix line %q is missing exactVersion", entry.Line)
 	}
 	if entry.KindNodeImage == "" {
-		return fmt.Errorf("Kubernetes previewMatrix line %q is missing kindNodeImage", entry.Line)
+		return fmt.Errorf("kubernetes previewMatrix line %q is missing kindNodeImage", entry.Line)
 	}
 	if entry.KindNodeImageDigest == "" {
-		return fmt.Errorf("Kubernetes previewMatrix line %q is missing kindNodeImageDigest", entry.Line)
+		return fmt.Errorf("kubernetes previewMatrix line %q is missing kindNodeImageDigest", entry.Line)
 	}
 	if !strings.Contains(entry.KindNodeImage, "@"+entry.KindNodeImageDigest) {
-		return fmt.Errorf("Kubernetes previewMatrix line %q kindNodeImage must include kindNodeImageDigest", entry.Line)
+		return fmt.Errorf("kubernetes previewMatrix line %q kindNodeImage must include kindNodeImageDigest", entry.Line)
 	}
 	return nil
 }
