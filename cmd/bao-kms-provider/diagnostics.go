@@ -188,14 +188,14 @@ func jwtValidationOptions(cfg config.Config) auth.JWTValidationOptions {
 
 func checkLocalAuthForDoctor(report *cli.Report, cfg config.Config) bool {
 	switch cfg.Auth.Method {
-	case "jwt":
+	case authMethodJWT:
 		if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWT.JWTFile, jwtValidationOptions(cfg)); err != nil {
 			report.Fail(checkJWTLocal, "JWT file", safeMessage(err))
 			return false
 		}
 		report.Pass(checkJWTLocal, "JWT file", "readable and locally valid")
 		return true
-	case "cert":
+	case authMethodCert:
 		report.Skip(checkCertLocal, "Certificate identity", "checked during certificate auth login")
 		return true
 	default:
@@ -275,14 +275,14 @@ func authenticateForDiagnostics(
 }
 
 func openBaoAuthCheckName(cfg config.Config) string {
-	if cfg.Auth.Method == "cert" {
+	if cfg.Auth.Method == authMethodCert {
 		return "OpenBao cert login"
 	}
 	return "OpenBao JWT login"
 }
 
 func openBaoAuthPassMessage(cfg config.Config) string {
-	if cfg.Auth.Method == "cert" {
+	if cfg.Auth.Method == authMethodCert {
 		return "authenticated with configured certificate role"
 	}
 	return "authenticated with configured JWT role"

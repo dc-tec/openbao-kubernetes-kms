@@ -253,13 +253,14 @@ func TestValidateCompleteConfig(t *testing.T) {
 
 func TestValidateCertificateAuthConfig(t *testing.T) {
 	cfg := loadValidConfig(t)
-	cfg.Auth.Method = "cert"
+	cfg.Auth.Method = authMethodCert
 	cfg.Auth.Cert = CertAuthConfig{
 		MountPath:       "auth/k8s-workload-a-cert",
 		Name:            "openbao-kms-control-plane",
 		MinRemainingTTL: 24 * time.Hour,
 		ClockSkewLeeway: 30 * time.Second,
-		Source:          "pkcs11",
+		Source:          certSourcePKCS11,
+		// #nosec G101 -- test fixture path, not PIN material.
 		PKCS11: PKCS11CertAuthConfig{
 			CertificateFile: "/etc/openbao-kms/tls/client.crt",
 			ModulePath:      "/usr/lib/softhsm/libsofthsm2.so",
@@ -285,7 +286,7 @@ func TestValidateRejectsCertificateAuthSourceConfig(t *testing.T) {
 			name:  "unknown source",
 			field: "auth.cert.source",
 			mutate: func(cfg *Config) {
-				cfg.Auth.Method = "cert"
+				cfg.Auth.Method = authMethodCert
 				cfg.Auth.Cert.MountPath = "auth/k8s-workload-a-cert"
 				cfg.Auth.Cert.MinRemainingTTL = 24 * time.Hour
 				cfg.Auth.Cert.Source = "pem"
@@ -295,12 +296,13 @@ func TestValidateRejectsCertificateAuthSourceConfig(t *testing.T) {
 			name:  "relative pkcs11 module",
 			field: "auth.cert.pkcs11.modulePath",
 			mutate: func(cfg *Config) {
-				cfg.Auth.Method = "cert"
+				cfg.Auth.Method = authMethodCert
 				cfg.Auth.Cert = CertAuthConfig{
 					MountPath:       "auth/k8s-workload-a-cert",
 					MinRemainingTTL: 24 * time.Hour,
 					ClockSkewLeeway: 30 * time.Second,
-					Source:          "pkcs11",
+					Source:          certSourcePKCS11,
+					// #nosec G101 -- test fixture path, not PIN material.
 					PKCS11: PKCS11CertAuthConfig{
 						CertificateFile: "/etc/openbao-kms/tls/client.crt",
 						ModulePath:      "libsofthsm2.so",
@@ -316,12 +318,12 @@ func TestValidateRejectsCertificateAuthSourceConfig(t *testing.T) {
 			name:  "spiffe trust domain mismatch",
 			field: "auth.cert.spiffe.trustDomain",
 			mutate: func(cfg *Config) {
-				cfg.Auth.Method = "cert"
+				cfg.Auth.Method = authMethodCert
 				cfg.Auth.Cert = CertAuthConfig{
 					MountPath:       "auth/k8s-workload-a-cert",
 					MinRemainingTTL: 24 * time.Hour,
 					ClockSkewLeeway: 30 * time.Second,
-					Source:          "spiffe",
+					Source:          certSourceSPIFFE,
 					SPIFFE: SPIFFECertAuthConfig{
 						WorkloadAPISocket: "unix:///run/spire/sockets/agent.sock",
 						SPIFFEID:          "spiffe://example.org/openbao-kms/workload-a",

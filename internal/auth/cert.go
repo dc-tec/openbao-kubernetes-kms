@@ -23,6 +23,7 @@ const (
 	maxCertificateFileBytes = 1 << 20
 	certificateFileModeMask = os.FileMode(0o037)
 	signerProbeMessage      = "openbao-kubernetes-kms/cert-signer-probe/v1"
+	spiffeURIScheme         = "spiffe"
 )
 
 var (
@@ -226,40 +227,52 @@ func validateCertificateSPIFFEIdentity(cert *x509.Certificate, opts CertificateV
 	if expectedID == "" && trustDomain == "" {
 		return nil
 	}
-	if expectedID != "" {
-		parsed, err := parseSPIFFEURI(expectedID)
-		if err != nil {
-			return err
-		}
-		if trustDomain != "" && parsed.Host != trustDomain {
-			return ErrCertificateIdentityMismatch
-		}
+	if err := validateExpectedSPIFFEID(expectedID, trustDomain, cert.URIs); err != nil {
+		return err
 	}
-	matched := false
-	for _, uri := range cert.URIs {
-		if expectedID != "" && uri.String() == expectedID {
-			matched = true
-		}
-		if trustDomain != "" && uri.Scheme == "spiffe" && uri.Host != trustDomain {
-			return ErrCertificateIdentityMismatch
-		}
+	if err := validateSPIFFETrustDomain(trustDomain, cert.URIs); err != nil {
+		return err
 	}
-	if expectedID != "" && !matched {
+	return nil
+}
+
+func validateExpectedSPIFFEID(expectedID string, trustDomain string, uris []*url.URL) error {
+	if expectedID == "" {
+		return nil
+	}
+	parsed, err := parseSPIFFEURI(expectedID)
+	if err != nil {
+		return err
+	}
+	if trustDomain != "" && parsed.Host != trustDomain {
 		return ErrCertificateIdentityMismatch
 	}
-	if trustDomain != "" && !hasSPIFFETrustDomain(cert, trustDomain) {
+	if !slices.ContainsFunc(uris, func(uri *url.URL) bool {
+		return uri != nil && uri.String() == expectedID
+	}) {
 		return ErrCertificateIdentityMismatch
 	}
 	return nil
 }
 
-func hasSPIFFETrustDomain(cert *x509.Certificate, trustDomain string) bool {
-	for _, uri := range cert.URIs {
-		if uri.Scheme == "spiffe" && uri.Host == trustDomain {
-			return true
-		}
+func validateSPIFFETrustDomain(trustDomain string, uris []*url.URL) error {
+	if trustDomain == "" {
+		return nil
 	}
-	return false
+	matched := false
+	for _, uri := range uris {
+		if uri == nil || uri.Scheme != spiffeURIScheme {
+			continue
+		}
+		if uri.Host != trustDomain {
+			return ErrCertificateIdentityMismatch
+		}
+		matched = true
+	}
+	if !matched {
+		return ErrCertificateIdentityMismatch
+	}
+	return nil
 }
 
 func hasClientAuthUsage(usages []x509.ExtKeyUsage) bool {
@@ -325,7 +338,7 @@ func validateCertificateFileMode(info os.FileInfo) error {
 func parseSPIFFEURI(value string) (*url.URL, error) {
 	parsed, err := url.Parse(value)
 	if err != nil ||
-		parsed.Scheme != "spiffe" ||
+		parsed.Scheme != spiffeURIScheme ||
 		parsed.Host == "" ||
 		parsed.Path == "" ||
 		parsed.User != nil ||

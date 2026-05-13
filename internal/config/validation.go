@@ -528,7 +528,7 @@ func validateSPIFFEID(problems *[]ValidationProblem, value string, trustDomain s
 	}
 	parsed, err := url.Parse(value)
 	if err != nil ||
-		parsed.Scheme != "spiffe" ||
+		parsed.Scheme != certSourceSPIFFE ||
 		parsed.Host == "" ||
 		parsed.RawQuery != "" ||
 		parsed.Fragment != "" ||
@@ -548,7 +548,11 @@ func validateTrustDomain(problems *[]ValidationProblem, value string) {
 	}
 	if strings.TrimSpace(value) != value ||
 		strings.ContainsAny(value, "\x00\r\n\t /:%") {
-		appendProblem(problems, "auth.cert.spiffe.trustDomain", "must be a DNS-style trust domain without whitespace, slash, colon, or percent encoding")
+		appendProblem(
+			problems,
+			"auth.cert.spiffe.trustDomain",
+			"must be a DNS-style trust domain without whitespace, slash, colon, or percent encoding",
+		)
 	}
 }
 

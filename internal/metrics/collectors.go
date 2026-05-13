@@ -123,7 +123,8 @@ func newAuthCollector(provider AuthProvider) *authCollector {
 		),
 		certTTL: prometheus.NewDesc(
 			"openbao_kms_certificate_ttl_seconds",
-			"Remaining cert-auth client certificate TTL. Zero when certificate auth is not in use or no certificate has been observed.",
+			"Remaining cert-auth client certificate TTL. "+
+				"Zero when certificate auth is not in use or no certificate has been observed.",
 			nil,
 			nil,
 		),

@@ -49,7 +49,7 @@ func newCertificateProvider(
 	cfg config.Config,
 ) (auth.ClientCertificateProvider, error) {
 	switch cfg.Auth.Cert.Source {
-	case "pkcs11":
+	case certSourcePKCS11:
 		return auth.NewPKCS11CertificateProvider(ctx, auth.PKCS11ProviderConfig{
 			CertificateFile: cfg.Auth.Cert.PKCS11.CertificateFile,
 			ModulePath:      cfg.Auth.Cert.PKCS11.ModulePath,
@@ -58,7 +58,7 @@ func newCertificateProvider(
 			PINFile:         cfg.Auth.Cert.PKCS11.PINFile,
 			MaxSessions:     cfg.Auth.Cert.PKCS11.MaxSessions,
 		})
-	case "spiffe":
+	case certSourceSPIFFE:
 		return auth.NewSPIFFECertificateProvider(ctx, auth.SPIFFEProviderConfig{
 			WorkloadAPISocket: cfg.Auth.Cert.SPIFFE.WorkloadAPISocket,
 			SPIFFEID:          cfg.Auth.Cert.SPIFFE.SPIFFEID,

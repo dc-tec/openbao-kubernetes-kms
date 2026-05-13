@@ -31,6 +31,10 @@ import (
 const (
 	diagnosticCiphertext   = "openbao-kms-provider-diagnostic-ciphertext"
 	messageContextRequired = "context is required"
+	authMethodJWT          = "jwt"
+	authMethodCert         = "cert"
+	certSourcePKCS11       = "pkcs11"
+	certSourceSPIFFE       = "spiffe"
 )
 
 type runtimeBuilder struct {
@@ -280,7 +284,7 @@ func buildAuthManager(
 	observer authRuntimeObserver,
 ) (*auth.Manager, error) {
 	switch cfg.Auth.Method {
-	case "jwt":
+	case authMethodJWT:
 		authClient, err := openbao.NewAuthClient(openbao.AuthClientConfig{
 			Address:       cfg.OpenBao.Address,
 			Namespace:     cfg.OpenBao.Namespace,
@@ -296,7 +300,7 @@ func buildAuthManager(
 			RenewalEnabled: true,
 			Observer:       observer,
 		})
-	case "cert":
+	case authMethodCert:
 		return newCertAuthManager(ctx, cfg, observer)
 	default:
 		return nil, fmt.Errorf("%w: unsupported auth method", auth.ErrAuthConfig)

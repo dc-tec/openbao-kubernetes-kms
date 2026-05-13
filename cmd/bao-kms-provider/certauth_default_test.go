@@ -14,7 +14,7 @@ import (
 
 func TestBuildAuthManagerRejectsCertAuthInDefaultBuild(t *testing.T) {
 	cfg := config.Config{}
-	cfg.Auth.Method = "cert"
+	cfg.Auth.Method = authMethodCert
 
 	_, err := buildAuthManager(context.Background(), cfg, nil)
 	if !errors.Is(err, auth.ErrAuthConfig) {
