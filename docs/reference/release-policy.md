@@ -14,9 +14,10 @@ Public releases are published from SemVer tags through the release workflow.
 The workflow publishes GitHub Release assets and a GHCR image, then signs,
 attests, verifies, and indexes the release evidence.
 
-release-please opens release PRs and maintains the changelog. Release
-publishing is implemented as a separate tag workflow and remains gated by the
-release criteria.
+release-please opens release PRs and maintains the changelog. A separate
+release-tag workflow creates the signed tag and draft GitHub Release. The
+tag-triggered release workflow then builds, validates, signs, uploads, and
+publishes the release evidence.
 
 The current public release line is a preview line unless the release notes and
 [Support Policy](/reference/support-policy/) explicitly say otherwise.
@@ -130,7 +131,16 @@ The release-please workflow is PR-only:
 - it does not publish GitHub Releases,
 - it does not build, sign, attest, or upload artifacts.
 
-Publishing is a separate release workflow concern. Release workflows consume the release-please version, run validation, build the release artifacts, generate checksums, create SBOMs, sign, attest, verify byte reproducibility, and publish evidence.
+Release tag creation is a separate workflow concern. After the release PR is
+merged, the release-tag workflow validates the merged release-please PR, creates
+a signed annotated tag at that merge commit, and creates or refreshes a draft
+GitHub Release with the release notes.
+
+The tag-triggered release workflow consumes that draft release, runs validation,
+builds the release artifacts, generates checksums, creates SBOMs, signs,
+attests, verifies byte reproducibility, uploads assets to the draft release, and
+publishes the release evidence. It fails early if the draft GitHub Release is
+missing or already published.
 
 The workflow expects a GitHub App token so release PR updates can trigger normal PR checks. Configure these repository secrets:
 
@@ -140,6 +150,18 @@ OPENBAO_KMS_RELEASE_PR_PRIVATE_KEY
 ```
 
 If the secrets are absent, the workflow exits as a no-op with a notice.
+
+Configure these repository secrets for signed release tag and draft release
+creation:
+
+```text
+OPENBAO_KMS_RELEASE_TAG_APP_ID
+OPENBAO_KMS_RELEASE_TAG_PRIVATE_KEY
+OPENBAO_KMS_RELEASE_TAG_GPG_PRIVATE_KEY
+OPENBAO_KMS_RELEASE_TAG_GPG_PASSPHRASE
+OPENBAO_KMS_RELEASE_TAG_GPG_NAME
+OPENBAO_KMS_RELEASE_TAG_GPG_EMAIL
+```
 
 ## Binary Artifacts
 
