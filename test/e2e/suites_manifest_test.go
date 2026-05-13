@@ -53,21 +53,23 @@ type e2eReleaseGateDefinition struct {
 }
 
 type e2eLane struct {
-	ID            string   `yaml:"id"`
-	Name          string   `yaml:"name"`
-	MakeTarget    string   `yaml:"makeTarget"`
-	Package       string   `yaml:"package"`
-	LabelFilter   string   `yaml:"labelFilter"`
-	PRScope       string   `yaml:"prScope"`
-	Environment   string   `yaml:"environment"`
-	Isolation     string   `yaml:"isolation"`
-	Timeout       string   `yaml:"timeout"`
-	ParallelNodes int      `yaml:"parallelNodes"`
-	RequiredEnv   []string `yaml:"requiredEnv"`
-	EnableEnv     string   `yaml:"enableEnv"`
-	VersionRefs   []string `yaml:"versionRefs"`
-	Status        string   `yaml:"status"`
-	Reports       bool     `yaml:"reports"`
+	ID               string   `yaml:"id"`
+	Name             string   `yaml:"name"`
+	MakeTarget       string   `yaml:"makeTarget"`
+	Package          string   `yaml:"package"`
+	LabelFilter      string   `yaml:"labelFilter"`
+	RunRegex         string   `yaml:"runRegex"`
+	PRScope          string   `yaml:"prScope"`
+	Environment      string   `yaml:"environment"`
+	Isolation        string   `yaml:"isolation"`
+	Timeout          string   `yaml:"timeout"`
+	ParallelNodes    int      `yaml:"parallelNodes"`
+	RequiredEnv      []string `yaml:"requiredEnv"`
+	EnableEnv        string   `yaml:"enableEnv"`
+	ProviderImageEnv string   `yaml:"providerImageEnv"`
+	VersionRefs      []string `yaml:"versionRefs"`
+	Status           string   `yaml:"status"`
+	Reports          bool     `yaml:"reports"`
 }
 
 type versionsPolicy struct {
@@ -644,6 +646,13 @@ func validateOpenBaoVersionPolicy(t *testing.T, policy versionsPolicy) {
 
 func validateE2ELane(t *testing.T, lane e2eLane, seenIDs map[string]struct{}) {
 	t.Helper()
+	validateE2ELaneIdentity(t, lane, seenIDs)
+	validateE2ELaneSelectors(t, lane)
+	validateE2ELaneRuntime(t, lane)
+}
+
+func validateE2ELaneIdentity(t *testing.T, lane e2eLane, seenIDs map[string]struct{}) {
+	t.Helper()
 
 	if lane.ID == "" {
 		t.Fatalf("lane id is required")
@@ -662,12 +671,25 @@ func validateE2ELane(t *testing.T, lane e2eLane, seenIDs map[string]struct{}) {
 	if lane.MakeTarget == "" {
 		t.Fatalf("lane %q makeTarget is required", lane.ID)
 	}
+}
+
+func validateE2ELaneSelectors(t *testing.T, lane e2eLane) {
+	t.Helper()
+
 	if lane.Package == "" {
 		t.Fatalf("lane %q package is required", lane.ID)
 	}
 	if lane.LabelFilter == "" {
 		t.Fatalf("lane %q labelFilter is required", lane.ID)
 	}
+	if lane.ProviderImageEnv != "" && !containsString(lane.RequiredEnv, lane.ProviderImageEnv) {
+		t.Fatalf("lane %q providerImageEnv %q must also be listed in requiredEnv", lane.ID, lane.ProviderImageEnv)
+	}
+}
+
+func validateE2ELaneRuntime(t *testing.T, lane e2eLane) {
+	t.Helper()
+
 	if lane.PRScope == "" {
 		t.Fatalf("lane %q prScope is required", lane.ID)
 	}
@@ -726,8 +748,29 @@ func validateReleaseGate(t *testing.T, gate e2eReleaseGate, lanesByID map[string
 			if lane.MakeTarget == "" {
 				t.Fatalf("release gate lane %q makeTarget is required", laneID)
 			}
+			if requiresRunRegex(lane.ID) && lane.RunRegex == "" {
+				t.Fatalf("release gate lane %q must define runRegex for manifest-driven execution", laneID)
+			}
 		}
 	}
+}
+
+func requiresRunRegex(laneID string) bool {
+	switch laneID {
+	case "openbao-ci", "openbao-cert-auth-ci":
+		return false
+	default:
+		return true
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func releaseGateMakeTargets(manifest e2eSuitesManifest) []string {

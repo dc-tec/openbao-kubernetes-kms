@@ -19,11 +19,21 @@ test-e2e: verify-e2e-manifest ## Run Ginkgo/Gomega E2E tests; filter with E2E_LA
 
 .PHONY: test-e2e-release-preview-openbao
 test-e2e-release-preview-openbao: verify-e2e-manifest test-e2e-release-preview-openbao-images ## Run manifest-defined OpenBao preview release E2E lanes.
-	@E2E_PROVIDER_BUILD=false "$(GO)" run ./hack/tools/e2e_release_gate -group openbao -make "$(MAKE)"
+	@E2E_PROVIDER_BUILD=false \
+	E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" \
+	E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" \
+	E2E_PROVIDER_OLD_IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" \
+	E2E_PROVIDER_NEW_IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" \
+	E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE="$(E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE)" \
+	"$(GO)" run ./hack/tools/e2e_release_gate -group openbao -ginkgo "$(GINKGO)"
 
 .PHONY: test-e2e-release-preview-kind
 test-e2e-release-preview-kind: verify-e2e-manifest test-e2e-release-preview-kind-images ## Run manifest-defined Kind preview release E2E lanes.
-	@E2E_PROVIDER_BUILD=false "$(GO)" run ./hack/tools/e2e_release_gate -group kind -make "$(MAKE)"
+	@E2E_PROVIDER_BUILD=false \
+	E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" \
+	E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" \
+	E2E_KIND_NODE_IMAGE="$(E2E_KIND_NODE_IMAGE)" \
+	"$(GO)" run ./hack/tools/e2e_release_gate -group kind -ginkgo "$(GINKGO)"
 
 .PHONY: test-e2e-release-preview-openbao-images
 test-e2e-release-preview-openbao-images: verify-e2e-manifest ## Build provider images needed by the OpenBao preview release gate.

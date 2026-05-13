@@ -77,10 +77,10 @@ make test-e2e E2E_LABEL_FILTER='openbao && transit && ci'
 
 ## Suite Manifest
 
-`test/e2e/suites.yaml` describes E2E lanes and the preview release gate groups.
-It does not own concrete OpenBao or Kubernetes versions. Those remain in
-`.ci/versions.yaml`, and lanes reference the relevant fields through
-`versionRefs`.
+`test/e2e/suites.yaml` describes E2E lanes, run selectors, timeouts, required
+environment, reports, and the preview release gate groups. It does not own
+concrete OpenBao or Kubernetes versions. Those remain in `.ci/versions.yaml`,
+and lanes reference the relevant fields through `versionRefs`.
 
 The release workflow calls only the aggregate preview gate targets:
 
@@ -89,9 +89,11 @@ make test-e2e-release-preview-openbao
 make test-e2e-release-preview-kind
 ```
 
-Those targets read `releaseGate.preview.groups` from the suite manifest and run
-the listed lane `makeTarget` values in order. Release evidence must not drift
-from the manifest-defined groups.
+Those targets prepare the required local images once, then the release-gate
+runner reads `releaseGate.preview.groups` from the suite manifest and executes
+the listed lanes directly. The per-lane `makeTarget` values remain supported
+operator/developer entrypoints, but release evidence must come from the
+manifest-defined groups, run selectors, timeouts, and environment.
 
 The Kind aggregate also reads `validation.kubernetes.previewMatrix` from
 `.ci/versions.yaml`. By default it runs the Kind lane group once for every
@@ -99,6 +101,14 @@ matrix entry with `releaseGate: true`. Set `E2E_KUBERNETES_LINE=1.34` or
 `E2E_KUBERNETES_LINE=1.35` to run one validated line locally. Kubernetes
 `1.36` is tracked as the intended next validation line until a digest-pinned
 Kind node image is available.
+
+For focused release-gate diagnosis after the required images are available, run
+a single lane through the same runner:
+
+```sh
+E2E_PROVIDER_IMAGE=ghcr.io/dc-tec/bao-kms-provider:e2e-local \
+  go run ./hack/tools/e2e_release_gate -group openbao -lane openbao-ha-ci
+```
 
 Soak lanes are release evidence for the pinned CI environment only. They are not
 an SLO, capacity, or production performance claim.
@@ -219,6 +229,14 @@ validation-only variants, not public release images.
 | `E2E_JSON_REPORT` | `artifacts/e2e/ginkgo.json` |
 | `E2E_TIMEOUT` | `30m` |
 | `E2E_PARALLEL_NODES` | `1` |
+
+Preview release gates write per-lane artifacts under
+`artifacts/e2e/<group>/<lane-id>/` for OpenBao lanes and
+`artifacts/e2e/kind/<kubernetes-line>/<lane-id>/` for Kind lanes. Every lane
+writes `console.log`. Ginkgo-spec lanes also write `junit.xml` and
+`ginkgo.json`; plain `testing` lanes are selected through manifest `runRegex`
+and keep their evidence in `console.log`. The shared `E2E_JUNIT_REPORT` and
+`E2E_JSON_REPORT` variables apply to the generic `make test-e2e` entrypoint.
 
 E2E logs are redacted. The framework never writes OpenBao tokens, JWTs,
 plaintext, or full ciphertext to artifacts.

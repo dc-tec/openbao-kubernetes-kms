@@ -303,7 +303,6 @@ func (h *OpenBaoHAEnvironment) startNode(ctx context.Context, index int) error {
 	configPath := "/bao/tls/" + node.name + ".hcl"
 	args := []string{
 		"run",
-		"--rm",
 		"--detach",
 		"--name", node.name,
 		"--network", h.networkName,
@@ -600,7 +599,8 @@ func writeOpenBaoHARaftStorageConfig(dir string, nodeName string, retryJoinNodes
   }
 `, retryJoinNode, openBaoTLSServerName)
 	}
-	raw := fmt.Sprintf(`api_addr = "https://%s:8200"
+	raw := fmt.Sprintf(`disable_mlock = true
+api_addr = "https://%s:8200"
 cluster_addr = "https://%s:8201"
 
 storage "raft" {

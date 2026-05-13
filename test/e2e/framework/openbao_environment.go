@@ -872,7 +872,8 @@ func writeOpenBaoRaftStorageConfig(dir string, requestClientCerts bool) error {
 		clientCertConfig = `  tls_disable_client_certs = false
 `
 	}
-	raw := fmt.Sprintf(`api_addr = "https://localhost:8200"
+	raw := fmt.Sprintf(`disable_mlock = true
+api_addr = "https://localhost:8200"
 cluster_addr = "https://localhost:8201"
 
 storage "raft" {
