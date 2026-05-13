@@ -29,7 +29,6 @@ releaseGate:
         - openbao-provider-upgrade-rollback-ci
         - openbao-cert-auth-ci
         - openbao-provider-certauth-pkcs11-source-ci
-        - openbao-provider-certauth-spiffe-source-ci
       kind:
         - kind-smoke
         - kind-convergence
@@ -123,7 +122,7 @@ lanes:
       - validation.spire.primary
       - validation.spire.serverImage
       - validation.spire.agentImage
-    status: active
+    status: planned
     reports: true
 
   - id: openbao-provider-certauth-pkcs11-source-ci

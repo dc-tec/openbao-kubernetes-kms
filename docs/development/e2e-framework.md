@@ -24,9 +24,9 @@ behavior.
 | Preview release Kind gate | `make test-e2e-release-preview-kind` | Runs the manifest-defined Kind release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime, Kind, kubectl |
 | OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
 | OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao TLS cert auth method, listener client-certificate request, URI SAN role binding, cert login, and Transit access with the issued token. | Docker-compatible runtime |
-| Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Real SPIRE server and agent, Workload API socket, X.509 SVID selection, and provider local SPIFFE certificate validation. This is implementation evidence, not a public preview support claim. | Docker-compatible runtime |
+| Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Explicit implementation check for real SPIRE server and agent, Workload API socket, X.509 SVID selection, and provider local SPIFFE certificate validation. This lane is not wired into CI or the preview release gate. | Docker-compatible runtime |
 | Provider PKCS#11 SoftHSM certificate source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | Real SoftHSM token, PKCS#11 signer, provider image, OpenBao cert login, KMS v2 socket client, and Transit access. | Docker-compatible runtime |
-| Provider certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | Runs the SPIRE source and PKCS#11 SoftHSM source lanes. | Docker-compatible runtime |
+| Provider certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | Runs the supported PKCS#11 SoftHSM source lane. SPIRE remains explicit local implementation coverage only. | Docker-compatible runtime |
 | Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and provider auth. | Docker-compatible runtime |
 | Provider CLI | `make test-e2e-provider-cli-openbao-ci` | Provider image CLI commands against real OpenBao/config/state, including diagnostics and hardening failures. | Docker-compatible runtime |
 | Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted auth material, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
@@ -103,10 +103,11 @@ Kind node image is available.
 Soak lanes are release evidence for the pinned CI environment only. They are not
 an SLO, capacity, or production performance claim.
 
-The SPIRE certificate-source lane may be part of the OpenBao preview gate as
-implementation evidence. It does not make `auth.cert.source: spiffe` a supported
-user configuration until the supported OpenBao version can derive cert-auth
-identity aliases from URI SANs and release evidence covers that login path.
+The SPIRE certificate-source lane is not part of the CI or preview release gate.
+It remains an explicit implementation check only. It does not make
+`auth.cert.source: spiffe` a supported user configuration until the supported
+OpenBao version can derive cert-auth identity aliases from URI SANs and release
+evidence covers that login path.
 
 Current lane IDs:
 
@@ -115,7 +116,7 @@ Current lane IDs:
 | `openbao-ci` | active |
 | `openbao-provider-openbao-ci` | active |
 | `openbao-cert-auth-ci` | active |
-| `openbao-provider-certauth-spiffe-source-ci` | active |
+| `openbao-provider-certauth-spiffe-source-ci` | planned |
 | `openbao-provider-certauth-pkcs11-source-ci` | active |
 | `openbao-failure-ci` | active |
 | `openbao-provider-cli-ci` | active |
@@ -199,6 +200,15 @@ manifest-defined lanes with `E2E_PROVIDER_BUILD=false` so the same image tags
 are reused across the release gate. Use `E2E_PROVIDER_BUILD=false` directly only
 when the referenced images are already built and available to the selected
 runtime.
+
+CI builds the default provider image and PKCS#11 validation image once in the
+`e2e-provider-images` job, uploads Docker archives, and has the image scan,
+OpenBao E2E, and Kind E2E jobs load those exact images with
+`E2E_PROVIDER_BUILD=false`. The release workflow pulls the digest produced by
+the release build job, tags it locally as `E2E_PROVIDER_IMAGE`, and runs the
+preview gate against that immutable build output. OpenBao release validation
+still builds local PKCS#11 and upgrade/rollback images because those are
+validation-only variants, not public release images.
 
 ## Reports And Artifacts
 

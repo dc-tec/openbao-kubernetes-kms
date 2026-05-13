@@ -80,4 +80,4 @@ versions-check: ## Check central version policy exists and contains no floating 
 
 .PHONY: verify-e2e-manifest
 verify-e2e-manifest: ## Validate the E2E suite manifest and version-pin policy.
-	@"$(GO)" test ./test/e2e -run '^Test(E2EManifest|KubernetesPreviewMatrixPolicy|OpenBaoVersionPolicy|ReleaseWorkflowUsesManifestGate|ReleaseGateMakeTargetsExist)$$' -count=1
+	@"$(GO)" test ./test/e2e -run '^Test(E2EManifest|KubernetesPreviewMatrixPolicy|OpenBaoVersionPolicy|ReleaseWorkflowUsesManifestGate|ReleaseGateDefersUnsupportedSPIRELane|CIWorkflowReusesPrebuiltE2EProviderImages|ReleaseWorkflowRunsE2EAgainstBuiltImage|ReleaseGateMakeTargetsExist)$$' -count=1

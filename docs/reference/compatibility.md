@@ -105,7 +105,7 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 |---|---|---|
 | JWT | default release artifacts | Supported preview path. |
 | Certificate with PKCS#11 source | `certauth_pkcs11` opt-in host artifact | Opt-in preview only when the selected release includes the PKCS#11 artifact evidence and E2E result. CI exercises a real SoftHSM token, PKCS#11 signer, OpenBao cert login, and Transit access. |
-| Certificate with SPIFFE source | `certauth_spiffe` validation artifact | Wiring is present for local verification and upstream OpenBao alignment work, and CI exercises real SPIRE Workload API source validation. `auth.cert.source: spiffe` is not a supported user configuration and SPIFFE artifacts are not public preview support artifacts until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
+| Certificate with SPIFFE source | `certauth_spiffe` validation artifact | Wiring is present for explicit local verification and upstream OpenBao alignment work, but the SPIRE lane is not part of CI or the preview release gate. `auth.cert.source: spiffe` is not a supported user configuration and SPIFFE artifacts are not public preview support artifacts until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
 | OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
 ## Compatibility Promises

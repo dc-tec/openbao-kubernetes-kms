@@ -178,9 +178,18 @@ jobs:
     name: Release Gate OpenBao E2E
     runs-on: ubuntu-24.04
     timeout-minutes: 75
-    needs: prepare
+    needs: [prepare, build]
+    permissions:
+      contents: read
+      packages: read
     env:
       GOFLAGS: -mod=vendor
+      E2E_PROVIDER_BUILD: "false"
+      E2E_PROVIDER_RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
+      E2E_PROVIDER_IMAGE: ${{ needs.prepare.outputs.image }}:release-e2e-${{ needs.prepare.outputs.commit }}
+      E2E_PROVIDER_OLD_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-upgrade-old-${{ needs.prepare.outputs.commit }}
+      E2E_PROVIDER_NEW_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-upgrade-new-${{ needs.prepare.outputs.commit }}
+      E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-certauth-pkcs11-${{ needs.prepare.outputs.commit }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -189,6 +198,24 @@ jobs:
 
       - name: Setup repo tools
         uses: ./.github/actions/setup-repo-tools
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull release provider image
+        run: |
+          docker pull "${E2E_PROVIDER_RELEASE_IMAGE}"
+          docker tag "${E2E_PROVIDER_RELEASE_IMAGE}" "${E2E_PROVIDER_IMAGE}"
+
+      - name: Build OpenBao validation images
+        run: |
+          make image IMAGE="${E2E_PROVIDER_OLD_IMAGE}" VERSION="${{ needs.prepare.outputs.version }}-e2e-old" COMMIT="${{ needs.prepare.outputs.commit }}-old"
+          make image IMAGE="${E2E_PROVIDER_NEW_IMAGE}" VERSION="${{ needs.prepare.outputs.version }}-e2e-new" COMMIT="${{ needs.prepare.outputs.commit }}-new"
+          make image-certauth-pkcs11-e2e
 
       - name: Run OpenBao release E2E lanes
         run: make test-e2e-release-preview-openbao
@@ -231,12 +258,18 @@ jobs:
     name: Release Gate Kind E2E (Kubernetes ${{ matrix.kubernetes_line }})
     runs-on: ubuntu-24.04
     timeout-minutes: 150
-    needs: [prepare, kind-matrix]
+    needs: [prepare, build, kind-matrix]
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.kind-matrix.outputs.matrix) }}
     env:
       GOFLAGS: -mod=vendor
+      E2E_PROVIDER_BUILD: "false"
+      E2E_PROVIDER_RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
+      E2E_PROVIDER_IMAGE: ${{ needs.prepare.outputs.image }}:release-e2e-${{ needs.prepare.outputs.commit }}
       E2E_KUBERNETES_LINE: ${{ matrix.kubernetes_line }}
     steps:
       - name: Checkout
@@ -246,6 +279,18 @@ jobs:
 
       - name: Setup repo tools
         uses: ./.github/actions/setup-repo-tools
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull release provider image
+        run: |
+          docker pull "${E2E_PROVIDER_RELEASE_IMAGE}"
+          docker tag "${E2E_PROVIDER_RELEASE_IMAGE}" "${E2E_PROVIDER_IMAGE}"
 
       - name: Install kind
         uses: ./.github/actions/install-kind

@@ -32,7 +32,6 @@ test-e2e-release-preview-openbao-images: verify-e2e-manifest ## Build provider i
 		$(MAKE) image IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" VERSION="$(VERSION)-e2e-old" COMMIT="$(COMMIT)-old"; \
 		$(MAKE) image IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" VERSION="$(VERSION)-e2e-new" COMMIT="$(COMMIT)-new"; \
 		$(MAKE) image-certauth-pkcs11-e2e; \
-		$(MAKE) image-certauth-spiffe; \
 	fi
 
 .PHONY: test-e2e-release-preview-kind-images
@@ -93,8 +92,7 @@ test-e2e-provider-certauth-pkcs11-openbao-ci: verify-e2e-manifest ## Run provide
 	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestProviderCertAuthPKCS11SoftHSME2E$$' -count=1 -timeout=7m
 
 .PHONY: test-e2e-provider-certauth-sources-openbao-ci
-test-e2e-provider-certauth-sources-openbao-ci: verify-e2e-manifest ## Run provider cert-auth source E2E lanes.
-	@$(MAKE) test-e2e-provider-certauth-spiffe-openbao-ci
+test-e2e-provider-certauth-sources-openbao-ci: verify-e2e-manifest ## Run supported provider cert-auth source E2E lanes.
 	@$(MAKE) test-e2e-provider-certauth-pkcs11-openbao-ci
 
 .PHONY: test-e2e-provider-upgrade-rollback-openbao-ci
