@@ -66,6 +66,12 @@ type OpenBaoAuthClient interface {
 	RenewSelfToken(context.Context, string, time.Duration) (openbao.AuthToken, error)
 }
 
+// LifecycleConfig contains token lifecycle settings shared by auth methods.
+type LifecycleConfig struct {
+	LoginBeforeTokenExpiry time.Duration
+	TokenRenewalIncrement  time.Duration
+}
+
 // ManagerConfig contains JWT auth settings after typed config loading.
 type ManagerConfig struct {
 	MountPath              string
@@ -78,6 +84,22 @@ type ManagerConfig struct {
 	ExpectedIssuer         string
 	ExpectedAudience       []string
 	ExpectedSubject        string
+}
+
+// LoginResult contains one successful auth-method login.
+type LoginResult struct {
+	AuthToken openbao.AuthToken
+	JWT       JWT
+}
+
+// LoginSource performs one auth-method-specific OpenBao login.
+type LoginSource interface {
+	Login(context.Context, OpenBaoAuthClient, Clock) (LoginResult, error)
+}
+
+// JWTLoginSource performs JWT file validation and OpenBao JWT login.
+type JWTLoginSource struct {
+	cfg ManagerConfig
 }
 
 // ManagerOptions contains testable lifecycle behavior settings.
@@ -113,10 +135,11 @@ type State struct {
 	LastTokenSource     string
 }
 
-// Manager keeps the OpenBao token in memory and refreshes it through JWT login.
+// Manager keeps the OpenBao token in memory and refreshes it through a login source.
 type Manager struct {
 	mu                  sync.Mutex
-	cfg                 ManagerConfig
+	cfg                 LifecycleConfig
+	source              LoginSource
 	client              OpenBaoAuthClient
 	clock               Clock
 	renewalEnabled      bool
@@ -144,10 +167,27 @@ type currentToken struct {
 
 // NewManager creates an in-memory token manager.
 func NewManager(cfg ManagerConfig, client OpenBaoAuthClient, opts ManagerOptions) (*Manager, error) {
+	source, err := NewJWTLoginSource(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return NewManagerWithSource(lifecycleConfigFromManager(cfg), source, client, opts)
+}
+
+// NewManagerWithSource creates an in-memory token manager for one login source.
+func NewManagerWithSource(
+	cfg LifecycleConfig,
+	source LoginSource,
+	client OpenBaoAuthClient,
+	opts ManagerOptions,
+) (*Manager, error) {
 	if client == nil {
 		return nil, fmt.Errorf("%w: OpenBao auth client is required", ErrAuthConfig)
 	}
-	normalized, err := validateManagerConfig(cfg)
+	if source == nil {
+		return nil, fmt.Errorf("%w: login source is required", ErrAuthConfig)
+	}
+	normalized, err := validateLifecycleConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +209,7 @@ func NewManager(cfg ManagerConfig, client OpenBaoAuthClient, opts ManagerOptions
 
 	return &Manager{
 		cfg:              normalized,
+		source:           source,
 		client:           client,
 		clock:            clockOrReal(opts.Clock),
 		renewalEnabled:   opts.RenewalEnabled,
@@ -191,7 +232,7 @@ func (m *Manager) Token(ctx context.Context) (string, error) {
 	return token.value, nil
 }
 
-// Refresh forces a JWT file read and OpenBao JWT login.
+// Refresh forces an auth-method login.
 func (m *Manager) Refresh(ctx context.Context) error {
 	_, err := m.ensureToken(ctx, true)
 	return err
@@ -287,7 +328,8 @@ const (
 
 type refreshAction struct {
 	kind    refreshKind
-	cfg     ManagerConfig
+	cfg     LifecycleConfig
+	source  LoginSource
 	current currentToken
 	clock   Clock
 }
@@ -305,6 +347,7 @@ func (m *Manager) refreshActionLocked(forceLogin bool, now time.Time) refreshAct
 	action := refreshAction{
 		kind:    refreshKindLogin,
 		cfg:     m.cfg,
+		source:  m.source,
 		current: m.current,
 		clock:   m.clock,
 	}
@@ -332,31 +375,14 @@ func (m *Manager) performRefresh(ctx context.Context, action refreshAction) refr
 }
 
 func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult {
-	jwt, err := ReadAndValidateJWT(action.cfg.JWTFile, JWTValidationOptions{
-		MinRemainingTTL:  action.cfg.MinJWTRemainingTTL,
-		ClockSkewLeeway:  action.cfg.ClockSkewLeeway,
-		ExpectedIssuer:   action.cfg.ExpectedIssuer,
-		ExpectedAudience: action.cfg.ExpectedAudience,
-		ExpectedSubject:  action.cfg.ExpectedSubject,
-		Clock:            action.clock,
-	})
+	login, err := action.source.Login(ctx, m.client, action.clock)
 	if err != nil {
 		m.observeLogin(ctx, err)
 		return refreshResult{err: err}
 	}
 
-	authToken, err := m.client.LoginJWT(ctx, openbao.JWTLoginRequest{
-		MountPath: action.cfg.MountPath,
-		Role:      action.cfg.Role,
-		JWT:       jwt.Raw,
-	})
-	if err != nil {
-		publicErr := publicAuthError(err)
-		m.observeLogin(ctx, publicErr)
-		return refreshResult{err: publicErr}
-	}
 	now := action.clock.Now()
-	token, err := currentTokenFromAuth(authToken, "", now, true, action.cfg.LoginBeforeTokenExpiry)
+	token, err := currentTokenFromAuth(login.AuthToken, "", now, true, action.cfg.LoginBeforeTokenExpiry)
 	if err != nil {
 		m.observeLogin(ctx, err)
 		return refreshResult{err: err}
@@ -365,7 +391,7 @@ func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult
 
 	return refreshResult{
 		token:   token,
-		jwt:     jwt,
+		jwt:     login.JWT,
 		loginAt: now,
 	}
 }
@@ -504,6 +530,44 @@ func jitterRetryBackoff(backoff time.Duration) time.Duration {
 	return backoff + time.Duration(offset.Int64()) - quarter
 }
 
+// NewJWTLoginSource creates a JWT login source with validated local settings.
+func NewJWTLoginSource(cfg ManagerConfig) (*JWTLoginSource, error) {
+	normalized, err := validateManagerConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &JWTLoginSource{cfg: normalized}, nil
+}
+
+// Login validates the current JWT file and exchanges it for an OpenBao token.
+func (s *JWTLoginSource) Login(
+	ctx context.Context,
+	client OpenBaoAuthClient,
+	clock Clock,
+) (LoginResult, error) {
+	jwt, err := ReadAndValidateJWT(s.cfg.JWTFile, JWTValidationOptions{
+		MinRemainingTTL:  s.cfg.MinJWTRemainingTTL,
+		ClockSkewLeeway:  s.cfg.ClockSkewLeeway,
+		ExpectedIssuer:   s.cfg.ExpectedIssuer,
+		ExpectedAudience: s.cfg.ExpectedAudience,
+		ExpectedSubject:  s.cfg.ExpectedSubject,
+		Clock:            clock,
+	})
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	authToken, err := client.LoginJWT(ctx, openbao.JWTLoginRequest{
+		MountPath: s.cfg.MountPath,
+		Role:      s.cfg.Role,
+		JWT:       jwt.Raw,
+	})
+	if err != nil {
+		return LoginResult{}, publicAuthError(err)
+	}
+	return LoginResult{AuthToken: authToken, JWT: jwt}, nil
+}
+
 func validateManagerConfig(cfg ManagerConfig) (ManagerConfig, error) {
 	cfg.MountPath = strings.TrimSpace(cfg.MountPath)
 	cfg.Role = strings.TrimSpace(cfg.Role)
@@ -539,11 +603,28 @@ func validateManagerConfig(cfg ManagerConfig) (ManagerConfig, error) {
 	if cfg.ClockSkewLeeway < 0 {
 		return ManagerConfig{}, fmt.Errorf("%w: clock skew leeway must not be negative", ErrAuthConfig)
 	}
+	lifecycle, err := validateLifecycleConfig(lifecycleConfigFromManager(cfg))
+	if err != nil {
+		return ManagerConfig{}, err
+	}
+	cfg.LoginBeforeTokenExpiry = lifecycle.LoginBeforeTokenExpiry
+	cfg.TokenRenewalIncrement = lifecycle.TokenRenewalIncrement
+	return cfg, nil
+}
+
+func lifecycleConfigFromManager(cfg ManagerConfig) LifecycleConfig {
+	return LifecycleConfig{
+		LoginBeforeTokenExpiry: cfg.LoginBeforeTokenExpiry,
+		TokenRenewalIncrement:  cfg.TokenRenewalIncrement,
+	}
+}
+
+func validateLifecycleConfig(cfg LifecycleConfig) (LifecycleConfig, error) {
 	if cfg.LoginBeforeTokenExpiry <= 0 {
-		return ManagerConfig{}, fmt.Errorf("%w: login-before-expiry duration must be positive", ErrAuthConfig)
+		return LifecycleConfig{}, fmt.Errorf("%w: login-before-expiry duration must be positive", ErrAuthConfig)
 	}
 	if cfg.TokenRenewalIncrement <= 0 {
-		return ManagerConfig{}, fmt.Errorf("%w: token renewal increment must be positive", ErrAuthConfig)
+		return LifecycleConfig{}, fmt.Errorf("%w: token renewal increment must be positive", ErrAuthConfig)
 	}
 	return cfg, nil
 }
