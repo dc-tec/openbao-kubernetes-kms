@@ -154,7 +154,7 @@ func TestKindMultiControlPlaneConvergenceE2E(t *testing.T) {
 	}
 	for _, nodeName := range nodeNames {
 		restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
-		assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
+		assertKindSecretReadableThroughOnlyAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeNames, nodeName, secretName, secretValue)
 	}
 }
 
@@ -418,6 +418,10 @@ func enableKindAPIServerKMS(
 	if err != nil {
 		t.Fatalf("read kube-apiserver manifest: %v", err)
 	}
+	previousID, err := kindAPIServerContainerID(ctx, dockerPath, nodeName)
+	if err != nil {
+		t.Fatalf("read kube-apiserver container ID on %s: %v", nodeName, err)
+	}
 	patched, err := patchKindAPIServerManifest(manifest)
 	if err != nil {
 		t.Fatalf("patch kube-apiserver manifest: %v", err)
@@ -427,6 +431,11 @@ func enableKindAPIServerKMS(
 		t.Fatalf("write patched kube-apiserver manifest: %v", err)
 	}
 	dockerCopy(t, ctx, dockerPath, staged, nodeName+":"+kindAPIServerManifestPath)
+	if patched != manifest && previousID != "" {
+		waitForKindAPIServerContainerRestart(t, ctx, dockerPath, nodeName, previousID)
+	} else {
+		waitForKindAPIServerContainer(t, ctx, dockerPath, nodeName)
+	}
 	if err := waitForKindAPIServerReady(ctx, kubectlPath, contextName); err != nil {
 		t.Fatalf("kube-apiserver did not become ready: %v\nkube-apiserver status:\n%s\nkube-apiserver logs:\n%s\nprovider status:\n%s\nprovider logs:\n%s\nnode logs:\n%s\npatched manifest:\n%s",
 			err,
@@ -536,7 +545,7 @@ func assertKindSecretReadableNamed(
 		"-o", "jsonpath={.data.value}",
 	)
 	if err != nil {
-		t.Fatalf("read Kubernetes Secret: %v", err)
+		t.Fatalf("read Kubernetes Secret %q: %v: %s", secretName, err, strings.TrimSpace(output))
 	}
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(output))
 	if err != nil {
@@ -618,25 +627,20 @@ func restartKindAPIServer(
 ) {
 	t.Helper()
 
-	_, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "sh", "-c", kindRestartAPIServerScript)
+	previousID := waitForKindAPIServerContainer(t, ctx, dockerPath, nodeName)
+	output, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "crictl", "stop", previousID)
 	if err != nil {
-		t.Fatalf("restart kube-apiserver container: %v\nkube-apiserver status:\n%s",
+		t.Fatalf("restart kube-apiserver container on %s: %v: %s\nkube-apiserver status:\n%s\nkube-apiserver logs:\n%s",
+			nodeName,
 			err,
+			strings.TrimSpace(output),
 			kindContainerStatus(ctx, dockerPath, nodeName, "kube-apiserver"),
+			kindContainerLogs(ctx, dockerPath, nodeName, "kube-apiserver"),
 		)
 	}
+	waitForKindAPIServerContainerRestart(t, ctx, dockerPath, nodeName, previousID)
 	waitForKindAPIServer(t, ctx, kubectlPath, contextName)
 }
-
-const kindRestartAPIServerScript = `set -eu
-cid="$(crictl ps --name kube-apiserver -q | head -n1)"
-if [ -z "$cid" ]; then
-  printf '%s\n' 'no kube-apiserver container found'
-  crictl ps -a
-  exit 1
-fi
-crictl stop "$cid" >/dev/null
-`
 
 func waitForKindAPIServer(t *testing.T, ctx context.Context, kubectlPath string, contextName string) {
 	t.Helper()
@@ -646,14 +650,38 @@ func waitForKindAPIServer(t *testing.T, ctx context.Context, kubectlPath string,
 	}
 }
 
-func waitForKindAPIServerContainer(t *testing.T, ctx context.Context, dockerPath string, nodeName string) {
+func waitForKindAPIServerContainer(t *testing.T, ctx context.Context, dockerPath string, nodeName string) string {
+	t.Helper()
+
+	return waitForKindAPIServerContainerID(t, ctx, dockerPath, nodeName, "")
+}
+
+func waitForKindAPIServerContainerRestart(
+	t *testing.T,
+	ctx context.Context,
+	dockerPath string,
+	nodeName string,
+	previousID string,
+) string {
+	t.Helper()
+
+	return waitForKindAPIServerContainerID(t, ctx, dockerPath, nodeName, previousID)
+}
+
+func waitForKindAPIServerContainerID(
+	t *testing.T,
+	ctx context.Context,
+	dockerPath string,
+	nodeName string,
+	previousID string,
+) string {
 	t.Helper()
 
 	deadline := time.Now().Add(2 * time.Minute)
 	for time.Now().Before(deadline) {
-		output, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "crictl", "ps", "--name", "kube-apiserver", "-q")
-		if err == nil && strings.TrimSpace(output) != "" {
-			return
+		currentID, err := kindAPIServerContainerID(ctx, dockerPath, nodeName)
+		if err == nil && currentID != "" && currentID != previousID {
+			return currentID
 		}
 		time.Sleep(time.Second)
 	}
@@ -661,6 +689,19 @@ func waitForKindAPIServerContainer(t *testing.T, ctx context.Context, dockerPath
 		nodeName,
 		kindContainerStatus(ctx, dockerPath, nodeName, "kube-apiserver"),
 	)
+	return ""
+}
+
+func kindAPIServerContainerID(ctx context.Context, dockerPath string, nodeName string) (string, error) {
+	output, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "crictl", "ps", "--name", "kube-apiserver", "-q")
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(output))
+	}
+	fields := strings.Fields(output)
+	if len(fields) == 0 {
+		return "", nil
+	}
+	return fields[0], nil
 }
 
 func assertKindSecretReadableThroughOnlyAPIServer(
