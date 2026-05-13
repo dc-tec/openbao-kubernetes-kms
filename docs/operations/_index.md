@@ -18,7 +18,7 @@ The runbooks assume `bao-kms-provider` is already installed on each control-plan
 ## Workflows
 
 1. [Rotation](/operations/rotation/) to rotate the OpenBao Transit key version, observe provider promotion, migrate Kubernetes resources, and keep old versions decryptable until backup retention allows retirement.
-2. [Disaster Recovery](/operations/disaster-recovery/) to recover OpenBao, etcd, provider state, JWT material, and control-plane nodes as compatible sets.
+2. [Disaster Recovery](/operations/disaster-recovery/) to recover OpenBao, etcd, provider state, auth material, and control-plane nodes as compatible sets.
 3. [Upgrade](/operations/upgrade/) to upgrade the provider binary or container image one control-plane node at a time with a documented rollback step.
 4. [Troubleshooting](/operations/troubleshooting/) for symptom-driven checks and the fastest safe recovery path.
 

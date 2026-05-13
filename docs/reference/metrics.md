@@ -37,16 +37,17 @@ The provider applies these rules to every metric:
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `openbao_kms_openbao_requests_total` | counter | `operation`, `status` | OpenBao API call counts by operation (`jwt_login`, `token_renew_self`, `transit_metadata_read`, `transit_disable_upsert_read`, `transit_encrypt`, `transit_decrypt`, `transit_batch_decrypt`, `capabilities_self`) and outcome. |
+| `openbao_kms_openbao_requests_total` | counter | `operation`, `status` | OpenBao API call counts by operation (`jwt_login`, `cert_login`, `token_renew_self`, `transit_metadata_read`, `transit_disable_upsert_read`, `transit_encrypt`, `transit_decrypt`, `transit_batch_decrypt`, `capabilities_self`) and outcome. |
 | `openbao_kms_openbao_duration_seconds` | histogram | `operation` | Per-operation latency for OpenBao calls. |
 
 ### Auth And Token
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `openbao_kms_auth_login_total` | counter | `status` | JWT login attempts by outcome. |
+| `openbao_kms_auth_login_total` | counter | `status` | Auth-method login attempts by outcome. |
 | `openbao_kms_auth_renewal_total` | counter | `status` | Token renewal attempts by outcome. |
 | `openbao_kms_token_ttl_seconds` | gauge | none | Remaining TTL of the current OpenBao token. |
+| `openbao_kms_certificate_ttl_seconds` | gauge | none | Remaining TTL of the current cert-auth client certificate. Zero when certificate auth is not in use or no certificate has been observed. |
 
 ### Active Key
 

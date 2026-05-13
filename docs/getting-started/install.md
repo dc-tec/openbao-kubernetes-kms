@@ -30,6 +30,16 @@ Choose the artifact that matches the deployment model you will use.
 | Static-pod bundle | static-pod deployment | Deterministic tarball with static-pod manifest, provider config sample, encryption config, image reference, checksum, signature, and attestation. |
 | Container image | static-pod runtime | Distroless non-root image, runs as `65532:65532`, pinned to a base image digest in `.ci/versions.yaml`. |
 
+Published release artifacts use the default JWT-capable build. Certificate auth is an opt-in build variant:
+
+```sh
+go build -tags certauth_spiffe ./cmd/bao-kms-provider
+go build -tags certauth_pkcs11 ./cmd/bao-kms-provider
+go build -tags "certauth_pkcs11 certauth_spiffe" ./cmd/bao-kms-provider
+```
+
+PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. SPIFFE builds require a reachable SPIFFE Workload API socket at the configured `auth.cert.spiffe.workloadAPISocket`.
+
 The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) once the artifact is in place.
 
 ## Verify Release Evidence
@@ -141,7 +151,7 @@ The bundle contains the static pod manifest, provider configuration sample, Kube
 - the numeric `supplementalGroups` entry,
 - the provider config values,
 - the OpenBao CA path,
-- the JWT path.
+- the configured auth material paths.
 
 Preload the referenced image on every control-plane node before relying on it for recovery-sensitive boot. See [Deployment: Static Pod Deployment](/deployment/static-pod/) for the host preparation and pod hardening details.
 
@@ -154,6 +164,8 @@ Recommended host layout:
 /etc/openbao-kms/config.yaml
 /etc/openbao-kms/tls/ca.crt
 /var/lib/openbao-kms/identity.jwt
+/etc/openbao-kms/client/client-chain.pem
+/etc/openbao-kms/pkcs11/pin
 /run/openbao-kms/kms.sock
 ```
 
@@ -166,10 +178,12 @@ Recommended ownership:
 /etc/openbao-kms/tls/ca.crt        root:root                       0644
 /var/lib/openbao-kms               openbao-kms:openbao-kms         0750
 /var/lib/openbao-kms/identity.jwt  root:openbao-kms                0640
+/etc/openbao-kms/client/client-chain.pem root:openbao-kms           0640
+/etc/openbao-kms/pkcs11/pin        root:openbao-kms                0640
 /run/openbao-kms                   openbao-kms:openbao-kms-socket  2750
 ```
 
-The provider runs as a non-root user (`openbao-kms`). The Kubernetes API server connects to the socket through the supplementary `openbao-kms-socket` group, which keeps API-server socket access separate from access to the provider JWT. For the full identity model and rationale, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+The provider runs as a non-root user (`openbao-kms`). The Kubernetes API server connects to the socket through the supplementary `openbao-kms-socket` group, which keeps API-server socket access separate from access to provider auth material. For the full identity model and rationale, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
 For the configuration file shape and field reference, see [Configuration](/reference/configuration/).
 
@@ -199,9 +213,9 @@ bao-kms-provider doctor \
 `doctor` validates:
 
 - configuration file permissions and shape,
-- JWT file readability and expiry,
+- auth material readability and local validity,
 - OpenBao TLS reachability,
-- JWT login against the configured OpenBao role,
+- login against the configured OpenBao auth method and role,
 - Transit key metadata read and capability negation,
 - probe encrypt and decrypt operations,
 - key_id stability across probe operations,

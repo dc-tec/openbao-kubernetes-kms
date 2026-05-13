@@ -16,7 +16,7 @@ This page is the threat model for `bao-kms-provider`. It enumerates the assets, 
 | KMS v2 plaintext request and response material | High |
 | OpenBao Transit key material | Critical |
 | OpenBao client token | High |
-| JWT identity file | High |
+| Provider auth material | High |
 | Plugin configuration | Medium to high |
 | Plugin local state | Medium, security-relevant |
 | KMS Unix socket | High local control-plane access |
@@ -30,7 +30,7 @@ This page is the threat model for `bao-kms-provider`. It enumerates the assets, 
 
 - `kube-apiserver` to the local Unix socket.
 - Plugin process to the OpenBao HTTPS endpoint.
-- OpenBao auth method to the external JWT issuer.
+- OpenBao auth method to the external JWT issuer, certificate authority, or SPIFFE control plane.
 - Plugin local filesystem to host users.
 - Plugin runtime directory to the API server identity.
 - OpenBao Transit policy to OpenBao administrators.
@@ -47,7 +47,7 @@ The design considers attackers who can:
 - access control-plane node files as a low-privilege user,
 - submit malformed KMS requests through a compromised local API server path,
 - cause OpenBao outages or network failures,
-- steal stale JWTs from disk or OpenBao tokens from logs if controls fail,
+- steal stale JWTs, certificate PIN files, SPIFFE socket access, or OpenBao tokens if controls fail,
 - modify configuration files when file permissions are wrong.
 
 The design does not defend against every action by:
@@ -65,7 +65,7 @@ The design does not defend against every action by:
 | Offline etcd snapshot theft | Encrypt selected API resources before persistence. |
 | Local key exposure | Use remote OpenBao Transit instead of static local encryption keys. |
 | OpenBao token theft | Memory-only token storage, short TTLs, explicit renewal increment, no token logs. |
-| JWT theft | File permissions, short lifetime, claim binding (issuer, audience, subject), external issuer where feasible. |
+| Auth material theft | File permissions, short JWT and certificate lifetimes, claim or certificate identity binding, external issuer or SPIFFE control plane where feasible. |
 | Transit key deletion | `deletion_allowed=false`, no delete permission for the plugin token, tested backups. |
 | Accidental key creation | `disable_upsert=true` at the Transit mount, no create permission for the plugin token. |
 | Key recreation with same name | Key lineage ID, decrypt validation, DR checks. |
@@ -74,7 +74,7 @@ The design does not defend against every action by:
 | Annotation tampering | Canonical AAD reconstruction and annotation hash checks. |
 | KMS socket path replacement | Provider-owned, non-group-writable runtime directory; filesystem socket permissions; live-socket collision checks; verified-dead stale socket cleanup only. |
 | Provider downgrade to plaintext | Remove `identity` fallback after migration; audit `EncryptionConfiguration`. |
-| Protected API server dependency loop | Use JWT auth without TokenReview and keep OpenBao outside the protected API-server dependency path. |
+| Protected API server dependency loop | Use provider auth without TokenReview and keep OpenBao outside the protected API-server dependency path. |
 | OpenBao MITM | TLS CA validation and server name verification. |
 | OpenBao outage | Cached Status with staleness limits, fail closed, bootstrap grace, jittered auth retry backoff, alerting. |
 | Malicious or compromised plugin binary | Host hardening, pinned release artifacts, and signing, reproducibility, and attestation evidence before a production-ready claim. Defense is limited because the plugin sees KMS plaintext material in flight. |
@@ -92,7 +92,7 @@ The design provides:
 - metadata binding through Transit associated data; see [AAD And Decrypt Validation](/security/aad-and-decrypt-validation/),
 - auditable OpenBao Transit operations,
 - narrowed plugin permissions,
-- reduced Kubernetes API circular dependency through JWT-first authentication; see [Auth Model](/security/auth-model/).
+- reduced Kubernetes API circular dependency through provider authentication that avoids TokenReview; see [Auth Model](/security/auth-model/).
 
 ## Security Properties Not Provided
 
@@ -114,7 +114,7 @@ Before any public release:
 - security review of AAD canonicalization,
 - review of OpenBao policy,
 - review of socket handling,
-- review of JWT handling,
+- review of auth material handling,
 - review of log and metric redaction,
 - failure-mode validation for key deletion, recreated keys, and premature `min_decryption_version`.
 

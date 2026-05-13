@@ -61,7 +61,7 @@ Use a static pod when:
 - the control plane is already kubeadm-style with all components running as static pods,
 - operators want a Kubernetes-native manifest on each control-plane node,
 - container images are preloaded or reliably available on each node,
-- hostPath-mounted configuration and JWT files are acceptable,
+- hostPath-mounted configuration and auth material are acceptable,
 - OpenBao is reachable independently of the protected API server.
 
 ## Bootstrap Risk Comparison

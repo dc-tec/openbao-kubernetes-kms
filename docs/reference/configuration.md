@@ -29,17 +29,18 @@ openbao:
 
 auth:
   method: jwt
-  mountPath: auth/k8s-workload-a-jwt
-  role: openbao-kms-control-plane
-  jwtFile: /var/lib/openbao-kms/identity.jwt
-  minJwtRemainingTtl: 2m
-  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
-  expectedIssuer: ""
-  expectedAudience: []
-  expectedSubject: ""
+  jwt:
+    mountPath: auth/k8s-workload-a-jwt
+    role: openbao-kms-control-plane
+    jwtFile: /var/lib/openbao-kms/identity.jwt
+    minRemainingTtl: 2m
+    clockSkewLeeway: 30s
+    expectedIssuer: ""
+    expectedAudience: []
+    expectedSubject: ""
 
 transit:
   mountPath: transit
@@ -82,7 +83,7 @@ logging:
 
 The following fields must be set explicitly:
 
-- `configVersion` (when authoring new configs; omitted legacy configs default to `v1alpha1`)
+- `configVersion`
 - `server.socketPath`
 - `server.socketMode`
 - `server.socketGroup`
@@ -91,9 +92,22 @@ The following fields must be set explicitly:
 - `openbao.tlsServerName`
 - `openbao.instanceId`
 - `auth.method`
-- `auth.mountPath`
-- `auth.role`
-- `auth.jwtFile`
+- when `auth.method` is `jwt`:
+  - `auth.jwt.mountPath`
+  - `auth.jwt.role`
+  - `auth.jwt.jwtFile`
+- when `auth.method` is `cert`:
+  - `auth.cert.mountPath`
+  - `auth.cert.source`
+  - for `auth.cert.source: pkcs11`:
+    - `auth.cert.pkcs11.certificateFile`
+    - `auth.cert.pkcs11.modulePath`
+    - `auth.cert.pkcs11.tokenLabel`
+    - `auth.cert.pkcs11.keyLabel`
+    - `auth.cert.pkcs11.pinFile`
+  - for `auth.cert.source: spiffe`:
+    - `auth.cert.spiffe.workloadAPISocket`
+    - `auth.cert.spiffe.spiffeID`
 - `transit.mountPath`
 - `transit.keyName`
 - `transit.keyIdScope.providerName`
@@ -120,14 +134,18 @@ is treated as identity-bearing provider scope.
 | `server.healthAddress` | `127.0.0.1:8082` |
 | `openbao.timeout` | `2s` |
 | `auth.method` | `jwt` |
-| `auth.minJwtRemainingTtl` | `2m` |
-| `auth.clockSkewLeeway` | `30s` |
 | `auth.loginBeforeTokenExpiry` | `5m` |
 | `auth.tokenRenewalIncrement` | `1h` |
 | `auth.loginTimeout` | `max(openbao.timeout, 5s)` when unset or `0s` |
-| `auth.expectedIssuer` | empty |
-| `auth.expectedAudience` | empty |
-| `auth.expectedSubject` | empty |
+| `auth.jwt.minRemainingTtl` | `2m` |
+| `auth.jwt.clockSkewLeeway` | `30s` |
+| `auth.jwt.expectedIssuer` | empty |
+| `auth.jwt.expectedAudience` | empty |
+| `auth.jwt.expectedSubject` | empty |
+| `auth.cert.minRemainingTtl` | `24h` |
+| `auth.cert.clockSkewLeeway` | `30s` |
+| `auth.cert.name` | empty, which lets OpenBao try every configured certificate role |
+| `auth.cert.pkcs11.maxSessions` | unset, but validation requires at least `2` when the PKCS#11 source is used |
 | `bootstrap.graceTimeout` | `60s` |
 | `bootstrap.retryInterval` | `5s` |
 | `status.probeInterval` | `30s` |
@@ -147,13 +165,68 @@ is treated as identity-bearing provider scope.
 
 ## Auth Timing
 
+`auth.method` selects how the provider obtains its OpenBao token. Supported values are `jwt` and `cert`. JWT auth is the default build and release path. Certificate auth requires a binary built with the relevant build tag: `certauth_pkcs11`, `certauth_spiffe`, or both.
+
 `auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. Once the remaining OpenBao token TTL drops below this value, the provider renews or re-logs in before the next request.
 
-`auth.tokenRenewalIncrement` is the requested TTL increment sent to OpenBao during `auth/token/renew-self`. Keep it larger than the refresh-ahead threshold and within the JWT role's maximum token TTL.
+`auth.tokenRenewalIncrement` is the requested TTL increment sent to OpenBao during `auth/token/renew-self`. Keep it larger than the refresh-ahead threshold and within the auth role's maximum token TTL.
 
 `auth.loginTimeout` can be left at `0s` to derive `max(openbao.timeout, 5s)`.
 
-`bootstrap.graceTimeout` controls how long startup retries the initial status probe before the process exits. It exists to handle boot races such as JWT file projection, DNS or routing settling, OpenBao restart, and clock synchronization.
+`auth.jwt.minRemainingTtl` controls how much JWT lifetime must remain before the provider will use a JWT for login. The JWT file is re-read before each re-login.
+
+`auth.cert.minRemainingTtl` controls how much client certificate lifetime must remain before the provider will attempt OpenBao cert auth. The provider validates the certificate locally before login and records the observed certificate TTL for metrics.
+
+`bootstrap.graceTimeout` controls how long startup retries the initial status probe before the process exits. It exists to handle boot races such as auth material projection, DNS or routing settling, OpenBao restart, and clock synchronization.
+
+## Certificate Auth
+
+Certificate auth logs in to OpenBao through the TLS Certificate auth method by sending `POST /v1/<auth.cert.mountPath>/login` over a TLS connection that presents the configured client certificate. `auth.cert.name` maps to OpenBao's optional cert role `name` request field. Leave it empty only when the mount is intentionally configured so one matching role is unambiguous.
+
+PKCS#11-backed certificate auth:
+
+```yaml
+auth:
+  method: cert
+  loginBeforeTokenExpiry: 5m
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  cert:
+    mountPath: auth/k8s-workload-a-cert
+    name: openbao-kms-control-plane
+    minRemainingTtl: 24h
+    clockSkewLeeway: 30s
+    source: pkcs11
+    pkcs11:
+      certificateFile: /etc/openbao-kms/client/client-chain.pem
+      modulePath: /usr/lib/softhsm/libsofthsm2.so
+      tokenLabel: openbao-kms
+      keyLabel: openbao-kms-client
+      pinFile: /etc/openbao-kms/pkcs11/pin
+      maxSessions: 4
+```
+
+SPIFFE-backed certificate auth:
+
+```yaml
+auth:
+  method: cert
+  loginBeforeTokenExpiry: 5m
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  cert:
+    mountPath: auth/k8s-workload-a-cert
+    name: openbao-kms-control-plane
+    minRemainingTtl: 24h
+    clockSkewLeeway: 30s
+    source: spiffe
+    spiffe:
+      workloadAPISocket: unix:///run/spire/sockets/agent.sock
+      spiffeID: spiffe://example.org/openbao-kms/workload-a
+      trustDomain: example.org
+```
+
+OpenBao must be configured to request TLS client certificates on the listener used by the provider. In OpenBao listener terms, do not set `tls_disable` or `tls_disable_client_certs` to true for that listener. Role constraints should bind certificate identity, for example through `allowed_uri_sans` for SPIFFE IDs. Keep cert auth binding enabled during token renewal and keep OCSP fail-open disabled when OCSP is used.
 
 ## Debug Correlation
 
@@ -202,9 +275,14 @@ Startup fails closed when any of the following conditions hold:
 - socket parent directory is unsafe,
 - socket path is a symlink or regular file,
 - state path is not absolute,
-- JWT file is unreadable,
-- JWT is expired or too close to expiry,
-- JWT `nbf` or `iat` claims are outside the configured clock-skew leeway,
+- JWT auth is selected and the JWT file is unreadable,
+- JWT auth is selected and the JWT is expired or too close to expiry,
+- JWT auth is selected and the JWT `nbf` or `iat` claims are outside the configured clock-skew leeway,
+- cert auth is selected without a cert-auth build variant,
+- cert auth is selected and the configured certificate source is unavailable,
+- cert auth is selected and the client certificate is expired, not yet valid, too close to expiry, missing client-auth usage, weakly signed, or mismatched with its signer,
+- PKCS#11 cert auth is selected and the certificate file, module path, token label, key label, PIN file, or session count is unsafe,
+- SPIFFE cert auth is selected and the Workload API socket, SPIFFE ID, or trust domain is malformed,
 - CA file is missing,
 - OpenBao address is invalid or includes user info, query, or fragment data,
 - TLS server name is empty,
@@ -227,12 +305,14 @@ Recommended local permissions:
 /etc/openbao-kms/config.yaml        root:openbao-kms                0640
 /etc/openbao-kms/tls/ca.crt         root:root                       0644
 /var/lib/openbao-kms/identity.jwt   root:openbao-kms                0640
+/etc/openbao-kms/client/client-chain.pem root:openbao-kms           0640
+/etc/openbao-kms/pkcs11/pin         root:openbao-kms                0640
 /var/lib/openbao-kms/state          openbao-kms:openbao-kms         0750
 /run/openbao-kms                    openbao-kms:openbao-kms-socket  2750
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
 ```
 
-The JWT file should be readable only by the provider process. The socket should be readable and writable only by the provider and the local API server identity. The socket directory should be writable only by the provider identity.
+JWT files, certificate chain files, and PKCS#11 PIN files should be readable only by the provider process. The socket should be readable and writable only by the provider and the local API server identity. The socket directory should be writable only by the provider identity. SPIFFE Workload API socket access is controlled by the local SPIFFE agent and should be granted only to the provider workload identity.
 
 `server.socketGroup` accepts a local group name or a decimal numeric GID. Use a group name for systemd or host-binary deployments. Use a numeric GID in static pod mode so the distroless non-root container does not depend on host group names being present inside the image.
 
@@ -246,7 +326,7 @@ release-boundary behavior. In particular, there is no config field to:
 - enable unsafe debug endpoints,
 - disable Transit associated data,
 - enable KMS decrypt micro-batching,
-- select AAD compatibility modes,
+- select alternate AAD read modes,
 - log raw OpenBao paths.
 
 Broad socket permissions remain rejected by validation.
@@ -263,8 +343,9 @@ Allowed environment overrides are limited to:
 - health listen address: `BAO_KMS_PROVIDER_SERVER_HEALTH_ADDRESS` or `BAO_KMS_PROVIDER_SERVER_HEALTHADDRESS`,
 - feature flags used only in tests.
 
-Identity-bearing fields such as `openbao.namespace`, `auth.expectedIssuer`,
-`auth.expectedAudience`, `auth.expectedSubject`, `transit.keyName`,
+Identity-bearing fields such as `openbao.namespace`, `auth.jwt.expectedIssuer`,
+`auth.jwt.expectedAudience`, `auth.jwt.expectedSubject`, `auth.cert.name`,
+`auth.cert.spiffe.spiffeID`, `auth.cert.spiffe.trustDomain`, `transit.keyName`,
 `transit.mountPath`, and `transit.keyIdScope.*` are not environment
 overrides. Keep them in the reviewed config file so deployment environments
 cannot silently drift the KMS identity contract.
@@ -283,4 +364,7 @@ The schema rejects unknown top-level and nested fields, reserves `configVersion:
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
-- [OpenBao JWT auth](https://openbao.org/docs/2.4.x/auth/jwt/)
+- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
+- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
+- [OpenBao TCP listener configuration](https://openbao.org/docs/configuration/listener/tcp/)
+- [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)

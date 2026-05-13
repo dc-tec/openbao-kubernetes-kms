@@ -18,7 +18,8 @@ The initial public release envelope is:
 - Kubernetes KMS v2,
 - OpenBao `2.5.3`,
 - OpenBao Transit,
-- JWT auth,
+- JWT auth in default builds,
+- certificate auth in build-tagged PKCS#11 and SPIFFE variants,
 - Linux control-plane nodes with filesystem Unix domain sockets.
 
 ## Kubernetes
@@ -51,7 +52,14 @@ The design requires OpenBao Transit features:
 - `min_encryption_version`,
 - `min_decryption_version`,
 - `disable_upsert`,
-- JWT auth.
+- JWT auth, or TLS certificate auth for cert-auth builds.
+
+Certificate auth variants additionally require:
+
+- OpenBao TLS certificate auth method,
+- an OpenBao listener that requests client certificates,
+- role constraints bound to the provider certificate identity,
+- a PKCS#11 module for `certauth_pkcs11` builds or a SPIFFE Workload API socket for `certauth_spiffe` builds.
 
 ## Operating Systems
 
@@ -85,6 +93,15 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 | `aes256-gcm96` | Supported and recommended default. |
 | Other AEAD Transit key types | Not supported. |
 | Derived or convergent keys | Not supported for the Kubernetes KMS path. |
+
+## Auth Methods
+
+| Auth method | Build | Status |
+|---|---|---|
+| JWT | default | Supported. |
+| Certificate with PKCS#11 source | `certauth_pkcs11` | Supported for deployments that provide a compatible PKCS#11 module and token. |
+| Certificate with SPIFFE source | `certauth_spiffe` | Supported for deployments that provide an X.509 SVID through the SPIFFE Workload API. |
+| OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
 ## Compatibility Promises
 
@@ -134,4 +151,6 @@ Examples of breaking changes:
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
-- [OpenBao JWT auth](https://openbao.org/docs/2.4.x/auth/jwt/)
+- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
+- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
+- [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)

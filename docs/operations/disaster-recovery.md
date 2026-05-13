@@ -1,6 +1,6 @@
 ---
 title: "Disaster Recovery"
-description: "Recover from OpenBao loss, Transit key loss, plugin config loss, JWT issuer loss, and API server failure to decrypt KMS-encrypted Kubernetes data."
+description: "Recover from OpenBao loss, Transit key loss, plugin config loss, auth issuer loss, and API server failure to decrypt KMS-encrypted Kubernetes data."
 weight: 20
 ---
 
@@ -25,9 +25,9 @@ The recovery posture is conservative:
 ```mermaid
 flowchart TD
     Incident["Kubernetes API server cannot decrypt data"]
-    CheckKMS["Check plugin, socket, JWT, and OpenBao reachability"]
+    CheckKMS["Check plugin, socket, auth material, and OpenBao reachability"]
     KMSHealthy{"KMS path healthy?"}
-    RestoreRuntime["Restore plugin, socket, JWT, or OpenBao availability"]
+    RestoreRuntime["Restore plugin, socket, auth material, or OpenBao availability"]
     CheckKey["Verify Transit key and historical versions"]
     KeyPresent{"Required Transit key material present?"}
     RestoreBao["Restore OpenBao backup with required key versions"]
@@ -59,7 +59,7 @@ Back up:
 - plugin configuration,
 - local key registry state and its adjacent checkpoint,
 - key lineage IDs,
-- OpenBao JWT auth configuration,
+- OpenBao auth configuration,
 - OpenBao policies,
 - CA bundles,
 - deployment manifests or systemd units.
@@ -81,7 +81,7 @@ Preserve historical Transit versions for at least as long as any retained etcd b
 
 1. Restore OpenBao to a point that contains the required Transit key and all required historical versions.
 2. Verify OpenBao is unsealed and healthy.
-3. Verify the JWT auth method and role configuration.
+3. Verify the OpenBao auth method and role configuration.
 4. Verify the plugin policy.
 5. Run the `verify-key` check below.
 6. Run the `doctor` check below.
@@ -146,16 +146,16 @@ Do not accept a recreated key as compatible with data encrypted under the previo
 1. Restore configuration from configuration management.
 2. Verify the identity-bearing fields match the previous values; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
 3. Restore the local key registry state and its checkpoint when available.
-4. Restore the CA bundle and the JWT file.
+4. Restore the CA bundle and selected auth material.
 5. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
 6. Start the plugin.
 7. Confirm the Status `key_id` hash matches other control-plane nodes or recorded backup metadata.
 
 Changing provider name, cluster ID, OpenBao instance ID, OpenBao namespace, Transit mount ID, key lineage ID, mount path, or key name causes `key_id` and AAD mismatches.
 
-## JWT Issuer Loss
+## Auth Issuer Loss
 
-If the JWT issuer is unavailable:
+If the configured JWT issuer, certificate authority, PKCS#11 token, or SPIFFE control plane is unavailable:
 
 - existing OpenBao tokens continue until expiry,
 - re-login fails after token expiry,
@@ -165,6 +165,7 @@ Recovery options:
 
 - restore the external issuer,
 - issue a valid replacement JWT through an emergency process,
+- restore the certificate authority, PKCS#11 token, or SPIFFE control plane,
 - configure OpenBao JWT auth with pinned public keys if appropriate,
 - use a time-limited emergency identity with a strong audit trail.
 
@@ -176,7 +177,7 @@ Avoid relying only on a Kubernetes ServiceAccount token from the protected clust
 2. Restore `/etc/openbao-kms/config.yaml`.
 3. Restore the local key registry state and checkpoint from the replaced node when available.
 4. Restore the CA bundle.
-5. Provision the JWT file.
+5. Provision the selected auth material.
 6. Create `/run/openbao-kms` with safe permissions.
 7. Ensure `kube-apiserver` can access the socket through the `openbao-kms-socket` group.
 8. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
@@ -199,7 +200,7 @@ Recovery order when the API server fails to start because the KMS path is unheal
 
 1. Do not delete encrypted etcd data.
 2. Inspect API server logs for KMS connection or decrypt errors.
-3. Restore the plugin, socket, OpenBao, and JWT first.
+3. Restore the plugin, socket, OpenBao, and auth material first.
 4. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml` locally. Include `--encryption-config /etc/kubernetes/encryption-config.yaml` when the API server encryption config is available.
 5. Start the plugin and verify KMS Status.
 6. Restart the API server.
@@ -219,7 +220,7 @@ Recover one node at a time:
 - keep at least one known-good API server running when possible,
 - compare active `key_id` hashes across nodes,
 - avoid simultaneous plugin upgrades,
-- avoid simultaneous JWT expiry,
+- avoid simultaneous auth credential expiry,
 - avoid cluster-wide `min_decryption_version` changes during recovery.
 
 ## Emergency Actions

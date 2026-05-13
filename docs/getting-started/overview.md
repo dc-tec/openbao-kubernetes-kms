@@ -17,7 +17,7 @@ flowchart LR
     API["kube-apiserver"]
     Socket["local Unix domain socket"]
     Plugin["bao-kms-provider"]
-    Auth["OpenBao JWT auth"]
+    Auth["OpenBao auth<br/>JWT or certificate"]
     Transit["OpenBao Transit wrap/unwrap"]
     Etcd["etcd"]
 
@@ -44,7 +44,7 @@ For threats outside this scope, see [Threat Model](/security/threat-model/).
 
 OpenBao Transit can encrypt and decrypt caller-supplied data. OpenBao itself does not implement the Kubernetes KMS gRPC protocol. The Kubernetes API server expects a local KMS provider plugin reachable over a Unix domain socket; it does not call OpenBao Transit directly. `bao-kms-provider` adapts the two protocols and adds the Kubernetes-specific correctness rules around `key_id` stability, AAD binding, decrypt validation, and rotation behavior.
 
-The plugin sits in the Kubernetes API server boot path. Kubernetes documents that startup can drive thousands of decrypt operations against the KMS plugin. If the plugin, its socket, the JWT credential, the OpenBao service, or the Transit key is unavailable, the API server may be unable to decrypt previously encrypted resources. Treat the provider as control-plane critical infrastructure.
+The plugin sits in the Kubernetes API server boot path. Kubernetes documents that startup can drive thousands of decrypt operations against the KMS plugin. If the plugin, its socket, the auth credential, the OpenBao service, or the Transit key is unavailable, the API server may be unable to decrypt previously encrypted resources. Treat the provider as control-plane critical infrastructure.
 
 ## Supported Versions
 
@@ -57,7 +57,7 @@ The current OpenBao validation target is OpenBao `2.5.3` with the Transit secret
 The implementation is intentionally narrow. These are implementation defaults and enforced boundaries:
 
 - Kubernetes KMS v2 only. KMS v1 is not implemented.
-- JWT authentication to OpenBao.
+- JWT authentication to OpenBao by default, with build-tagged certificate auth variants for PKCS#11 and SPIFFE-backed identities.
 - OpenBao tokens stored in process memory only.
 - Transit associated data required for encrypt and decrypt.
 - Deterministic, opaque Kubernetes `key_id` values derived from configured identity scope and Transit metadata.
@@ -98,7 +98,7 @@ The current release line does not include:
 
 ## Read Next
 
-1. [OpenBao Setup](/getting-started/openbao-setup/) to provision the Transit mount, key, policy, and JWT authentication.
+1. [OpenBao Setup](/getting-started/openbao-setup/) to provision the Transit mount, key, policy, and provider authentication.
 2. [Install](/getting-started/install/) to fetch a verified provider binary.
 3. [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) to write the `EncryptionConfiguration` consumed by the API server.
 4. [First Encrypt](/getting-started/first-encrypt/) to verify the path end-to-end.

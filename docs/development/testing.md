@@ -23,7 +23,7 @@ For captured load and cold-start evidence, see [Performance Evidence](/developme
 | KMS v2 protocol correctness | Kubernetes accepts `Status`, `Encrypt`, and `Decrypt` responses and the provider preserves the `Status.key_id == EncryptResponse.key_id` invariant. |
 | `key_id` stability | Rotation, rollback rejection, and decrypt lookup depend on deterministic, non-reused `key_id` values. |
 | Decrypt compatibility | Data written before restart, upgrade, rollback, and Transit rotation remains readable. |
-| Fail-closed behavior | OpenBao, JWT, socket, policy, and Transit key failures do not lead to plaintext exposure or unsafe fallback. |
+| Fail-closed behavior | OpenBao, auth material, socket, policy, and Transit key failures do not lead to plaintext exposure or unsafe fallback. |
 | API server startup | The provider is available early enough for kube-apiserver restart and recovery paths. |
 | Deployment behavior | systemd and static-pod modes have different boot, socket, filesystem, and rollback failure modes. |
 | Disaster recovery | OpenBao, provider state, and etcd restore procedures preserve decryptability only when the correct backup pair is restored. |
@@ -35,11 +35,11 @@ For captured load and cold-start evidence, see [Performance Evidence](/developme
 |---|---|---|
 | Unit and golden tests | Validate key registry decisions, AAD construction, config validation, socket handling, logging redaction, and stable wire-format fixtures. | `go test ./...`, golden fixtures under `testdata/` |
 | KMS v2 conformance | Start the real Unix-socket server path with fake OpenBao behavior and exercise Kubernetes KMS v2 protobuf requests. | fast local and PR checks |
-| OpenBao client integration | Verify Transit, JWT auth, TLS, policy diagnostics, and OpenBao error handling without external credentials. | hermetic integration tests and OpenBao CI E2E |
+| OpenBao client integration | Verify Transit, auth login, TLS, policy diagnostics, and OpenBao error handling without external credentials. | hermetic integration tests and OpenBao CI E2E |
 | Operator CLI E2E | Run provider image CLI diagnostics against real OpenBao/config/state and assert redacted hardening failures. | provider CLI E2E |
 | Kubernetes API server E2E | Prove real API server encryption, raw etcd envelope storage, restart readback, and multi-control-plane convergence. | Kind lanes and local kubeadm VM validation |
 | Rotation and compatibility | Prove Transit version promotion, old ciphertext readback, new ciphertext write path, historical decryptability guards, missing-state fail-closed behavior, and rollback rejection. | OpenBao rotation E2E |
-| Failure injection | Exercise OpenBao outage, sealed state, failover, bad policy, expired or identity-drifted JWT, missing Transit key, stale socket, and startup failures. | provider failure and HA E2E lanes |
+| Failure injection | Exercise OpenBao outage, sealed state, failover, bad policy, expired or identity-drifted auth material, missing Transit key, stale socket, and startup failures. | provider failure and HA E2E lanes |
 | Performance and load | Bound Status, Encrypt, Decrypt, direct decrypt soak, startup decrypt, and resource growth behavior. | provider load lanes and performance evidence |
 | Security and supply chain | Run redaction checks, fuzz targets, static analysis, vulnerability scan, license check, SBOM, and vendor verification. | `make ci-core`, security CI, release workflow |
 | Disaster recovery | Validate OpenBao raft restore, provider state rehydration, etcd restore pairing, and Kubernetes readback after replacement. | Kind DR, OpenBao restore, and local VM validation |
@@ -51,6 +51,7 @@ the provider fails safely when:
 
 - OpenBao is down, sealed, unavailable during failover, or restored from an old backend,
 - the JWT expires, rotates, has the wrong claims, or cannot be read,
+- the certificate is expired, identity-drifted, unavailable from PKCS#11 or SPIFFE, or cannot be validated,
 - the Transit key is missing, soft-deleted, recreated under the same name, or has unsafe version bounds,
 - `key_id` values are unknown, malformed, rolled back, or associated with changed identity scope,
 - AAD annotations are missing, modified, or from another provider or cluster,

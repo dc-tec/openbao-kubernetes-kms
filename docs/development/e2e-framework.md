@@ -20,10 +20,10 @@ behavior.
 | Lane | Command | Proves | External dependency |
 |---|---|---|---|
 | Full enabled E2E suite | `make test-e2e` | Runs the enabled Ginkgo E2E specs selected by labels. | Depends on selected labels |
-| OpenBao CI | `make test-e2e-openbao-ci` | Transit, JWT auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
-| Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and JWT auth. | Docker-compatible runtime |
+| OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
+| Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and provider auth. | Docker-compatible runtime |
 | Provider CLI | `make test-e2e-provider-cli-openbao-ci` | Provider image CLI commands against real OpenBao/config/state, including diagnostics and hardening failures. | Docker-compatible runtime |
-| Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted JWT, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
+| Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted auth material, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
 | OpenBao HA failover | `make test-e2e-provider-ha-openbao-ci` | Integrated-raft active node failover while preserving old decrypt and new KMS operations. | Docker-compatible runtime |
 | Decrypt storm smoke | `make test-e2e-provider-decrypt-storm-openbao-ci` | Concurrent KMS v2 decrypts through the provider and real OpenBao. | Docker-compatible runtime |
 | Sustained direct decrypt soak | `make test-e2e-provider-decrypt-soak-openbao-ci` | Direct decrypt latency, error bounds, memory growth, and PID growth. | Docker-compatible runtime |

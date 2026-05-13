@@ -18,7 +18,7 @@ The plugin static pod mounts everything it needs from the host:
 
 - configuration file,
 - CA bundle,
-- JWT file,
+- configured auth material such as a JWT file, certificate chain, PKCS#11 PIN file, or SPIFFE Workload API socket,
 - runtime socket directory,
 - optional local state directory.
 
@@ -127,7 +127,7 @@ The final manifest depends on the host socket group GID and the released image d
 | `hostNetwork: true` | Avoids CNI availability as an early-boot dependency. |
 | `automountServiceAccountToken: false` | Prevents accidental dependency on protected-cluster ServiceAccount tokens. |
 | `runAsNonRoot: true` and `runAsUser: 65532` | Runs as the distroless non-root image user. |
-| `supplementalGroups` | Gives the container access to the host socket group without exposing the provider JWT to the API server. |
+| `supplementalGroups` | Gives the container access to the host socket group without exposing provider auth material to the API server. |
 | `seccompProfile: RuntimeDefault` | Uses the runtime default syscall filter. |
 | `allowPrivilegeEscalation: false` | Blocks privilege escalation inside the container. |
 | `readOnlyRootFilesystem: true` | Forces writes into explicit hostPath mounts. |
@@ -154,9 +154,13 @@ Every control-plane node must have:
 /etc/openbao-kms/config.yaml
 /etc/openbao-kms/tls/ca.crt
 /var/lib/openbao-kms/identity.jwt
+/etc/openbao-kms/client/client-chain.pem
+/etc/openbao-kms/pkcs11/pin
 /var/lib/openbao-kms/state
 /run/openbao-kms
 ```
+
+The JWT path is needed only for `auth.method: jwt`. Certificate auth deployments should instead mount the configured certificate chain and PKCS#11 PIN file, or the SPIFFE Workload API socket required by `auth.cert.spiffe.workloadAPISocket`.
 
 The API server must be able to access the socket created under `/run/openbao-kms`. The container user must own the socket directory, or an equally narrow provider-only identity must be the only writer. The API server's socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
 
@@ -187,7 +191,7 @@ Static pod mode depends on:
 
 If kubelet or the container runtime is broken, the KMS plugin may not start and the API server may be unable to decrypt existing resources.
 
-The provider retries its initial status probe for `bootstrap.graceTimeout` before exiting. Static pod deployments should keep this enabled because the JWT file, container networking, DNS, OpenBao availability, and clock sync can settle after the container process starts.
+The provider retries its initial status probe for `bootstrap.graceTimeout` before exiting. Static pod deployments should keep this enabled because auth material, container networking, DNS, OpenBao availability, and clock sync can settle after the container process starts.
 
 For single-node control planes, systemd is usually safer. See [Deployment: Choosing A Model](/deployment/choosing-a-model/).
 

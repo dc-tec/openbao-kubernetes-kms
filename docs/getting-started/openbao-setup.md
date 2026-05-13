@@ -1,12 +1,12 @@
 ---
 title: "OpenBao Setup"
-description: "Provision the Transit mount, key, least-privilege policy, and JWT authentication required by bao-kms-provider."
+description: "Provision the Transit mount, key, least-privilege policy, and OpenBao authentication required by bao-kms-provider."
 weight: 20
 ---
 
 # OpenBao Setup
 
-The provider expects an existing OpenBao deployment with the Transit secrets engine enabled, a single named key per Kubernetes cluster, a least-privilege policy, and JWT authentication for the host running the provider. This page lists the OpenBao-side commands in order. Run them as an OpenBao administrator before installing the provider.
+The provider expects an existing OpenBao deployment with the Transit secrets engine enabled, a single named key per Kubernetes cluster, a least-privilege policy, and one supported auth method for the host running the provider. This page lists the OpenBao-side commands in order. Run them as an OpenBao administrator before installing the provider.
 
 ## Prerequisites
 
@@ -143,7 +143,11 @@ bao policy write openbao-kms-workload-a /tmp/openbao-kms-workload-a.hcl
 
 For policy variants and rationale see [Reference: Transit Policy Examples](/reference/transit-policy-examples/).
 
-## Step 5: Enable JWT Auth
+## Step 5: Configure Auth
+
+Choose one provider auth method. JWT auth is the default build and release path. Certificate auth requires a binary built with `certauth_pkcs11`, `certauth_spiffe`, or both.
+
+### JWT Auth
 
 Enable JWT auth at a dedicated path:
 
@@ -182,13 +186,46 @@ Recommended role constraints:
 
 The provider reads JWTs from a host-mounted file. The JWT issuer should be reachable independently of the protected Kubernetes API server. Avoid using a Kubernetes ServiceAccount token from the same protected cluster as the only credential source. If that API server is unavailable, refreshing the token may be impossible during the recovery the provider is meant to support. See [Security: Auth Model](/security/auth-model/) for the trust-boundary discussion.
 
+### Certificate Auth
+
+Enable cert auth at a dedicated path:
+
+```sh
+bao auth enable -path=auth/k8s-workload-a-cert cert
+```
+
+The OpenBao listener used by the provider must request TLS client certificates. Keep TLS enabled and do not set `tls_disable_client_certs=true` on that listener.
+
+Keep cert auth binding enabled for token renewal:
+
+```sh
+bao write auth/k8s-workload-a-cert/config \
+  disable_binding=false
+```
+
+Configure a cert role bound to the provider identity. For SPIFFE, use the trust bundle CA as the trusted certificate and bind the URI SAN to the exact provider SPIFFE ID:
+
+```sh
+bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
+  display_name=openbao-kms-control-plane \
+  certificate=@/etc/openbao/trust/openbao-kms-spiffe-bundle.pem \
+  allowed_uri_sans="spiffe://example.org/openbao-kms/workload-a" \
+  token_policies="openbao-kms-workload-a" \
+  token_ttl="30m" \
+  token_max_ttl="1h" \
+  token_no_default_policy=true \
+  ocsp_fail_open=false
+```
+
+For PKCS#11-backed client certificates, configure the role with the CA or trusted certificate that issued the provider client certificate, then bind stable certificate fields such as URI SAN, DNS SAN, common name, OU, or required extensions. Keep the private key inside the PKCS#11 module and give the provider only the certificate chain, module path, token label, key label, and local PIN file path.
+
 ## Step 6: Verify
 
 After installing the provider, `bao-kms-provider doctor` validates the OpenBao side end-to-end:
 
 - TLS connection to OpenBao succeeds.
-- The JWT file is readable and not near expiry.
-- JWT login succeeds.
+- The configured auth material is locally valid.
+- OpenBao auth login succeeds.
 - The token can read Transit key metadata.
 - The token can encrypt and decrypt probe data.
 - The token cannot rotate, export, back up, or delete the key.

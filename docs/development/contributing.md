@@ -71,7 +71,7 @@ OpenBao E2E validation uses the ephemeral CI lane. E2E specs use Ginkgo v2 and G
 make test-e2e-openbao-ci
 ```
 
-The OpenBao CI target starts real OpenBao, bootstraps JWT auth, runs the
+The OpenBao CI target starts real OpenBao, bootstraps provider auth, runs the
 provider, and exercises the Unix socket with the Kubernetes KMS v2 protobuf
 client.
 

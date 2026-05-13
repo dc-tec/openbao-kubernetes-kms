@@ -1,6 +1,6 @@
 ---
 title: "Security"
-description: "Threat model, hardening, JWT-first authentication and decrypt validation."
+description: "Threat model, hardening, authentication and decrypt validation."
 weight: 50
 browse:
   - "/security/threat-model"
@@ -19,7 +19,7 @@ The security section documents the intended hardened posture for `bao-kms-provid
 
 - [Threat Model](/security/threat-model/) for in-scope and out-of-scope threats, attacker capabilities, and mitigations.
 - [Hardening](/security/hardening/) for runtime hardening of the provider process under systemd and as a static pod.
-- [Auth Model](/security/auth-model/) for the JWT-first authentication design, token lifecycle, and the rationale for avoiding a Kubernetes API circular dependency.
+- [Auth Model](/security/auth-model/) for JWT and certificate authentication, token lifecycle, and the rationale for avoiding a Kubernetes API circular dependency.
 - [AAD And Decrypt Validation](/security/aad-and-decrypt-validation/) for the security view of how the provider rejects stale, unknown, or annotation-inconsistent ciphertexts.
 
 ## Use Another Section If

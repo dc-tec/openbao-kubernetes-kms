@@ -49,7 +49,7 @@ KMS v2 annotations are plaintext metadata stored in etcd with the encrypted obje
 
 Static pods are managed directly by kubelet without requiring the Kubernetes API server. Kubernetes documentation states that kubelet runs static pods from a host directory of manifests and that kubelet can run them without observing them through the API server.
 
-Static pods cannot reference Kubernetes API objects such as ServiceAccounts, ConfigMaps, or Secrets. The static-pod deployment of `bao-kms-provider` therefore mounts every required file (configuration, CA bundle, JWT, runtime socket directory, optional state directory) from the host. See [Deployment: Static Pod Deployment](/deployment/static-pod/).
+Static pods cannot reference Kubernetes API objects such as ServiceAccounts, ConfigMaps, or Secrets. The static-pod deployment of `bao-kms-provider` therefore mounts every required file or socket, including configuration, CA bundle, selected auth material, runtime socket directory, and optional state directory, from the host. See [Deployment: Static Pod Deployment](/deployment/static-pod/).
 
 ## OpenBao Transit
 
@@ -87,4 +87,5 @@ Transit key deletion is catastrophic for this use case. OpenBao documentation wa
 - [Kubernetes static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
 - [OpenBao Transit documentation](https://openbao.org/docs/secrets/transit/)
-- [OpenBao JWT auth](https://openbao.org/docs/2.4.x/auth/jwt/)
+- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
+- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)

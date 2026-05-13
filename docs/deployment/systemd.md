@@ -64,12 +64,14 @@ The exact ordering depends on the Kubernetes distribution. For kubeadm-style hos
 
 Use `deploy/config/provider-systemd.yaml` as the starting provider configuration for host-service deployments.
 
+The sample unit is written for the default JWT config. Certificate auth deployments should replace the JWT `ConditionPathExists=` line with checks for the configured certificate chain, PKCS#11 PIN file, or SPIFFE Workload API socket.
+
 ## Unit Settings
 
 | Setting | Purpose |
 |---|---|
 | `Before=kubelet.service` | Starts the provider before kubelet starts static-pod control-plane components on kubeadm-style hosts. |
-| `ConditionPathExists=` | Fails early when config or JWT material has not been staged. |
+| `ConditionPathExists=` | Fails early when config or selected auth material has not been staged. |
 | `ConditionPathIsDirectory=` | Requires the runtime socket directory to exist with packaging-controlled ownership. |
 | `Type=exec` | Surfaces `execve` failures before systemd marks the service started. |
 | `Restart=always` and restart limits | Restarts transient provider failures without hiding a fast crash loop. |
@@ -127,7 +129,7 @@ bao-kms-provider doctor \
 ## Hardening Checklist
 
 - Run as non-root where possible.
-- Keep the JWT readable only by the plugin process.
+- Keep auth material readable only by the plugin process.
 - Keep the socket writable only by the plugin and the API server identity.
 - Verify `ProtectSystem=strict` does not block required paths.
 - Bind metrics and health endpoints to localhost unless explicitly needed.
@@ -142,11 +144,11 @@ Common failures during initial bring-up:
 
 - the service starts after kubelet or the API server,
 - the socket directory group is wrong,
-- `ProtectSystem` blocks the configuration file or JWT file,
+- `ProtectSystem` blocks the configuration file or auth material,
 - the CA bundle path is missing,
 - host DNS is not ready before service start,
 - the OpenBao TLS server name does not match the certificate.
 
-The provider retries the initial status probe for `bootstrap.graceTimeout` before exiting. Keep the grace long enough for JWT projection, DNS or routing, OpenBao restart, and clock-sync races. Keep it short enough that deterministic misconfiguration is visible in service status.
+The provider retries the initial status probe for `bootstrap.graceTimeout` before exiting. Keep the grace long enough for auth material projection, DNS or routing, OpenBao restart, and clock-sync races. Keep it short enough that deterministic misconfiguration is visible in service status.
 
 For diagnosis and recovery see [Operations: Troubleshooting](/operations/troubleshooting/). For provider upgrade procedure see [Operations: Upgrade](/operations/upgrade/).

@@ -16,7 +16,7 @@ Verify:
 
 - the new binary or image is fetched and verified per [Install: Verify Release Evidence](/getting-started/install/#verify-release-evidence),
 - the cluster is not mid-rotation (check `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`),
-- OpenBao is healthy and the JWT credentials on every node are valid,
+- OpenBao is healthy and the configured auth credentials on every node are valid,
 - the existing plugin reports a stable `key_id` hash on every control-plane node,
 - `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` passes,
 - the previous binary or image is still available on every node in case of rollback.

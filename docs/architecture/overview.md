@@ -36,14 +36,14 @@ flowchart LR
         KMS["KMS v2 server"]
         Registry["key registry"]
         AAD["AAD builder / validator"]
-        AuthManager["JWT auth manager"]
+        AuthManager["auth manager"]
         TransitClient["Transit client"]
         StatusCache["status cache"]
         Observability["metrics / logging / health"]
     end
 
     subgraph Bao["OpenBao"]
-        JWTAuth["JWT auth method"]
+        BaoAuth["JWT or cert auth method"]
         Transit["Transit secrets engine"]
         Audit["audit devices"]
     end
@@ -56,7 +56,7 @@ flowchart LR
     KMS --> TransitClient
     Registry <--> StateFile
     TransitClient --> AuthManager
-    AuthManager -->|JWT login| JWTAuth
+    AuthManager -->|login| BaoAuth
     TransitClient -->|HTTPS<br/>TLS verify| Transit
     Transit --> Audit
     Observability -.->|observes| KMS
@@ -88,7 +88,7 @@ The plugin process:
 
 OpenBao provides:
 
-- JWT authentication,
+- JWT or certificate authentication,
 - short-lived OpenBao tokens,
 - Transit key metadata,
 - Transit encrypt and decrypt operations,
@@ -165,7 +165,7 @@ The provider sits across these boundaries:
 - Kubernetes API server to local plugin socket.
 - Plugin host process to OpenBao HTTPS endpoint.
 - OpenBao policy boundary for Transit operations.
-- Local host filesystem boundary for configuration, JWT file, CA bundle, socket, and registry state.
+- Local host filesystem boundary for configuration, auth material, CA bundle, socket, and registry state.
 - etcd persistence boundary for ciphertext and KMS annotations.
 
 The plugin sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog see [Threat Model](/security/threat-model/).
@@ -224,7 +224,7 @@ flowchart TD
     A["host boot"]
     B["network and DNS available"]
     C["bao-kms-provider starts"]
-    D["plugin reads config / JWT / CA"]
+    D["plugin reads config / auth material / CA"]
     E["plugin authenticates to OpenBao"]
     F["plugin reads Transit metadata"]
     G["plugin creates Unix socket"]
@@ -268,7 +268,7 @@ All instances share:
 - the same AAD policy,
 - the same `key_id` derivation algorithm.
 
-Instances may have different JWTs and OpenBao client tokens.
+Instances may have different auth credentials and OpenBao client tokens.
 
 Each instance also owns its own local registry state file. The content should converge to the same active `key_id`, while pending or recovered snapshots can differ temporarily during failover or rotation recovery.
 

@@ -17,7 +17,7 @@ Use this section when you are new to `bao-kms-provider` or when you need the sho
 ## Recommended Order
 
 1. [Overview](/getting-started/overview/) to confirm what the provider does and does not do, and that the OpenBao Transit pattern fits your platform.
-2. [OpenBao Setup](/getting-started/openbao-setup/) to provision the Transit mount, key, policy, and JWT authentication for the Kubernetes API server.
+2. [OpenBao Setup](/getting-started/openbao-setup/) to provision the Transit mount, key, policy, and provider authentication.
 3. [Install](/getting-started/install/) to fetch a verified binary and validate the local environment.
 4. [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) to write the `EncryptionConfiguration` the Kubernetes API server consumes.
 5. [First Encrypt](/getting-started/first-encrypt/) to run the smoke test and confirm encrypted resources land in etcd as expected.

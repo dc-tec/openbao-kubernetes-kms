@@ -1,6 +1,6 @@
 ---
 title: "Troubleshooting"
-description: "Symptom-driven recovery for common bao-kms-provider failures: socket connectivity, JWT auth, Transit key issues, key_id and AAD validation, identity fallback, static pod problems."
+description: "Symptom-driven recovery for common bao-kms-provider failures: socket connectivity, OpenBao auth, Transit key issues, key_id and AAD validation, identity fallback, static pod problems."
 weight: 40
 ---
 
@@ -98,7 +98,7 @@ Recovery:
 4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
 5. Restart the plugin only if it does not recover on its own after OpenBao is healthy.
 
-## JWT Login Fails
+## Auth Login Fails
 
 Symptoms:
 
@@ -108,18 +108,22 @@ Symptoms:
 
 Check:
 
-- the JWT file exists and is readable by the plugin process,
-- the JWT `exp` claim is not near expiry,
-- `iss`, `aud`, and `sub` claims match the OpenBao role configuration,
-- OpenBao JWT auth has the current signing keys (JWKS, OIDC discovery, or pinned public keys),
-- host, OpenBao, and issuer clocks are synchronized.
+- for JWT auth, the JWT file exists and is readable by the plugin process,
+- for JWT auth, the JWT `exp` claim is not near expiry,
+- for JWT auth, `iss`, `aud`, and `sub` claims match the OpenBao role configuration,
+- for JWT auth, OpenBao has the current signing keys through JWKS, OIDC discovery, or pinned public keys,
+- for certificate auth, the OpenBao listener requests client certificates,
+- for certificate auth, the certificate is not expired, has client-auth usage, and matches the configured role constraints,
+- for SPIFFE auth, the Workload API socket is reachable and returns the configured SPIFFE ID,
+- for PKCS#11 auth, the module path, token label, key label, and PIN file are correct,
+- host, OpenBao, issuer, CA, and SPIFFE clocks are synchronized.
 
 Recovery:
 
-1. Replace the JWT with a valid token.
-2. Fix OpenBao JWT role constraints if they are wrong.
-3. Fix issuer, JWKS, or OIDC discovery reachability.
-4. Restart the plugin if the current in-memory token does not recover. The provider re-reads the JWT file before re-login.
+1. Replace or restore the configured auth material.
+2. Fix OpenBao auth role constraints if they are wrong.
+3. Fix issuer, JWKS, OIDC discovery, certificate authority, PKCS#11, or SPIFFE Workload API reachability.
+4. Restart the plugin if the current in-memory token does not recover. The provider re-reads auth material before re-login.
 
 ## Transit Key Missing
 

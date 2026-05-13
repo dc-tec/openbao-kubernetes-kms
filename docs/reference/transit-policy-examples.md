@@ -1,12 +1,12 @@
 ---
 title: "Transit Policy Examples"
-description: "Reference OpenBao policy, JWT auth role, and Transit key configuration examples for bao-kms-provider, plus capabilities to avoid."
+description: "Reference OpenBao policy, auth role, and Transit key configuration examples for bao-kms-provider, plus capabilities to avoid."
 weight: 110
 ---
 
 # Transit Policy Examples
 
-This page collects the reference OpenBao policy, JWT auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies these examples, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace the workload-specific identifiers (mount path, key name, role name, audience, subject) with values from your environment.
+This page collects the reference OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies these examples, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace the workload-specific identifiers (mount path, key name, role name, audience, subject, and SPIFFE ID) with values from your environment.
 
 ## Plugin Hot-Path Policy
 
@@ -86,6 +86,25 @@ bao write auth/k8s-workload-a-jwt/config \
 ```
 
 OpenBao JWT auth requires one of: OIDC discovery, a JWKS URL, or local validation public keys.
+
+## Certificate Auth Role: SPIFFE URI SAN
+
+```sh
+bao auth enable -path=k8s-workload-a-cert cert
+bao write auth/k8s-workload-a-cert/config \
+  disable_binding=false
+bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
+  display_name="openbao-kms-control-plane" \
+  certificate=@/etc/openbao/trust/openbao-kms-spiffe-bundle.pem \
+  allowed_uri_sans="spiffe://example.org/openbao-kms/workload-a" \
+  token_policies='["openbao-kms-workload-a"]' \
+  token_ttl="10m" \
+  token_max_ttl="30m" \
+  token_no_default_policy="true" \
+  ocsp_fail_open="false"
+```
+
+The OpenBao listener used by the provider must request client certificates. Keep cert auth binding enabled so renewal remains tied to the certificate identity used during login.
 
 ## Transit Key Configuration
 

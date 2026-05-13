@@ -37,7 +37,7 @@ flowchart LR
     API["kube-apiserver"]
     Socket["Unix socket<br/>/run/openbao-kms/kms.sock"]
     Provider["bao-kms-provider"]
-    Auth["OpenBao JWT auth"]
+    Auth["OpenBao auth<br/>JWT or certificate"]
     Transit["OpenBao Transit<br/>explicit key_version + AAD"]
     Etcd["etcd<br/>KMS v2 envelope"]
 
@@ -56,9 +56,9 @@ server may need the KMS plugin during startup to read encrypted resources.
 |---|---|
 | Kubernetes API | KMS v2 only. KMS v1 is not implemented. |
 | Kubernetes target | Kubernetes `1.34` release line, with exact runnable pins in `.ci/versions.yaml`. |
-| OpenBao target | OpenBao `2.5.3` with Transit and JWT auth. |
+| OpenBao target | OpenBao `2.5.3` with Transit, JWT auth, and cert auth. |
 | Transit key type | `aes256-gcm96` is the supported and recommended default. |
-| Authentication | JWT auth to OpenBao; OpenBao tokens stay in process memory. |
+| Authentication | JWT auth by default. Certificate auth is available in build-tagged variants for PKCS#11 or SPIFFE-backed identities. OpenBao tokens stay in process memory. |
 | Deployment models | Hardened systemd unit or kubelet-managed static pod. |
 | Release maturity | Preview release line; see the [Support Policy](https://dc-tec.github.io/openbao-kubernetes-kms/reference/support-policy/). |
 | Release cadence | Event-driven releases, scheduled validation. |
@@ -73,7 +73,7 @@ matrix for the exact support envelope.
 ## Security Posture
 
 `bao-kms-provider` is control-plane critical software. If the provider socket,
-JWT credential, OpenBao endpoint, or Transit key is unavailable,
+auth credential, OpenBao endpoint, or Transit key is unavailable,
 `kube-apiserver` may be unable to decrypt previously encrypted resources during
 startup.
 
@@ -141,6 +141,13 @@ make build
 bin/bao-kms-provider version
 ```
 
+Certificate auth variants are opt-in build tags:
+
+```sh
+go build -tags certauth_spiffe ./cmd/bao-kms-provider
+go build -tags certauth_pkcs11 ./cmd/bao-kms-provider
+```
+
 Selected E2E entrypoints:
 
 ```sh
@@ -191,7 +198,9 @@ Release policy is documented in
 - [Kubernetes: Encrypting confidential data at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
 - [Kubernetes: Static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
-- [OpenBao JWT auth](https://openbao.org/docs/2.4.x/auth/jwt/)
+- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
+- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
+- [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)
 
 ## License
 

@@ -1,6 +1,6 @@
 ---
 title: "Hardening"
-description: "Required and recommended hardening for production-oriented deployments of bao-kms-provider: OpenBao, plugin host, file permissions, JWT, logging, metrics, and Kubernetes-side."
+description: "Required and recommended hardening for production-oriented deployments of bao-kms-provider: OpenBao, plugin host, file permissions, auth material, logging, metrics, and Kubernetes-side."
 weight: 20
 ---
 
@@ -28,7 +28,7 @@ Recommended:
 
 - tested OpenBao backup and restore procedure,
 - a separate Transit key per Kubernetes cluster or trust domain,
-- a separate JWT auth role per cluster or trust domain,
+- a separate auth mount or role per Kubernetes cluster or trust domain,
 - change control around key rotation and `min_decryption_version`.
 
 ## Plugin Host
@@ -36,7 +36,7 @@ Recommended:
 Required:
 
 - configuration file readable only by root and the required service identity,
-- JWT readable only by the plugin process,
+- file-backed auth material readable only by the plugin process,
 - socket writable only by the plugin and the API server identity,
 - metrics and health endpoints bound to localhost by default,
 - no debug endpoints in production,
@@ -49,7 +49,7 @@ Recommended:
 - distroless non-root image and read-only container filesystem where static-pod mode is used,
 - immutable image digests,
 - pinned release artifacts with verified checksums,
-- host audit for configuration and JWT changes,
+- host audit for configuration and auth material changes,
 - one-node-at-a-time upgrades.
 
 ## File Permissions
@@ -60,6 +60,8 @@ Recommended:
 /etc/openbao-kms/config.yaml        root:openbao-kms                0640
 /etc/openbao-kms/tls/ca.crt         root:root                       0644
 /var/lib/openbao-kms/identity.jwt   root:openbao-kms                0640
+/etc/openbao-kms/client/client-chain.pem root:openbao-kms           0640
+/etc/openbao-kms/pkcs11/pin         root:openbao-kms                0640
 /var/lib/openbao-kms/state          openbao-kms:openbao-kms         0750
 /run/openbao-kms                    openbao-kms:openbao-kms-socket  2750
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
@@ -67,9 +69,9 @@ Recommended:
 
 For the rationale and runtime directory creation pattern see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
-## JWT
+## Auth Material
 
-Required:
+Required for JWT auth:
 
 - bound issuer,
 - bound audience,
@@ -81,14 +83,31 @@ Required:
 - OpenBao client token stored in memory only,
 - no JWT logging.
 
-Recommended:
+Recommended for JWT auth:
 
 - external issuer independent of the protected API server,
 - short JWT lifetime with reliable renewal,
-- `auth.expectedIssuer`, `auth.expectedAudience`, and `auth.expectedSubject` set as early misconfiguration diagnostics when the expected service-account token identity is stable,
+- `auth.jwt.expectedIssuer`, `auth.jwt.expectedAudience`, and `auth.jwt.expectedSubject` set as early misconfiguration diagnostics when the expected service-account token identity is stable,
 - issuer key rotation overlap,
 - documented emergency issuance process,
 - pinned public keys for recovery where appropriate.
+
+Required for certificate auth:
+
+- OpenBao listener requests TLS client certificates,
+- cert auth role binds the expected certificate identity,
+- cert auth method binding remains enabled for renewal,
+- OpenBao client token stored in memory only,
+- no certificate private key or PIN logging,
+- no PEM private key file source.
+
+Recommended for certificate auth:
+
+- SPIFFE roles bind `allowed_uri_sans` to the exact configured SPIFFE ID,
+- PKCS#11 private keys stay non-exportable,
+- PKCS#11 PIN files are local regular files with provider-only read access,
+- OCSP fail-open remains disabled when OCSP is enabled,
+- certificate TTL monitoring uses `openbao_kms_certificate_ttl_seconds`.
 
 The portable OpenBao/provider e2e lanes exercise bound-claim rejection and
 pinned public-key rollover. JWKS/OIDC discovery behavior remains
@@ -120,6 +139,7 @@ Do not label metrics with:
 - request UID values,
 - Kubernetes namespace or object name values,
 - unbounded error message strings.
+- SPIFFE IDs or certificate subject values.
 
 ## Kubernetes
 
@@ -145,7 +165,7 @@ Recommended:
 - Set `automountServiceAccountToken: false`.
 - Use hostPath mounts for all required files.
 - Preload images in air-gapped environments.
-- Use read-only mounts for configuration, CA, and JWT.
+- Use read-only mounts for configuration, CA, JWT, certificate chain, and PKCS#11 PIN files.
 - Run as a non-root numeric user and numeric supplemental group that matches the host socket group.
 - Set `seccompProfile: RuntimeDefault`.
 - Set `allowPrivilegeEscalation: false`.
@@ -173,7 +193,7 @@ Recommended hardening directives:
 - `ReadOnlyPaths=/etc/openbao-kms`
 - minimal `ReadWritePaths`
 
-Verify hardening does not prevent access to the configuration file, JWT, CA bundle, socket directory, or the optional state file.
+Verify hardening does not prevent access to the configuration file, selected auth material, CA bundle, socket directory, or the optional state file.
 
 ## Validate Hardening
 

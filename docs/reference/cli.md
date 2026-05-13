@@ -48,10 +48,8 @@ Checks:
 |---|---|
 | OpenBao reachable | HTTPS connection succeeds with configured CA and SNI. |
 | TLS valid | Certificate chain and server name validate. |
-| JWT file readable | File exists, permissions are safe, content parses. |
-| JWT expiry | Not expired and not within `auth.minJwtRemainingTtl`. |
-| JWT claims | Issuer, audience, subject, and configured claims match expectations where locally checkable. |
-| JWT login | OpenBao JWT login succeeds. |
+| Local auth material | For JWT auth, the JWT file exists, permissions are safe, content parses, expiry is acceptable, and configured claims match. For cert auth, certificate validation runs during OpenBao login. |
+| OpenBao auth login | The configured OpenBao auth method login succeeds. |
 | Token policy | Token can read Transit metadata and perform encrypt and decrypt. |
 | Transit key exists | Metadata read succeeds. |
 | Key type | Matches allowed key types. |
