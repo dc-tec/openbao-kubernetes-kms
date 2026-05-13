@@ -32,6 +32,7 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 	recorder.RecordTransitMetadataObservation("ok")
 	recorder.RecordAADValidationError("annotation_invalid")
 	recorder.RecordDecryptKeyIDError("key_id_unknown")
+	recorder.RecordPanicRecovery("encrypt")
 	recorder.RecordSocketRestart()
 
 	output := scrapeMetrics(t, recorder.Handler())
@@ -43,6 +44,7 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 		`openbao_kms_transit_metadata_observation_total{status="ok"} 1`,
 		`openbao_kms_aad_validation_errors_total{reason="annotation_invalid"} 1`,
 		`openbao_kms_decrypt_key_id_errors_total{reason="key_id_unknown"} 1`,
+		`openbao_kms_panic_recoveries_total{method="encrypt"} 1`,
 		`openbao_kms_socket_restarts_total 1`,
 		`openbao_kms_status_key_id_hash{hash="safe-key-id-hash"} 1`,
 		`openbao_kms_key_version 7`,

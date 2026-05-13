@@ -185,6 +185,7 @@ Errors map to stable classes in logs and metrics:
 - `openbao_rate_limited`
 - `openbao_sealed`
 - `openbao_unavailable`
+- `panic`
 - `transit_key_missing`
 - `transit_policy_denied`
 - `key_id_unknown`

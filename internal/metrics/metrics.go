@@ -51,6 +51,7 @@ type Recorder struct {
 	openbaoDuration      *prometheus.HistogramVec
 	authRenewal          *prometheus.CounterVec
 	authLogin            *prometheus.CounterVec
+	panicRecoveries      *prometheus.CounterVec
 	socketRestarts       prometheus.Counter
 	metadataObservation  *prometheus.CounterVec
 	aadValidationErrors  *prometheus.CounterVec
@@ -106,6 +107,13 @@ func NewRecorder() (*Recorder, error) {
 				Help: "Total OpenBao auth-method login attempts by bounded status.",
 			},
 			[]string{labelStatus},
+		),
+		panicRecoveries: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "openbao_kms_panic_recoveries_total",
+				Help: "Total recovered KMS handler panics by bounded method.",
+			},
+			[]string{labelMethod},
 		),
 		socketRestarts: prometheus.NewCounter(
 			prometheus.CounterOpts{
@@ -207,6 +215,11 @@ func (r *Recorder) RecordSocketRestart() {
 	r.socketRestarts.Inc()
 }
 
+// RecordPanicRecovery records one recovered KMS handler panic.
+func (r *Recorder) RecordPanicRecovery(method string) {
+	r.panicRecoveries.WithLabelValues(normalize(method)).Inc()
+}
+
 // RecordTransitMetadataObservation records one status-controller metadata observation.
 func (r *Recorder) RecordTransitMetadataObservation(requestStatus string) {
 	r.metadataObservation.WithLabelValues(normalizeStatus(requestStatus)).Inc()
@@ -230,6 +243,7 @@ func (r *Recorder) registerBaseCollectors() error {
 		r.openbaoDuration,
 		r.authRenewal,
 		r.authLogin,
+		r.panicRecoveries,
 		r.socketRestarts,
 		r.metadataObservation,
 		r.aadValidationErrors,

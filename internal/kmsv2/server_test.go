@@ -487,14 +487,25 @@ func TestTransitOpenBaoErrorsPreserveKMSBoundaryClasses(t *testing.T) {
 	}
 }
 
-func TestPanicRecoveryReturnsRedactedInternalError(t *testing.T) {
-	server, _, transit, _ := newTestServer(t)
+func TestPanicRecoveryReturnsRedactedInternalErrorAndObservation(t *testing.T) {
+	observer := &fakeObserver{}
+	server, _, transit, _ := newTestServerWithOptions(t, kmsv2.Options{Observer: observer})
 	transit.SetPanicEncrypt(true)
 
 	_, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
 	assertCode(t, err, codes.Internal)
 	if err == nil || bytes.Contains([]byte(err.Error()), []byte(testPlaintext)) {
 		t.Fatalf("panic recovery leaked sensitive detail: %v", err)
+	}
+	if strings.Contains(err.Error(), "fake transit") {
+		t.Fatalf("panic recovery leaked panic value: %v", err)
+	}
+	if len(observer.requests) != 1 {
+		t.Fatalf("expected one request observation, got %d", len(observer.requests))
+	}
+	request := observer.requests[0]
+	if request.ErrorClass != "panic" || !request.PanicRecovered || request.PanicType != "string" {
+		t.Fatalf("unexpected panic observation: %#v", request)
 	}
 }
 

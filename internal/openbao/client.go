@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -25,6 +26,16 @@ const (
 	openBaoAPIVersion    = "v1"
 	addressSchemeHTTPS   = "https"
 	maxRequestIDLength   = 128
+
+	defaultHTTPDialTimeout           = 10 * time.Second
+	defaultHTTPKeepAlive             = 30 * time.Second
+	defaultHTTPTLSHandshakeTimeout   = 10 * time.Second
+	defaultHTTPResponseHeaderTimeout = 30 * time.Second
+	defaultHTTPExpectContinueTimeout = time.Second
+	defaultHTTPIdleConnTimeout       = 90 * time.Second
+	defaultHTTPMaxIdleConns          = 64
+	defaultHTTPMaxIdleConnsPerHost   = 16
+	defaultHTTPMaxConnsPerHost       = 0
 )
 
 // TokenSource returns the current OpenBao token for one request.
@@ -213,11 +224,28 @@ func NewHTTPClientWithTLSOptions(cfg HTTPClientConfig) (*http.Client, error) {
 	}
 	tlsConfig.GetClientCertificate = cfg.GetClientCertificate
 	return &http.Client{
-		Timeout: cfg.Timeout,
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
+		Timeout:   cfg.Timeout,
+		Transport: newHTTPTransport(tlsConfig),
 	}, nil
+}
+
+func newHTTPTransport(tlsConfig *tls.Config) *http.Transport {
+	dialer := &net.Dialer{
+		Timeout:   defaultHTTPDialTimeout,
+		KeepAlive: defaultHTTPKeepAlive,
+	}
+	return &http.Transport{
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		TLSClientConfig:       tlsConfig,
+		TLSHandshakeTimeout:   defaultHTTPTLSHandshakeTimeout,
+		ResponseHeaderTimeout: defaultHTTPResponseHeaderTimeout,
+		ExpectContinueTimeout: defaultHTTPExpectContinueTimeout,
+		IdleConnTimeout:       defaultHTTPIdleConnTimeout,
+		MaxIdleConns:          defaultHTTPMaxIdleConns,
+		MaxIdleConnsPerHost:   defaultHTTPMaxIdleConnsPerHost,
+		MaxConnsPerHost:       defaultHTTPMaxConnsPerHost,
+	}
 }
 
 // CloseIdleConnections closes idle HTTP connections held by the auth client.

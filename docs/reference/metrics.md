@@ -83,6 +83,7 @@ The provider applies these rules to every metric:
 | Metric | Type | Labels | Description |
 |---|---|---|---|
 | `openbao_kms_circuit_breaker_state` | gauge | none | OpenBao client circuit breaker state. |
+| `openbao_kms_panic_recoveries_total` | counter | `method` | Recovered KMS handler panics by bounded method. Panic values are not exported. |
 | `openbao_kms_socket_restarts_total` | counter | none | Socket reclamations after stale socket detection. |
 
 ## Log Fields
@@ -104,5 +105,7 @@ Stable JSON log fields. Operators can rely on these names across preview patch r
 | `request_uid_hash` | string | Hash of the KMS request UID when debug correlation is enabled. |
 | `debug_correlation_incident` | string | Operator-supplied incident ID when debug correlation is enabled. |
 | `debug_correlation_expires_at` | string | RFC 3339 timestamp at which debug correlation will expire. |
+| `panic_recovered` | boolean | Present only when a KMS handler panic was recovered and redacted. |
+| `panic_type` | string | Runtime type of the recovered panic value. The panic value itself is never logged. |
 
 The provider must never include `plaintext`, `jwt`, `openbao_token`, `ciphertext`, `transit_key_material`, raw `openbao_path`, or raw `key_name` fields in any log entry.

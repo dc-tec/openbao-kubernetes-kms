@@ -80,6 +80,8 @@ var (
 	ErrRequestLimitExceeded = errors.New("kms request exceeds protocol limits")
 	// ErrResponseLimitExceeded identifies KMS response fields outside Kubernetes KMS v2 bounds.
 	ErrResponseLimitExceeded = errors.New("kms response exceeds protocol limits")
+	// ErrPanicRecovered identifies a recovered panic inside a KMS v2 request handler.
+	ErrPanicRecovered = errors.New("kms panic recovered")
 )
 
 // StatusCache exposes the cached Status view maintained by the status workstream.
@@ -192,7 +194,7 @@ func (s *Server) Status(ctx context.Context, _ *kmsapi.StatusRequest) (response 
 		}
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
 	requestCtx, cancel := s.requestContext(ctx)
 	defer cancel()
@@ -224,7 +226,7 @@ func (s *Server) Encrypt(
 	defer func() {
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
 	if request == nil || len(request.GetPlaintext()) == 0 {
 		return nil, rpcError(ErrPlaintextRequired)
@@ -300,7 +302,7 @@ func (s *Server) Decrypt(
 	defer func() {
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
 	if request == nil || len(request.GetCiphertext()) == 0 {
 		return nil, rpcError(ErrCiphertextRequired)
@@ -417,8 +419,13 @@ func annotationsFromProto(annotations map[string][]byte) (map[string]string, err
 	return decoded, nil
 }
 
-func recoverRPC(err *error) {
+func recoverRPC(err *error, observation *RequestObservation) {
 	if recovered := recover(); recovered != nil {
+		if observation != nil {
+			observation.ErrorClass = errorClass(ErrPanicRecovered)
+			observation.PanicRecovered = true
+			observation.PanicType = fmt.Sprintf("%T", recovered)
+		}
 		*err = grpcstatus.Error(codes.Internal, messageKMSRequestFailed)
 	}
 }
@@ -566,6 +573,8 @@ func safeMessage(err error) string {
 		return messageAnnotationsMismatch
 	case errors.Is(err, aad.ErrAADRequired):
 		return messageAADRequired
+	case errors.Is(err, ErrPanicRecovered):
+		return messageKMSRequestFailed
 	case errors.Is(err, ErrStatusUnavailable):
 		return messageStatusUnavailable
 	case errors.Is(err, ErrStatusUnhealthy):

@@ -32,6 +32,8 @@ const (
 	FieldProbeKind         = "probe_kind"
 	FieldCorrelationID     = "debug_correlation_incident"
 	FieldCorrelationExpiry = "debug_correlation_expires_at"
+	FieldPanicRecovered    = "panic_recovered"
+	FieldPanicType         = "panic_type"
 
 	// RedactedValue is the only placeholder used when a caller must acknowledge
 	// sensitive material without logging its value.
@@ -134,6 +136,11 @@ func RedactedString(key string) slog.Attr {
 // Int records a stable integer field.
 func Int(key string, value int) slog.Attr {
 	return slog.Int(key, value)
+}
+
+// Bool records a stable boolean field.
+func Bool(key string, value bool) slog.Attr {
+	return slog.Bool(key, value)
 }
 
 // DurationMilliseconds records a duration as milliseconds.

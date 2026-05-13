@@ -169,6 +169,42 @@ func TestNewAuthClientUsesClientCertificateCallback(t *testing.T) {
 	}
 }
 
+func TestNewHTTPTransportUsesExplicitControlPlaneDefaults(t *testing.T) {
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+	transport := newHTTPTransport(tlsConfig)
+
+	if transport.TLSClientConfig != tlsConfig {
+		t.Fatal("transport did not preserve TLS config")
+	}
+	if transport.DialContext == nil {
+		t.Fatal("transport must use an explicit dialer")
+	}
+	if !transport.ForceAttemptHTTP2 {
+		t.Fatal("transport should attempt HTTP/2")
+	}
+	if transport.TLSHandshakeTimeout != defaultHTTPTLSHandshakeTimeout {
+		t.Fatalf("unexpected TLS handshake timeout: %s", transport.TLSHandshakeTimeout)
+	}
+	if transport.ResponseHeaderTimeout != defaultHTTPResponseHeaderTimeout {
+		t.Fatalf("unexpected response header timeout: %s", transport.ResponseHeaderTimeout)
+	}
+	if transport.ExpectContinueTimeout != defaultHTTPExpectContinueTimeout {
+		t.Fatalf("unexpected expect-continue timeout: %s", transport.ExpectContinueTimeout)
+	}
+	if transport.IdleConnTimeout != defaultHTTPIdleConnTimeout {
+		t.Fatalf("unexpected idle connection timeout: %s", transport.IdleConnTimeout)
+	}
+	if transport.MaxIdleConns != defaultHTTPMaxIdleConns {
+		t.Fatalf("unexpected max idle connections: %d", transport.MaxIdleConns)
+	}
+	if transport.MaxIdleConnsPerHost != defaultHTTPMaxIdleConnsPerHost {
+		t.Fatalf("unexpected max idle connections per host: %d", transport.MaxIdleConnsPerHost)
+	}
+	if transport.MaxConnsPerHost != defaultHTTPMaxConnsPerHost {
+		t.Fatalf("unexpected max connections per host: %d", transport.MaxConnsPerHost)
+	}
+}
+
 func TestClientRequestFailureIsRedacted(t *testing.T) {
 	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path != "/v1/sys/capabilities-self" {

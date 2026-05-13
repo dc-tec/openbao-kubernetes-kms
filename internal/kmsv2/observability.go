@@ -24,6 +24,7 @@ const (
 	errorClassOpenBaoRateLimited  = "openbao_rate_limited"
 	errorClassOpenBaoSealed       = "openbao_sealed"
 	errorClassOpenBaoUnavailable  = "openbao_unavailable"
+	errorClassPanic               = "panic"
 	errorClassProtocolLimit       = "protocol_limit"
 	errorClassStatusStale         = "status_stale"
 	errorClassTimeout             = "timeout"
@@ -73,6 +74,8 @@ type RequestObservation struct {
 	RequestUIDHash    string
 	ErrorClass        string
 	Healthz           string
+	PanicRecovered    bool
+	PanicType         string
 }
 
 // Observer receives redacted KMS v2 request and validation observations.
@@ -165,6 +168,8 @@ func validationErrorClass(err error) string {
 		return errorClassAnnotationInvalid
 	case errors.Is(err, aad.ErrAnnotationMismatch):
 		return errorClassAADMismatched
+	case errors.Is(err, ErrPanicRecovered):
+		return errorClassPanic
 	case errors.Is(err, ErrRequestLimitExceeded),
 		errors.Is(err, ErrResponseLimitExceeded):
 		return errorClassProtocolLimit

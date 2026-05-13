@@ -60,6 +60,7 @@ The provider tags every failed operation with one of these stable error classes.
 - `openbao_rate_limited`
 - `openbao_sealed`
 - `openbao_unavailable`
+- `panic`
 - `transit_key_missing`
 - `transit_policy_denied`
 - `key_id_unknown`

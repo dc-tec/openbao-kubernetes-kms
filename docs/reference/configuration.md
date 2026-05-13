@@ -174,6 +174,12 @@ includes matching opt-in artifacts and E2E evidence.
 
 `auth.loginTimeout` can be left at `0s` to derive `max(openbao.timeout, 5s)`.
 
+`openbao.timeout` is the operator-facing deadline for one OpenBao request. The
+HTTP transport also uses fixed control-plane defaults for dial, TLS handshake,
+response-header, and idle-connection timeouts so failed or stalled connections
+are bounded in addition to the overall request deadline. These transport defaults
+are not configurable in the preview line.
+
 `auth.jwt.minRemainingTtl` controls how much JWT lifetime must remain before the provider will use a JWT for login. The JWT file is re-read before each re-login.
 
 `auth.cert.minRemainingTtl` controls how much client certificate lifetime must remain before the provider will attempt OpenBao cert auth. The provider validates the certificate locally before login and records the observed certificate TTL for metrics.
