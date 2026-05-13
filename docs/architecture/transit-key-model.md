@@ -68,7 +68,7 @@ OpenBao policies are path-based and deny by default; capabilities are only what 
 | `key_version` | Required on every encrypt. Avoids implicit-latest races during rotation. |
 | `associated_data` | Required AAD binding for supported AEAD key types; see [Reference: Key ID And AAD](/reference/key-id-and-aad/). |
 | `min_encryption_version` | Useful as a guard after rotation to prevent encryption with retired versions. Operator-driven, not plugin-driven. |
-| `min_decryption_version` | Dangerous if raised too early; only after full migration and verification. See [Operations: Rotation: min_decryption_version](/operations/rotation/#min_decryption_version). |
+| `min_decryption_version` | Dangerous if raised too early; only after independent migration evidence and backup-retention evidence. `verify-rotation` alone is not enough. See [Operations: Rotation: min_decryption_version](/operations/rotation/#min_decryption_version). |
 | `disable_upsert` | Enabled at the mount level. |
 | `batch_input` | Outside the provider runtime for this release line; future decrypt coalescing must be introduced with explicit benchmarks and failure semantics. |
 | `rewrap` | Operational tool outside the Kubernetes KMS hot path. |

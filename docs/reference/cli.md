@@ -134,7 +134,7 @@ active key hash from live Transit metadata after rotation.
 
 ## verify-rotation
 
-Verify whether rotation migration has rewritten enough resources to proceed safely.
+Report local rotation preflight state.
 
 ```sh
 bao-kms-provider verify-rotation \
@@ -143,10 +143,14 @@ bao-kms-provider verify-rotation \
 ```
 
 The command reports the same local registry and Transit metadata view as
-`rotation-plan`, plus a limited confidence marker. It does not scan Kubernetes
-resources, inspect etcd, or prove that every encrypted resource and backup has
-been rewritten. Treat it as a local preflight signal, not as proof that old
-ciphertext no longer exists.
+`rotation-plan`, plus `confidence: limited` and a `limitations` field. It does
+not scan Kubernetes resources, inspect etcd, prove that every encrypted resource
+or retained backup has been rewritten, or recommend raising OpenBao
+`min_decryption_version`.
+
+Treat it as a local preflight signal. The operator still owns independent
+migration evidence, backup-retention evidence, and any change to
+`min_decryption_version`.
 
 ## config
 

@@ -1,6 +1,6 @@
 ---
 title: "Disaster Recovery"
-description: "Recover from OpenBao loss, Transit key loss, plugin config loss, auth issuer loss, and API server failure to decrypt KMS-encrypted Kubernetes data."
+description: "Recover compatible OpenBao, etcd, provider state, auth, and API server dependencies without implying recovery from lost Transit key material."
 weight: 20
 ---
 
@@ -12,12 +12,24 @@ If etcd contains objects encrypted with a Transit key version that no longer exi
 
 For the design view of the failure modes addressed by this runbook, see [Architecture: Failure Modes](/architecture/failure-modes/).
 
+## Preview Boundary
+
+Current preview releases do not include a supported `recover-state` command.
+Normal runtime can auto-bootstrap local registry state only for an initial,
+unrotated Transit key. After any Transit rotation, recovery requires the
+registry state file and checkpoint from backup or from a known-good peer with
+matching identity scope.
+
+If Transit key material is lost and no compatible OpenBao backup exists, the
+provider cannot recover KMS-encrypted Kubernetes data. Recreating a key with the
+same name is a new key lineage, not recovery.
+
 The recovery posture is conservative:
 
 - preserve encrypted etcd data while investigating,
 - restore OpenBao Transit key material before changing Kubernetes encryption configuration,
 - keep identity-bearing provider fields unchanged,
-- use `doctor` and `verify-key` to prove the KMS path before restarting API servers,
+- use `doctor` and `verify-key` to check the KMS path before restarting API servers,
 - restore OpenBao and etcd from a compatible backup pair when key versions or ciphertext epochs no longer line up.
 
 ## Recovery Decision Flow
@@ -153,9 +165,14 @@ Do not accept a recreated key as compatible with data encrypted under the previo
 
 Changing provider name, cluster ID, OpenBao instance ID, OpenBao namespace, Transit mount ID, key lineage ID, mount path, or key name causes `key_id` and AAD mismatches.
 
+If both registry files are missing after Transit rotation, do not synthesize a
+replacement state file by hand. Current preview releases have no supported
+`recover-state` command, so normal runtime fails closed until complete
+state/checkpoint evidence is restored.
+
 ## Auth Issuer Loss
 
-If the configured JWT issuer, certificate authority, PKCS#11 token, or SPIFFE control plane is unavailable:
+If the configured JWT issuer, certificate authority, or PKCS#11 token is unavailable:
 
 - existing OpenBao tokens continue until expiry,
 - re-login fails after token expiry,
@@ -165,7 +182,7 @@ Recovery options:
 
 - restore the external issuer,
 - issue a valid replacement JWT through an emergency process,
-- restore the certificate authority, PKCS#11 token, or SPIFFE control plane,
+- restore the certificate authority or PKCS#11 token,
 - configure OpenBao JWT auth with pinned public keys if appropriate,
 - use a time-limited emergency identity with a strong audit trail.
 
@@ -187,10 +204,10 @@ Avoid relying only on a Kubernetes ServiceAccount token from the protected clust
 If both local registry files are unavailable, normal startup auto-bootstraps
 only when OpenBao still reports initial Transit metadata (`latest_version` 1)
 that can decrypt version 1. A replacement node after any Transit rotation must
-restore the registry state and checkpoint, or use an operator-controlled
-recovery flow with complete version metadata and cross-node `key_id` evidence.
-Otherwise startup fails closed before the API server is allowed to rely on a
-new active `key_id`.
+restore the registry state and checkpoint from backup or a known-good peer.
+The controlled `recover-state` workflow is deferred for the preview line.
+Otherwise startup fails closed before the API server is allowed to rely on a new
+active `key_id`.
 
 For systemd deployments, restore the package, unit, users, groups, and `tmpfiles.d` runtime directory entry. For static-pod deployments, preload the provider image digest, restore the manifest, and ensure the numeric `openbao-kms-socket` GID matches `supplementalGroups` and `server.socketGroup`.
 

@@ -114,15 +114,14 @@ Check:
 - for JWT auth, OpenBao has the current signing keys through JWKS, OIDC discovery, or pinned public keys,
 - for certificate auth, the OpenBao listener requests client certificates,
 - for certificate auth, the certificate is not expired, has client-auth usage, and matches the configured role constraints,
-- for SPIFFE auth, the Workload API socket is reachable and returns the configured SPIFFE ID,
 - for PKCS#11 auth, the module path, token label, key label, and PIN file are correct,
-- host, OpenBao, issuer, CA, and SPIFFE clocks are synchronized.
+- host, OpenBao, issuer, and CA clocks are synchronized.
 
 Recovery:
 
 1. Replace or restore the configured auth material.
 2. Fix OpenBao auth role constraints if they are wrong.
-3. Fix issuer, JWKS, OIDC discovery, certificate authority, PKCS#11, or SPIFFE Workload API reachability.
+3. Fix issuer, JWKS, OIDC discovery, certificate authority, or PKCS#11 reachability.
 4. Restart the plugin if the current in-memory token does not recover. The provider re-reads auth material before re-login.
 
 ## Transit Key Missing
@@ -167,6 +166,11 @@ Recovery:
 3. Verify active and historical key snapshots are present.
 4. Restart the plugin.
 5. Retry the Kubernetes read.
+
+After Transit rotation, current preview releases do not support synthesizing
+replacement registry state. Restore the state/checkpoint pair from backup or a
+known-good peer with matching identity scope; otherwise the provider fails
+closed.
 
 ## AAD Mismatch
 
@@ -222,11 +226,16 @@ Symptoms:
 
 Recovery:
 
-1. Lower `min_decryption_version` if the old key version still exists.
-2. Rerun storage migration; see [Operations: Rotation](/operations/rotation/#migrate-kubernetes-data).
-3. Verify old backups are either expired or still decryptable.
+1. Lower `min_decryption_version` if the old key version still exists and policy allows it.
+2. Restore an OpenBao backup if the old key version no longer exists.
+3. Rerun storage migration only after reads through the KMS path are healthy; see [Operations: Rotation](/operations/rotation/#migrate-kubernetes-data).
+4. Verify old backups are either expired or still decryptable.
 
 If old key material no longer exists, restore the OpenBao backup. See [Disaster Recovery: Transit Key Loss](/operations/disaster-recovery/#transit-key-loss).
+
+Do not treat `verify-rotation` as evidence that raising
+`min_decryption_version` was safe. It reports local registry and Transit
+metadata only.
 
 ## Static Pod Image Missing
 
@@ -269,5 +278,6 @@ Recovery:
 - Do not recreate Transit keys with the same name.
 - Do not change the provider name to clear errors.
 - Do not raise `min_decryption_version`.
+- Do not hand-edit or invent key registry state after rotation.
 - Do not log plaintext or full ciphertext.
 - Do not disable AAD globally.

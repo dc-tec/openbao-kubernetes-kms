@@ -67,7 +67,7 @@ func newVerifyRotationCommand(runtimeConfig *config.Runtime, configPath *string)
 	var output string
 	cmd := &cobra.Command{
 		Use:   "verify-rotation",
-		Short: "Verify rotation migration state",
+		Short: "Report local rotation preflight state",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := loadAndValidateConfig(runtimeConfig, *configPath, false)

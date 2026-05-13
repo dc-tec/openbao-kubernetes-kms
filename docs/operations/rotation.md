@@ -1,6 +1,6 @@
 ---
 title: "Rotation"
-description: "Rotate the OpenBao Transit key version, observe the provider's promotion state machine, migrate existing API resources, and verify rotation completed."
+description: "Rotate the OpenBao Transit key version, observe the provider's promotion state machine, migrate existing API resources, and collect bounded validation evidence."
 weight: 10
 ---
 
@@ -11,6 +11,17 @@ This runbook covers OpenBao Transit key rotation for `bao-kms-provider`. Transit
 For the design rationale behind the rotation state machine, including the flip-flop guards and observation thresholds, see [Architecture: Rotation Model](/architecture/rotation-model/).
 
 Rotation changes the active Transit version under an existing Transit key. It must not change the provider name, cluster ID, OpenBao instance ID, Transit mount ID, key lineage ID, mount path, or key name. Those fields are identity-bearing and changing them requires a migration plan; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+
+## Preview Boundary
+
+Current preview tooling reports local registry state and OpenBao Transit metadata.
+It does not enumerate Kubernetes resources, inspect etcd, prove that every
+targeted object was rewritten, or prove that retained backups no longer require
+old Transit versions.
+
+Treat `verify-rotation` as a local preflight signal. Rewrite proof,
+backup-retention proof, and any recommendation to raise `min_decryption_version`
+remain operator-controlled until a proof-producing command exists.
 
 ## Before Rotation
 
@@ -78,7 +89,10 @@ The rotation metric is intentionally bounded to `state="active"`, `state="pendin
 
 ## Migrate Kubernetes Data
 
-Rewrite targeted resources after Status exposes the new `key_id`.
+Rewrite targeted resources after Status exposes the new `key_id`. Define the
+complete resource list from the API server `EncryptionConfiguration` before
+starting migration, and keep the command output, timestamps, and resource list as
+operator evidence.
 
 For Secrets:
 
@@ -94,14 +108,22 @@ Repeat for each configured resource type. The pattern is `kubectl get <resource>
 bao-kms-provider verify-rotation --config /etc/openbao-kms/config.yaml
 ```
 
-Then:
+This command confirms the provider's local registry and Transit metadata view.
+When it succeeds, it still reports limited confidence because it does not scan
+Kubernetes resources, inspect etcd, or evaluate retained backups.
+
+Then collect independent evidence:
 
 - run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml`,
 - restart one API server and verify reads succeed,
 - verify new writes carry the new `key_id`,
+- verify every configured resource type was included in the rewrite procedure,
 - check the provider decrypt-error metrics on every control-plane node,
 - check the OpenBao decrypt error rate,
 - check API server encryption metrics where available,
+- compare `openbao_kms_status_key_id_hash` across all control-plane nodes,
+- confirm retained backup sets either still have old Transit versions available
+  or no longer need them,
 - inspect etcd in a controlled environment if required.
 
 For the metric and log catalog used during these checks see [Reference: Observability](/reference/observability/).
@@ -113,7 +135,12 @@ Do not raise OpenBao `min_decryption_version` until:
 - every targeted live object has been rewritten,
 - old backups have expired or are known not to need the old version,
 - restore testing has proved that the remaining backup set can decrypt,
-- `verify-rotation` confidence is acceptable.
+- a human-reviewed change record identifies the exact Transit versions that
+  remain required and the rollback plan.
+
+`verify-rotation` is not a recommendation engine for this setting. It cannot
+prove that old ciphertext no longer exists in Kubernetes, etcd snapshots, or
+retained backups.
 
 Raising `min_decryption_version` too early can make old Kubernetes data unreadable even when the Transit key still exists. Lowering the value may help only when the old key version still exists and policy allows it. Treat this as an emergency recovery step, not a rollback plan.
 

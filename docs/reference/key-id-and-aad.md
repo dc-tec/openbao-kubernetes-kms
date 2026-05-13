@@ -213,7 +213,7 @@ State-file invariants enforced at load:
 - `min_available_version` and `min_decryption_version` must not block active or retained historical versions,
 - `min_encryption_version` must not block the active version.
 
-If both the state file and checkpoint are missing, normal startup auto-bootstraps only from initial Transit metadata (`latest_version` 1) that can still decrypt version 1. This allows first install without a preexisting state file but fails closed for replacement or recovery after Transit rotation. Recovery after rotation must restore the state/checkpoint pair or use an operator-controlled recovery flow with complete version metadata. If the checkpoint exists but the state file is missing or older than the checkpoint, startup fails closed.
+If both the state file and checkpoint are missing, normal startup auto-bootstraps only from initial Transit metadata (`latest_version` 1) that can still decrypt version 1. This allows first install without a preexisting state file but fails closed for replacement or recovery after Transit rotation. Recovery after rotation must restore the state/checkpoint pair from backup or a known-good peer with matching identity scope. A controlled `recover-state` command is deferred for the preview line; operators must not synthesize replacement state by hand. If the checkpoint exists but the state file is missing or older than the checkpoint, startup fails closed.
 
 ## Golden Fixtures
 

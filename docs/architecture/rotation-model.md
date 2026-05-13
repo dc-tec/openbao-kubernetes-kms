@@ -26,7 +26,7 @@ stateDiagram-v2
     PendingStability --> PendingStability: successful observation count below threshold
     PendingStability --> PendingActivationDelay: stable observation threshold met
     PendingActivationDelay --> Active: activation delay elapsed
-    Active --> RetiredAfterMigration: storage migration verified
+    Active --> RetiredAfterMigration: operator migration evidence retained
 
     NewVersionObserved --> Rejected: metadata inconsistent
     PendingStability --> Rejected: version rollback or probe failure
@@ -54,8 +54,8 @@ sequenceDiagram
     API->>Status: observe changed Status.key_id
     API->>API: mark older encrypted data stale
     Operator->>API: run storage migration / resource rewrite
-    Operator->>Watcher: verify-rotation
-    Operator->>Bao: consider min_decryption_version only after verification
+    Operator->>Watcher: collect local verify-rotation preflight
+    Operator->>Bao: consider min_decryption_version only after independent rewrite and backup evidence
 ```
 
 ## Avoiding Key ID Flip-Flop
@@ -85,6 +85,11 @@ The flip-flop guard is critical because Kubernetes treats Status `key_id` change
 - backups are aligned with retained Transit versions,
 - disaster recovery drills have passed,
 - OpenBao and etcd backup retention implications are understood.
+
+The current preview implementation does not prove those conditions. It validates
+local registry state and Transit metadata, then leaves rewrite proof,
+backup-retention proof, and `min_decryption_version` decisions to operator
+change control.
 
 Runtime status probes validate `min_decryption_version` and
 `min_available_version` against every retained active, retired, and
