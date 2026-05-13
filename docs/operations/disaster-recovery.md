@@ -97,6 +97,12 @@ Record with every backup set:
 
 Preserve historical Transit versions for at least as long as any retained etcd backup can reference them. Do not raise OpenBao `min_decryption_version` for versions that may still be needed by retained etcd backups.
 
+OpenBao backups must preserve Transit version creation timestamps for every
+version the provider state can reference. This includes intermediate versions
+that a control-plane node may have skipped over during back-to-back rotations;
+the provider treats missing or changed creation metadata as unsafe identity
+drift.
+
 ## State Rollback Boundary
 
 The local registry state file and adjacent checkpoint help detect operational
@@ -146,7 +152,8 @@ Preferred procedure when both stores must be restored:
 
 1. Select an etcd backup and an OpenBao backup from a compatible time window.
 2. Restore OpenBao first.
-3. Verify the Transit key versions required by the etcd snapshot exist and are decryptable.
+3. Verify the Transit key versions required by the etcd snapshot exist, are
+   decryptable, and still have their original Unix-second creation timestamps.
 4. Restore etcd.
 5. Start the plugin.
 6. Start the API server.

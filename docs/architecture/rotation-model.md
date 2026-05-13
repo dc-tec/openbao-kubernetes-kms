@@ -68,6 +68,11 @@ The plugin must not flip-flop between `key_id` values during rotation. Recommend
 - keep old snapshots in the registry for decrypt,
 - do not promote a key while OpenBao metadata is stale or inconsistent,
 - do not promote when Transit metadata read fails,
+- retain complete intermediate Transit version metadata as decrypt-only
+  historical snapshots if a node observes `latest_version` jump over one or
+  more versions,
+- fail closed when an observed `latest_version` jump is missing intermediate
+  Transit version creation metadata,
 - do not promote based on an encrypt response.
 
 The flip-flop guard is critical because Kubernetes treats Status `key_id` changes as a signal that older data is stale. A flip-flop would oscillate the staleness signal and confuse the API server's storage migration tracking.

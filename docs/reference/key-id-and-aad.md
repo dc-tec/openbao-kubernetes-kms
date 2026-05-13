@@ -245,6 +245,9 @@ State-file invariants enforced at load:
 - pending and rejected snapshots are retained in state but excluded from decrypt lookup,
 - the checkpoint rejects older generations and same-generation hash mismatches,
 - the active Transit version must not move backwards during normal promotion,
+- when live Transit `latest_version` jumps over intermediate versions, the
+  provider requires their creation metadata and retains them as decrypt-only
+  historical snapshots; missing intermediate creation metadata fails closed,
 - loaded state must match the current provider, cluster, OpenBao instance, OpenBao namespace, Transit mount, lineage, key name, and AAD mode,
 - active and retained historical Transit version creation times must match current Transit metadata after Unix-second normalization,
 - `min_available_version` and `min_decryption_version` must not block active or retained historical versions,

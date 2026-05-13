@@ -230,6 +230,38 @@ Do not edit `key_id`, creation timestamps, or local state by hand to force a
 match. That can make Kubernetes objects reference a key epoch that cannot
 decrypt them.
 
+## Intermediate Transit Version Metadata Missing
+
+Symptoms:
+
+- `rotation-plan`, `verify-rotation`, `/ready`, or startup reports invalid
+  Transit metadata,
+- the reported Transit `latest_version` jumped over one or more versions,
+- KMS Status is unhealthy and does not publish a `key_id`.
+
+Likely causes:
+
+- multiple Transit rotations happened before every control-plane node converged,
+- OpenBao restore or import omitted an intermediate version creation timestamp,
+- Transit metadata is temporarily inconsistent during restore.
+
+Recovery:
+
+1. Stop further Transit rotations.
+2. Keep all existing Transit versions decryptable.
+3. Restore compatible OpenBao metadata that includes every intermediate version
+   creation timestamp at Unix-second precision.
+4. Restore the provider state file and checkpoint from backup or a known-good
+   peer if local state was lost.
+5. Run `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`
+   on every control-plane node.
+6. Resume only after every node reports a healthy, converged active `key_id`
+   hash.
+
+Do not synthesize intermediate snapshots by hand. If the provider cannot prove
+the skipped version identities from OpenBao metadata and local state, it fails
+closed to avoid advertising a registry that might not decrypt Kubernetes data.
+
 ## AAD Mismatch
 
 Symptoms:
