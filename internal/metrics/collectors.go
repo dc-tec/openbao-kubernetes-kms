@@ -109,6 +109,7 @@ func (c *diagnosticsCollector) Collect(ch chan<- prometheus.Metric) {
 type authCollector struct {
 	provider AuthProvider
 	tokenTTL *prometheus.Desc
+	certTTL  *prometheus.Desc
 }
 
 func newAuthCollector(provider AuthProvider) *authCollector {
@@ -120,11 +121,18 @@ func newAuthCollector(provider AuthProvider) *authCollector {
 			nil,
 			nil,
 		),
+		certTTL: prometheus.NewDesc(
+			"openbao_kms_certificate_ttl_seconds",
+			"Remaining cert-auth client certificate TTL. Zero when certificate auth is not in use or no certificate has been observed.",
+			nil,
+			nil,
+		),
 	}
 }
 
 func (c *authCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.tokenTTL
+	ch <- c.certTTL
 }
 
 func (c *authCollector) Collect(ch chan<- prometheus.Metric) {
@@ -133,6 +141,11 @@ func (c *authCollector) Collect(ch chan<- prometheus.Metric) {
 		c.tokenTTL,
 		prometheus.GaugeValue,
 		nonNegativeSeconds(state.TokenTTL),
+	)
+	ch <- prometheus.MustNewConstMetric(
+		c.certTTL,
+		prometheus.GaugeValue,
+		nonNegativeSeconds(state.CertTTL),
 	)
 }
 

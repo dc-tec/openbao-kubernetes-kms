@@ -102,7 +102,7 @@ func NewRecorder() (*Recorder, error) {
 		authLogin: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "openbao_kms_auth_login_total",
-				Help: "Total OpenBao JWT login attempts by bounded status.",
+				Help: "Total OpenBao auth-method login attempts by bounded status.",
 			},
 			[]string{labelStatus},
 		),
@@ -191,7 +191,7 @@ func (r *Recorder) RecordOpenBaoRequest(operation string, requestStatus string, 
 	r.openbaoDuration.WithLabelValues(operationLabel).Observe(duration.Seconds())
 }
 
-// RecordAuthLogin records one JWT login attempt.
+// RecordAuthLogin records one auth-method login attempt.
 func (r *Recorder) RecordAuthLogin(requestStatus string) {
 	r.authLogin.WithLabelValues(normalizeStatus(requestStatus)).Inc()
 }

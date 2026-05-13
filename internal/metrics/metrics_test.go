@@ -47,6 +47,7 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 		`openbao_kms_status_key_id_hash{hash="safe-key-id-hash"} 1`,
 		`openbao_kms_key_version 7`,
 		`openbao_kms_token_ttl_seconds 300`,
+		`openbao_kms_certificate_ttl_seconds 7200`,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("metrics output missing %q:\n%s", want, output)
@@ -93,5 +94,6 @@ func (fakeAuthProvider) State() auth.State {
 	return auth.State{
 		Status:   auth.StatusAuthenticated,
 		TokenTTL: 5 * time.Minute,
+		CertTTL:  2 * time.Hour,
 	}
 }
