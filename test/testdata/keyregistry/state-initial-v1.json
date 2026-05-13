@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "keyregistry.openbao-kms/v1alpha1",
+  "generation": 1,
+  "currentHash": "krs1.DqMdjGGzCtdXlX6PD1Z5bcj4EyeiEzFav7vchElfAMo",
+  "activeKeyId": "obk2.SU0bKFnl1E6uEttJ3yhQy_uGBWZ6MUOJrNH4VJwtz0k",
+  "snapshots": [
+    {
+      "providerName": "openbao-kms-workload-a",
+      "clusterId": "workload-a",
+      "openbaoInstanceId": "bao-prod-a",
+      "transitMountId": "transit-prod-primary",
+      "transitKeyLineageId": "01HXEXAMPLEKEYLINEAGEID",
+      "transitVersion": 1,
+      "transitVersionCreatedAtUnix": 1700000060,
+      "kubernetesKeyId": "obk2.SU0bKFnl1E6uEttJ3yhQy_uGBWZ6MUOJrNH4VJwtz0k",
+      "state": "active",
+      "aadMode": "aad.required",
+      "observedAtUnix": 1700000000,
+      "promotedAtUnix": 1700000000
+    }
+  ]
+}
