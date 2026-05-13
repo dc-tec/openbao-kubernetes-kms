@@ -56,6 +56,7 @@ const (
 	openBaoJWTTokenMaxTTL      = "30m"
 	openBaoJWTClockSkewLeeway  = "30s"
 	openBaoJWTExpirationLeeway = "30s"
+	openBaoEndpointProbeWait   = 5 * time.Second
 
 	openBaoCertAuthMount       = "auth/k8s-workload-a-cert"
 	openBaoCertAuthRole        = "openbao-kms-control-plane"
@@ -1322,7 +1323,10 @@ func (f *OpenBaoEnvironment) waitUntilReady(ctx context.Context, timeout time.Du
 }
 
 func (f *OpenBaoEnvironment) refreshEndpoint(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, f.dockerBinary, "port", f.containerName, "8200/tcp")
+	probeCtx, cancel := context.WithTimeout(ctx, openBaoEndpointProbeWait)
+	defer cancel()
+
+	cmd := exec.CommandContext(probeCtx, f.dockerBinary, "port", f.containerName, "8200/tcp")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("resolve OpenBao environment port: %w", err)

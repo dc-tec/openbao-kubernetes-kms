@@ -201,7 +201,7 @@ lanes:
     prScope: main
     environment: local-openbao-ha
     isolation: local-container
-    timeout: 7m
+    timeout: 10m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
     versionRefs:

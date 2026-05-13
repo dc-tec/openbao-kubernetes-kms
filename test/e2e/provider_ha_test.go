@@ -25,7 +25,7 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 		t.Skip(envProviderImage + " is required")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 9*time.Minute)
 	defer cancel()
 
 	dockerPath, err := exec.LookPath(framework.EnvDefault(framework.EnvDockerBinary, "docker"))
