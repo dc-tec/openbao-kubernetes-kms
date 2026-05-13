@@ -58,7 +58,7 @@ server may need the KMS plugin during startup to read encrypted resources.
 | Kubernetes target | Kubernetes `1.34` release line, with exact runnable pins in `.ci/versions.yaml`. |
 | OpenBao target | OpenBao `2.5.3` with Transit and JWT auth. Certificate auth implementation targets OpenBao TLS certificate auth in build-tagged variants. |
 | Transit key type | `aes256-gcm96` is the supported and recommended default. |
-| Authentication | JWT auth by default. Certificate auth is implemented in build-tagged PKCS#11 and SPIFFE variants; release support is gated on provider source E2E and release artifact evidence. OpenBao tokens stay in process memory. |
+| Authentication | JWT auth by default. Certificate auth is implemented in build-tagged PKCS#11 and SPIFFE variants. CI covers OpenBao cert auth, PKCS#11/SoftHSM full-stack provider auth, and SPIRE Workload API provider-source validation; release support is still gated on artifact evidence. OpenBao tokens stay in process memory. |
 | Deployment models | Hardened systemd unit or kubelet-managed static pod. |
 | Release maturity | Preview release line; see the [Support Policy](https://dc-tec.github.io/openbao-kubernetes-kms/reference/support-policy/). |
 | Release cadence | Event-driven releases, scheduled validation. |
@@ -160,6 +160,7 @@ Selected E2E entrypoints:
 
 ```sh
 make test-e2e-openbao-ci
+make test-e2e-provider-certauth-sources-openbao-ci
 make test-e2e-provider-ha-openbao-ci
 make test-e2e-kind-smoke
 ```

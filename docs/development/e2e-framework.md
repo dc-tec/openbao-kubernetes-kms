@@ -22,6 +22,9 @@ behavior.
 | Full enabled E2E suite | `make test-e2e` | Runs the enabled Ginkgo E2E specs selected by labels. | Depends on selected labels |
 | OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
 | OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao TLS cert auth method, listener client-certificate request, URI SAN role binding, cert login, and Transit access with the issued token. | Docker-compatible runtime |
+| Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Real SPIRE server and agent, Workload API socket, X.509 SVID selection, and provider local SPIFFE certificate validation. | Docker-compatible runtime |
+| Provider PKCS#11 SoftHSM certificate source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | Real SoftHSM token, PKCS#11 signer, provider image, OpenBao cert login, KMS v2 socket client, and Transit access. | Docker-compatible runtime |
+| Provider certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | Runs the SPIRE source and PKCS#11 SoftHSM source lanes. | Docker-compatible runtime |
 | Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and provider auth. | Docker-compatible runtime |
 | Provider CLI | `make test-e2e-provider-cli-openbao-ci` | Provider image CLI commands against real OpenBao/config/state, including diagnostics and hardening failures. | Docker-compatible runtime |
 | Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted auth material, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
@@ -83,6 +86,8 @@ Current lane IDs:
 |---|---|
 | `openbao-ci` | active |
 | `openbao-cert-auth-ci` | active |
+| `openbao-provider-certauth-spiffe-source-ci` | active |
+| `openbao-provider-certauth-pkcs11-source-ci` | active |
 | `openbao-failure-ci` | active |
 | `openbao-provider-cli-ci` | active |
 | `openbao-ha-ci` | active |

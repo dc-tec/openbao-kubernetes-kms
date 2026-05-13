@@ -19,7 +19,7 @@ The initial public release envelope is:
 - OpenBao `2.5.3`,
 - OpenBao Transit,
 - JWT auth in default builds,
-- certificate auth implementation in build-tagged PKCS#11 and SPIFFE variants, with release support pending provider source E2E and release artifact evidence,
+- certificate auth implementation in build-tagged PKCS#11 and SPIFFE variants, with CI coverage for OpenBao cert auth, PKCS#11/SoftHSM full-stack provider auth, and SPIRE Workload API provider-source validation,
 - Linux control-plane nodes with filesystem Unix domain sockets.
 
 ## Kubernetes
@@ -99,8 +99,8 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 | Auth method | Build | Status |
 |---|---|---|
 | JWT | default | Supported. |
-| Certificate with PKCS#11 source | `certauth_pkcs11` | Implemented. Release support is pending host artifact evidence plus provider source E2E evidence with a compatible PKCS#11 module and token. |
-| Certificate with SPIFFE source | `certauth_spiffe` | Implemented. Release support is pending SPIFFE artifact evidence plus provider source E2E evidence with an X.509 SVID from the SPIFFE Workload API. |
+| Certificate with PKCS#11 source | `certauth_pkcs11` | Implemented. CI exercises a real SoftHSM token, PKCS#11 signer, OpenBao cert login, and Transit access. Release support still requires artifact evidence for the selected deployment. |
+| Certificate with SPIFFE source | `certauth_spiffe` | Implemented. CI exercises a real SPIRE Workload API X.509 SVID source and provider local validation. Full OpenBao cert-auth login with stock SPIRE SVIDs is not claimed until OpenBao cert auth can accept the URI-SAN-only identity without requiring a certificate alias name from CN. |
 | OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
 ## Compatibility Promises

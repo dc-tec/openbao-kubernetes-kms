@@ -28,6 +28,22 @@ role, logs in through cert auth, and verifies Transit access with the issued
 token. It does not replace provider E2E coverage for PKCS#11 or SPIFFE source
 availability.
 
+Run the provider certificate-source lanes with:
+
+```sh
+make test-e2e-provider-certauth-sources-openbao-ci
+```
+
+That target runs two source-specific provider checks. The PKCS#11 lane builds an
+E2E image with SoftHSM, creates a real PKCS#11 key pair and client certificate,
+configures OpenBao cert auth with the generated CA, and runs the KMS v2 socket
+client through the provider. The SPIFFE lane starts real SPIRE server and agent
+containers, registers the provider UID selector, fetches a real X.509 SVID from
+the Workload API, and validates it through the provider SPIFFE certificate
+source code. The SPIFFE lane is source-level coverage only; full OpenBao cert
+login for stock SPIRE SVIDs is not claimed until the OpenBao cert-auth identity
+alias behavior is compatible with URI-SAN-only SVIDs.
+
 Run only the provider CLI slice with:
 
 ```sh

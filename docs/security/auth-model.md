@@ -94,8 +94,8 @@ The provider keeps the OpenBao client token in memory only. File-backed JWTs and
 
 | Source | Local validation | Operational notes |
 |---|---|---|
-| PKCS#11 | Certificate file safety, certificate lifetime, client-auth usage, weak signature rejection, and signer public key match. | The private key remains behind the PKCS#11 module. The PIN file must be local, regular, absolute, and tightly permissioned. |
-| SPIFFE | X.509 SVID lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | The Workload API socket must be a `unix://` URI. Configure an explicit `spiffeID`; do not rely on default SVID selection when multiple identities may be returned. |
+| PKCS#11 | Certificate file safety, certificate lifetime, client-auth usage, weak signature rejection, and signer public key match. | The private key remains behind the PKCS#11 module. The PIN file must be local, regular, absolute, and tightly permissioned. CI exercises this path with SoftHSM, OpenBao cert auth, and Transit. |
+| SPIFFE | X.509 SVID lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | The Workload API socket must be a `unix://` URI. Configure an explicit `spiffeID`; do not rely on default SVID selection when multiple identities may be returned. CI exercises this provider source with real SPIRE Workload API SVIDs. |
 
 The provider does not accept a PEM private key file as a certificate source.
 
@@ -134,6 +134,13 @@ The OpenBao cert role should require:
 - one dedicated Transit policy.
 
 The OpenBao listener used by the provider must request TLS client certificates. In OpenBao listener terms, keep TLS enabled and do not set `tls_disable_client_certs=true`. Do not set `disable_binding=true` on the cert auth method, because renewal should remain bound to the certificate identity used at login. If OCSP is enabled for the role, keep `ocsp_fail_open=false`.
+
+Stock SPIRE X.509 SVIDs are SPIFFE URI SAN identities and do not include a Common
+Name by default. OpenBao `2.5.3` cert auth can enforce `allowed_uri_sans`, but
+current provider CI does not claim full OpenBao cert login with stock SPIRE SVIDs
+because OpenBao returns an identity-alias error for URI-SAN-only SVIDs. Validate
+the selected OpenBao and SPIFFE issuer profile end-to-end before using the SPIFFE
+source for production cert auth.
 
 ## Token Renewal Considerations
 

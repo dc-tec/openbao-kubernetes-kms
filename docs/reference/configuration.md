@@ -228,6 +228,12 @@ auth:
 
 OpenBao must be configured to request TLS client certificates on the listener used by the provider. In OpenBao listener terms, do not set `tls_disable` or `tls_disable_client_certs` to true for that listener. Role constraints should bind certificate identity, for example through `allowed_uri_sans` for SPIFFE IDs. Keep cert auth binding enabled during token renewal and keep OCSP fail-open disabled when OCSP is used.
 
+Current CI exercises PKCS#11 certificate auth end-to-end with SoftHSM and
+OpenBao. The SPIFFE lane exercises the real SPIRE Workload API provider source
+and local certificate validation. Full OpenBao cert login with stock SPIRE
+URI-SAN-only SVIDs is not a support claim until the selected OpenBao/SPIFFE
+profile has been validated end-to-end.
+
 ## Debug Correlation
 
 `logging.debugCorrelation` is an incident-response mode for short-window troubleshooting. Do not enable it for steady-state operation.

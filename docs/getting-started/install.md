@@ -47,9 +47,11 @@ cert-auth artifacts are host CGO builds via
 
 PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. SPIFFE
 builds require a reachable SPIFFE Workload API socket at the configured
-`auth.cert.spiffe.workloadAPISocket`. Cert-auth release support is gated on
-provider source E2E and release artifact evidence for the selected deployment
-lane.
+`auth.cert.spiffe.workloadAPISocket`. PKCS#11 source support has SoftHSM
+provider E2E coverage. SPIFFE source support has SPIRE Workload API source E2E
+coverage; full OpenBao cert-auth login must still be validated with the selected
+SPIFFE issuer profile. Cert-auth release support is gated on provider source E2E
+and release artifact evidence for the selected deployment lane.
 
 The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) once the artifact is in place.
 

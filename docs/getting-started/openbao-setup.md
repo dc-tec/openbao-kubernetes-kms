@@ -203,12 +203,15 @@ bao write auth/k8s-workload-a-cert/config \
   disable_binding=false
 ```
 
-Configure a cert role bound to the provider identity. For SPIFFE, use the trust bundle CA as the trusted certificate and bind the URI SAN to the exact provider SPIFFE ID:
+Configure a cert role bound to the provider identity. For a CA-issued provider
+certificate, use the issuing CA as the trusted certificate and bind stable
+identity fields such as URI SAN, DNS SAN, common name, OU, or required
+extensions. This example binds a SPIFFE-style URI SAN:
 
 ```sh
 bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
   display_name=openbao-kms-control-plane \
-  certificate=@/etc/openbao/trust/openbao-kms-spiffe-bundle.pem \
+  certificate=@/etc/openbao/trust/openbao-kms-client-ca.pem \
   allowed_uri_sans="spiffe://example.org/openbao-kms/workload-a" \
   token_policies="openbao-kms-workload-a" \
   token_ttl="30m" \
@@ -217,7 +220,16 @@ bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
   ocsp_fail_open=false
 ```
 
-For PKCS#11-backed client certificates, configure the role with the CA or trusted certificate that issued the provider client certificate, then bind stable certificate fields such as URI SAN, DNS SAN, common name, OU, or required extensions. Keep the private key inside the PKCS#11 module and give the provider only the certificate chain, module path, token label, key label, and local PIN file path.
+For PKCS#11-backed client certificates, keep the private key inside the PKCS#11
+module and give the provider only the certificate chain, module path, token
+label, key label, and local PIN file path.
+
+For SPIFFE-backed certificates, validate the selected OpenBao and SPIFFE issuer
+profile end-to-end before production use. Stock SPIRE X.509 SVIDs are
+URI-SAN-only identities without a Common Name by default; current CI validates
+the real SPIRE Workload API provider source, but it does not claim full OpenBao
+cert login for stock SPIRE SVIDs until OpenBao cert-auth identity alias behavior
+is compatible with that profile.
 
 ## Step 6: Verify
 
