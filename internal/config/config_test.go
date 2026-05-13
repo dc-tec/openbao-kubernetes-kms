@@ -59,6 +59,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadConfigFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`
+configVersion: v1alpha1
 server:
   socketPath: /tmp/bao-kms-provider.sock
   socketGroup: kube-apiserver
@@ -115,7 +116,7 @@ func TestLoadEnvironmentOverridesAreAllowlisted(t *testing.T) {
 	t.Setenv(envLogLevel, testDebugLogLevel)
 	t.Setenv(envServerMetricsAddress, "127.0.0.1:19081")
 	t.Setenv(envServerHealthAddress, "127.0.0.1:19082")
-	t.Setenv("BAO_KMS_PROVIDER_AUTH_EXPECTEDISSUER", "https://evil.example.internal")
+	t.Setenv("BAO_KMS_PROVIDER_AUTH_JWT_EXPECTEDISSUER", "https://evil.example.internal")
 	t.Setenv("BAO_KMS_PROVIDER_OPENBAO_NAMESPACE", "evil-namespace")
 	t.Setenv("BAO_KMS_PROVIDER_TRANSIT_KEYIDSCOPE_CLUSTERID", "evil-cluster")
 
@@ -196,6 +197,7 @@ func assertLoadedConfigFileAuth(t *testing.T, cfg AuthConfig) {
 func TestLoadRejectsUnknownConfigField(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`
+configVersion: v1alpha1
 server:
   socketPath: /run/openbao-kms/kms.sock
   unexpected: true
@@ -217,6 +219,27 @@ func TestLoadMissingConfigFile(t *testing.T) {
 	_, err := Load(NewRuntime(), LoadOptions{Path: filepath.Join(t.TempDir(), "missing.yaml")})
 	if err == nil {
 		t.Fatal("expected missing config to fail")
+	}
+}
+
+func TestLoadRejectsMissingConfigVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`
+server:
+  socketPath: /run/openbao-kms/kms.sock
+  socketMode: "0660"
+  socketGroup: kube-apiserver
+`)
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	_, err := Load(NewRuntime(), LoadOptions{Path: path})
+	if err == nil {
+		t.Fatal("expected missing configVersion to fail")
+	}
+	if !strings.Contains(err.Error(), "configVersion") {
+		t.Fatalf("unexpected missing configVersion error: %v", err)
 	}
 }
 
@@ -321,19 +344,6 @@ func TestValidateRejectsCertificateAuthSourceConfig(t *testing.T) {
 				t.Fatalf("expected %s problem, got %v", tt.field, err)
 			}
 		})
-	}
-}
-
-func TestLoadLegacyConfigWithoutVersion(t *testing.T) {
-	cfg, err := Load(NewRuntime(), LoadOptions{Path: "../../test/testdata/config/legacy-no-version.yaml"})
-	if err != nil {
-		t.Fatalf("load legacy config: %v", err)
-	}
-	if cfg.ConfigVersion != "v1alpha1" {
-		t.Fatalf("unexpected default config version: %s", cfg.ConfigVersion)
-	}
-	if err := Validate(cfg, ValidationOptions{}); err != nil {
-		t.Fatalf("validate legacy config: %v", err)
 	}
 }
 

@@ -97,15 +97,6 @@ type AuthConfig struct {
 	LoginTimeout           time.Duration  `mapstructure:"loginTimeout"`
 	JWT                    JWTAuthConfig  `mapstructure:"jwt"`
 	Cert                   CertAuthConfig `mapstructure:"cert"`
-	// Legacy flat JWT fields remain accepted for v1alpha1 config compatibility.
-	MountPath          string        `mapstructure:"mountPath"`
-	Role               string        `mapstructure:"role"`
-	JWTFile            string        `mapstructure:"jwtFile"`
-	MinJWTRemainingTTL time.Duration `mapstructure:"minJwtRemainingTtl"`
-	ClockSkewLeeway    time.Duration `mapstructure:"clockSkewLeeway"`
-	ExpectedIssuer     string        `mapstructure:"expectedIssuer"`
-	ExpectedAudience   []string      `mapstructure:"expectedAudience"`
-	ExpectedSubject    string        `mapstructure:"expectedSubject"`
 }
 
 // JWTAuthConfig contains OpenBao JWT auth settings.
@@ -267,13 +258,15 @@ func Load(runtime *Runtime, opts LoadOptions) (Config, error) {
 		if err := runtime.v.ReadInConfig(); err != nil {
 			return Config{}, fmt.Errorf("read config: %w", err)
 		}
+		if !runtime.v.InConfig("configVersion") {
+			return Config{}, fmt.Errorf("decode config: configVersion is required")
+		}
 	}
 
 	var cfg Config
 	if err := runtime.v.UnmarshalExact(&cfg, viper.DecodeHook(mapstructure.StringToTimeDurationHookFunc())); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
-	normalizeLoadedConfig(&cfg, runtime.v)
 
 	return cfg, nil
 }
@@ -286,8 +279,8 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("server.healthAddress", defaultHealthAddress)
 	runtime.v.SetDefault("openbao.timeout", defaultOpenBaoTimeout)
 	runtime.v.SetDefault("auth.method", defaultAuthMethod)
-	runtime.v.SetDefault("auth.minJwtRemainingTtl", defaultMinJWTRemainingTTL)
-	runtime.v.SetDefault("auth.clockSkewLeeway", defaultClockSkewLeeway)
+	runtime.v.SetDefault("auth.jwt.minRemainingTtl", defaultMinJWTRemainingTTL)
+	runtime.v.SetDefault("auth.jwt.clockSkewLeeway", defaultClockSkewLeeway)
 	runtime.v.SetDefault("auth.loginBeforeTokenExpiry", defaultLoginBeforeExpiry)
 	runtime.v.SetDefault("auth.tokenRenewalIncrement", defaultTokenRenewalIncrement)
 	runtime.v.SetDefault("auth.cert.minRemainingTtl", defaultMinCertRemainingTTL)
@@ -307,44 +300,4 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("logging.logOpenBaoRequestIDs", defaultLogOpenBaoRequestIDs)
 	runtime.v.SetDefault("logging.debugCorrelation.enabled", false)
 	runtime.v.SetDefault("logging.debugCorrelation.ttl", defaultDebugCorrelationTTL)
-}
-
-func normalizeLoadedConfig(cfg *Config, v *viper.Viper) {
-	normalizeJWTAuthConfig(&cfg.Auth, v)
-}
-
-func normalizeJWTAuthConfig(auth *AuthConfig, v *viper.Viper) {
-	if !v.InConfig("auth.jwt.mountPath") {
-		auth.JWT.MountPath = auth.MountPath
-	}
-	if !v.InConfig("auth.jwt.role") {
-		auth.JWT.Role = auth.Role
-	}
-	if !v.InConfig("auth.jwt.jwtFile") {
-		auth.JWT.JWTFile = auth.JWTFile
-	}
-	if !v.InConfig("auth.jwt.minRemainingTtl") {
-		auth.JWT.MinRemainingTTL = auth.MinJWTRemainingTTL
-	}
-	if !v.InConfig("auth.jwt.clockSkewLeeway") {
-		auth.JWT.ClockSkewLeeway = auth.ClockSkewLeeway
-	}
-	if !v.InConfig("auth.jwt.expectedIssuer") {
-		auth.JWT.ExpectedIssuer = auth.ExpectedIssuer
-	}
-	if !v.InConfig("auth.jwt.expectedAudience") {
-		auth.JWT.ExpectedAudience = auth.ExpectedAudience
-	}
-	if !v.InConfig("auth.jwt.expectedSubject") {
-		auth.JWT.ExpectedSubject = auth.ExpectedSubject
-	}
-
-	auth.MountPath = auth.JWT.MountPath
-	auth.Role = auth.JWT.Role
-	auth.JWTFile = auth.JWT.JWTFile
-	auth.MinJWTRemainingTTL = auth.JWT.MinRemainingTTL
-	auth.ClockSkewLeeway = auth.JWT.ClockSkewLeeway
-	auth.ExpectedIssuer = auth.JWT.ExpectedIssuer
-	auth.ExpectedAudience = auth.JWT.ExpectedAudience
-	auth.ExpectedSubject = auth.JWT.ExpectedSubject
 }

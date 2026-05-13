@@ -14,18 +14,19 @@ openbao:
   instanceId: bao-prod-a
 auth:
   method: jwt
-  mountPath: auth/k8s-workload-a-jwt
-  role: openbao-kms-control-plane
-  jwtFile: /var/lib/openbao-kms/identity.jwt
-  minJwtRemainingTtl: 2m
-  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 5m
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
-  expectedIssuer: https://issuer.example.internal
-  expectedAudience:
-    - bao-kms-provider
-  expectedSubject: system:openbao-kms:workload-a
+  jwt:
+    mountPath: auth/k8s-workload-a-jwt
+    role: openbao-kms-control-plane
+    jwtFile: /var/lib/openbao-kms/identity.jwt
+    minRemainingTtl: 2m
+    clockSkewLeeway: 30s
+    expectedIssuer: https://issuer.example.internal
+    expectedAudience:
+      - bao-kms-provider
+    expectedSubject: system:openbao-kms:workload-a
 transit:
   mountPath: transit
   keyName: k8s-workload-a-etcd

@@ -871,14 +871,15 @@ openbao:
   instanceId: openbao-ci-a
 auth:
   method: jwt
-  mountPath: %q
-  role: %q
-  jwtFile: %q
-  minJwtRemainingTtl: 2m
-  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 30s
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
+  jwt:
+    mountPath: %q
+    role: %q
+    jwtFile: %q
+    minRemainingTtl: 2m
+    clockSkewLeeway: 30s
 transit:
   mountPath: %q
   keyName: %q

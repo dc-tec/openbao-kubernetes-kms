@@ -11,7 +11,7 @@ const configSchemaJSON = `{
   "title": "bao-kms-provider configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["server", "openbao", "auth", "transit"],
+  "required": ["configVersion", "server", "openbao", "auth", "transit"],
   "properties": {
     "configVersion": {"type": "string", "const": "v1alpha1"},
     "server": {
@@ -96,18 +96,7 @@ const configSchemaJSON = `{
               }
             }
           }
-        },
-        "mountPath": {"type": "string", "minLength": 1},
-        "role": {"type": "string", "minLength": 1},
-        "jwtFile": {"type": "string", "minLength": 1},
-        "minJwtRemainingTtl": {"type": "string"},
-        "clockSkewLeeway": {"type": "string"},
-        "expectedIssuer": {"type": "string"},
-        "expectedAudience": {
-          "type": "array",
-          "items": {"type": "string", "minLength": 1}
-        },
-        "expectedSubject": {"type": "string"}
+        }
 	      }
 	    },
     "transit": {

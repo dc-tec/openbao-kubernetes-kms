@@ -193,10 +193,10 @@ func writeProviderContainerConfigWithOptions(
 	if opts.ExpectedSubject == "" {
 		opts.ExpectedSubject = environment.JWTSubject()
 	}
-	expectedClaims := fmt.Sprintf(`  expectedIssuer: %q
-  expectedAudience:
-    - %q
-  expectedSubject: %q
+	expectedClaims := fmt.Sprintf(`    expectedIssuer: %q
+    expectedAudience:
+      - %q
+    expectedSubject: %q
 `, opts.ExpectedIssuer, opts.ExpectedAudience, opts.ExpectedSubject)
 
 	raw := fmt.Sprintf(`configVersion: v1alpha1
@@ -215,14 +215,15 @@ openbao:
   instanceId: openbao-ci-a
 auth:
   method: jwt
-  mountPath: %q
-  role: %q
-  jwtFile: %q
-  minJwtRemainingTtl: %s
-  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: %s
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
+  jwt:
+    mountPath: %q
+    role: %q
+    jwtFile: %q
+    minRemainingTtl: %s
+    clockSkewLeeway: 30s
 %s
 transit:
   mountPath: %q
@@ -259,11 +260,11 @@ logging:
 		containerCAPath,
 		environment.TLSServerName,
 		opts.OpenBaoTimeout,
+		opts.LoginBeforeTokenExpiry,
 		environment.AuthMount,
 		environment.AuthRole,
 		containerJWTPath,
 		opts.MinJWTRemainingTTL,
-		opts.LoginBeforeTokenExpiry,
 		expectedClaims,
 		environment.TransitMount,
 		opts.TransitKeyName,
