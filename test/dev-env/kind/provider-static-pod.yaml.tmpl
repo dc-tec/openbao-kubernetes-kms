@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bao-kms-provider
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: bao-kms-provider
+    app.kubernetes.io/component: kms-provider
+spec:
+  hostNetwork: true
+  priorityClassName: system-node-critical
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    supplementalGroups:
+      - 1234
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: bao-kms-provider
+      image: "{{PROVIDER_IMAGE}}"
+      imagePullPolicy: IfNotPresent
+      args:
+        - serve
+        - --config=/etc/openbao-kms/config.yaml
+      ports:
+        - name: metrics
+          containerPort: 8081
+          protocol: TCP
+        - name: health
+          containerPort: 8082
+          protocol: TCP
+      env:
+        - name: BAO_KMS_PROVIDER_SERVER_METRICS_ADDRESS
+          value: "0.0.0.0:8081"
+        - name: BAO_KMS_PROVIDER_SERVER_HEALTH_ADDRESS
+          value: "0.0.0.0:8082"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      volumeMounts:
+        - name: config
+          mountPath: /etc/openbao-kms/config.yaml
+          readOnly: true
+        - name: tls
+          mountPath: /etc/openbao-kms/tls
+          readOnly: true
+        - name: jwt
+          mountPath: /var/lib/openbao-kms/identity.jwt
+          readOnly: true
+        - name: run
+          mountPath: /run/openbao-kms
+        - name: state
+          mountPath: /var/lib/openbao-kms/state
+      livenessProbe:
+        httpGet:
+          host: 127.0.0.1
+          path: /live
+          port: 8082
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          host: 127.0.0.1
+          path: /ready
+          port: 8082
+        initialDelaySeconds: 5
+        periodSeconds: 10
+  volumes:
+    - name: config
+      hostPath:
+        path: /etc/openbao-kms/config.yaml
+        type: File
+    - name: tls
+      hostPath:
+        path: /etc/openbao-kms/tls
+        type: Directory
+    - name: jwt
+      hostPath:
+        path: /var/lib/openbao-kms/identity.jwt
+        type: File
+    - name: run
+      hostPath:
+        path: /run/openbao-kms
+        type: Directory
+    - name: state
+      hostPath:
+        path: /var/lib/openbao-kms/state
+        type: Directory

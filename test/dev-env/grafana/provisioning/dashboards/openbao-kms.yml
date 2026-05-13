@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: OpenBao Kubernetes KMS
+    orgId: 1
+    folder: OpenBao Kubernetes KMS
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
