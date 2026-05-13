@@ -1,12 +1,15 @@
 ---
 title: "Hardening"
-description: "Required and recommended hardening for production-oriented deployments of bao-kms-provider: OpenBao, plugin host, file permissions, auth material, logging, metrics, and Kubernetes-side."
+description: "Required and recommended hardening for bao-kms-provider deployments: OpenBao, plugin host, file permissions, auth material, logging, metrics, and Kubernetes-side."
 weight: 20
 ---
 
 # Hardening
 
-This page lists hardening requirements for production-oriented deployments. For the threat coverage see [Threat Model](/security/threat-model/). For the file ownership and group model the host-side requirements rely on, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+This page lists hardening requirements for deployments. It is hardening guidance,
+not a production support claim for preview releases. For the threat coverage see
+[Threat Model](/security/threat-model/). For the file ownership and group model
+the host-side requirements rely on, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
 ## OpenBao
 
@@ -103,7 +106,6 @@ Required for certificate auth:
 
 Recommended for certificate auth:
 
-- SPIFFE roles bind `allowed_uri_sans` to the exact configured SPIFFE ID,
 - PKCS#11 private keys stay non-exportable,
 - PKCS#11 PIN files are local regular files with provider-only read access,
 - OCSP fail-open remains disabled when OCSP is enabled,

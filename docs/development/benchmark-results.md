@@ -7,10 +7,10 @@ weight: 57
 # Performance Evidence
 
 This page records benchmark and validation evidence used for release decisions.
-The results are release evidence from controlled validation
-environments, not general performance guarantees. Use them to understand the
-observed behavior, the micro-batching decision, and the remaining validation
-work before production claims.
+The results are release evidence from controlled validation environments, not
+general performance guarantees, service-level objectives, or capacity claims.
+Use them to understand the observed behavior, the micro-batching decision, and
+the remaining validation work before production claims.
 
 ## Current Conclusion
 
@@ -39,6 +39,23 @@ creation and large Secret list handling. It was not provider decrypt fan-out.
 These runs do not validate OpenBao HA failover behavior under cold-start load.
 
 ## Summary
+
+### Automated Release Soak
+
+The release gate runs two local OpenBao soak lanes from
+`test/e2e/suites.yaml`:
+
+- `test-e2e-provider-decrypt-soak-openbao-ci` exercises sustained direct
+  Decrypt requests through the provider and OpenBao Transit.
+- `test-e2e-provider-load-soak-openbao-ci` exercises sustained Status, Encrypt,
+  and Decrypt requests through the provider and OpenBao Transit.
+
+These lanes are automated release evidence for the pinned CI environment only.
+They are useful for catching regressions in request cancellation, latency, and
+resource growth, but they do not establish production throughput, capacity, or
+availability guarantees.
+
+### Kubeadm VM Runs
 
 | Run | Date | Secret corpus | API endpoints | Object reads | Errors | p95 | Max | Provider decrypt delta | Transit decrypt delta | Result |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|

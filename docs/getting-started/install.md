@@ -39,13 +39,13 @@ make build-certauth-pkcs11
 PKCS#11 cert-auth artifacts are host CGO builds via
 `make release-artifact-certauth-pkcs11-host`.
 
-PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. PKCS#11
-source support has SoftHSM provider E2E coverage. SPIFFE certificate-source
-wiring remains in tree for local verification and upstream OpenBao alignment
-work, but `auth.cert.source: spiffe` is not a supported user configuration until
-the supported OpenBao version can derive cert-auth identity aliases from URI
-SANs. Cert-auth release support is gated on provider source E2E and release
-artifact evidence for the selected deployment lane.
+PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. PKCS#11 is
+an opt-in preview path only when the selected release includes the matching
+artifact evidence and SoftHSM provider-source E2E result. SPIFFE
+certificate-source wiring remains in tree for local verification and upstream
+OpenBao alignment work, but `auth.cert.source: spiffe` is not a supported user
+configuration until the supported OpenBao version can derive cert-auth identity
+aliases from URI SANs.
 
 The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) once the artifact is in place.
 

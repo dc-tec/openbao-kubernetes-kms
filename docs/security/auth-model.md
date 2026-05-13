@@ -13,7 +13,7 @@ This page describes how `bao-kms-provider` authenticates to OpenBao. For the ope
 | Method | Status | Use when |
 |---|---|---|
 | `jwt` | Default build and release path | A file-backed JWT issuer can be validated by OpenBao without calling the protected Kubernetes API server. |
-| `cert` with `pkcs11` source | Build-tagged with `certauth_pkcs11` | The deployment has a hardware or software token that can hold the private key outside the filesystem. |
+| `cert` with `pkcs11` source | Opt-in preview when release artifacts and E2E evidence include it | The deployment has a hardware or software token that can hold the private key outside the filesystem. |
 | `cert` with `spiffe` source | Not user-configurable | SPIFFE source wiring remains in tree for local verification and upstream OpenBao alignment work. It is not a supported configuration until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
 
 OpenBao Kubernetes auth is intentionally not a provider auth method for this plugin. It calls Kubernetes TokenReview, which depends on the API server the KMS plugin may be required to unlock during bootstrap or disaster recovery.
@@ -129,8 +129,9 @@ integration.
 The OpenBao cert role should require:
 
 - one dedicated certificate auth mount for the provider trust boundary,
-- `allowed_uri_sans` pinned to the expected SPIFFE ID when SPIFFE is used,
-- `allowed_common_names`, `allowed_dns_sans`, or `required_extensions` only when they are stable and meaningful for the issuing CA,
+- `allowed_uri_sans`, `allowed_common_names`, `allowed_dns_sans`, or
+  `required_extensions` only when they are stable and meaningful for the
+  issuing CA,
 - short OpenBao token TTL,
 - limited token max TTL,
 - no default policy,
@@ -157,7 +158,7 @@ behavior.
 | OpenBao token expiry | Re-login before expiry by default. Token renewal is supported when the role allows `auth/token/renew-self`. |
 | Revoked JWT | Pure JWT auth cannot detect revocation until expiry. Mitigate with short JWT TTL where renewal is reliable, or use external issuer revocation controls. |
 | Revoked certificate | Use OpenBao CRL or OCSP configuration for the cert auth mount. Prefer fail-closed OCSP behavior. |
-| API server down | Avoid TokenReview dependency. External JWT issuer, PKCS#11, or SPIFFE Workload API availability should not depend on the protected API server. |
+| API server down | Avoid TokenReview dependency. External JWT issuer and PKCS#11 availability should not depend on the protected API server. |
 
 ## Response Wrapping
 
@@ -170,16 +171,16 @@ The auth model defends against:
 - Kubernetes API circular dependency during bootstrap and disaster recovery,
 - token theft on disk because tokens are kept in memory only,
 - broad-scope authentication because the role binds issuer, audience, subject, and claims,
-- certificate identity drift because local SPIFFE and certificate checks run before OpenBao login,
+- certificate identity drift because local certificate checks run before OpenBao login,
 - cross-environment credential reuse because each cluster, certificate identity, or trust domain has a dedicated role.
 
 It does not defend against:
 
 - a JWT issuer compromise that issues valid replacement JWTs,
-- a certificate authority or SPIFFE control-plane compromise that issues valid replacement certificates,
+- a certificate authority compromise that issues valid replacement certificates,
 - a malicious plugin binary that exfiltrates tokens it sees in memory,
 - OpenBao administrative actions that revoke or modify the role,
-- a compromised host that can read JWT files, certificate chains, PIN files, SPIFFE sockets, or process memory directly.
+- a compromised host that can read JWT files, certificate chains, PIN files, or process memory directly.
 
 ## Source References
 

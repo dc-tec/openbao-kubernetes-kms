@@ -6,7 +6,7 @@ weight: 20
 
 # OpenBao Setup
 
-The provider expects an existing OpenBao deployment with the Transit secrets engine enabled, a single named key per Kubernetes cluster, a least-privilege policy, and one supported auth method for the host running the provider. This page lists the OpenBao-side commands in order. Run them as an OpenBao administrator before installing the provider.
+The provider expects an existing OpenBao deployment with the Transit secrets engine enabled, a single named key per Kubernetes cluster, a least-privilege policy, and one release-supported auth method for the host running the provider. This page lists the OpenBao-side commands in order. Run them as an OpenBao administrator before installing the provider.
 
 ## Prerequisites
 
@@ -145,9 +145,9 @@ For policy variants and rationale see [Reference: Transit Policy Examples](/refe
 
 ## Step 5: Configure Auth
 
-Choose one provider auth method. JWT auth is the default build and release path.
-Certificate auth with the PKCS#11 source requires a binary built with
-`certauth_pkcs11`.
+Choose one provider auth method. JWT auth is the default preview build and
+release path. PKCS#11 certificate auth is an opt-in preview path only when the
+selected release includes matching artifacts and E2E evidence.
 
 ### JWT Auth
 
@@ -188,7 +188,7 @@ Recommended role constraints:
 
 The provider reads JWTs from a host-mounted file. The JWT issuer should be reachable independently of the protected Kubernetes API server. Avoid using a Kubernetes ServiceAccount token from the same protected cluster as the only credential source. If that API server is unavailable, refreshing the token may be impossible during the recovery the provider is meant to support. See [Security: Auth Model](/security/auth-model/) for the trust-boundary discussion.
 
-### Certificate Auth
+### PKCS#11 Certificate Auth
 
 Enable cert auth at a dedicated path:
 

@@ -15,6 +15,13 @@ The provider is designed for Kubernetes control planes that want an
 OpenBao-native KMS integration without making the API server call OpenBao
 Transit directly.
 
+> [!IMPORTANT]
+> `bao-kms-provider` is an engineering preview. It is ready for controlled
+> validation, design review, and staging-style testing against the exact release
+> evidence described in the docs. Do not use preview releases for production
+> control planes, and do not treat adjacent Kubernetes, OpenBao, auth, or
+> deployment configurations as supported until release evidence covers them.
+
 ## Why It Exists
 
 OpenBao Transit can encrypt and decrypt caller-supplied data. Kubernetes does
@@ -37,7 +44,7 @@ flowchart LR
     API["kube-apiserver"]
     Socket["Unix socket<br/>/run/openbao-kms/kms.sock"]
     Provider["bao-kms-provider"]
-    Auth["OpenBao auth<br/>JWT or certificate"]
+    Auth["OpenBao auth<br/>JWT or scoped cert auth"]
     Transit["OpenBao Transit<br/>explicit key_version + AAD"]
     Etcd["etcd<br/>KMS v2 envelope"]
 
@@ -55,10 +62,10 @@ server may need the KMS plugin during startup to read encrypted resources.
 | Area | Current state |
 |---|---|
 | Kubernetes API | KMS v2 only. KMS v1 is not implemented. |
-| Kubernetes target | Kubernetes `1.34` release line, with exact runnable pins in `.ci/versions.yaml`. |
-| OpenBao target | OpenBao `2.5.3` with Transit and JWT auth. Certificate auth implementation targets OpenBao TLS certificate auth in build-tagged variants. |
+| Kubernetes target | Exact-pinned Kind validation for Kubernetes `1.34` and `1.35` release lines. Kubernetes `1.36` is the intended next validation line once a digest-pinned Kind node image is available. Kubernetes `1.29+` KMS v2 clusters may work, but are not release-gate validated unless listed in `.ci/versions.yaml`. |
+| OpenBao target | OpenBao `2.5.3` with Transit. JWT auth is the default preview auth path. |
 | Transit key type | `aes256-gcm96` is the supported and recommended default. |
-| Authentication | JWT auth by default. Certificate auth is implemented in build-tagged PKCS#11 and SPIFFE variants. CI covers OpenBao cert auth, PKCS#11/SoftHSM full-stack provider auth, and SPIRE Workload API provider-source validation; release support is still gated on artifact evidence. OpenBao tokens stay in process memory. |
+| Authentication | JWT auth by default. PKCS#11 certificate auth is an opt-in preview path only when the release artifacts and E2E evidence include it. SPIFFE/SPIRE wiring is implementation evidence only and is not a supported user configuration in the current preview envelope. OpenBao tokens stay in process memory. |
 | Deployment models | Hardened systemd unit or kubelet-managed static pod. |
 | Release maturity | Preview release line; see the [Support Policy](https://dc-tec.github.io/openbao-kubernetes-kms/reference/support-policy/). |
 | Release cadence | Event-driven releases, scheduled validation. |

@@ -14,23 +14,28 @@ The support envelope is intentionally narrow. A tagged release claims only the e
 
 The initial public release envelope is:
 
-- Kubernetes `1.34` release line, with exact patch pins recorded in `.ci/versions.yaml`,
+- Kubernetes `1.34` and `1.35` release lines, with exact Kind node-image pins
+  recorded in `.ci/versions.yaml`,
 - Kubernetes KMS v2,
 - OpenBao `2.5.3`,
 - OpenBao Transit,
 - JWT auth in default builds,
-- certificate auth implementation in build-tagged PKCS#11 and SPIFFE variants, with CI coverage for OpenBao cert auth, PKCS#11/SoftHSM full-stack provider auth, and SPIRE Workload API provider-source validation,
+- PKCS#11 certificate auth only when the selected release includes matching
+  opt-in artifacts and E2E evidence,
+- SPIFFE/SPIRE source wiring as implementation evidence only, not as supported
+  user configuration,
 - Linux control-plane nodes with filesystem Unix domain sockets.
 
 ## Kubernetes
 
 | Version | Status |
 |---|---|
-| `< 1.34` | Not targeted for the current release line. |
-| `1.34.3` | Initial Kind e2e target pinned by node-image digest in `.ci/versions.yaml`. |
-| Other `1.34.x` patches | Candidate within the same release line; claimed only after an exact-pinned lane exists in release evidence. |
-| `1.35.x` | Future candidate. Not a support claim until release evidence exists. |
-| `1.36.x` | Future candidate. Not a support claim until release evidence exists. |
+| `< 1.29` | Not targeted. KMS v2 is the only implemented Kubernetes KMS API. |
+| `1.29.x` through `1.33.x` | May work with KMS v2, but is not validated in CI and is not part of the preview support claim. |
+| `1.34.3` | Preview release-gate Kind target pinned by node-image digest in `.ci/versions.yaml`. |
+| `1.35.0` | Preview release-gate Kind target pinned by node-image digest in `.ci/versions.yaml`. |
+| Other `1.34.x` or `1.35.x` patches | Candidate within the validated minor lines; claimed only after an exact-pinned lane exists in release evidence. |
+| `1.36.x` | Intended next validation line once a digest-pinned Kind node image is available. Not a support claim yet. |
 
 KMS v1 is not part of the primary implementation.
 
@@ -99,7 +104,7 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 | Auth method | Build | Status |
 |---|---|---|
 | JWT | default | Supported. |
-| Certificate with PKCS#11 source | `certauth_pkcs11` | Implemented. CI exercises a real SoftHSM token, PKCS#11 signer, OpenBao cert login, and Transit access. Release support still requires artifact evidence for the selected deployment. |
+| Certificate with PKCS#11 source | `certauth_pkcs11` | Opt-in preview only when the selected release includes the PKCS#11 artifact evidence and E2E result. CI exercises a real SoftHSM token, PKCS#11 signer, OpenBao cert login, and Transit access. |
 | Certificate with SPIFFE source | `certauth_spiffe` | Wiring is present for local verification and upstream OpenBao alignment work, and CI exercises real SPIRE Workload API source validation. `auth.cert.source: spiffe` is not a supported user configuration until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
 | OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
@@ -121,10 +126,10 @@ CI does not use floating `latest` inputs for compatibility claims.
 The implementation uses a central version manifest at `.ci/versions.yaml` for:
 
 - OpenBao image tag and digest,
-- Kubernetes exact patch version,
+- Kubernetes exact patch versions,
 - Kind node image digest,
 - release matrix rows,
-- future candidate versions.
+- intended next validation lines and future candidate versions.
 
 For the full CI and supply-chain controls see [Development: CI And Supply Chain](/development/ci-supply-chain/).
 

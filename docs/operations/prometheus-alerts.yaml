@@ -112,7 +112,7 @@ groups:
           severity: warning
         annotations:
           summary: "OpenBao KMS gRPC latency is high"
-          description: "p99 {{ $labels.method }} latency is above 100ms on {{ $labels.instance }}."
+          description: "p99 {{ $labels.method }} latency is above the starter 100ms threshold on {{ $labels.instance }}; tune this threshold to local OpenBao and control-plane behavior before paging."
 
       - alert: OpenBaoKMSStaleSocketRemoved
         expr: sum by (job, instance) (increase(openbao_kms_socket_restarts_total[10m])) > 0

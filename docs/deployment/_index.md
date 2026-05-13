@@ -11,7 +11,7 @@ browse:
 
 # Deployment
 
-Use this section to select a deployment model and apply the matching system identity, file paths, and runtime hardening. Two production deployment models are supported.
+Use this section to select a deployment model and apply the matching system identity, file paths, and runtime hardening. The preview release evidence targets systemd and static-pod deployment models; this is not a production support claim.
 
 ## Pick A Model First
 

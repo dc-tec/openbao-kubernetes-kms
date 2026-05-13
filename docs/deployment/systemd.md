@@ -64,7 +64,9 @@ The exact ordering depends on the Kubernetes distribution. For kubeadm-style hos
 
 Use `deploy/config/provider-systemd.yaml` as the starting provider configuration for host-service deployments.
 
-The sample unit is written for the default JWT config. Certificate auth deployments should replace the JWT `ConditionPathExists=` line with checks for the configured certificate chain, PKCS#11 PIN file, or SPIFFE Workload API socket.
+The sample unit is written for the default JWT config. PKCS#11 certificate-auth
+deployments should replace the JWT `ConditionPathExists=` line with checks for
+the configured certificate chain and PKCS#11 PIN file.
 
 ## Unit Settings
 

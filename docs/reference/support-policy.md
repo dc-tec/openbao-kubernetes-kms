@@ -28,12 +28,38 @@ Support expectations:
 | Component | Version |
 |---|---|
 | OpenBao | `2.5.3` |
-| Kubernetes | `1.34` release line, exact patch pinned in CI |
+| Kubernetes | `1.34` and `1.35` release lines, exact Kind node-image pins in CI |
 | KMS API | v2 |
 | OS | Linux |
 | Deployment modes | systemd and static pod |
 
-Future Kubernetes release lines are not supported by virtue of being newer. They become supported only after exact-pinned CI and release evidence exists. See [Reference: Compatibility](/reference/compatibility/).
+Kubernetes `1.36` is the intended next validation line once a digest-pinned
+Kind node image is available. Kubernetes `1.29+` KMS v2 clusters may work, but
+unlisted versions are not validated in CI and are not part of the preview
+support claim. Future Kubernetes release lines are not supported by virtue of
+being newer; they become supported only after exact-pinned CI and release
+evidence exists. See [Reference: Compatibility](/reference/compatibility/).
+
+## What The Preview Gate Proves
+
+A passing public-preview release gate proves only the lanes recorded for that
+tag's evidence bundle:
+
+- KMS v2 behavior against the pinned Kubernetes and OpenBao versions.
+- OpenBao Transit with `aes256-gcm96`.
+- JWT auth in the default build.
+- PKCS#11 certificate auth only when the release includes matching opt-in
+  artifacts and E2E evidence.
+- systemd and static-pod deployment artifacts where release evidence includes
+  them.
+- OpenBao failure, HA failover, restore, rotation, upgrade/rollback, and soak
+  behavior in the tested CI and validation environments.
+- SBOM, signing, provenance, checksum, scan, and reproducibility evidence
+  produced by the release workflow.
+
+It does not prove production readiness, unsupported Kubernetes or OpenBao
+versions, OpenBao HA topologies beyond the release lanes, SPIFFE/SPIRE user
+configuration, a performance SLO, or a long-term support window.
 
 ## Support Terms
 

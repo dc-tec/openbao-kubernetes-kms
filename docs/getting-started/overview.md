@@ -17,7 +17,7 @@ flowchart LR
     API["kube-apiserver"]
     Socket["local Unix domain socket"]
     Plugin["bao-kms-provider"]
-    Auth["OpenBao auth<br/>JWT or certificate"]
+    Auth["OpenBao auth<br/>JWT or scoped cert auth"]
     Transit["OpenBao Transit wrap/unwrap"]
     Etcd["etcd"]
 
@@ -25,7 +25,9 @@ flowchart LR
     API --> Etcd
 ```
 
-The plugin runs on the same host as the Kubernetes API server. Both supported deployment models (systemd unit and static pod) keep the provider node-local. The plugin does not depend on the protected Kubernetes API server to operate.
+The plugin runs on the same host as the Kubernetes API server. The preview
+release evidence targets node-local systemd and static-pod deployment models.
+The plugin does not depend on the protected Kubernetes API server to operate.
 
 ## What It Encrypts
 
@@ -46,9 +48,14 @@ OpenBao Transit can encrypt and decrypt caller-supplied data. OpenBao itself doe
 
 The plugin sits in the Kubernetes API server boot path. Kubernetes documents that startup can drive thousands of decrypt operations against the KMS plugin. If the plugin, its socket, the auth credential, the OpenBao service, or the Transit key is unavailable, the API server may be unable to decrypt previously encrypted resources. Treat the provider as control-plane critical infrastructure.
 
-## Supported Versions
+## Preview Validation Scope
 
-The current validation target is the Kubernetes 1.34 release line. CI records the tracked upstream patch and pins the initial Kind lane to `1.34.3` by node image digest in `.ci/versions.yaml`. KMS v2 is the only supported Kubernetes KMS API; KMS v1 is not implemented.
+The current preview validation targets are Kubernetes `1.34` and `1.35`, each
+with exact Kind node-image pins recorded in `.ci/versions.yaml`. Kubernetes
+`1.36` is the intended next validation line once a digest-pinned Kind node image
+is available. Kubernetes `1.29+` KMS v2 clusters may work, but unlisted versions
+are not validated in CI and are not part of the preview support claim. KMS v2 is
+the only supported Kubernetes KMS API; KMS v1 is not implemented.
 
 The current OpenBao validation target is OpenBao `2.5.3` with the Transit secrets engine using `aes256-gcm96` keys. See [Compatibility](/reference/compatibility/) for the full supported version envelope and the upgrade discipline applied to this matrix.
 
@@ -57,7 +64,11 @@ The current OpenBao validation target is OpenBao `2.5.3` with the Transit secret
 The implementation is intentionally narrow. These are implementation defaults and enforced boundaries:
 
 - Kubernetes KMS v2 only. KMS v1 is not implemented.
-- JWT authentication to OpenBao by default, with build-tagged certificate auth for PKCS#11-backed identities.
+- JWT authentication to OpenBao by default.
+- PKCS#11 certificate auth only when the selected release includes matching
+  opt-in artifacts and E2E evidence.
+- SPIFFE/SPIRE certificate-source wiring is implementation evidence only and is
+  not a supported user configuration in the current preview envelope.
 - OpenBao tokens stored in process memory only.
 - Transit associated data required for encrypt and decrypt.
 - Deterministic, opaque Kubernetes `key_id` values derived from configured identity scope and Transit metadata.
@@ -65,7 +76,8 @@ The implementation is intentionally narrow. These are implementation defaults an
 - Provider socket at `/run/openbao-kms/kms.sock` with mode `0660`.
 - Metrics on `127.0.0.1:8081` and health on `127.0.0.1:8082`.
 - Direct decrypt path without provider-side micro-batching.
-- systemd and static-pod deployment models supported.
+- systemd and static-pod deployment models in the exact release evidence
+  envelope.
 
 ## Recommended Deployment Defaults
 

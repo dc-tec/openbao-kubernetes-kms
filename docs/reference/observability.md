@@ -98,7 +98,7 @@ Recommended alert conditions:
 - Rotation state stuck pending.
 - AAD validation errors.
 - Unknown `key_id` errors.
-- Latency SLO burn for encrypt or decrypt.
+- Latency threshold breach for encrypt or decrypt.
 - Plugin restart loop.
 - Socket restart or stale socket detection.
 

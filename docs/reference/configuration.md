@@ -162,7 +162,11 @@ is treated as identity-bearing provider scope.
 
 ## Auth Timing
 
-`auth.method` selects how the provider obtains its OpenBao token. Supported values are `jwt` and `cert`. JWT auth is the default build and release path. Certificate auth with the PKCS#11 source requires a binary built with `certauth_pkcs11`.
+`auth.method` selects how the provider obtains its OpenBao token. The default
+preview release path is `jwt`. The `cert` method is available only in binaries
+built with a certificate-auth build tag, and PKCS#11 certificate auth is a
+supported preview path only when the selected release includes matching opt-in
+artifacts and E2E evidence.
 
 `auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. Once the remaining OpenBao token TTL drops below this value, the provider renews or re-logs in before the next request.
 
@@ -271,7 +275,7 @@ Startup fails closed when any of the following conditions hold:
 - cert auth is selected and the configured certificate source is unavailable,
 - cert auth is selected and the client certificate is expired, not yet valid, too close to expiry, missing client-auth usage, weakly signed, or mismatched with its signer,
 - PKCS#11 cert auth is selected and the certificate file, module path, token label, key label, PIN file, or session count is unsafe,
-- SPIFFE cert auth is selected and the Workload API socket, SPIFFE ID, or trust domain is malformed,
+- unsupported SPIFFE cert auth is selected,
 - CA file is missing,
 - OpenBao address is invalid or includes user info, query, or fragment data,
 - TLS server name is empty,
@@ -301,7 +305,7 @@ Recommended local permissions:
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
 ```
 
-JWT files, certificate chain files, and PKCS#11 PIN files should be readable only by the provider process. The socket should be readable and writable only by the provider and the local API server identity. The socket directory should be writable only by the provider identity. SPIFFE Workload API socket access is controlled by the local SPIFFE agent and should be granted only to the provider workload identity.
+JWT files, certificate chain files, and PKCS#11 PIN files should be readable only by the provider process. The socket should be readable and writable only by the provider and the local API server identity. The socket directory should be writable only by the provider identity.
 
 `server.socketGroup` accepts a local group name or a decimal numeric GID. Use a group name for systemd or host-binary deployments. Use a numeric GID in static pod mode so the distroless non-root container does not depend on host group names being present inside the image.
 

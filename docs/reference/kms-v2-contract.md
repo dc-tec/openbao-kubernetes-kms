@@ -158,7 +158,7 @@ deferred.
 Micro-batching adds request queueing, per-request deadlines, cancellation
 behavior, order preservation, fairness, and failure fan-out concerns. Do not add
 or enable it until benchmarks show it improves API server startup behavior
-without violating the latency targets below.
+without violating the validation thresholds below.
 
 ## Error Semantics
 
@@ -185,9 +185,9 @@ Errors map to stable classes in logs and metrics:
 
 Errors returned to Kubernetes are specific enough for diagnosis but contain no secrets, tokens, plaintext, full ciphertext, or raw sensitive paths. See [Reference: Observability: Error Classes](/reference/observability/#error-classes).
 
-## Latency Targets
+## Validation Thresholds
 
-Initial latency targets (subject to validation against real OpenBao and Kubernetes API server tests):
+Initial validation thresholds used by tests and examples:
 
 ```yaml
 status:
@@ -201,7 +201,9 @@ decrypt:
   p99: 50ms
 ```
 
-These targets must be validated with real OpenBao and Kubernetes API server tests before any production-readiness claim.
+These thresholds are not production SLOs. They must be validated against the
+operator's OpenBao deployment, network path, and Kubernetes API server behavior
+before they are used for paging or production-readiness claims.
 
 ## Conformance Tests
 

@@ -18,7 +18,7 @@ The plugin static pod mounts everything it needs from the host:
 
 - configuration file,
 - CA bundle,
-- configured auth material such as a JWT file, certificate chain, PKCS#11 PIN file, or SPIFFE Workload API socket,
+- configured auth material such as a JWT file, certificate chain, or PKCS#11 PIN file,
 - runtime socket directory,
 - optional local state directory.
 
@@ -160,7 +160,9 @@ Every control-plane node must have:
 /run/openbao-kms
 ```
 
-The JWT path is needed only for `auth.method: jwt`. Certificate auth deployments should instead mount the configured certificate chain, PKCS#11 PIN file, and PKCS#11 module path.
+The JWT path is needed only for `auth.method: jwt`. PKCS#11 certificate-auth
+deployments should instead mount the configured certificate chain, PKCS#11 PIN
+file, and PKCS#11 module path.
 
 The API server must be able to access the socket created under `/run/openbao-kms`. The container user must own the socket directory, or an equally narrow provider-only identity must be the only writer. The API server's socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
 

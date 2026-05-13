@@ -30,7 +30,7 @@ This page is the threat model for `bao-kms-provider`. It enumerates the assets, 
 
 - `kube-apiserver` to the local Unix socket.
 - Plugin process to the OpenBao HTTPS endpoint.
-- OpenBao auth method to the external JWT issuer, certificate authority, or SPIFFE control plane.
+- OpenBao auth method to the external JWT issuer or certificate authority.
 - Plugin local filesystem to host users.
 - Plugin runtime directory to the API server identity.
 - OpenBao Transit policy to OpenBao administrators.
@@ -47,7 +47,7 @@ The design considers attackers who can:
 - access control-plane node files as a low-privilege user,
 - submit malformed KMS requests through a compromised local API server path,
 - cause OpenBao outages or network failures,
-- steal stale JWTs, certificate PIN files, SPIFFE socket access, or OpenBao tokens if controls fail,
+- steal stale JWTs, certificate PIN files, or OpenBao tokens if controls fail,
 - modify configuration files when file permissions are wrong.
 
 The design does not defend against every action by:
@@ -65,7 +65,7 @@ The design does not defend against every action by:
 | Offline etcd snapshot theft | Encrypt selected API resources before persistence. |
 | Local key exposure | Use remote OpenBao Transit instead of static local encryption keys. |
 | OpenBao token theft | Memory-only token storage, short TTLs, explicit renewal increment, no token logs. |
-| Auth material theft | File permissions, short JWT and certificate lifetimes, claim or certificate identity binding, external issuer or SPIFFE control plane where feasible. |
+| Auth material theft | File permissions, short JWT and certificate lifetimes, claim or certificate identity binding, and an external issuer where feasible. |
 | Transit key deletion | `deletion_allowed=false`, no delete permission for the plugin token, tested backups. |
 | Accidental key creation | `disable_upsert=true` at the Transit mount, no create permission for the plugin token. |
 | Key recreation with same name | Key lineage ID, decrypt validation, DR checks. |

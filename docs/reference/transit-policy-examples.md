@@ -6,7 +6,7 @@ weight: 110
 
 # Transit Policy Examples
 
-This page collects the reference OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies these examples, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace the workload-specific identifiers (mount path, key name, role name, audience, subject, and SPIFFE ID) with values from your environment.
+This page collects the reference OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies these examples, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace the workload-specific identifiers such as mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
 
 ## Plugin Hot-Path Policy
 

@@ -63,9 +63,18 @@ A preview release is suitable for engineering evaluation and controlled validati
 - KMS v2 protocol behavior,
 - exact-pinned OpenBao CI e2e validation,
 - exact-pinned Kubernetes Kind e2e validation,
+- JWT auth in the default build,
+- PKCS#11 certificate auth only when matching opt-in artifacts and E2E evidence
+  are present,
 - rotation behavior,
-- bootstrap and recovery runbooks,
+- bootstrap and recovery runbooks covered by the release lanes,
 - CI and supply-chain evidence.
+
+SPIFFE/SPIRE source wiring may appear in implementation evidence, but preview
+release artifacts and docs must not present `auth.cert.source: spiffe` as a
+supported user configuration until the supported OpenBao version can derive
+cert-auth identity aliases from URI SANs and the release evidence covers that
+path.
 
 ## Stable Release Rule
 
