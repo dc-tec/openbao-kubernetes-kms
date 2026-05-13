@@ -258,6 +258,13 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 	if err != nil {
 		return nil, fmt.Errorf("create OpenBao environment TLS directory: %w", err)
 	}
+	// OpenBao dev TLS material is generated inside Docker; rootless or userns-remapped
+	// runners need write access to this host-mounted test directory.
+	// #nosec G302 -- e2e Docker container needs write access to generated dev TLS files.
+	if err := os.Chmod(certDir, 0o777); err != nil {
+		_ = os.RemoveAll(certDir)
+		return nil, fmt.Errorf("prepare OpenBao environment TLS directory permissions: %w", err)
+	}
 	token, err := randomHex(24)
 	if err != nil {
 		return nil, fmt.Errorf("generate OpenBao environment token: %w", err)
@@ -1049,6 +1056,7 @@ func (f *OpenBaoEnvironment) waitUntilEndpoint(ctx context.Context, timeout time
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	var lastErr error
 	for {
 		if err := f.refreshEndpoint(waitCtx); err == nil {
 			httpClient, clientErr := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 2*time.Second)
@@ -1061,13 +1069,24 @@ func (f *OpenBaoEnvironment) waitUntilEndpoint(ctx context.Context, timeout time
 						_ = response.Body.Close()
 						return nil
 					}
+					lastErr = responseErr
+				} else {
+					lastErr = requestErr
 				}
+			} else {
+				lastErr = clientErr
 			}
+		} else {
+			lastErr = err
 		}
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("OpenBao environment endpoint did not become reachable: %w", waitCtx.Err())
+			return openBaoReadinessTimeoutError(
+				"OpenBao environment endpoint did not become reachable",
+				waitCtx.Err(),
+				lastErr,
+			)
 		case <-ticker.C:
 		}
 	}
@@ -1278,16 +1297,25 @@ func (f *OpenBaoEnvironment) waitUntilReady(ctx context.Context, timeout time.Du
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	var lastErr error
 	for {
 		if err := f.refreshEndpoint(waitCtx); err == nil {
 			if err := f.probeHealth(waitCtx); err == nil {
 				return nil
+			} else {
+				lastErr = err
 			}
+		} else {
+			lastErr = err
 		}
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("OpenBao environment did not become ready: %w", waitCtx.Err())
+			return openBaoReadinessTimeoutError(
+				"OpenBao environment did not become ready",
+				waitCtx.Err(),
+				lastErr,
+			)
 		case <-ticker.C:
 		}
 	}
@@ -1312,9 +1340,16 @@ func (f *OpenBaoEnvironment) refreshEndpoint(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	f.Address = "https://localhost:" + port
+	f.Address = "https://" + net.JoinHostPort("127.0.0.1", port)
 	f.CACertFile = caFile
 	return nil
+}
+
+func openBaoReadinessTimeoutError(message string, timeoutErr error, lastErr error) error {
+	if lastErr == nil {
+		return fmt.Errorf("%s: %w", message, timeoutErr)
+	}
+	return fmt.Errorf("%s: %w (last readiness error: %v)", message, timeoutErr, lastErr)
 }
 
 func (f *OpenBaoEnvironment) probeHealth(ctx context.Context) error {
