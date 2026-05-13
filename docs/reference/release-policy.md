@@ -139,29 +139,12 @@ GitHub Release with the release notes.
 The tag-triggered release workflow consumes that draft release, runs validation,
 builds the release artifacts, generates checksums, creates SBOMs, signs,
 attests, verifies byte reproducibility, uploads assets to the draft release, and
-publishes the release evidence. It fails early if the draft GitHub Release is
-missing or already published.
+publishes the release evidence through the maintainer-controlled
+`release-publish` GitHub Environment. It fails early if the draft GitHub Release
+is missing or already published.
 
-The workflow expects a GitHub App token so release PR updates can trigger normal PR checks. Configure these repository secrets:
-
-```text
-OPENBAO_KMS_RELEASE_PR_APP_ID
-OPENBAO_KMS_RELEASE_PR_PRIVATE_KEY
-```
-
-If the secrets are absent, the workflow exits as a no-op with a notice.
-
-Configure these repository secrets for signed release tag and draft release
-creation:
-
-```text
-OPENBAO_KMS_RELEASE_TAG_APP_ID
-OPENBAO_KMS_RELEASE_TAG_PRIVATE_KEY
-OPENBAO_KMS_RELEASE_TAG_GPG_PRIVATE_KEY
-OPENBAO_KMS_RELEASE_TAG_GPG_PASSPHRASE
-OPENBAO_KMS_RELEASE_TAG_GPG_NAME
-OPENBAO_KMS_RELEASE_TAG_GPG_EMAIL
-```
+Release credentials, signing keys, and tag-ruleset bypass are maintainer
+configuration, not user-facing deployment inputs.
 
 ## Binary Artifacts
 

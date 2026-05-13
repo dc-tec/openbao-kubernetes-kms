@@ -157,25 +157,11 @@ The tag release workflow:
 - verifies byte reproducibility,
 - generates `provenance-index.json`,
 - uploads byte-verified assets to the draft release,
-- publishes the GitHub Release and GHCR image tag.
+- publishes the GitHub Release and GHCR image tag through the
+  maintainer-controlled `release-publish` GitHub Environment.
 
-Required repository secrets for release PR automation:
-
-```text
-OPENBAO_KMS_RELEASE_PR_APP_ID
-OPENBAO_KMS_RELEASE_PR_PRIVATE_KEY
-```
-
-Required repository secrets for signed tag and draft release creation:
-
-```text
-OPENBAO_KMS_RELEASE_TAG_APP_ID
-OPENBAO_KMS_RELEASE_TAG_PRIVATE_KEY
-OPENBAO_KMS_RELEASE_TAG_GPG_PRIVATE_KEY
-OPENBAO_KMS_RELEASE_TAG_GPG_PASSPHRASE
-OPENBAO_KMS_RELEASE_TAG_GPG_NAME
-OPENBAO_KMS_RELEASE_TAG_GPG_EMAIL
-```
+Release credentials, signing keys, and tag-ruleset bypass are maintainer
+configuration, not user-facing deployment inputs.
 
 The tag release workflow uses GitHub `GITHUB_TOKEN`, OIDC, and attestations
 permissions for asset publication, signing, and provenance.
