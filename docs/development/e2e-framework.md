@@ -20,6 +20,8 @@ behavior.
 | Lane | Command | Proves | External dependency |
 |---|---|---|---|
 | Full enabled E2E suite | `make test-e2e` | Runs the enabled Ginkgo E2E specs selected by labels. | Depends on selected labels |
+| Preview release OpenBao gate | `make test-e2e-release-preview-openbao` | Runs the manifest-defined OpenBao release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime |
+| Preview release Kind gate | `make test-e2e-release-preview-kind` | Runs the manifest-defined Kind release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime, Kind, kubectl |
 | OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
 | OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao TLS cert auth method, listener client-certificate request, URI SAN role binding, cert login, and Transit access with the issued token. | Docker-compatible runtime |
 | Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Real SPIRE server and agent, Workload API socket, X.509 SVID selection, and provider local SPIFFE certificate validation. | Docker-compatible runtime |
@@ -62,7 +64,6 @@ Label("kind", "kmsv2", "smoke")
 Label("kind", "kmsv2", "convergence")
 Label("kind", "kmsv2", "restore", "dr")
 Label("kind", "kmsv2", "upgrade", "rollback")
-Label("release-gate")
 ```
 
 Use stable `case:<id>` labels when a spec becomes release evidence or a known
@@ -76,15 +77,38 @@ make test-e2e E2E_LABEL_FILTER='openbao && transit && ci'
 
 ## Suite Manifest
 
-`test/e2e/suites.yaml` describes E2E lanes. It does not own concrete OpenBao or
-Kubernetes versions. Those remain in `.ci/versions.yaml`, and lanes reference
-the relevant fields through `versionRefs`.
+`test/e2e/suites.yaml` describes E2E lanes and the preview release gate groups.
+It does not own concrete OpenBao or Kubernetes versions. Those remain in
+`.ci/versions.yaml`, and lanes reference the relevant fields through
+`versionRefs`.
+
+The release workflow calls only the aggregate preview gate targets:
+
+```sh
+make test-e2e-release-preview-openbao
+make test-e2e-release-preview-kind
+```
+
+Those targets read `releaseGate.preview.groups` from the suite manifest and run
+the listed lane `makeTarget` values in order. Release evidence must not drift
+from the manifest-defined groups.
+
+The Kind aggregate also reads `validation.kubernetes.previewMatrix` from
+`.ci/versions.yaml`. By default it runs the Kind lane group once for every
+matrix entry with `releaseGate: true`. Set `E2E_KUBERNETES_LINE=1.34` or
+`E2E_KUBERNETES_LINE=1.35` to run one validated line locally. Kubernetes
+`1.36` is tracked as the intended next validation line until a digest-pinned
+Kind node image is available.
+
+Soak lanes are release evidence for the pinned CI environment only. They are not
+an SLO, capacity, or production performance claim.
 
 Current lane IDs:
 
 | Lane ID | Status |
 |---|---|
 | `openbao-ci` | active |
+| `openbao-provider-openbao-ci` | active |
 | `openbao-cert-auth-ci` | active |
 | `openbao-provider-certauth-spiffe-source-ci` | active |
 | `openbao-provider-certauth-pkcs11-source-ci` | active |
@@ -101,7 +125,6 @@ Current lane IDs:
 | `kind-convergence` | active |
 | `kind-upgrade-rollback` | active |
 | `kind-dr-runbook` | active |
-| `release-gate` | planned |
 
 Manifest validation:
 
@@ -110,7 +133,8 @@ make verify-e2e-manifest
 ```
 
 The validation checks schema shape, required fields, lane IDs, status values,
-and the absence of floating `latest` references.
+release-gate references, release workflow wiring, Make target availability, and
+the absence of floating `latest` references.
 
 ## Layout
 
@@ -155,7 +179,8 @@ broad harness abstractions wait until multiple specs need them.
 |---|---|---|
 | `E2E_OPENBAO_CI` | set by `make test-e2e-openbao-ci` | Enables the PR-capable OpenBao CI spec. |
 | `E2E_OPENBAO_IMAGE` | `validation.openbao.image` from `.ci/versions.yaml` | OpenBao image used by CI E2E environments. |
-| `E2E_KIND_NODE_IMAGE` | `validation.kubernetes.kindNodeImage` from `.ci/versions.yaml` | Kind node image used by Kubernetes lanes. |
+| `E2E_KUBERNETES_LINE` | unset | Optional release-gate selector for one Kubernetes preview matrix line. |
+| `E2E_KIND_NODE_IMAGE` | `validation.kubernetes.kindNodeImage` from `.ci/versions.yaml` | Kind node image used by individual Kubernetes lanes. The Kind release gate overrides this from `validation.kubernetes.previewMatrix`. |
 | `E2E_PROVIDER_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-<commit>` | Provider image loaded into Kind or run in Docker full-stack tests. |
 | `E2E_PROVIDER_OLD_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-upgrade-old-<commit>` | Old provider image used by upgrade and rollback tests. |
 | `E2E_PROVIDER_NEW_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-upgrade-new-<commit>` | New provider image used by upgrade and rollback tests. |
@@ -163,9 +188,12 @@ broad harness abstractions wait until multiple specs need them.
 | `DOCKER` | `docker` | Container runtime CLI compatible with Docker commands. |
 | `E2E_SKIP_CLEANUP` | `false` | Keeps generated OpenBao TLS files and containers for debugging. |
 
-The provider lanes build `E2E_PROVIDER_IMAGE` by default. Use
-`E2E_PROVIDER_BUILD=false` only when the referenced image is already built and
-available to the selected runtime.
+Individual provider lanes build their required image by default. The preview
+release aggregate targets prebuild the required images once, then run the
+manifest-defined lanes with `E2E_PROVIDER_BUILD=false` so the same image tags
+are reused across the release gate. Use `E2E_PROVIDER_BUILD=false` directly only
+when the referenced images are already built and available to the selected
+runtime.
 
 ## Reports And Artifacts
 

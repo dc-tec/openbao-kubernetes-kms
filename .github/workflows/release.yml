@@ -191,17 +191,7 @@ jobs:
         uses: ./.github/actions/setup-repo-tools
 
       - name: Run OpenBao release E2E lanes
-        run: |
-          make test-e2e-openbao-ci
-          make test-e2e-provider-failure-openbao-ci
-          make test-e2e-provider-ha-openbao-ci
-          make test-e2e-provider-decrypt-storm-openbao-ci
-          make test-e2e-provider-decrypt-soak-openbao-ci
-          make test-e2e-provider-load-soak-openbao-ci
-          make test-e2e-provider-restore-openbao-ci
-          make test-e2e-provider-rotation-openbao-ci
-          make test-e2e-provider-upgrade-rollback-openbao-ci
-          make test-e2e-provider-certauth-sources-openbao-ci
+        run: make test-e2e-release-preview-openbao
 
       - name: Upload OpenBao E2E artifacts
         if: always()
@@ -212,13 +202,42 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  e2e-kind:
-    name: Release Gate Kind E2E
+  kind-matrix:
+    name: Kind Release Gate Matrix
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
-    needs: prepare
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
     env:
       GOFLAGS: -mod=vendor
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-repo-tools
+        with:
+          bootstrap-tools: "false"
+
+      - name: Resolve Kind release gate matrix
+        id: matrix
+        run: |
+          set -euo pipefail
+          matrix="$(go run ./hack/tools/e2e_release_gate -group kind -matrix)"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+  e2e-kind:
+    name: Release Gate Kind E2E (Kubernetes ${{ matrix.kubernetes_line }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    needs: [prepare, kind-matrix]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.kind-matrix.outputs.matrix) }}
+    env:
+      GOFLAGS: -mod=vendor
+      E2E_KUBERNETES_LINE: ${{ matrix.kubernetes_line }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -232,17 +251,13 @@ jobs:
         uses: ./.github/actions/install-kind
 
       - name: Run Kind release E2E lanes
-        run: |
-          make test-e2e-kind-smoke
-          make test-e2e-kind-convergence
-          make test-e2e-kind-upgrade-rollback
-          make test-e2e-kind-dr-runbook
+        run: make test-e2e-release-preview-kind
 
       - name: Upload Kind E2E artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-kind-e2e-artifacts
+          name: release-kind-${{ matrix.kubernetes_line }}-e2e-artifacts
           path: artifacts/e2e/
           if-no-files-found: ignore
           retention-days: 14

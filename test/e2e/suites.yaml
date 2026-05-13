@@ -3,7 +3,7 @@ version: 1
 versionPolicy:
   source: .ci/versions.yaml
   openbao: validation.openbao.primary
-  kubernetes: validation.kubernetes
+  kubernetes: validation.kubernetes.previewMatrix
 
 defaults:
   package: ./test/e2e
@@ -11,9 +11,35 @@ defaults:
   timeout: 30m
   parallelNodes: 1
 
+releaseGate:
+  preview:
+    status: active
+    groups:
+      openbao:
+        - openbao-ci
+        - openbao-provider-openbao-ci
+        - openbao-provider-cli-ci
+        - openbao-failure-ci
+        - openbao-ha-ci
+        - openbao-decrypt-storm-ci
+        - openbao-decrypt-soak-ci
+        - openbao-load-soak-ci
+        - openbao-restore-ci
+        - openbao-rotation-ci
+        - openbao-provider-upgrade-rollback-ci
+        - openbao-cert-auth-ci
+        - openbao-provider-certauth-pkcs11-source-ci
+        - openbao-provider-certauth-spiffe-source-ci
+      kind:
+        - kind-smoke
+        - kind-convergence
+        - kind-upgrade-rollback
+        - kind-dr-runbook
+
 lanes:
   - id: openbao-ci
     name: OpenBao CI
+    makeTarget: test-e2e-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && transit && ci
     prScope: pr
@@ -28,8 +54,28 @@ lanes:
     status: active
     reports: true
 
+  - id: openbao-provider-openbao-ci
+    name: OpenBao Provider Full Stack CI
+    makeTarget: test-e2e-provider-openbao-ci
+    package: ./test/e2e
+    labelFilter: openbao && kmsv2 && provider && ci
+    prScope: pr
+    environment: local-openbao
+    isolation: local-container
+    timeout: 4m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
   - id: kind-smoke
     name: Kubernetes KMS v2 Kind Smoke
+    makeTarget: test-e2e-kind-smoke
     package: ./test/e2e
     labelFilter: kind && kmsv2 && smoke
     prScope: main
@@ -38,13 +84,13 @@ lanes:
     timeout: 30m
     parallelNodes: 1
     versionRefs:
-      - validation.kubernetes.exactVersion
-      - validation.kubernetes.kindNodeImage
+      - validation.kubernetes.previewMatrix
     status: active
     reports: true
 
   - id: openbao-cert-auth-ci
     name: OpenBao Certificate Auth CI
+    makeTarget: test-e2e-cert-auth-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && certauth && ci
     prScope: pr
@@ -61,6 +107,7 @@ lanes:
 
   - id: openbao-provider-certauth-spiffe-source-ci
     name: Provider SPIRE Certificate Source CI
+    makeTarget: test-e2e-provider-certauth-spiffe-openbao-ci
     package: ./test/e2e
     labelFilter: certauth && spiffe && ci
     prScope: pr
@@ -81,6 +128,7 @@ lanes:
 
   - id: openbao-provider-certauth-pkcs11-source-ci
     name: OpenBao Provider PKCS#11 SoftHSM Certificate Source CI
+    makeTarget: test-e2e-provider-certauth-pkcs11-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && certauth && pkcs11 && ci
     prScope: pr
@@ -99,6 +147,7 @@ lanes:
 
   - id: kind-convergence
     name: Kubernetes KMS v2 Kind Multi-Control-Plane Convergence
+    makeTarget: test-e2e-kind-convergence
     package: ./test/e2e
     labelFilter: kind && kmsv2 && convergence
     prScope: main
@@ -107,13 +156,13 @@ lanes:
     timeout: 45m
     parallelNodes: 1
     versionRefs:
-      - validation.kubernetes.exactVersion
-      - validation.kubernetes.kindNodeImage
+      - validation.kubernetes.previewMatrix
     status: active
     reports: true
 
   - id: openbao-failure-ci
     name: OpenBao Failure CI
+    makeTarget: test-e2e-provider-failure-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && failure && ci
     prScope: main
@@ -130,6 +179,7 @@ lanes:
 
   - id: openbao-provider-cli-ci
     name: OpenBao Provider CLI CI
+    makeTarget: test-e2e-provider-cli-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && cli && ci
     prScope: main
@@ -146,6 +196,7 @@ lanes:
 
   - id: openbao-ha-ci
     name: OpenBao HA Failover CI
+    makeTarget: test-e2e-provider-ha-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && ha && ci
     prScope: main
@@ -162,6 +213,7 @@ lanes:
 
   - id: openbao-decrypt-storm-ci
     name: OpenBao Decrypt Storm CI
+    makeTarget: test-e2e-provider-decrypt-storm-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && performance && ci
     prScope: main
@@ -178,6 +230,7 @@ lanes:
 
   - id: openbao-load-soak-ci
     name: OpenBao Load Soak CI
+    makeTarget: test-e2e-provider-load-soak-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && soak && ci
     prScope: main
@@ -194,6 +247,7 @@ lanes:
 
   - id: openbao-decrypt-soak-ci
     name: OpenBao Sustained Decrypt Soak CI
+    makeTarget: test-e2e-provider-decrypt-soak-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && performance && soak && ci
     prScope: main
@@ -210,6 +264,7 @@ lanes:
 
   - id: openbao-restore-ci
     name: OpenBao Backend Replacement And Raft Restore CI
+    makeTarget: test-e2e-provider-restore-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && restore && ci
     prScope: main
@@ -226,6 +281,7 @@ lanes:
 
   - id: openbao-rotation-ci
     name: OpenBao Transit Rotation CI
+    makeTarget: test-e2e-provider-rotation-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && rotation && ci
     prScope: main
@@ -242,6 +298,7 @@ lanes:
 
   - id: openbao-provider-upgrade-rollback-ci
     name: OpenBao Provider Binary Upgrade Rollback CI
+    makeTarget: test-e2e-provider-upgrade-rollback-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && upgrade && rollback && ci
     prScope: main
@@ -258,6 +315,7 @@ lanes:
 
   - id: kind-upgrade-rollback
     name: Kubernetes KMS v2 Kind Static-Pod Upgrade Rollback
+    makeTarget: test-e2e-kind-upgrade-rollback
     package: ./test/e2e
     labelFilter: kind && kmsv2 && upgrade && rollback
     prScope: main
@@ -266,13 +324,13 @@ lanes:
     timeout: 30m
     parallelNodes: 1
     versionRefs:
-      - validation.kubernetes.exactVersion
-      - validation.kubernetes.kindNodeImage
+      - validation.kubernetes.previewMatrix
     status: active
     reports: true
 
   - id: kind-dr-runbook
     name: Kubernetes KMS v2 Kind DR Restore Runbook
+    makeTarget: test-e2e-kind-dr-runbook
     package: ./test/e2e
     labelFilter: kind && kmsv2 && restore && dr
     prScope: main
@@ -283,22 +341,6 @@ lanes:
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
-      - validation.kubernetes.exactVersion
-      - validation.kubernetes.kindNodeImage
+      - validation.kubernetes.previewMatrix
     status: active
-    reports: true
-
-  - id: release-gate
-    name: v0.1 Release Gate
-    package: ./test/e2e
-    labelFilter: release-gate
-    prScope: release
-    environment: kind
-    isolation: local-cluster
-    timeout: 60m
-    parallelNodes: 1
-    versionRefs:
-      - validation.openbao.primary
-      - validation.kubernetes.exactVersion
-    status: planned
     reports: true

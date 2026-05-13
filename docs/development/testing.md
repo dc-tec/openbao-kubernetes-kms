@@ -96,7 +96,9 @@ In summary:
 - release candidates should add exact-pinned version matrices, local kubeadm VM
   validation, recovery evidence, and release artifact evidence.
 
-The exact Kubernetes patch version, Kind node image, OpenBao image, and tool
-versions live in `.ci/versions.yaml`. Additional Kubernetes or OpenBao versions
-remain future candidates until exact-pinned lanes and release evidence exist. See
-[Reference: Compatibility](/reference/compatibility/) for the support boundary.
+The exact Kubernetes patch versions, Kind node images, OpenBao image, and tool
+versions live in `.ci/versions.yaml`. Kubernetes `1.36` is tracked as the
+intended next validation line until a digest-pinned Kind node image exists.
+Additional Kubernetes or OpenBao versions remain candidates until exact-pinned
+lanes and release evidence exist. See [Reference: Compatibility](/reference/compatibility/)
+for the support boundary.

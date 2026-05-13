@@ -17,6 +17,30 @@ test-e2e: verify-e2e-manifest ## Run Ginkgo/Gomega E2E tests; filter with E2E_LA
 		"$(GO)" test -tags=e2e "$(E2E_PACKAGE)" -run '^TestE2E$$' -count=1; \
 	fi
 
+.PHONY: test-e2e-release-preview-openbao
+test-e2e-release-preview-openbao: verify-e2e-manifest test-e2e-release-preview-openbao-images ## Run manifest-defined OpenBao preview release E2E lanes.
+	@E2E_PROVIDER_BUILD=false "$(GO)" run ./hack/tools/e2e_release_gate -group openbao -make "$(MAKE)"
+
+.PHONY: test-e2e-release-preview-kind
+test-e2e-release-preview-kind: verify-e2e-manifest test-e2e-release-preview-kind-images ## Run manifest-defined Kind preview release E2E lanes.
+	@E2E_PROVIDER_BUILD=false "$(GO)" run ./hack/tools/e2e_release_gate -group kind -make "$(MAKE)"
+
+.PHONY: test-e2e-release-preview-openbao-images
+test-e2e-release-preview-openbao-images: verify-e2e-manifest ## Build provider images needed by the OpenBao preview release gate.
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then \
+		$(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; \
+		$(MAKE) image IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" VERSION="$(VERSION)-e2e-old" COMMIT="$(COMMIT)-old"; \
+		$(MAKE) image IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" VERSION="$(VERSION)-e2e-new" COMMIT="$(COMMIT)-new"; \
+		$(MAKE) image-certauth-pkcs11-e2e; \
+		$(MAKE) image-certauth-spiffe; \
+	fi
+
+.PHONY: test-e2e-release-preview-kind-images
+test-e2e-release-preview-kind-images: verify-e2e-manifest ## Build provider image needed by the Kind preview release gate.
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then \
+		$(MAKE) image IMAGE="$(E2E_PROVIDER_IMAGE)"; \
+	fi
+
 .PHONY: test-e2e-openbao
 test-e2e-openbao: test-e2e-openbao-ci
 
@@ -25,15 +49,14 @@ test-e2e-openbao-ci: verify-e2e-manifest ## Run the default OpenBao CI E2E lane.
 	@if command -v "$(GINKGO)" >/dev/null 2>&1; then \
 		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && transit && ci' E2E_TIMEOUT=6m; \
 	else \
-		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1; \
+		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1; \
 	fi
-	@$(MAKE) test-e2e-provider-openbao-ci
 
 define provider-e2e-target
 .PHONY: $(1)
 $(1): verify-e2e-manifest
 	@if [ "$$(E2E_PROVIDER_BUILD)" != "false" ]; then $$(MAKE) image IMAGE="$$(E2E_PROVIDER_IMAGE)"; fi
-	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$$(E2E_PROVIDER_IMAGE)" "$$(GO)" test -tags=e2e ./test/e2e -run '$(2)' -count=1 -timeout=$(3)
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$$(E2E_PROVIDER_IMAGE)" "$$(GO)" test -v -tags=e2e ./test/e2e -run '$(2)' -count=1 -timeout=$(3)
 endef
 
 $(eval $(call provider-e2e-target,test-e2e-provider-openbao-ci,^TestProviderContainerFullStackE2E$$$$,4m))
@@ -48,22 +71,26 @@ $(eval $(call provider-e2e-target,test-e2e-provider-rotation-openbao-ci,^TestPro
 
 .PHONY: test-e2e-cert-auth-openbao-ci
 test-e2e-cert-auth-openbao-ci: verify-e2e-manifest ## Run the OpenBao TLS certificate auth E2E lane.
-	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1 -timeout=6m -ginkgo.label-filter='openbao && certauth && ci'
+	@if command -v "$(GINKGO)" >/dev/null 2>&1; then \
+		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && certauth && ci' E2E_TIMEOUT=6m; \
+	else \
+		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1 -timeout=6m -ginkgo.label-filter='openbao && certauth && ci'; \
+	fi
 
 .PHONY: test-e2e-provider-certauth-spiffe-openbao-ci
 test-e2e-provider-certauth-spiffe-openbao-ci: verify-e2e-manifest ## Run provider E2E with real SPIRE Workload API cert source.
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image-certauth-spiffe; fi
-	@E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" E2E_SPIRE_SERVER_IMAGE="$(E2E_SPIRE_SERVER_IMAGE)" E2E_SPIRE_AGENT_IMAGE="$(E2E_SPIRE_AGENT_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderCertAuthSPIREWorkloadAPISourceE2E$$' -count=1 -timeout=7m
+	@E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" E2E_SPIRE_SERVER_IMAGE="$(E2E_SPIRE_SERVER_IMAGE)" E2E_SPIRE_AGENT_IMAGE="$(E2E_SPIRE_AGENT_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestProviderCertAuthSPIREWorkloadAPISourceE2E$$' -count=1 -timeout=7m
 
 .PHONY: test-e2e-provider-certauth-spiffe-openbao-local
 test-e2e-provider-certauth-spiffe-openbao-local: verify-e2e-manifest ## Run provider E2E with real SPIRE Workload API and OpenBao cert login.
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" IMAGE_CGO_ENABLED=0 IMAGE_GO_BUILD_TAGS="$(CERTAUTH_SPIFFE_LOCAL_BUILD_TAGS)"; fi
-	@E2E_OPENBAO_CI=true E2E_OPENBAO_CERT_AUTH_URI_SAN_ALIAS=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" E2E_SPIRE_SERVER_IMAGE="$(E2E_SPIRE_SERVER_IMAGE)" E2E_SPIRE_AGENT_IMAGE="$(E2E_SPIRE_AGENT_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderCertAuthSPIREOpenBaoE2E$$' -count=1 -timeout=7m
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_CERT_AUTH_URI_SAN_ALIAS=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" E2E_SPIRE_SERVER_IMAGE="$(E2E_SPIRE_SERVER_IMAGE)" E2E_SPIRE_AGENT_IMAGE="$(E2E_SPIRE_AGENT_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestProviderCertAuthSPIREOpenBaoE2E$$' -count=1 -timeout=7m
 
 .PHONY: test-e2e-provider-certauth-pkcs11-openbao-ci
 test-e2e-provider-certauth-pkcs11-openbao-ci: verify-e2e-manifest ## Run provider E2E with real PKCS#11 SoftHSM cert source.
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image-certauth-pkcs11-e2e; fi
-	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderCertAuthPKCS11SoftHSME2E$$' -count=1 -timeout=7m
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestProviderCertAuthPKCS11SoftHSME2E$$' -count=1 -timeout=7m
 
 .PHONY: test-e2e-provider-certauth-sources-openbao-ci
 test-e2e-provider-certauth-sources-openbao-ci: verify-e2e-manifest ## Run provider cert-auth source E2E lanes.
@@ -76,13 +103,13 @@ test-e2e-provider-upgrade-rollback-openbao-ci: verify-e2e-manifest
 		$(MAKE) image IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" VERSION="$(VERSION)-e2e-old" COMMIT="$(COMMIT)-old"; \
 		$(MAKE) image IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" VERSION="$(VERSION)-e2e-new" COMMIT="$(COMMIT)-new"; \
 	fi
-	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_OLD_IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" E2E_PROVIDER_NEW_IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderBinaryUpgradeRollbackE2E$$' -count=1 -timeout=8m
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_OLD_IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" E2E_PROVIDER_NEW_IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestProviderBinaryUpgradeRollbackE2E$$' -count=1 -timeout=8m
 
 define kind-e2e-target
 .PHONY: $(1)
 $(1): verify-e2e-manifest
 	@if [ "$$(E2E_PROVIDER_BUILD)" != "false" ]; then $$(MAKE) image IMAGE="$$(E2E_PROVIDER_IMAGE)"; fi
-	@E2E_KIND_CI=true E2E_OPENBAO_IMAGE="$$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$$(E2E_PROVIDER_IMAGE)" E2E_KIND_NODE_IMAGE="$$(E2E_KIND_NODE_IMAGE)" "$$(GO)" test -tags=e2e ./test/e2e -run '$(2)' -count=1 -timeout=$(3)
+	@E2E_KIND_CI=true E2E_OPENBAO_IMAGE="$$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$$(E2E_PROVIDER_IMAGE)" E2E_KIND_NODE_IMAGE="$$(E2E_KIND_NODE_IMAGE)" "$$(GO)" test -v -tags=e2e ./test/e2e -run '$(2)' -count=1 -timeout=$(3)
 endef
 
 $(eval $(call kind-e2e-target,test-e2e-kind-smoke,^TestKindKMSV2SmokeE2E$$$$,30m))

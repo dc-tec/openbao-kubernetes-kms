@@ -205,6 +205,7 @@ jobs:
       - name: Run OpenBao E2E lanes
         run: |
           make test-e2e-openbao-ci
+          make test-e2e-provider-openbao-ci
           make test-e2e-provider-failure-openbao-ci
           make test-e2e-provider-rotation-openbao-ci
           make test-e2e-provider-certauth-sources-openbao-ci

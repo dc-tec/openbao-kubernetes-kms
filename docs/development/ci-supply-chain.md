@@ -43,10 +43,12 @@ The policy is:
 - release artifact names and checksum filenames defined by the version policy.
 
 Initial validation uses OpenBao `2.5.3`, Kubernetes KMS v2, Linux
-control-plane nodes, and the Kubernetes `1.34` release line with the exact
-runnable patch recorded in `.ci/versions.yaml`. Future Kubernetes or OpenBao
-versions become support claims only after exact-pinned release evidence
-exists. See [Reference: Compatibility](/reference/compatibility/).
+control-plane nodes, and exact-pinned Kind lanes for the Kubernetes `1.34` and
+`1.35` release lines recorded in `.ci/versions.yaml`. Kubernetes `1.36` is the
+intended next validation line once a digest-pinned Kind node image is available.
+Future Kubernetes or OpenBao versions become support claims only after
+exact-pinned release evidence exists. See
+[Reference: Compatibility](/reference/compatibility/).
 
 ## Local Parity
 
@@ -110,6 +112,9 @@ Main and scheduled lanes add the slower integration coverage:
 - sustained direct decrypt soak,
 - image scan and SBOM generation.
 
+The soak lanes are release evidence for the pinned CI environment only. They do
+not establish a production SLO or broad capacity claim.
+
 Local kubeadm VM validation stays outside public CI because it restarts VMs,
 restarts API servers, and intentionally stops OpenBao in the validation
 environment.
@@ -133,7 +138,8 @@ The tag release workflow:
 
 - builds the image and release assets,
 - independently rebuilds the image for reproducibility comparison,
-- runs source, image, OpenBao, and Kind validation,
+- runs source, image, and the manifest-defined OpenBao and Kind preview release
+  gates from `test/e2e/suites.yaml`,
 - generates SBOMs,
 - generates deterministic checksums,
 - signs the image by digest,
