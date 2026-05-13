@@ -224,6 +224,15 @@ The local registry is a non-secret JSON file that records:
 
 The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. A small adjacent checkpoint file records the last accepted generation and hash so a replayed older state file is rejected when the checkpoint survives. Neither file contains key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths. When `openbao.namespace` is configured, the namespace is persisted as non-secret identity scope so namespace drift fails closed during state validation.
 
+The state hash and checkpoint are local integrity and replay guards, not
+hardware-backed tamper evidence. They detect corruption, unsafe restore, missing
+state with a surviving checkpoint, older generations, and same-generation hash
+mismatches. They do not stop a privileged host-level attacker who can replace
+both the state file and checkpoint with a self-consistent pair. Environments
+that need stronger rollback resistance must add host controls such as protected
+state directories, immutable backups, measured boot, TPM-sealed anchors, or an
+external write-protected generation record.
+
 State-file invariants enforced at load:
 
 - the file must be regular and must not be a symlink,

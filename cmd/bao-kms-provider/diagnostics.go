@@ -598,7 +598,7 @@ func diagnosticPluginVersion(info version.Info) string {
 }
 
 func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, profile openbao.KeyProfile) {
-	state, _, err := keyregistry.LoadStateFile(cfg.State.Path, keyregistry.StateLoadOptions{})
+	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
 	if errors.Is(err, keyregistry.ErrStateNotFound) {
 		report.Warn(checkRegistryState, "Registry state", "state file is absent; checked latest Transit metadata only")
 		checkLatestVersionRestrictions(report, profile)
@@ -608,7 +608,23 @@ func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, pro
 		report.Fail(checkRegistryState, "Registry state", safeMessage(err))
 		return
 	}
-	report.Pass(checkRegistryState, "Registry state", "loaded local key registry state")
+	switch loaded.CheckpointStatus {
+	case stateCheckpointStatusMissing:
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			"state file loaded but replay checkpoint is absent; rollback detection is not anchored",
+		)
+	case stateCheckpointStatusBehind:
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			"state file loaded but replay checkpoint lags the accepted state generation",
+		)
+	default:
+		report.Pass(checkRegistryState, "Registry state", "loaded local key registry state and checkpoint")
+	}
+	state := loaded.State
 	failures := make([]string, 0)
 	for _, record := range state.Snapshots {
 		snapshot, snapshotErr := record.Snapshot()

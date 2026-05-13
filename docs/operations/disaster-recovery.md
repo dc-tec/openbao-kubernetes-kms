@@ -89,6 +89,28 @@ Record with every backup set:
 
 Preserve historical Transit versions for at least as long as any retained etcd backup can reference them. Do not raise OpenBao `min_decryption_version` for versions that may still be needed by retained etcd backups.
 
+## State Rollback Boundary
+
+The local registry state file and adjacent checkpoint help detect operational
+rollback mistakes. If the checkpoint survives, the provider rejects a missing
+state file, an older generation, and a same-generation state hash mismatch.
+`doctor`, `verify-key`, `rotation-plan`, and `verify-rotation` also report the
+checkpoint status so operators can spot an unanchored or lagging checkpoint.
+
+This is not a tamper-proof anti-rollback system. A privileged host-level
+attacker who can replace both the registry state file and checkpoint can still
+construct a self-consistent rollback. Treat the state directory as
+security-relevant host data:
+
+- keep the parent directory non-group-writable and non-world-writable,
+- back up the state file and checkpoint together,
+- compare state generation and `key_id` hash across control-plane nodes,
+- alert on missing state with checkpoint present, state rollback, or checkpoint
+  corruption,
+- use stronger host controls such as immutable backups, measured boot,
+  TPM-sealed anchors, or external generation records where the environment
+  requires tamper-resistant rollback protection.
+
 ## Restore OpenBao
 
 1. Restore OpenBao to a point that contains the required Transit key and all required historical versions.

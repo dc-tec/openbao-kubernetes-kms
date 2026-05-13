@@ -25,20 +25,24 @@ const (
 )
 
 type rotationReport struct {
-	Name                 string
-	StateLoaded          bool
-	StateGeneration      uint64
-	StateHash            string
-	ActiveKeyIDHash      string
-	ActiveTransitVersion int
-	LatestTransitVersion int
-	RotationState        status.RotationState
-	PendingKeyIDHash     string
-	PendingVersion       int
-	PendingStableCount   int
-	PendingPromotesAfter time.Time
-	Confidence           string
-	Limitations          string
+	Name                      string
+	StateLoaded               bool
+	StateGeneration           uint64
+	StateHash                 string
+	StateCheckpointLoaded     bool
+	StateCheckpointStatus     string
+	StateCheckpointGeneration uint64
+	StateCheckpointHash       string
+	ActiveKeyIDHash           string
+	ActiveTransitVersion      int
+	LatestTransitVersion      int
+	RotationState             status.RotationState
+	PendingKeyIDHash          string
+	PendingVersion            int
+	PendingStableCount        int
+	PendingPromotesAfter      time.Time
+	Confidence                string
+	Limitations               string
 }
 
 func newRotationPlanCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.Command {
@@ -89,11 +93,16 @@ func newVerifyRotationCommand(runtimeConfig *config.Runtime, configPath *string)
 
 func buildRotationReport(ctx context.Context, cfg config.Config, name string) (rotationReport, error) {
 	report := rotationReport{Name: name, RotationState: status.RotationStateUnknown}
-	state, _, err := keyregistry.LoadStateFile(cfg.State.Path, keyregistry.StateLoadOptions{})
+	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
 	if err != nil && !errors.Is(err, keyregistry.ErrStateNotFound) {
 		return rotationReport{}, err
 	}
-	if err == nil {
+	report.StateCheckpointLoaded = loaded.CheckpointLoaded
+	report.StateCheckpointStatus = loaded.CheckpointStatus
+	report.StateCheckpointGeneration = loaded.CheckpointGeneration
+	report.StateCheckpointHash = loaded.CheckpointHash
+	if loaded.StateLoaded {
+		state := loaded.State
 		report.StateLoaded = true
 		report.StateGeneration = state.Generation
 		report.StateHash = state.CurrentHash
@@ -203,6 +212,14 @@ func printRotationReportText(out io.Writer, report rotationReport) {
 		_, _ = fmt.Fprintf(out, "stateGeneration: %d\n", report.StateGeneration)
 		_, _ = fmt.Fprintf(out, "stateHash: %s\n", report.StateHash)
 	}
+	_, _ = fmt.Fprintf(out, "stateCheckpointLoaded: %t\n", report.StateCheckpointLoaded)
+	if report.StateCheckpointStatus != "" {
+		_, _ = fmt.Fprintf(out, "stateCheckpointStatus: %s\n", report.StateCheckpointStatus)
+	}
+	if report.StateCheckpointLoaded {
+		_, _ = fmt.Fprintf(out, "stateCheckpointGeneration: %d\n", report.StateCheckpointGeneration)
+		_, _ = fmt.Fprintf(out, "stateCheckpointHash: %s\n", report.StateCheckpointHash)
+	}
 	_, _ = fmt.Fprintf(out, "rotationState: %s\n", report.RotationState)
 	_, _ = fmt.Fprintf(out, "activeKeyIdHash: %s\n", report.ActiveKeyIDHash)
 	_, _ = fmt.Fprintf(out, "activeTransitVersion: %d\n", report.ActiveTransitVersion)
@@ -228,6 +245,10 @@ type rotationReportJSON struct {
 	StateLoaded                   bool                 `json:"stateLoaded"`
 	StateGeneration               uint64               `json:"stateGeneration,omitempty"`
 	StateHash                     string               `json:"stateHash,omitempty"`
+	StateCheckpointLoaded         bool                 `json:"stateCheckpointLoaded"`
+	StateCheckpointStatus         string               `json:"stateCheckpointStatus,omitempty"`
+	StateCheckpointGeneration     uint64               `json:"stateCheckpointGeneration,omitempty"`
+	StateCheckpointHash           string               `json:"stateCheckpointHash,omitempty"`
 	ActiveKeyIDHash               string               `json:"activeKeyIdHash,omitempty"`
 	ActiveTransitVersion          int                  `json:"activeTransitVersion,omitempty"`
 	LatestTransitVersion          int                  `json:"latestTransitVersion,omitempty"`
@@ -246,6 +267,10 @@ func printRotationReportJSON(out io.Writer, report rotationReport) error {
 		StateLoaded:                   report.StateLoaded,
 		StateGeneration:               report.StateGeneration,
 		StateHash:                     report.StateHash,
+		StateCheckpointLoaded:         report.StateCheckpointLoaded,
+		StateCheckpointStatus:         report.StateCheckpointStatus,
+		StateCheckpointGeneration:     report.StateCheckpointGeneration,
+		StateCheckpointHash:           report.StateCheckpointHash,
 		ActiveKeyIDHash:               report.ActiveKeyIDHash,
 		ActiveTransitVersion:          report.ActiveTransitVersion,
 		LatestTransitVersion:          report.LatestTransitVersion,

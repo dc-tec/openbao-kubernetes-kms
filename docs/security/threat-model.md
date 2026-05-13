@@ -69,6 +69,7 @@ The design does not defend against every action by:
 | Transit key deletion | `deletion_allowed=false`, no delete permission for the plugin token, tested backups. |
 | Accidental key creation | `disable_upsert=true` at the Transit mount, no create permission for the plugin token. |
 | Key recreation with same name | Key lineage ID, decrypt validation, DR checks. |
+| Registry state rollback | State hash chain, adjacent checkpoint, monotonic generation checks, and fail-closed startup when the checkpoint survives. |
 | Ciphertext replay across clusters | AAD binds provider, cluster, OpenBao instance, key lineage, and key version. |
 | `key_id` spoofing | Strict local key registry and decrypt rejection before Transit. |
 | Annotation tampering | Canonical AAD reconstruction and annotation hash checks. |
@@ -100,6 +101,7 @@ The design does not provide:
 
 - protection from plaintext visible inside `kube-apiserver` during legitimate operation,
 - protection from a compromised plugin process,
+- tamper-proof rollback protection if a host-level attacker can replace both local registry state and checkpoint,
 - protection from an attacker with Transit decrypt permission,
 - protection from an OpenBao administrator with destructive access,
 - recovery after Transit key material is permanently lost,

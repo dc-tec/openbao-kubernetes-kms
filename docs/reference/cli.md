@@ -127,15 +127,24 @@ Reports:
 
 - whether local registry state was loaded,
 - registry generation and state hash when available,
+- registry checkpoint status, generation, and hash when available,
 - current active Transit version,
 - current Kubernetes `key_id` hash,
 - latest observed Transit version,
 - pending promotion status,
 - estimated promotion time when a pending version has become stable.
 
+Checkpoint status values:
+
+- `current`: checkpoint exists and matches the loaded state generation/hash,
+- `behind`: checkpoint exists and accepts a newer state generation,
+- `missing`: state exists but the checkpoint is absent,
+- `absent`: neither state nor checkpoint exists.
+
 If local registry state is missing, `rotation-plan` only synthesizes initial
 bootstrap state from initial Transit metadata. It fails instead of reporting an
-active key hash from live Transit metadata after rotation.
+active key hash from live Transit metadata after rotation. If a checkpoint is
+present but the state file is missing or rolled back, the command fails closed.
 
 ## verify-rotation
 
