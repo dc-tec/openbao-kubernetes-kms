@@ -31,6 +31,7 @@ const (
 	checkConfigValidate         = "config.validate"
 	checkSocketGroup            = "socket.group"
 	checkJWTLocal               = "jwt.local"
+	checkCertLocal              = "auth.cert.local"
 	checkEncryptionConfig       = "kubernetes.encryption_config"
 	checkOpenBaoTLS             = "openbao.tls"
 	checkOpenBaoAuth            = "openbao.auth"
@@ -145,7 +146,7 @@ func runDoctor(
 		CheckFilesystem: true,
 	}); err != nil {
 		report.Fail(checkConfigValidate, "Config validation", safeMessage(err))
-		report.Skip(checkOpenBaoAuth, "OpenBao JWT login", messageConfigValidationFailed)
+		report.Skip(checkOpenBaoAuth, openBaoAuthCheckName(cfg), messageConfigValidationFailed)
 		return report, cli.WithExitCode(cli.ExitConfig, errors.New("doctor config validation failed"))
 	}
 	report.Pass(checkConfigValidate, "Config validation", "local configuration is syntactically safe")
@@ -156,17 +157,11 @@ func runDoctor(
 		report.Pass(checkSocketGroup, "Socket group", "configured group resolves locally")
 	}
 
-	jwtValid := true
-	if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWT.JWTFile, jwtValidationOptions(cfg)); err != nil {
-		jwtValid = false
-		report.Fail(checkJWTLocal, "JWT file", safeMessage(err))
-	} else {
-		report.Pass(checkJWTLocal, "JWT file", "readable and locally valid")
-	}
+	authLocalValid := checkLocalAuthForDoctor(&report, cfg)
 
 	checkEncryptionConfiguration(&report, cfg, encryptionConfigPath)
-	if !jwtValid {
-		report.Skip(checkOpenBaoAuth, "OpenBao JWT login", "local JWT validation failed")
+	if !authLocalValid {
+		report.Skip(checkOpenBaoAuth, openBaoAuthCheckName(cfg), "local auth validation failed")
 		return report, nil
 	}
 
@@ -188,6 +183,24 @@ func jwtValidationOptions(cfg config.Config) auth.JWTValidationOptions {
 		ExpectedIssuer:   cfg.Auth.JWT.ExpectedIssuer,
 		ExpectedAudience: cfg.Auth.JWT.ExpectedAudience,
 		ExpectedSubject:  cfg.Auth.JWT.ExpectedSubject,
+	}
+}
+
+func checkLocalAuthForDoctor(report *cli.Report, cfg config.Config) bool {
+	switch cfg.Auth.Method {
+	case "jwt":
+		if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWT.JWTFile, jwtValidationOptions(cfg)); err != nil {
+			report.Fail(checkJWTLocal, "JWT file", safeMessage(err))
+			return false
+		}
+		report.Pass(checkJWTLocal, "JWT file", "readable and locally valid")
+		return true
+	case "cert":
+		report.Skip(checkCertLocal, "Certificate identity", "checked during certificate auth login")
+		return true
+	default:
+		report.Skip(checkCertLocal, "Certificate identity", "unsupported auth method")
+		return false
 	}
 }
 
@@ -226,32 +239,25 @@ func authenticateForDiagnostics(
 	report *cli.Report,
 	cfg config.Config,
 ) (diagnosticClients, bool) {
-	authClient, err := openbao.NewAuthClient(openbao.AuthClientConfig{
-		Address:       cfg.OpenBao.Address,
-		Namespace:     cfg.OpenBao.Namespace,
-		CACertFile:    cfg.OpenBao.CACertFile,
-		TLSServerName: cfg.OpenBao.TLSServerName,
-		Timeout:       authLoginTimeout(cfg),
-	})
-	if err != nil {
+	if _, err := openbao.NewTLSConfig(cfg.OpenBao.CACertFile, cfg.OpenBao.TLSServerName); err != nil {
 		report.Fail(checkOpenBaoTLS, "OpenBao TLS config", safeMessage(err))
-		report.Skip(checkOpenBaoAuth, "OpenBao JWT login", "TLS configuration failed")
+		report.Skip(checkOpenBaoAuth, openBaoAuthCheckName(cfg), "TLS configuration failed")
 		return diagnosticClients{}, false
 	}
 	report.Pass(checkOpenBaoTLS, "OpenBao TLS config", "CA bundle and server name are usable")
 
-	manager, err := auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{RenewalEnabled: true})
+	manager, err := buildAuthManager(ctx, cfg, nil)
 	if err != nil {
-		report.Fail(checkOpenBaoAuth, "OpenBao JWT login", safeMessage(err))
+		report.Fail(checkOpenBaoAuth, openBaoAuthCheckName(cfg), safeMessage(err))
 		return diagnosticClients{}, false
 	}
 	loginCtx, cancel := withTimeout(ctx, authLoginTimeout(cfg))
 	defer cancel()
 	if err := manager.Refresh(loginCtx); err != nil {
-		report.Fail(checkOpenBaoAuth, "OpenBao JWT login", safeMessage(err))
+		report.Fail(checkOpenBaoAuth, openBaoAuthCheckName(cfg), safeMessage(err))
 		return diagnosticClients{}, false
 	}
-	report.Pass(checkOpenBaoAuth, "OpenBao JWT login", "authenticated with configured JWT role")
+	report.Pass(checkOpenBaoAuth, openBaoAuthCheckName(cfg), openBaoAuthPassMessage(cfg))
 
 	transitClient, err := openbao.NewClient(openbao.ClientConfig{
 		Address:       cfg.OpenBao.Address,
@@ -262,10 +268,24 @@ func authenticateForDiagnostics(
 		TokenSource:   manager,
 	})
 	if err != nil {
-		report.Fail(checkOpenBaoTLS, "OpenBao client", safeMessage(err))
+		report.Fail(checkOpenBaoTLS, "OpenBao TLS config", safeMessage(err))
 		return diagnosticClients{}, false
 	}
 	return diagnosticClients{transitClient: transitClient}, true
+}
+
+func openBaoAuthCheckName(cfg config.Config) string {
+	if cfg.Auth.Method == "cert" {
+		return "OpenBao cert login"
+	}
+	return "OpenBao JWT login"
+}
+
+func openBaoAuthPassMessage(cfg config.Config) string {
+	if cfg.Auth.Method == "cert" {
+		return "authenticated with configured certificate role"
+	}
+	return "authenticated with configured JWT role"
 }
 
 func runTransitDiagnostics(
