@@ -271,6 +271,19 @@ func TestReleaseWorkflowRunsE2EAgainstBuiltImage(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowImageSecurityChecksOutTrivyIgnore(t *testing.T) {
+	workflow := readTextFile(t, releaseWorkflowPath)
+
+	imageSecurity := workflowJobSection(t, workflow, "security-image")
+	for _, want := range []string{
+		"name: Checkout",
+		"uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+		"trivyignores: .trivyignore",
+	} {
+		requireContains(t, imageSecurity, want, "release image security job")
+	}
+}
+
 func TestReleaseWorkflowKeepsPublicAttestationsAndPrivateDryRunFallback(t *testing.T) {
 	releaseWorkflow := readTextFile(t, releaseWorkflowPath)
 	reusableBuildWorkflow := readTextFile(t, reusableBuildWorkflowPath)
@@ -303,6 +316,14 @@ func TestReleaseWorkflowKeepsPublicAttestationsAndPrivateDryRunFallback(t *testi
 	}
 }
 
+func TestReusableBuildWorkflowUsesDeterministicImageOutput(t *testing.T) {
+	workflow := readTextFile(t, reusableBuildWorkflowPath)
+
+	requireContains(t, workflow, "outputs: type=image,push=true,rewrite-timestamp=true", reusableBuildWorkflowPath)
+	requireContains(t, workflow, "SOURCE_DATE_EPOCH=${{ inputs.source_date_epoch }}", reusableBuildWorkflowPath)
+	requireNotContains(t, workflow, "\n          push: true", reusableBuildWorkflowPath)
+}
+
 func TestReleaseGateMakeTargetsExist(t *testing.T) {
 	manifest := readE2EManifest(t)
 	validateE2EManifest(t, manifest)
@@ -317,6 +338,19 @@ func TestReleaseGateMakeTargetsExist(t *testing.T) {
 		if !strings.Contains(makefile, target) {
 			t.Fatalf("%s must define or generate lane target %q", e2eMakefilePath, target)
 		}
+	}
+}
+
+func TestOpenBaoAggregateClearsProviderImageEnvironment(t *testing.T) {
+	makefile := readTextFile(t, e2eMakefilePath)
+	for _, want := range []string{
+		"E2E_PROVIDER_IMAGE= \\",
+		"E2E_PROVIDER_OLD_IMAGE= \\",
+		"E2E_PROVIDER_NEW_IMAGE= \\",
+		"E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE= \\",
+		"E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE= \\",
+	} {
+		requireContains(t, makefile, want, "OpenBao aggregate E2E target")
 	}
 }
 

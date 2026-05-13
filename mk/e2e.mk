@@ -46,9 +46,23 @@ test-e2e-openbao: test-e2e-openbao-ci
 .PHONY: test-e2e-openbao-ci
 test-e2e-openbao-ci: verify-e2e-manifest ## Run the default OpenBao CI E2E lane.
 	@if command -v "$(GINKGO)" >/dev/null 2>&1; then \
-		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && transit && ci' E2E_TIMEOUT=6m; \
+		E2E_OPENBAO_CI=true \
+		E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" \
+		E2E_PROVIDER_IMAGE= \
+		E2E_PROVIDER_OLD_IMAGE= \
+		E2E_PROVIDER_NEW_IMAGE= \
+		E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE= \
+		E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE= \
+		"$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && transit && ci' E2E_TIMEOUT=6m; \
 	else \
-		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1; \
+		E2E_OPENBAO_CI=true \
+		E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" \
+		E2E_PROVIDER_IMAGE= \
+		E2E_PROVIDER_OLD_IMAGE= \
+		E2E_PROVIDER_NEW_IMAGE= \
+		E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE= \
+		E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE= \
+		"$(GO)" test -v -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1; \
 	fi
 
 define provider-e2e-target
