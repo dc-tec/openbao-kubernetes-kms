@@ -71,7 +71,10 @@ verify-vendor: ## Verify vendor/ is synchronized with go.mod and go.sum.
 .PHONY: fuzz
 fuzz: ## Run curated fuzz smoke targets.
 	@"$(GO)" test ./internal/aad -run '^$$' -fuzz '^FuzzParseAnnotations$$' -fuzztime="$(FUZZTIME)"
+	@"$(GO)" test ./internal/aad -run '^$$' -fuzz '^FuzzPrepareDecrypt$$' -fuzztime="$(FUZZTIME)"
 	@"$(GO)" test ./internal/keyregistry -run '^$$' -fuzz '^FuzzParseKeyID$$' -fuzztime="$(FUZZTIME)"
+	@"$(GO)" test ./internal/keyregistry -run '^$$' -fuzz '^FuzzStateFileDecode$$' -fuzztime="$(FUZZTIME)"
+	@"$(GO)" test ./internal/keyregistry -run '^$$' -fuzz '^FuzzStateCheckpointDecode$$' -fuzztime="$(FUZZTIME)"
 
 .PHONY: versions-check
 versions-check: ## Check central version policy exists and contains no floating latest.
