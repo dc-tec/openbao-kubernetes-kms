@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -13,6 +15,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
+	"github.com/dc-tec/openbao-kubernetes-kms/test/fakes"
 )
 
 const (
@@ -155,6 +160,109 @@ func TestValidateCertificateSignerRejectsMismatch(t *testing.T) {
 	}
 }
 
+func TestCertLoginSourceLogsInWithValidatedCertificate(t *testing.T) {
+	now := time.Unix(testCurrentUnix, 0).UTC()
+	_, cert, signer := newCertificateFixture(t, certificateFixtureOptions{
+		Now:      now,
+		NotAfter: now.Add(48 * time.Hour),
+		URIs:     []string{testSPIFFEID},
+	})
+	source, err := NewCertLoginSource(CertLoginSourceConfig{
+		MountPath:        "auth/k8s-workload-a-cert",
+		Name:             "openbao-kms-control-plane",
+		MinRemainingTTL:  24 * time.Hour,
+		ClockSkewLeeway:  time.Minute,
+		ExpectedSPIFFEID: testSPIFFEID,
+		TrustDomain:      testTrustDomain,
+	}, fakeCertificateProvider{
+		cert: tls.Certificate{
+			Certificate: [][]byte{cert.Raw},
+			PrivateKey:  signer,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new cert login source: %v", err)
+	}
+	client := &fakes.OpenBaoAuthClient{
+		CertResponses: []openbao.AuthToken{{
+			ClientToken:   testBaoToken1,
+			LeaseDuration: time.Hour,
+			Renewable:     true,
+		}},
+	}
+	manager, err := NewManagerWithSource(LifecycleConfig{
+		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
+		TokenRenewalIncrement:  testRenewalIncrement,
+	}, source, client, ManagerOptions{
+		Clock:              &fakeClock{now: now},
+		RefreshRetryJitter: noRetryJitter,
+	})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	token, err := manager.Token(context.Background())
+	if err != nil {
+		t.Fatalf("token: %v", err)
+	}
+	if token != testBaoToken1 {
+		t.Fatalf("unexpected token")
+	}
+	logins := client.CertLogins()
+	if len(logins) != 1 ||
+		logins[0].MountPath != "auth/k8s-workload-a-cert" ||
+		logins[0].Name != "openbao-kms-control-plane" {
+		t.Fatalf("unexpected cert logins: %#v", logins)
+	}
+	state := manager.State()
+	if state.CertExpiresAt.IsZero() || state.CertTTL <= 0 {
+		t.Fatalf("expected certificate TTL state, got %#v", state)
+	}
+}
+
+func TestCertLoginSourceFailsClosedBeforeOpenBao(t *testing.T) {
+	now := time.Unix(testCurrentUnix, 0).UTC()
+	_, cert, signer := newCertificateFixture(t, certificateFixtureOptions{
+		Now:      now,
+		NotAfter: now.Add(48 * time.Hour),
+		URIs:     []string{testSPIFFEID},
+	})
+	source, err := NewCertLoginSource(CertLoginSourceConfig{
+		MountPath:        "auth/k8s-workload-a-cert",
+		MinRemainingTTL:  24 * time.Hour,
+		ClockSkewLeeway:  time.Minute,
+		ExpectedSPIFFEID: "spiffe://example.org/openbao-kms/other",
+		TrustDomain:      testTrustDomain,
+	}, fakeCertificateProvider{
+		cert: tls.Certificate{
+			Certificate: [][]byte{cert.Raw},
+			PrivateKey:  signer,
+		},
+	})
+	if err != nil {
+		t.Fatalf("new cert login source: %v", err)
+	}
+	client := &fakes.OpenBaoAuthClient{}
+	manager, err := NewManagerWithSource(LifecycleConfig{
+		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
+		TokenRenewalIncrement:  testRenewalIncrement,
+	}, source, client, ManagerOptions{
+		Clock:              &fakeClock{now: now},
+		RefreshRetryJitter: noRetryJitter,
+	})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	_, err = manager.Token(context.Background())
+	if !errors.Is(err, ErrCertificateIdentityMismatch) {
+		t.Fatalf("expected certificate identity mismatch, got %v", err)
+	}
+	if len(client.CertLogins()) != 0 {
+		t.Fatal("invalid certificate should fail before OpenBao login")
+	}
+}
+
 type certificateFixtureOptions struct {
 	Now      time.Time
 	NotAfter time.Time
@@ -222,4 +330,16 @@ func writeCertificateFile(t *testing.T, content []byte, mode os.FileMode) string
 		t.Fatalf("write certificate: %v", err)
 	}
 	return path
+}
+
+type fakeCertificateProvider struct {
+	cert tls.Certificate
+	err  error
+}
+
+func (f fakeCertificateProvider) CurrentCertificate(context.Context) (tls.Certificate, error) {
+	if f.err != nil {
+		return tls.Certificate{}, f.err
+	}
+	return f.cert, nil
 }

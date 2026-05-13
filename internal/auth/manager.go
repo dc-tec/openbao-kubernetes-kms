@@ -76,6 +76,7 @@ const (
 // OpenBaoAuthClient is the OpenBao auth API surface used by Manager.
 type OpenBaoAuthClient interface {
 	LoginJWT(context.Context, openbao.JWTLoginRequest) (openbao.AuthToken, error)
+	LoginCert(context.Context, openbao.CertLoginRequest) (openbao.AuthToken, error)
 	RenewSelfToken(context.Context, string, time.Duration) (openbao.AuthToken, error)
 }
 
@@ -101,8 +102,9 @@ type ManagerConfig struct {
 
 // LoginResult contains one successful auth-method login.
 type LoginResult struct {
-	AuthToken openbao.AuthToken
-	JWT       JWT
+	AuthToken   openbao.AuthToken
+	JWT         JWT
+	Certificate Certificate
 }
 
 // LoginSource performs one auth-method-specific OpenBao login.
@@ -139,6 +141,8 @@ type State struct {
 	TokenTTL            time.Duration
 	JWTExpiresAt        time.Time
 	JWTTTL              time.Duration
+	CertExpiresAt       time.Time
+	CertTTL             time.Duration
 	LastLoginAt         time.Time
 	LastRenewalAt       time.Time
 	LastError           string
@@ -158,6 +162,7 @@ type Manager struct {
 	renewalEnabled      bool
 	current             currentToken
 	lastJWT             JWT
+	lastCertificate     Certificate
 	lastLoginAt         time.Time
 	lastRenewalAt       time.Time
 	lastErr             error
@@ -264,6 +269,8 @@ func (m *Manager) State() State {
 		TokenTTL:            ttlUntil(now, m.current.expiresAt),
 		JWTExpiresAt:        m.lastJWT.Claims.ExpiresAt,
 		JWTTTL:              ttlUntil(now, m.lastJWT.Claims.ExpiresAt),
+		CertExpiresAt:       m.lastCertificate.ExpiresAt,
+		CertTTL:             ttlUntil(now, m.lastCertificate.ExpiresAt),
 		LastLoginAt:         m.lastLoginAt,
 		LastRenewalAt:       m.lastRenewalAt,
 		LastError:           safeErrorMessage(m.lastErr),
@@ -348,12 +355,13 @@ type refreshAction struct {
 }
 
 type refreshResult struct {
-	token      currentToken
-	jwt        JWT
-	loginAt    time.Time
-	renewalAt  time.Time
-	renewalErr error
-	err        error
+	token       currentToken
+	jwt         JWT
+	certificate Certificate
+	loginAt     time.Time
+	renewalAt   time.Time
+	renewalErr  error
+	err         error
 }
 
 func (m *Manager) refreshActionLocked(forceLogin bool, now time.Time) refreshAction {
@@ -403,9 +411,10 @@ func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult
 	m.observeLogin(ctx, nil)
 
 	return refreshResult{
-		token:   token,
-		jwt:     login.JWT,
-		loginAt: now,
+		token:       token,
+		jwt:         login.JWT,
+		certificate: login.Certificate,
+		loginAt:     now,
 	}
 }
 
@@ -448,6 +457,9 @@ func (m *Manager) applyRefreshResultLocked(result refreshResult, forceLogin bool
 	m.current = result.token
 	if result.jwt.Raw != "" {
 		m.lastJWT = result.jwt
+	}
+	if result.certificate.Leaf != nil {
+		m.lastCertificate = result.certificate
 	}
 	if !result.loginAt.IsZero() {
 		m.lastLoginAt = result.loginAt

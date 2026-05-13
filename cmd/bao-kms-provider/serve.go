@@ -130,10 +130,7 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 	if err != nil {
 		return serveDependencies{}, err
 	}
-	authManager, err := auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{
-		RenewalEnabled: true,
-		Observer:       observer,
-	})
+	authManager, err := buildAuthManager(cfg, authClient, observer)
 	if err != nil {
 		return serveDependencies{}, err
 	}
@@ -286,6 +283,32 @@ func authConfig(cfg config.Config) auth.ManagerConfig {
 		ExpectedAudience:       cfg.Auth.JWT.ExpectedAudience,
 		ExpectedSubject:        cfg.Auth.JWT.ExpectedSubject,
 	}
+}
+
+func buildAuthManager(
+	cfg config.Config,
+	authClient auth.OpenBaoAuthClient,
+	observer auth.Observer,
+) (*auth.Manager, error) {
+	switch cfg.Auth.Method {
+	case "jwt":
+		return auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{
+			RenewalEnabled: true,
+			Observer:       observer,
+		})
+	case "cert":
+		return newCertAuthManager(cfg, authClient, observer)
+	default:
+		return nil, fmt.Errorf("%w: unsupported auth method", auth.ErrAuthConfig)
+	}
+}
+
+func newCertAuthManager(
+	config.Config,
+	auth.OpenBaoAuthClient,
+	auth.Observer,
+) (*auth.Manager, error) {
+	return nil, fmt.Errorf("%w: auth.method cert requires a certauth build variant", auth.ErrAuthConfig)
 }
 
 type bootstrapProbeController interface {
