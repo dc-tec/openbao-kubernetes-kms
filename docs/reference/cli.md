@@ -53,8 +53,8 @@ Checks:
 | Token policy | Token can read Transit metadata and perform encrypt and decrypt. |
 | Transit key exists | Metadata read succeeds. |
 | Key type | Matches allowed key types. |
-| Key export | `exportable=false` unless explicitly allowed. |
-| Plaintext backup | `allow_plaintext_backup=false` unless explicitly allowed. |
+| Key export | `exportable=false`. |
+| Plaintext backup | `allow_plaintext_backup=false`. |
 | Key deletion | `deletion_allowed=false`. |
 | Upsert | Transit mount has `disable_upsert=true` where configured. |
 | Encryption/decryption | Test encrypt and decrypt of random non-secret probe data succeed. |
@@ -67,6 +67,11 @@ Checks:
 `doctor` prints a report with stable check IDs and exits non-zero when any
 check fails. Use `--output text` for the default human-readable report or
 `--output json` for automation.
+
+Transit profile failures include an impact prefix. `cryptographic_safety`
+findings protect the validated encryption and AAD contract. `api_server_availability`
+findings identify settings that can make Kubernetes reads or writes fail even
+though they may not weaken ciphertext confidentiality directly.
 
 ## verify-key
 

@@ -1,6 +1,7 @@
 package status_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -49,6 +50,68 @@ func TestControllerProbeBuildsPersistsAndDeepProbes(t *testing.T) {
 	}
 	if string(transit.lastProbe.AssociatedData) != "openbao-kubernetes-kms/status-probe/v1" {
 		t.Fatalf("unexpected deep probe AAD: %q", string(transit.lastProbe.AssociatedData))
+	}
+}
+
+func TestControllerDeepProbeRejectsOversizedTransitCiphertext(t *testing.T) {
+	clock := newFakeClock()
+	store := newTestStore(t, clock)
+	observer := newTestObserver(t, clock, 3, 2*time.Minute)
+	auth := &fakeAuth{}
+	transit := &fakeTransit{
+		profile: profileForLatest(1, clock.Now()),
+		deepProbeResult: openbao.ProbeResult{
+			Ciphertext: bytes.Repeat([]byte("c"), kmsv2.MaxKMSCiphertextBytes),
+			KeyVersion: 1,
+		},
+	}
+	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+
+	if err := controller.ProbeOnce(context.Background()); err != nil {
+		t.Fatalf("metadata probe: %v", err)
+	}
+	err := controller.DeepProbeOnce(context.Background())
+	if !errors.Is(err, status.ErrProbeFailed) {
+		t.Fatalf("expected deep probe failure, got %v", err)
+	}
+	current, currentErr := store.Current(context.Background())
+	if currentErr != nil {
+		t.Fatalf("current status: %v", currentErr)
+	}
+	if current.Healthz != kmsv2.HealthUnhealthy || current.KeyID != "" {
+		t.Fatalf("expected oversized deep probe to mark unhealthy without key_id, got %+v", current)
+	}
+}
+
+func TestControllerDeepProbeRejectsUnexpectedTransitKeyVersion(t *testing.T) {
+	clock := newFakeClock()
+	store := newTestStore(t, clock)
+	observer := newTestObserver(t, clock, 3, 2*time.Minute)
+	auth := &fakeAuth{}
+	transit := &fakeTransit{
+		profile: profileForLatest(1, clock.Now()),
+		deepProbeResult: openbao.ProbeResult{
+			Ciphertext: []byte("vault:v2:test"),
+			KeyVersion: 2,
+		},
+	}
+	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+
+	if err := controller.ProbeOnce(context.Background()); err != nil {
+		t.Fatalf("metadata probe: %v", err)
+	}
+	err := controller.DeepProbeOnce(context.Background())
+	if !errors.Is(err, status.ErrProbeFailed) {
+		t.Fatalf("expected deep probe failure, got %v", err)
+	}
+	current, currentErr := store.Current(context.Background())
+	if currentErr != nil {
+		t.Fatalf("current status: %v", currentErr)
+	}
+	if current.Healthz != kmsv2.HealthUnhealthy || current.KeyID != "" {
+		t.Fatalf("expected version mismatch to mark unhealthy without key_id, got %+v", current)
 	}
 }
 
@@ -279,12 +342,13 @@ func (f *fakeAuth) Refresh(context.Context) error {
 }
 
 type fakeTransit struct {
-	profile        openbao.KeyProfile
-	readErr        error
-	deepProbeErr   error
-	readCalls      int
-	deepProbeCalls int
-	lastProbe      openbao.ProbeRequest
+	profile         openbao.KeyProfile
+	readErr         error
+	deepProbeErr    error
+	deepProbeResult openbao.ProbeResult
+	readCalls       int
+	deepProbeCalls  int
+	lastProbe       openbao.ProbeRequest
 }
 
 func (f *fakeTransit) ReadKeyProfile(context.Context, string, string) (openbao.KeyProfile, error) {
@@ -295,10 +359,10 @@ func (f *fakeTransit) ReadKeyProfile(context.Context, string, string) (openbao.K
 	return f.profile, nil
 }
 
-func (f *fakeTransit) ProbeEncryptDecrypt(_ context.Context, req openbao.ProbeRequest) error {
+func (f *fakeTransit) ProbeEncryptDecrypt(_ context.Context, req openbao.ProbeRequest) (openbao.ProbeResult, error) {
 	f.deepProbeCalls++
 	f.lastProbe = req
-	return f.deepProbeErr
+	return f.deepProbeResult, f.deepProbeErr
 }
 
 type fakeStateStore struct {

@@ -133,6 +133,12 @@ Decrypt requests that exceed these limits are rejected before Transit decrypt is
 
 The gRPC server also caps inbound and outbound protobuf messages at 65536 bytes. This keeps the transport envelope bounded while leaving room for protobuf overhead around the KMS v2 field limits.
 
+The deep status probe also checks that a real non-secret Transit encrypt/decrypt
+round trip returns the expected Transit key version and ciphertext within the
+KMS v2 ciphertext limit. This turns backend response-shape drift into a
+readiness failure before Kubernetes depends on that response shape for new
+writes.
+
 ## Annotations
 
 KMS v2 annotations are plaintext metadata stored with encrypted data. They are non-secret and use fully qualified domain-name keys.

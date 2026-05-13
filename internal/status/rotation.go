@@ -262,8 +262,13 @@ func validateProfile(profile openbao.KeyProfile) error {
 	if profile.MinAvailableVersion > profile.LatestVersion {
 		return fmt.Errorf("%w: minimum available version exceeds latest version", ErrTransitKeyUnusable)
 	}
-	if len(openbao.AssessKeyProfile(profile)) > 0 {
-		return fmt.Errorf("%w: Transit key profile has unsafe settings", ErrTransitKeyUnusable)
+	findings := openbao.BlockingKeyProfileFindings(openbao.AssessKeyProfile(profile))
+	if len(findings) > 0 {
+		return fmt.Errorf(
+			"%w: Transit key profile has blocking settings: %s",
+			ErrTransitKeyUnusable,
+			openbao.FormatKeyProfileFindings(findings),
+		)
 	}
 	versions, err := validatedVersionCreationTimes(profile)
 	if err != nil {
@@ -323,8 +328,23 @@ func validateDecryptableSnapshot(profile openbao.KeyProfile, snapshot keyregistr
 	if err != nil {
 		return err
 	}
-	if !createdAt.Equal(snapshot.TransitVersionCreatedAt.UTC()) {
-		return fmt.Errorf("%w: %s Transit version creation time changed", ErrTransitMetadataInvalid, label)
+	persistedCreatedAt, err := keyregistry.NormalizeTransitVersionCreatedAt(snapshot.TransitVersionCreatedAt)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: %s persisted Transit version creation time is invalid: %w",
+			ErrTransitMetadataInvalid,
+			label,
+			err,
+		)
+	}
+	if !createdAt.Equal(persistedCreatedAt) {
+		return fmt.Errorf(
+			"%w: %s Transit version creation time changed (persisted_unix=%d observed_unix=%d)",
+			ErrTransitMetadataInvalid,
+			label,
+			persistedCreatedAt.Unix(),
+			createdAt.Unix(),
+		)
 	}
 	return nil
 }
@@ -344,18 +364,19 @@ func versionCreatedAt(profile openbao.KeyProfile, version int) (time.Time, error
 func validatedVersionCreationTimes(profile openbao.KeyProfile) (map[int]time.Time, error) {
 	versions := make(map[int]time.Time, len(profile.VersionCreationTimes))
 	for _, candidate := range profile.VersionCreationTimes {
+		createdAt, createdAtErr := keyregistry.NormalizeTransitVersionCreatedAt(candidate.CreatedAt)
 		switch {
 		case candidate.Version <= 0:
 			return nil, fmt.Errorf("%w: Transit version must be positive", ErrTransitMetadataInvalid)
 		case candidate.Version > profile.LatestVersion:
 			return nil, fmt.Errorf("%w: Transit version exceeds latest version", ErrTransitMetadataInvalid)
-		case candidate.CreatedAt.IsZero():
-			return nil, fmt.Errorf("%w: Transit version creation time is missing", ErrTransitMetadataInvalid)
+		case createdAtErr != nil:
+			return nil, fmt.Errorf("%w: Transit version creation time is invalid: %w", ErrTransitMetadataInvalid, createdAtErr)
 		}
 		if _, ok := versions[candidate.Version]; ok {
-			return nil, fmt.Errorf("%w: duplicate Transit version creation time", ErrTransitMetadataInvalid)
+			return nil, fmt.Errorf("%w: duplicate Transit version metadata", ErrTransitMetadataInvalid)
 		}
-		versions[candidate.Version] = candidate.CreatedAt.UTC()
+		versions[candidate.Version] = createdAt
 	}
 	return versions, nil
 }

@@ -350,7 +350,7 @@ func runTransitDiagnostics(
 	}
 
 	if includeProbe && profileSafe {
-		if err := client.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
+		if _, err := client.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
 			MountPath:      cfg.Transit.MountPath,
 			KeyName:        cfg.Transit.KeyName,
 			KeyVersion:     profile.LatestVersion,
@@ -478,18 +478,31 @@ func hasAnyCapability(caps openbao.CapabilitiesResult, capabilityPath string, ca
 func keyProfileFindings(profile openbao.KeyProfile) []string {
 	findings := make([]string, 0)
 	if profile.LatestVersion <= 0 {
-		findings = append(findings, "latest version is not positive")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"latest version is not positive",
+		))
 	}
 	if profile.SoftDeleted {
-		findings = append(findings, "key is soft-deleted")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"key is soft-deleted",
+		))
 	}
 	if profile.MinAvailableVersion > profile.LatestVersion {
-		findings = append(findings, "minimum available version exceeds latest version")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"minimum available version exceeds latest version",
+		))
 	}
 	for _, finding := range openbao.AssessKeyProfile(profile) {
-		findings = append(findings, finding.Message)
+		findings = append(findings, openbao.FormatKeyProfileFindings([]openbao.KeyProfileFinding{finding}))
 	}
 	return findings
+}
+
+func keyProfileFindingMessage(impact openbao.KeyProfileFindingImpact, message string) string {
+	return fmt.Sprintf("%s/%s: %s", openbao.KeyProfileFindingSeverityBlocking, impact, message)
 }
 
 func checkKeyIDDeterminism(

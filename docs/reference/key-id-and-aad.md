@@ -70,7 +70,35 @@ Inputs:
 | `transit_mount_id` | Plugin configuration | Stable opaque mount ID, not the raw path. |
 | `transit_key_lineage_id` | Plugin configuration or platform metadata | Changes when the key is deleted and recreated. |
 | `transit_key_version` | Transit metadata | Active version used for encryption. |
-| `transit_version_created_at_unix` | Transit metadata | Distinguishes historical versions and restored lineages. |
+| `transit_version_created_at_unix` | Transit metadata | Canonical Unix-second creation time for the Transit version. |
+
+## Transit Version Creation Time
+
+Transit version creation time is part of the long-lived `key_id` contract. The
+provider normalizes this value to Unix seconds before deriving `key_id` values,
+persisting local state, or comparing live OpenBao metadata with retained
+snapshots.
+
+This normalization tolerates representation changes that keep the same Unix
+second, such as a future metadata reader exposing sub-second precision. It does
+not treat a different Unix second as equivalent. If OpenBao restore, import, or
+manual metadata changes report a different creation second for an active or
+retained historical Transit version, the provider fails closed because old
+Kubernetes `key_id` values may no longer describe the same decryptable key
+epoch.
+
+Backup and restore procedures must preserve:
+
+- OpenBao Transit key material,
+- Transit version numbers,
+- Transit version creation timestamps at Unix-second precision,
+- the configured Transit key lineage ID,
+- the provider local registry state file and checkpoint.
+
+If any of these are lost or changed after rotation, do not synthesize a
+replacement state file by hand. Restore the matching OpenBao and provider state
+evidence, or keep the provider stopped until a controlled recovery workflow is
+available for the release line.
 
 ## Mount Accessor Vs Configured Mount ID
 
@@ -209,7 +237,7 @@ State-file invariants enforced at load:
 - the checkpoint rejects older generations and same-generation hash mismatches,
 - the active Transit version must not move backwards during normal promotion,
 - loaded state must match the current provider, cluster, OpenBao instance, OpenBao namespace, Transit mount, lineage, key name, and AAD mode,
-- active and retained historical Transit version creation times must match current Transit metadata,
+- active and retained historical Transit version creation times must match current Transit metadata after Unix-second normalization,
 - `min_available_version` and `min_decryption_version` must not block active or retained historical versions,
 - `min_encryption_version` must not block the active version.
 

@@ -88,6 +88,10 @@ func DeriveKeyID(snapshot KeySnapshot) (string, error) {
 	if err := validateSnapshotIdentity(snapshot); err != nil {
 		return "", err
 	}
+	createdAt, err := NormalizeTransitVersionCreatedAt(snapshot.TransitVersionCreatedAt)
+	if err != nil {
+		return "", err
+	}
 
 	input := make([]byte, 0, 256)
 	input = appendPart(input, keyIDDomain)
@@ -100,10 +104,22 @@ func DeriveKeyID(snapshot KeySnapshot) (string, error) {
 	input = appendPart(input, snapshot.TransitMountID)
 	input = appendPart(input, snapshot.TransitKeyLineageID)
 	input = appendPart(input, strconv.Itoa(snapshot.TransitVersion))
-	input = appendPart(input, strconv.FormatInt(snapshot.TransitVersionCreatedAt.Unix(), 10))
+	input = appendPart(input, strconv.FormatInt(createdAt.Unix(), 10))
 
 	sum := sha256.Sum256(input)
 	return keyIDPrefix + base64.RawURLEncoding.EncodeToString(sum[:]), nil
+}
+
+// NormalizeTransitVersionCreatedAt returns the canonical Transit version creation time used for key_id derivation.
+func NormalizeTransitVersionCreatedAt(createdAt time.Time) (time.Time, error) {
+	if createdAt.IsZero() {
+		return time.Time{}, fmt.Errorf("transit version creation time is required")
+	}
+	unix := createdAt.UTC().Unix()
+	if unix <= 0 {
+		return time.Time{}, fmt.Errorf("transit version creation time must be after Unix epoch")
+	}
+	return time.Unix(unix, 0).UTC(), nil
 }
 
 // ParseKeyID validates and normalizes a Kubernetes key_id value.
@@ -134,6 +150,11 @@ func (s KeySnapshot) Normalize() (KeySnapshot, error) {
 	if !s.AADMode.Valid() {
 		return KeySnapshot{}, fmt.Errorf("snapshot AAD mode %q is invalid", s.AADMode)
 	}
+	createdAt, err := NormalizeTransitVersionCreatedAt(s.TransitVersionCreatedAt)
+	if err != nil {
+		return KeySnapshot{}, err
+	}
+	s.TransitVersionCreatedAt = createdAt
 
 	derived, err := DeriveKeyID(s)
 	if err != nil {
@@ -237,8 +258,8 @@ func validateSnapshotIdentity(snapshot KeySnapshot) error {
 	if snapshot.TransitVersion <= 0 {
 		return fmt.Errorf("transit version must be positive")
 	}
-	if snapshot.TransitVersionCreatedAt.IsZero() {
-		return fmt.Errorf("transit version creation time is required")
+	if _, err := NormalizeTransitVersionCreatedAt(snapshot.TransitVersionCreatedAt); err != nil {
+		return err
 	}
 	if err := validateOpenBaoNamespace(snapshot.OpenBaoNamespace); err != nil {
 		return err

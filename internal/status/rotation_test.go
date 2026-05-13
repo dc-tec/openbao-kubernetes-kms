@@ -2,6 +2,7 @@ package status_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,6 +193,9 @@ func TestRotationRejectsUnsupportedTransitKeyType(t *testing.T) {
 	if !errors.Is(err, status.ErrTransitKeyUnusable) {
 		t.Fatalf("expected unsupported Transit key type to fail closed, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "cryptographic_safety") {
+		t.Fatalf("expected unsafe profile impact in error, got %v", err)
+	}
 }
 
 func TestRebuildStateIncludesHistoricalVersionsFromMetadata(t *testing.T) {
@@ -303,6 +307,32 @@ func TestRotationRejectsPersistedNamespaceScopeDrift(t *testing.T) {
 	}
 }
 
+func TestRotationCanonicalizesSubsecondCreationTime(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, time.Minute)
+	profileV1 := profileForLatest(1, clock.Now())
+	profileV1.VersionCreationTimes[0].CreatedAt = profileV1.VersionCreationTimes[0].CreatedAt.Add(750 * time.Millisecond)
+
+	state := rebuildState(t, observer, profileV1, clock.Now())
+	active, err := state.ActiveSnapshot()
+	if err != nil {
+		t.Fatalf("active snapshot: %v", err)
+	}
+	if active.TransitVersionCreatedAt.Nanosecond() != 0 {
+		t.Fatalf("creation time kept subsecond precision: %s", active.TransitVersionCreatedAt)
+	}
+
+	reobserved := profileForLatest(1, clock.Now())
+	reobserved.VersionCreationTimes[0].CreatedAt = active.TransitVersionCreatedAt.Add(250 * time.Millisecond)
+	result, err := observer.Observe(state, reobserved, clock.Now())
+	if err != nil {
+		t.Fatalf("observe same Unix-second creation time: %v", err)
+	}
+	if result.Changed {
+		t.Fatal("expected subsecond creation-time precision change to be stable")
+	}
+}
+
 func TestRotationRejectsActiveVersionCreationTimeDrift(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, time.Minute)
@@ -314,6 +344,18 @@ func TestRotationRejectsActiveVersionCreationTimeDrift(t *testing.T) {
 	_, err := observer.Observe(state, driftedProfile, clock.Now())
 	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
 		t.Fatalf("expected Transit creation time drift to fail closed, got %v", err)
+	}
+}
+
+func TestRebuildStateRejectsInvalidCreationTime(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 3, time.Minute)
+	profile := profileForLatest(1, clock.Now())
+	profile.VersionCreationTimes[0].CreatedAt = time.Unix(0, 0).UTC()
+
+	_, err := observer.RebuildState(profile, clock.Now())
+	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
+		t.Fatalf("expected invalid Transit creation time to fail rebuild, got %v", err)
 	}
 }
 

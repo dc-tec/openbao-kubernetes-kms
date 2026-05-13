@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,26 @@ const (
 	findingMessageDecryptionUnsupported = "key does not support decryption"
 )
 
+// KeyProfileFindingSeverity identifies whether a Transit profile finding blocks runtime use.
+type KeyProfileFindingSeverity string
+
+const (
+	// KeyProfileFindingSeverityBlocking means the provider fails closed while the finding is present.
+	KeyProfileFindingSeverityBlocking KeyProfileFindingSeverity = "blocking"
+	// KeyProfileFindingSeverityWarning is reserved for non-blocking operator warnings.
+	KeyProfileFindingSeverityWarning KeyProfileFindingSeverity = "warning"
+)
+
+// KeyProfileFindingImpact identifies the operator-facing impact of a Transit profile finding.
+type KeyProfileFindingImpact string
+
+const (
+	// KeyProfileFindingImpactCryptographicSafety covers settings that weaken the key or AAD contract.
+	KeyProfileFindingImpactCryptographicSafety KeyProfileFindingImpact = "cryptographic_safety"
+	// KeyProfileFindingImpactAvailability covers settings that can make KMS operations unavailable.
+	KeyProfileFindingImpactAvailability KeyProfileFindingImpact = "api_server_availability"
+)
+
 // TransitClient is the narrow OpenBao Transit surface needed by the KMS provider.
 type TransitClient interface {
 	ReadKeyProfile(context.Context, string, string) (KeyProfile, error)
@@ -59,7 +80,7 @@ type TransitClient interface {
 	Decrypt(context.Context, DecryptRequest) (DecryptResponse, error)
 	BatchDecrypt(context.Context, BatchDecryptRequest) (BatchDecryptResponse, error)
 	Capabilities(context.Context, []string) (CapabilitiesResult, error)
-	ProbeEncryptDecrypt(context.Context, ProbeRequest) error
+	ProbeEncryptDecrypt(context.Context, ProbeRequest) (ProbeResult, error)
 }
 
 // KeyProfile is parsed OpenBao Transit key metadata.
@@ -92,68 +113,127 @@ type KeyVersion struct {
 
 // KeyProfileFinding describes a policy-relevant Transit key profile issue.
 type KeyProfileFinding struct {
-	Code    string
-	Message string
+	Code     string
+	Message  string
+	Impact   KeyProfileFindingImpact
+	Severity KeyProfileFindingSeverity
 }
 
 // AssessKeyProfile returns policy findings for dangerous Transit key settings.
 func AssessKeyProfile(profile KeyProfile) []KeyProfileFinding {
 	findings := make([]KeyProfileFinding, 0)
 	if profile.Type != TransitKeyTypeAES256GCM96 {
-		findings = append(findings, KeyProfileFinding{
-			Code:    findingCodeUnsupportedType,
-			Message: findingMessageUnsupportedType,
-		})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeUnsupportedType,
+			findingMessageUnsupportedType,
+			KeyProfileFindingImpactCryptographicSafety,
+		))
 	}
 	if profile.Exportable {
-		findings = append(findings, KeyProfileFinding{Code: findingCodeExportable, Message: findingMessageExportable})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeExportable,
+			findingMessageExportable,
+			KeyProfileFindingImpactCryptographicSafety,
+		))
 	}
 	if profile.AllowPlaintextBackup {
-		findings = append(findings, KeyProfileFinding{
-			Code:    findingCodePlaintextBackup,
-			Message: findingMessagePlaintextBackup,
-		})
+		findings = append(findings, blockingProfileFinding(
+			findingCodePlaintextBackup,
+			findingMessagePlaintextBackup,
+			KeyProfileFindingImpactCryptographicSafety,
+		))
 	}
 	if profile.DeletionAllowed {
-		findings = append(findings, KeyProfileFinding{
-			Code:    findingCodeDeletionAllowed,
-			Message: findingMessageDeletionAllowed,
-		})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeDeletionAllowed,
+			findingMessageDeletionAllowed,
+			KeyProfileFindingImpactAvailability,
+		))
 	}
 	if profile.Derived {
-		findings = append(findings, KeyProfileFinding{Code: findingCodeDerived, Message: findingMessageDerived})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeDerived,
+			findingMessageDerived,
+			KeyProfileFindingImpactCryptographicSafety,
+		))
 	}
 	if profile.ConvergentEncryption {
-		findings = append(findings, KeyProfileFinding{
-			Code:    findingCodeConvergent,
-			Message: findingMessageConvergent,
-		})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeConvergent,
+			findingMessageConvergent,
+			KeyProfileFindingImpactCryptographicSafety,
+		))
 	}
 	if profile.MinEncryptionVersion > 0 && profile.MinEncryptionVersion > profile.LatestVersion {
-		findings = append(findings, KeyProfileFinding{
-			Code:    findingCodeMinEncryptionVersion,
-			Message: findingMessageMinEncryptionVersion,
-		})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeMinEncryptionVersion,
+			findingMessageMinEncryptionVersion,
+			KeyProfileFindingImpactAvailability,
+		))
 	}
 	if profile.MinDecryptionVersion > profile.LatestVersion {
-		findings = append(findings, KeyProfileFinding{
-			Code:    findingCodeMinDecryptionVersion,
-			Message: findingMessageMinDecryptionVersion,
-		})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeMinDecryptionVersion,
+			findingMessageMinDecryptionVersion,
+			KeyProfileFindingImpactAvailability,
+		))
 	}
 	if !profile.SupportsEncryption {
-		findings = append(findings, KeyProfileFinding{
-			Code:    findingCodeEncryptionUnsupported,
-			Message: findingMessageEncryptionUnsupported,
-		})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeEncryptionUnsupported,
+			findingMessageEncryptionUnsupported,
+			KeyProfileFindingImpactAvailability,
+		))
 	}
 	if !profile.SupportsDecryption {
-		findings = append(findings, KeyProfileFinding{
-			Code:    findingCodeDecryptionUnsupported,
-			Message: findingMessageDecryptionUnsupported,
-		})
+		findings = append(findings, blockingProfileFinding(
+			findingCodeDecryptionUnsupported,
+			findingMessageDecryptionUnsupported,
+			KeyProfileFindingImpactAvailability,
+		))
 	}
 	return findings
+}
+
+// BlockingKeyProfileFindings returns the findings that make the provider fail closed.
+func BlockingKeyProfileFindings(findings []KeyProfileFinding) []KeyProfileFinding {
+	blocking := make([]KeyProfileFinding, 0, len(findings))
+	for _, finding := range findings {
+		if finding.Severity == "" || finding.Severity == KeyProfileFindingSeverityBlocking {
+			blocking = append(blocking, finding)
+		}
+	}
+	return blocking
+}
+
+// FormatKeyProfileFindings renders bounded, non-secret findings for diagnostics.
+func FormatKeyProfileFindings(findings []KeyProfileFinding) string {
+	parts := make([]string, 0, len(findings))
+	for _, finding := range findings {
+		impact := string(finding.Impact)
+		if impact == "" {
+			impact = "unspecified"
+		}
+		severity := string(finding.Severity)
+		if severity == "" {
+			severity = string(KeyProfileFindingSeverityBlocking)
+		}
+		parts = append(parts, fmt.Sprintf("%s/%s: %s", severity, impact, finding.Message))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func blockingProfileFinding(
+	code string,
+	message string,
+	impact KeyProfileFindingImpact,
+) KeyProfileFinding {
+	return KeyProfileFinding{
+		Code:     code,
+		Message:  message,
+		Impact:   impact,
+		Severity: KeyProfileFindingSeverityBlocking,
+	}
 }
 
 // EncryptRequest is an OpenBao Transit encrypt request with explicit key version.
@@ -221,6 +301,12 @@ type ProbeRequest struct {
 	KeyName        string
 	KeyVersion     int
 	AssociatedData []byte
+}
+
+// ProbeResult reports safe metadata from a non-secret Transit encrypt/decrypt probe.
+type ProbeResult struct {
+	Ciphertext []byte
+	KeyVersion int
 }
 
 // ReadKeyProfile reads and parses Transit key metadata.
@@ -390,10 +476,10 @@ func (c *Client) Capabilities(ctx context.Context, paths []string) (Capabilities
 }
 
 // ProbeEncryptDecrypt performs a non-secret random Transit round trip.
-func (c *Client) ProbeEncryptDecrypt(ctx context.Context, req ProbeRequest) error {
+func (c *Client) ProbeEncryptDecrypt(ctx context.Context, req ProbeRequest) (ProbeResult, error) {
 	plaintext := make([]byte, 32)
 	if _, err := rand.Read(plaintext); err != nil {
-		return fmt.Errorf("generate probe plaintext: %w", err)
+		return ProbeResult{}, fmt.Errorf("generate probe plaintext: %w", err)
 	}
 	encrypted, err := c.Encrypt(ctx, EncryptRequest{
 		MountPath:      req.MountPath,
@@ -403,7 +489,7 @@ func (c *Client) ProbeEncryptDecrypt(ctx context.Context, req ProbeRequest) erro
 		KeyVersion:     req.KeyVersion,
 	})
 	if err != nil {
-		return err
+		return ProbeResult{}, err
 	}
 	decrypted, err := c.Decrypt(ctx, DecryptRequest{
 		MountPath:      req.MountPath,
@@ -412,12 +498,15 @@ func (c *Client) ProbeEncryptDecrypt(ctx context.Context, req ProbeRequest) erro
 		AssociatedData: req.AssociatedData,
 	})
 	if err != nil {
-		return err
+		return ProbeResult{}, err
 	}
 	if !bytes.Equal(decrypted.Plaintext, plaintext) {
-		return fmt.Errorf("probe decrypt did not return original plaintext")
+		return ProbeResult{}, fmt.Errorf("probe decrypt did not return original plaintext")
 	}
-	return nil
+	return ProbeResult{
+		Ciphertext: []byte(encrypted.Ciphertext),
+		KeyVersion: encrypted.KeyVersion,
+	}, nil
 }
 
 type keyProfileResponse struct {

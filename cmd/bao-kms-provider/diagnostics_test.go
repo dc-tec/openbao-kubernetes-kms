@@ -44,6 +44,9 @@ func TestTransitDiagnosticsFlagsDangerousKeyProfile(t *testing.T) {
 	if !reportContains(report, "key material export is enabled") {
 		t.Fatalf("expected export finding in report: %#v", report.Checks)
 	}
+	if !reportContains(report, "cryptographic_safety") {
+		t.Fatalf("expected finding impact in report: %#v", report.Checks)
+	}
 }
 
 func TestTransitDiagnosticsPassesWithSafeFakeOpenBao(t *testing.T) {
@@ -260,6 +263,6 @@ func (f fakeDiagnosticTransitClient) Capabilities(
 func (f fakeDiagnosticTransitClient) ProbeEncryptDecrypt(
 	context.Context,
 	openbao.ProbeRequest,
-) error {
-	return nil
+) (openbao.ProbeResult, error) {
+	return openbao.ProbeResult{Ciphertext: []byte("vault:v1:test"), KeyVersion: 1}, nil
 }

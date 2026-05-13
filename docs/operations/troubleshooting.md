@@ -98,6 +98,37 @@ Recovery:
 4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
 5. Restart the plugin only if it does not recover on its own after OpenBao is healthy.
 
+## Transit Profile Fails Closed
+
+Symptoms:
+
+- plugin `/ready` returns non-200,
+- KMS Status is unhealthy,
+- `doctor` or `verify-key` reports `transit.profile` failure,
+- API server writes fail while existing reads may continue from cache.
+
+Check:
+
+```sh
+bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
+bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
+```
+
+Recovery:
+
+1. Read the finding impact prefix.
+2. For `cryptographic_safety`, restore the validated Transit profile before
+   routing Kubernetes writes through the provider.
+3. For `api_server_availability`, repair the setting that prevents required
+   encrypt or decrypt operations, such as key deletion, unsupported operations,
+   or version restrictions.
+4. Re-run `verify-key`.
+5. Confirm `/ready` and KMS Status return healthy before restarting or reloading
+   `kube-apiserver`.
+
+Fail-closed behavior prevents new encryption under unvalidated settings, but it
+can also make API server writes unavailable until OpenBao metadata is repaired.
+
 ## Auth Login Fails
 
 Symptoms:
@@ -171,6 +202,33 @@ After Transit rotation, current preview releases do not support synthesizing
 replacement registry state. Restore the state/checkpoint pair from backup or a
 known-good peer with matching identity scope; otherwise the provider fails
 closed.
+
+## Transit Version Creation Time Changed
+
+Symptoms:
+
+- `/ready`, `doctor`, or `verify-key` reports that Transit version creation time changed,
+- KMS Status is unhealthy and does not publish a `key_id`,
+- OpenBao was restored, imported, or modified before the failure.
+
+The provider stores the first observed Transit version creation time in local
+state and compares it with live OpenBao metadata after Unix-second
+normalization. Sub-second precision differences are tolerated, but a different
+Unix second is treated as identity drift.
+
+Recovery:
+
+1. Confirm the OpenBao backup contains the original Transit key material and
+   metadata.
+2. Restore the matching provider state file and checkpoint.
+3. Confirm the configured Transit key lineage ID still identifies the restored
+   key lineage.
+4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
+5. Keep the provider stopped if the original metadata cannot be restored.
+
+Do not edit `key_id`, creation timestamps, or local state by hand to force a
+match. That can make Kubernetes objects reference a key epoch that cannot
+decrypt them.
 
 ## AAD Mismatch
 

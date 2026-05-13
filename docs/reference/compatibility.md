@@ -99,6 +99,27 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 | Other AEAD Transit key types | Not supported. |
 | Derived or convergent keys | Not supported for the Kubernetes KMS path. |
 
+## Transit Profile Findings
+
+Transit profile findings are fail-closed. When metadata shows a blocking
+profile issue, the provider marks readiness and KMS Status unhealthy instead of
+encrypting with settings outside the validated contract.
+
+Findings are classified by impact:
+
+- `cryptographic_safety`: settings that weaken or change the validated
+  encryption and AAD contract, such as unsupported key type, exportable key
+  material, plaintext backup, derived mode, or convergent encryption.
+- `api_server_availability`: settings that can strand API server reads or
+  writes, such as key deletion, unsupported encrypt/decrypt operations, or
+  version restrictions that block active or historical versions.
+
+Fail-closed behavior protects the cryptographic contract. It does not guarantee
+API server write availability while OpenBao is misconfigured, sealed,
+unreachable, or changed to an unsafe Transit profile. Use `verify-key`,
+`doctor`, readiness, and KMS Status as preflight and monitoring signals before
+changing API server encryption settings.
+
 ## Auth Methods
 
 | Auth method | Build | Status |
@@ -113,6 +134,7 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 After the first stable release, these surfaces remain backward compatible within a major version:
 
 - `key_id` derivation for existing epochs,
+- Unix-second Transit version creation-time normalization used by `key_id`,
 - annotation schema,
 - AAD canonicalization,
 - configuration field meanings for identity-bearing values,
