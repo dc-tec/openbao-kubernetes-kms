@@ -1599,12 +1599,18 @@ func (f *OpenBaoEnvironment) writeWithNamespace(
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, response.Body)
-		_ = response.Body.Close()
-	}()
+	responseBody, readErr := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if readErr != nil {
+		return fmt.Errorf("read OpenBao environment setup response: %w", readErr)
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("OpenBao environment setup %q status %d", apiPath, response.StatusCode)
+		return fmt.Errorf(
+			"OpenBao environment setup %q status %d: %s",
+			apiPath,
+			response.StatusCode,
+			strings.TrimSpace(string(responseBody)),
+		)
 	}
 	return nil
 }

@@ -65,6 +65,7 @@ const (
 	decryptSoakMinOpsDefault   = 500
 	decryptSoakSamplesDefault  = 128
 	decryptSoakWorkersDefault  = 8
+	soakOperationTimeout       = 5 * time.Second
 	samplePath                 = "/kms-sample/encrypted-sample.json"
 	sampleMountRoot            = "/kms-sample"
 	rotationSamplePathDefault  = "/kms-sample/rotated-sample.json"
@@ -330,7 +331,7 @@ func decryptSoak(ctx context.Context, client kmsapi.KeyManagementServiceClient) 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runDecryptSoakWorker(soakCtx, client, workerID, workers, samples, results)
+			runDecryptSoakWorker(soakCtx, ctx, client, workerID, workers, samples, results)
 		}()
 	}
 	go func() {
@@ -386,7 +387,8 @@ func prepareDecryptSoakSamples(
 }
 
 func runDecryptSoakWorker(
-	ctx context.Context,
+	stopCtx context.Context,
+	requestParent context.Context,
 	client kmsapi.KeyManagementServiceClient,
 	workerID int,
 	workers int,
@@ -395,12 +397,12 @@ func runDecryptSoakWorker(
 ) {
 	iteration := 0
 	for {
-		if ctx.Err() != nil {
+		if stopCtx.Err() != nil {
 			return
 		}
 		sample := samples[(workerID+(iteration*workers))%len(samples)]
 		iteration++
-		recordDecryptSoak(ctx, client, sample, results)
+		recordDecryptSoak(requestParent, client, sample, results)
 	}
 }
 
@@ -439,7 +441,7 @@ func loadSoak(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runLoadSoakWorker(soakCtx, client, workerID, results)
+			runLoadSoakWorker(soakCtx, ctx, client, workerID, results)
 		}()
 	}
 	go func() {
@@ -466,24 +468,25 @@ func loadSoak(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
 }
 
 func runLoadSoakWorker(
-	ctx context.Context,
+	stopCtx context.Context,
+	requestParent context.Context,
 	client kmsapi.KeyManagementServiceClient,
 	workerID int,
 	results chan<- loadSoakSample,
 ) {
 	for {
-		if ctx.Err() != nil {
+		if stopCtx.Err() != nil {
 			return
 		}
-		statusResponse, ok := recordLoadSoakStatus(ctx, client, results)
+		statusResponse, ok := recordLoadSoakStatus(requestParent, client, results)
 		if !ok {
 			continue
 		}
-		encrypted, ok := recordLoadSoakEncrypt(ctx, client, statusResponse.GetKeyId(), workerID, results)
+		encrypted, ok := recordLoadSoakEncrypt(requestParent, client, statusResponse.GetKeyId(), workerID, results)
 		if !ok {
 			continue
 		}
-		recordLoadSoakDecrypt(ctx, client, encrypted, results)
+		recordLoadSoakDecrypt(requestParent, client, encrypted, results)
 	}
 }
 
@@ -565,7 +568,7 @@ func recordLoadSoakOperation(
 	results chan<- loadSoakSample,
 	fn func(context.Context) error,
 ) error {
-	requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	requestCtx, cancel := context.WithTimeout(ctx, soakOperationTimeout)
 	defer cancel()
 	startedAt := time.Now()
 	err := fn(requestCtx)

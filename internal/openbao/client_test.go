@@ -210,6 +210,23 @@ func TestClientRequestFailureIsRedacted(t *testing.T) {
 	}
 }
 
+func TestClientPreservesRequestContextCancellation(t *testing.T) {
+	client, err := NewClientWithHTTPClient(ClientConfig{
+		Address:     "https://bao.example.internal",
+		TokenSource: StaticTokenSource{TokenValue: testToken},
+	}, &http.Client{})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = client.ReadDisableUpsert(ctx, testMountPath)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+}
+
 func TestClientResolvePreservesBasePath(t *testing.T) {
 	client, err := NewClientWithHTTPClient(ClientConfig{
 		Address:     "https://bao.example.internal/base",
