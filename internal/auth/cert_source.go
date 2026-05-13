@@ -18,6 +18,30 @@ type CertificateProvider interface {
 	CurrentCertificate(context.Context) (tls.Certificate, error)
 }
 
+// ClientCertificateProvider can also supply TLS callbacks for OpenBao auth clients.
+type ClientCertificateProvider interface {
+	CertificateProvider
+	GetClientCertificate(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+	Close() error
+}
+
+// PKCS11ProviderConfig contains PKCS#11 certificate provider settings.
+type PKCS11ProviderConfig struct {
+	CertificateFile string
+	ModulePath      string
+	TokenLabel      string
+	KeyLabel        string
+	PINFile         string
+	MaxSessions     int
+}
+
+// SPIFFEProviderConfig contains SPIFFE certificate provider settings.
+type SPIFFEProviderConfig struct {
+	WorkloadAPISocket string
+	SPIFFEID          string
+	TrustDomain       string
+}
+
 // CertLoginSourceConfig contains certificate auth login settings.
 type CertLoginSourceConfig struct {
 	MountPath        string

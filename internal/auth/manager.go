@@ -59,6 +59,7 @@ var safeAuthErrorClasses = []error{
 	ErrCertificateIdentityMismatch,
 	ErrCertificateSignerMismatch,
 	ErrCertificateSignerProbe,
+	ErrPKCS11PINRead,
 	ErrAuthConfig,
 	ErrAuthFailed,
 	ErrTokenUnavailable,
@@ -725,6 +726,7 @@ func authStatus(err error) string {
 		errors.Is(err, ErrCertificateIdentityMismatch),
 		errors.Is(err, ErrCertificateSignerMismatch),
 		errors.Is(err, ErrCertificateSignerProbe),
+		errors.Is(err, ErrPKCS11PINRead),
 		errors.Is(err, ErrCertificateRead):
 		return authStatusCertInvalid
 	case errors.Is(err, ErrAuthFailed),

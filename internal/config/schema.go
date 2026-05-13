@@ -83,7 +83,7 @@ const configSchemaJSON = `{
                 "tokenLabel": {"type": "string", "minLength": 1},
                 "keyLabel": {"type": "string", "minLength": 1},
                 "pinFile": {"type": "string", "minLength": 1},
-                "maxSessions": {"type": "integer", "minimum": 1}
+                "maxSessions": {"type": "integer", "minimum": 2}
               }
             },
             "spiffe": {

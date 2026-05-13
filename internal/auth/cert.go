@@ -46,6 +46,8 @@ var (
 	ErrCertificateSignerMismatch = errors.New("certificate signer mismatch")
 	// ErrCertificateSignerProbe identifies a signer that cannot perform a non-secret probe signature.
 	ErrCertificateSignerProbe = errors.New("certificate signer probe failed")
+	// ErrPKCS11PINRead identifies an unreadable or unsafe PKCS#11 PIN file.
+	ErrPKCS11PINRead = errors.New("pkcs11 pin read failed")
 )
 
 // Certificate contains one locally validated client certificate chain.
@@ -67,7 +69,7 @@ type CertificateValidationOptions struct {
 
 // ReadAndValidateCertificate reads one PEM certificate chain and enforces local policy.
 func ReadAndValidateCertificate(path string, opts CertificateValidationOptions) (Certificate, error) {
-	chain, err := ReadCertificateChain(path, opts.Clock)
+	chain, err := ReadCertificateChain(path)
 	if err != nil {
 		return Certificate{}, err
 	}
@@ -83,7 +85,7 @@ func ReadAndValidateCertificate(path string, opts CertificateValidationOptions) 
 }
 
 // ReadCertificateChain reads a PEM X.509 certificate chain from a local file.
-func ReadCertificateChain(path string, clock Clock) ([]*x509.Certificate, error) {
+func ReadCertificateChain(path string) ([]*x509.Certificate, error) {
 	cleanPath := strings.TrimSpace(path)
 	if cleanPath == "" {
 		return nil, fmt.Errorf("%w: file path is required", ErrCertificateRead)

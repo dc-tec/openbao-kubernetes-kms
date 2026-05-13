@@ -303,8 +303,8 @@ func validatePKCS11AuthValues(problems *[]ValidationProblem, pkcs11 PKCS11CertAu
 	validateIdentifier(problems, "auth.cert.pkcs11.tokenLabel", pkcs11.TokenLabel)
 	validateIdentifier(problems, "auth.cert.pkcs11.keyLabel", pkcs11.KeyLabel)
 	validateAbsolutePath(problems, "auth.cert.pkcs11.pinFile", pkcs11.PINFile)
-	if pkcs11.MaxSessions <= 0 {
-		appendProblem(problems, "auth.cert.pkcs11.maxSessions", "must be positive")
+	if pkcs11.MaxSessions < 2 {
+		appendProblem(problems, "auth.cert.pkcs11.maxSessions", "must be at least 2")
 	}
 }
 

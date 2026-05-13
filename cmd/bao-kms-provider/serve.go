@@ -119,18 +119,7 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 		return serveDependencies{}, err
 	}
 
-	authClient, err := openbao.NewAuthClient(openbao.AuthClientConfig{
-		Address:       cfg.OpenBao.Address,
-		Namespace:     cfg.OpenBao.Namespace,
-		CACertFile:    cfg.OpenBao.CACertFile,
-		TLSServerName: cfg.OpenBao.TLSServerName,
-		Timeout:       authLoginTimeout(cfg),
-		Observer:      observer,
-	})
-	if err != nil {
-		return serveDependencies{}, err
-	}
-	authManager, err := buildAuthManager(cfg, authClient, observer)
+	authManager, err := buildAuthManager(ctx, cfg, observer)
 	if err != nil {
 		return serveDependencies{}, err
 	}
@@ -286,29 +275,37 @@ func authConfig(cfg config.Config) auth.ManagerConfig {
 }
 
 func buildAuthManager(
+	ctx context.Context,
 	cfg config.Config,
-	authClient auth.OpenBaoAuthClient,
-	observer auth.Observer,
+	observer authRuntimeObserver,
 ) (*auth.Manager, error) {
 	switch cfg.Auth.Method {
 	case "jwt":
+		authClient, err := openbao.NewAuthClient(openbao.AuthClientConfig{
+			Address:       cfg.OpenBao.Address,
+			Namespace:     cfg.OpenBao.Namespace,
+			CACertFile:    cfg.OpenBao.CACertFile,
+			TLSServerName: cfg.OpenBao.TLSServerName,
+			Timeout:       authLoginTimeout(cfg),
+			Observer:      observer,
+		})
+		if err != nil {
+			return nil, err
+		}
 		return auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{
 			RenewalEnabled: true,
 			Observer:       observer,
 		})
 	case "cert":
-		return newCertAuthManager(cfg, authClient, observer)
+		return newCertAuthManager(ctx, cfg, observer)
 	default:
 		return nil, fmt.Errorf("%w: unsupported auth method", auth.ErrAuthConfig)
 	}
 }
 
-func newCertAuthManager(
-	config.Config,
-	auth.OpenBaoAuthClient,
-	auth.Observer,
-) (*auth.Manager, error) {
-	return nil, fmt.Errorf("%w: auth.method cert requires a certauth build variant", auth.ErrAuthConfig)
+type authRuntimeObserver interface {
+	auth.Observer
+	openbao.RequestObserver
 }
 
 type bootstrapProbeController interface {

@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
-	"github.com/dc-tec/openbao-kubernetes-kms/test/fakes"
 )
 
 func TestProbeOnceWithBootstrapGraceRetriesUntilSuccess(t *testing.T) {
@@ -77,19 +75,6 @@ func TestAuthLoginTimeoutDefaultsToFiveSecondsMinimum(t *testing.T) {
 	cfg.Auth.LoginTimeout = 3 * time.Second
 	if got := authLoginTimeout(cfg); got != 3*time.Second {
 		t.Fatalf("expected explicit login timeout, got %s", got)
-	}
-}
-
-func TestBuildAuthManagerRejectsCertAuthInDefaultBuild(t *testing.T) {
-	cfg := config.Config{}
-	cfg.Auth.Method = "cert"
-
-	_, err := buildAuthManager(cfg, &fakes.OpenBaoAuthClient{}, nil)
-	if !errors.Is(err, auth.ErrAuthConfig) {
-		t.Fatalf("expected auth config error, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "certauth build variant") {
-		t.Fatalf("expected certauth build variant error, got %v", err)
 	}
 }
 
