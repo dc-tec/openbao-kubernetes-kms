@@ -160,7 +160,7 @@ Every control-plane node must have:
 /run/openbao-kms
 ```
 
-The JWT path is needed only for `auth.method: jwt`. Certificate auth deployments should instead mount the configured certificate chain and PKCS#11 PIN file, or the SPIFFE Workload API socket required by `auth.cert.spiffe.workloadAPISocket`.
+The JWT path is needed only for `auth.method: jwt`. Certificate auth deployments should instead mount the configured certificate chain, PKCS#11 PIN file, and PKCS#11 module path.
 
 The API server must be able to access the socket created under `/run/openbao-kms`. The container user must own the socket directory, or an equally narrow provider-only identity must be the only writer. The API server's socket access group needs execute permission on the directory and write permission on `kms.sock`; it must not have write permission on the directory itself.
 

@@ -145,7 +145,9 @@ For policy variants and rationale see [Reference: Transit Policy Examples](/refe
 
 ## Step 5: Configure Auth
 
-Choose one provider auth method. JWT auth is the default build and release path. Certificate auth requires a binary built with `certauth_pkcs11`, `certauth_spiffe`, or both.
+Choose one provider auth method. JWT auth is the default build and release path.
+Certificate auth with the PKCS#11 source requires a binary built with
+`certauth_pkcs11`.
 
 ### JWT Auth
 
@@ -206,13 +208,13 @@ bao write auth/k8s-workload-a-cert/config \
 Configure a cert role bound to the provider identity. For a CA-issued provider
 certificate, use the issuing CA as the trusted certificate and bind stable
 identity fields such as URI SAN, DNS SAN, common name, OU, or required
-extensions. This example binds a SPIFFE-style URI SAN:
+extensions. This example binds a URI SAN:
 
 ```sh
 bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
   display_name=openbao-kms-control-plane \
   certificate=@/etc/openbao/trust/openbao-kms-client-ca.pem \
-  allowed_uri_sans="spiffe://example.org/openbao-kms/workload-a" \
+  allowed_uri_sans="urn:openbao-kms:workload-a" \
   token_policies="openbao-kms-workload-a" \
   token_ttl="30m" \
   token_max_ttl="1h" \
@@ -224,12 +226,10 @@ For PKCS#11-backed client certificates, keep the private key inside the PKCS#11
 module and give the provider only the certificate chain, module path, token
 label, key label, and local PIN file path.
 
-For SPIFFE-backed certificates, validate the selected OpenBao and SPIFFE issuer
-profile end-to-end before production use. Stock SPIRE X.509 SVIDs are
-URI-SAN-only identities without a Common Name by default; current CI validates
-the real SPIRE Workload API provider source, but it does not claim full OpenBao
-cert login for stock SPIRE SVIDs until OpenBao cert-auth identity alias behavior
-is compatible with that profile.
+SPIFFE certificate-source wiring remains in tree for local verification and
+upstream OpenBao alignment work, but `auth.cert.source: spiffe` is not a
+supported user configuration until the supported OpenBao version can derive
+cert-auth identity aliases from URI SANs.
 
 ## Step 6: Verify
 

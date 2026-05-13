@@ -105,9 +105,6 @@ The following fields must be set explicitly:
     - `auth.cert.pkcs11.tokenLabel`
     - `auth.cert.pkcs11.keyLabel`
     - `auth.cert.pkcs11.pinFile`
-  - for `auth.cert.source: spiffe`:
-    - `auth.cert.spiffe.workloadAPISocket`
-    - `auth.cert.spiffe.spiffeID`
 - `transit.mountPath`
 - `transit.keyName`
 - `transit.keyIdScope.providerName`
@@ -165,7 +162,7 @@ is treated as identity-bearing provider scope.
 
 ## Auth Timing
 
-`auth.method` selects how the provider obtains its OpenBao token. Supported values are `jwt` and `cert`. JWT auth is the default build and release path. Certificate auth requires a binary built with the relevant build tag: `certauth_pkcs11`, `certauth_spiffe`, or both.
+`auth.method` selects how the provider obtains its OpenBao token. Supported values are `jwt` and `cert`. JWT auth is the default build and release path. Certificate auth with the PKCS#11 source requires a binary built with `certauth_pkcs11`.
 
 `auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. Once the remaining OpenBao token TTL drops below this value, the provider renews or re-logs in before the next request.
 
@@ -206,33 +203,13 @@ auth:
       maxSessions: 4
 ```
 
-SPIFFE-backed certificate auth:
-
-```yaml
-auth:
-  method: cert
-  loginBeforeTokenExpiry: 5m
-  tokenRenewalIncrement: 1h
-  loginTimeout: 0s
-  cert:
-    mountPath: auth/k8s-workload-a-cert
-    name: openbao-kms-control-plane
-    minRemainingTtl: 24h
-    clockSkewLeeway: 30s
-    source: spiffe
-    spiffe:
-      workloadAPISocket: unix:///run/spire/sockets/agent.sock
-      spiffeID: spiffe://example.org/openbao-kms/workload-a
-      trustDomain: example.org
-```
-
-OpenBao must be configured to request TLS client certificates on the listener used by the provider. In OpenBao listener terms, do not set `tls_disable` or `tls_disable_client_certs` to true for that listener. Role constraints should bind certificate identity, for example through `allowed_uri_sans` for SPIFFE IDs. Keep cert auth binding enabled during token renewal and keep OCSP fail-open disabled when OCSP is used.
+OpenBao must be configured to request TLS client certificates on the listener used by the provider. In OpenBao listener terms, do not set `tls_disable` or `tls_disable_client_certs` to true for that listener. Role constraints should bind certificate identity, for example through `allowed_uri_sans` for URI identities. Keep cert auth binding enabled during token renewal and keep OCSP fail-open disabled when OCSP is used.
 
 Current CI exercises PKCS#11 certificate auth end-to-end with SoftHSM and
 OpenBao. The SPIFFE lane exercises the real SPIRE Workload API provider source
-and local certificate validation. Full OpenBao cert login with stock SPIRE
-URI-SAN-only SVIDs is not a support claim until the selected OpenBao/SPIFFE
-profile has been validated end-to-end.
+and local certificate validation, but `auth.cert.source: spiffe` is not a
+supported user configuration until the supported OpenBao version can derive
+cert-auth identity aliases from URI SANs.
 
 ## Debug Correlation
 
@@ -351,10 +328,9 @@ Allowed environment overrides are limited to:
 
 Identity-bearing fields such as `openbao.namespace`, `auth.jwt.expectedIssuer`,
 `auth.jwt.expectedAudience`, `auth.jwt.expectedSubject`, `auth.cert.name`,
-`auth.cert.spiffe.spiffeID`, `auth.cert.spiffe.trustDomain`, `transit.keyName`,
-`transit.mountPath`, and `transit.keyIdScope.*` are not environment
-overrides. Keep them in the reviewed config file so deployment environments
-cannot silently drift the KMS identity contract.
+`transit.keyName`, `transit.mountPath`, and `transit.keyIdScope.*` are not
+environment overrides. Keep them in the reviewed config file so deployment
+environments cannot silently drift the KMS identity contract.
 
 ## Schema Export
 

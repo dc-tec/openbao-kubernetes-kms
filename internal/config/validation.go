@@ -197,8 +197,10 @@ func appendCertSourceRequired(problems *[]ValidationProblem, cert CertAuthConfig
 		appendRequired(problems, "auth.cert.pkcs11.keyLabel", cert.PKCS11.KeyLabel)
 		appendRequired(problems, "auth.cert.pkcs11.pinFile", cert.PKCS11.PINFile)
 	case certSourceSPIFFE:
-		appendRequired(problems, "auth.cert.spiffe.workloadAPISocket", cert.SPIFFE.WorkloadAPISocket)
-		appendRequired(problems, "auth.cert.spiffe.spiffeID", cert.SPIFFE.SPIFFEID)
+		if unsupportedSPIFFECertAuthAllowed {
+			appendRequired(problems, "auth.cert.spiffe.workloadAPISocket", cert.SPIFFE.WorkloadAPISocket)
+			appendRequired(problems, "auth.cert.spiffe.spiffeID", cert.SPIFFE.SPIFFEID)
+		}
 	}
 }
 
@@ -289,10 +291,18 @@ func validateCertAuthValues(problems *[]ValidationProblem, cert CertAuthConfig) 
 	case certSourcePKCS11:
 		validatePKCS11AuthValues(problems, cert.PKCS11)
 	case certSourceSPIFFE:
+		if !unsupportedSPIFFECertAuthAllowed {
+			appendProblem(problems, "auth.cert.source", "spiffe is unavailable until the supported OpenBao version can derive certificate identity aliases from URI SANs")
+			return
+		}
 		validateSPIFFEAuthValues(problems, cert.SPIFFE)
 	default:
 		if cert.Source != "" {
-			appendProblem(problems, "auth.cert.source", "must be one of pkcs11 or spiffe")
+			if unsupportedSPIFFECertAuthAllowed {
+				appendProblem(problems, "auth.cert.source", "must be one of pkcs11 or spiffe")
+			} else {
+				appendProblem(problems, "auth.cert.source", "must be pkcs11")
+			}
 		}
 	}
 }

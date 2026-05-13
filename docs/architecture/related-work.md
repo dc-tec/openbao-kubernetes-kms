@@ -31,7 +31,7 @@ Those lessons are reflected in the deployment, hardening, and operations docs fo
 |---|---|---|
 | KMS API | KMS v2 only. | Keeps the implementation focused on the stable current Kubernetes contract. |
 | OpenBao integration | OpenBao-native naming, configuration, policy examples, and operational docs. | Keeps the public contract specific to OpenBao. |
-| Authentication | JWT auth by default, with certificate auth variants for PKCS#11 and SPIFFE-backed identities. | Avoids TokenReview dependency on the protected API server during bootstrap and recovery. |
+| Authentication | JWT auth by default, with certificate auth for PKCS#11-backed identities. | Avoids TokenReview dependency on the protected API server during bootstrap and recovery. |
 | Deployment model | systemd is the recommended default when operators control the host OS; static pod remains supported. | systemd removes kubelet and container runtime from the provider boot path. |
 | Status path | Status returns cached health and active `key_id`. | Kubernetes polls Status continually, so live Transit encrypt/decrypt work belongs in background probes. |
 | Encrypt versioning | Encrypt passes an explicit Transit `key_version` from the active snapshot. | Avoids implicit-latest races during Transit rotation. |

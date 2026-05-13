@@ -14,7 +14,7 @@ This page describes how `bao-kms-provider` authenticates to OpenBao. For the ope
 |---|---|---|
 | `jwt` | Default build and release path | A file-backed JWT issuer can be validated by OpenBao without calling the protected Kubernetes API server. |
 | `cert` with `pkcs11` source | Build-tagged with `certauth_pkcs11` | The deployment has a hardware or software token that can hold the private key outside the filesystem. |
-| `cert` with `spiffe` source | Build-tagged with `certauth_spiffe` | The deployment already runs a SPIFFE Workload API provider such as SPIRE and can issue X.509 SVIDs before the protected API server is healthy. |
+| `cert` with `spiffe` source | Not user-configurable | SPIFFE source wiring remains in tree for local verification and upstream OpenBao alignment work. It is not a supported configuration until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
 
 OpenBao Kubernetes auth is intentionally not a provider auth method for this plugin. It calls Kubernetes TokenReview, which depends on the API server the KMS plugin may be required to unlock during bootstrap or disaster recovery.
 
@@ -73,14 +73,17 @@ auth:
     name: openbao-kms-control-plane
     minRemainingTtl: 24h
     clockSkewLeeway: 30s
-    source: spiffe
-    spiffe:
-      workloadAPISocket: unix:///run/spire/sockets/agent.sock
-      spiffeID: spiffe://example.org/openbao-kms/workload-a
-      trustDomain: example.org
+    source: pkcs11
+    pkcs11:
+      certificateFile: /etc/openbao-kms/client/client-chain.pem
+      modulePath: /usr/lib/softhsm/libsofthsm2.so
+      tokenLabel: openbao-kms
+      keyLabel: openbao-kms-client
+      pinFile: /etc/openbao-kms/pkcs11/pin
+      maxSessions: 4
 ```
 
-The provider keeps the OpenBao client token in memory only. File-backed JWTs and certificate chains are re-read before re-login. SPIFFE SVIDs are read from the Workload API source, so rotation is handled by the SPIFFE agent and observed by the provider during login.
+The provider keeps the OpenBao client token in memory only. File-backed JWTs and certificate chains are re-read before re-login.
 
 ## JWT Source Options
 
@@ -95,7 +98,7 @@ The provider keeps the OpenBao client token in memory only. File-backed JWTs and
 | Source | Local validation | Operational notes |
 |---|---|---|
 | PKCS#11 | Certificate file safety, certificate lifetime, client-auth usage, weak signature rejection, and signer public key match. | The private key remains behind the PKCS#11 module. The PIN file must be local, regular, absolute, and tightly permissioned. CI exercises this path with SoftHSM, OpenBao cert auth, and Transit. |
-| SPIFFE | X.509 SVID lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | The Workload API socket must be a `unix://` URI. Configure an explicit `spiffeID`; do not rely on default SVID selection when multiple identities may be returned. CI exercises this provider source with real SPIRE Workload API SVIDs. |
+| SPIFFE | X.509 SVID lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | Wiring is present for local verification, and CI exercises the source with real SPIRE Workload API SVIDs. It is not a supported user configuration yet. |
 
 The provider does not accept a PEM private key file as a certificate source.
 
@@ -137,10 +140,10 @@ The OpenBao listener used by the provider must request TLS client certificates. 
 
 Stock SPIRE X.509 SVIDs are SPIFFE URI SAN identities and do not include a Common
 Name by default. OpenBao `2.5.3` cert auth can enforce `allowed_uri_sans`, but
-current provider CI does not claim full OpenBao cert login with stock SPIRE SVIDs
-because OpenBao returns an identity-alias error for URI-SAN-only SVIDs. Validate
-the selected OpenBao and SPIFFE issuer profile end-to-end before using the SPIFFE
-source for production cert auth.
+it cannot derive the identity alias from a URI SAN. For that reason,
+`auth.cert.source: spiffe` is rejected by provider configuration validation
+until the supported OpenBao version includes compatible cert-auth alias
+behavior.
 
 ## Token Renewal Considerations
 

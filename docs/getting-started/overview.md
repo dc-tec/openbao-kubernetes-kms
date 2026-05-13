@@ -57,7 +57,7 @@ The current OpenBao validation target is OpenBao `2.5.3` with the Transit secret
 The implementation is intentionally narrow. These are implementation defaults and enforced boundaries:
 
 - Kubernetes KMS v2 only. KMS v1 is not implemented.
-- JWT authentication to OpenBao by default, with build-tagged certificate auth variants for PKCS#11 and SPIFFE-backed identities.
+- JWT authentication to OpenBao by default, with build-tagged certificate auth for PKCS#11-backed identities.
 - OpenBao tokens stored in process memory only.
 - Transit associated data required for encrypt and decrypt.
 - Deterministic, opaque Kubernetes `key_id` values derived from configured identity scope and Transit metadata.

@@ -60,6 +60,7 @@ VERSION_PKG := github.com/dc-tec/openbao-kubernetes-kms/internal/version
 GO_BUILD_FLAGS ?= -trimpath -buildvcs=false
 LDFLAGS := -s -w -X $(VERSION_PKG).version=$(VERSION) -X $(VERSION_PKG).commit=$(COMMIT) -X $(VERSION_PKG).buildDate=$(BUILD_DATE) -X $(VERSION_PKG).dirty=$(DIRTY)
 CERTAUTH_SPIFFE_BUILD_TAGS ?= certauth_spiffe
+CERTAUTH_SPIFFE_LOCAL_BUILD_TAGS ?= certauth_spiffe openbao_kms_e2e_spiffe_certauth
 CERTAUTH_PKCS11_BUILD_TAGS ?= certauth_pkcs11
 CERTAUTH_COMBINED_BUILD_TAGS ?= certauth_pkcs11 certauth_spiffe
 CERTAUTH_SPIFFE_BIN ?= bin/$(BINARY_NAME)-certauth-spiffe

@@ -169,7 +169,16 @@ dist/release/checksums.txt
 
 The published release asset is `checksums.txt`. The checksum file uses SHA-256 and contains one line per published release artifact. `release-artifacts` builds the default JWT-capable Linux binary matrix, `release-packages` builds `.deb` and `.rpm` packages for systemd hosts, and `release-bundles` builds deterministic systemd and static-pod tarballs.
 
-Certificate-auth artifacts are explicit opt-in builds. `release-artifacts-certauth-spiffe` builds the SPIFFE Linux matrix, and `release-artifacts-with-certauth-spiffe` builds the default JWT matrix plus the SPIFFE matrix. PKCS#11 and combined PKCS#11/SPIFFE variants are host CGO artifact builds through `release-artifact-certauth-pkcs11-host` and `release-artifact-certauth-combined-host`. A release must not claim PKCS#11 cert-auth source support unless the release evidence includes the relevant artifact lane and the SoftHSM provider source E2E result. SPIFFE source support remains a Workload API source claim until release evidence includes a successful OpenBao cert-auth login with the selected SPIFFE issuer profile.
+Certificate-auth artifacts are explicit opt-in builds. PKCS#11 cert-auth
+variants are host CGO artifact builds through
+`release-artifact-certauth-pkcs11-host`. A release must not claim PKCS#11
+cert-auth source support unless the release evidence includes the relevant
+artifact lane and the SoftHSM provider source E2E result. SPIFFE source wiring
+remains in tree for local verification and upstream OpenBao alignment work, but
+release artifacts must not claim `auth.cert.source: spiffe` support until the
+supported OpenBao version can derive cert-auth identity aliases from URI SANs
+and release evidence includes successful OpenBao cert-auth login with the
+selected SPIFFE issuer profile.
 
 ## Release Evidence
 

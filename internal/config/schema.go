@@ -73,7 +73,7 @@ const configSchemaJSON = `{
             "name": {"type": "string"},
             "minRemainingTtl": {"type": "string"},
             "clockSkewLeeway": {"type": "string"},
-            "source": {"type": "string", "enum": ["pkcs11", "spiffe"]},
+            "source": {"type": "string", "enum": ["pkcs11"]},
             "pkcs11": {
               "type": "object",
               "additionalProperties": false,
@@ -84,15 +84,6 @@ const configSchemaJSON = `{
                 "keyLabel": {"type": "string", "minLength": 1},
                 "pinFile": {"type": "string", "minLength": 1},
                 "maxSessions": {"type": "integer", "minimum": 2}
-              }
-            },
-            "spiffe": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "workloadAPISocket": {"type": "string", "pattern": "^unix:///.+"},
-                "spiffeID": {"type": "string", "pattern": "^spiffe://[^/]+/.+"},
-                "trustDomain": {"type": "string"}
               }
             }
           }

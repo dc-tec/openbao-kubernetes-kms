@@ -57,7 +57,7 @@ test-e2e-provider-certauth-spiffe-openbao-ci: verify-e2e-manifest ## Run provide
 
 .PHONY: test-e2e-provider-certauth-spiffe-openbao-local
 test-e2e-provider-certauth-spiffe-openbao-local: verify-e2e-manifest ## Run provider E2E with real SPIRE Workload API and OpenBao cert login.
-	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image-certauth-spiffe; fi
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" IMAGE_CGO_ENABLED=0 IMAGE_GO_BUILD_TAGS="$(CERTAUTH_SPIFFE_LOCAL_BUILD_TAGS)"; fi
 	@E2E_OPENBAO_CI=true E2E_OPENBAO_CERT_AUTH_URI_SAN_ALIAS=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" E2E_SPIRE_SERVER_IMAGE="$(E2E_SPIRE_SERVER_IMAGE)" E2E_SPIRE_AGENT_IMAGE="$(E2E_SPIRE_AGENT_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderCertAuthSPIREOpenBaoE2E$$' -count=1 -timeout=7m
 
 .PHONY: test-e2e-provider-certauth-pkcs11-openbao-ci

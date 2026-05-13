@@ -278,9 +278,10 @@ func TestValidateCertificateAuthConfig(t *testing.T) {
 
 func TestValidateRejectsCertificateAuthSourceConfig(t *testing.T) {
 	tests := []struct {
-		name   string
-		field  string
-		mutate func(*Config)
+		name                   string
+		field                  string
+		fieldWhenSPIFFEAllowed string
+		mutate                 func(*Config)
 	}{
 		{
 			name:  "unknown source",
@@ -315,8 +316,9 @@ func TestValidateRejectsCertificateAuthSourceConfig(t *testing.T) {
 			},
 		},
 		{
-			name:  "spiffe trust domain mismatch",
-			field: "auth.cert.spiffe.trustDomain",
+			name:                   "spiffe source unavailable",
+			field:                  "auth.cert.source",
+			fieldWhenSPIFFEAllowed: "auth.cert.spiffe.trustDomain",
 			mutate: func(cfg *Config) {
 				cfg.Auth.Method = authMethodCert
 				cfg.Auth.Cert = CertAuthConfig{
@@ -342,8 +344,12 @@ func TestValidateRejectsCertificateAuthSourceConfig(t *testing.T) {
 			if !errors.Is(err, ErrInvalidConfig) {
 				t.Fatalf("expected invalid config error, got %v", err)
 			}
-			if !strings.Contains(err.Error(), tt.field) {
-				t.Fatalf("expected %s problem, got %v", tt.field, err)
+			field := tt.field
+			if unsupportedSPIFFECertAuthAllowed && tt.fieldWhenSPIFFEAllowed != "" {
+				field = tt.fieldWhenSPIFFEAllowed
+			}
+			if !strings.Contains(err.Error(), field) {
+				t.Fatalf("expected %s problem, got %v", field, err)
 			}
 		})
 	}

@@ -59,7 +59,7 @@ Certificate auth variants additionally require:
 - OpenBao TLS certificate auth method,
 - an OpenBao listener that requests client certificates,
 - role constraints bound to the provider certificate identity,
-- a PKCS#11 module for `certauth_pkcs11` builds or a SPIFFE Workload API socket for `certauth_spiffe` builds.
+- a PKCS#11 module for `certauth_pkcs11` builds.
 
 ## Operating Systems
 
@@ -100,7 +100,7 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 |---|---|---|
 | JWT | default | Supported. |
 | Certificate with PKCS#11 source | `certauth_pkcs11` | Implemented. CI exercises a real SoftHSM token, PKCS#11 signer, OpenBao cert login, and Transit access. Release support still requires artifact evidence for the selected deployment. |
-| Certificate with SPIFFE source | `certauth_spiffe` | Implemented. CI exercises a real SPIRE Workload API X.509 SVID source and provider local validation. Full OpenBao cert-auth login with stock SPIRE SVIDs is not claimed until OpenBao cert auth can accept the URI-SAN-only identity without requiring a certificate alias name from CN. |
+| Certificate with SPIFFE source | `certauth_spiffe` | Wiring is present for local verification and upstream OpenBao alignment work, and CI exercises real SPIRE Workload API source validation. `auth.cert.source: spiffe` is not a supported user configuration until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
 | OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
 ## Compatibility Promises

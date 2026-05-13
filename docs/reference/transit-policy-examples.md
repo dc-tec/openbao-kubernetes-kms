@@ -87,7 +87,7 @@ bao write auth/k8s-workload-a-jwt/config \
 
 OpenBao JWT auth requires one of: OIDC discovery, a JWKS URL, or local validation public keys.
 
-## Certificate Auth Role: SPIFFE URI SAN
+## Certificate Auth Role: URI SAN
 
 ```sh
 bao auth enable -path=k8s-workload-a-cert cert
@@ -95,8 +95,8 @@ bao write auth/k8s-workload-a-cert/config \
   disable_binding=false
 bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
   display_name="openbao-kms-control-plane" \
-  certificate=@/etc/openbao/trust/openbao-kms-spiffe-bundle.pem \
-  allowed_uri_sans="spiffe://example.org/openbao-kms/workload-a" \
+  certificate=@/etc/openbao/trust/openbao-kms-client-ca.pem \
+  allowed_uri_sans="urn:openbao-kms:workload-a" \
   token_policies='["openbao-kms-workload-a"]' \
   token_ttl="10m" \
   token_max_ttl="30m" \

@@ -144,17 +144,16 @@ bin/bao-kms-provider version
 Certificate auth variants are opt-in build tags:
 
 ```sh
-make build-certauth-spiffe
 make build-certauth-pkcs11
-make build-certauth-combined
 ```
 
-SPIFFE cert-auth Linux artifacts can be built with
-`make release-artifacts-certauth-spiffe` or alongside the default JWT Linux
-matrix with `make release-artifacts-with-certauth-spiffe`. PKCS#11 and combined
-cert-auth artifacts are host CGO builds via
-`make release-artifact-certauth-pkcs11-host` and
-`make release-artifact-certauth-combined-host`.
+PKCS#11 cert-auth artifacts are host CGO builds via
+`make release-artifact-certauth-pkcs11-host`.
+
+SPIFFE certificate-source wiring remains in tree for local verification and
+upstream OpenBao alignment work, but `auth.cert.source: spiffe` is not a
+supported user configuration until the supported OpenBao version can derive
+cert-auth identity aliases from URI SANs.
 
 Selected E2E entrypoints:
 
