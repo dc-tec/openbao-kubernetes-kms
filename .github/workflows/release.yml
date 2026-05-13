@@ -565,14 +565,23 @@ jobs:
             "${IMAGE}@${IMAGE_DIGEST}" >/dev/null
 
       - name: Attest checksums provenance
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: dist/checksums.txt
 
       - name: Attest release asset provenance
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-checksums: dist/checksums.txt
+
+      - name: Record private dry-run attestation limitation
+        if: ${{ github.event.repository.private }}
+        run: |
+          cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
+          GitHub release asset attestations were skipped because this is a private repository dry run. Public release tags must run with attestations enabled.
+          EOF
 
       - name: Sign release checksums
         run: |
@@ -595,6 +604,7 @@ jobs:
             dist/checksums.txt >/dev/null
 
       - name: Verify image attestation
+        if: ${{ !github.event.repository.private }}
         uses: ./.github/actions/verify-image-attestations
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -604,6 +614,7 @@ jobs:
           image-refs: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
 
       - name: Verify release asset attestations
+        if: ${{ !github.event.repository.private }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -624,6 +635,8 @@ jobs:
           IMAGE: ${{ needs.prepare.outputs.image }}
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
           IMAGE_REBUILD_DIGEST: ${{ needs.rebuild.outputs.image_digest }}
+          ATTESTATIONS_AVAILABLE: ${{ !github.event.repository.private }}
+          ATTESTATIONS_UNAVAILABLE_REASON: private-repository-dry-run
         run: bash hack/ci/generate-provenance-index.sh
 
       - name: Publish GitHub Release

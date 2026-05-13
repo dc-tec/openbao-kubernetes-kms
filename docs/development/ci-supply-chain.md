@@ -160,6 +160,13 @@ OPENBAO_KMS_RELEASE_PR_PRIVATE_KEY
 The tag release workflow uses GitHub `GITHUB_TOKEN`, OIDC, and attestations
 permissions for publication, signing, and provenance.
 
+Private repository release dry runs on user-owned repositories cannot persist
+GitHub artifact attestations because GitHub does not expose that feature there.
+In that mode the workflow skips GitHub attestation persistence and verification,
+records `attestations.available: false` in `provenance-index.json`, and still
+validates the build, E2E, reproducibility, signatures, checksums, SBOMs, and
+published assets. Public release tags must run with attestations enabled.
+
 ## Supply-Chain Gates
 
 Required before publishing any release artifact:

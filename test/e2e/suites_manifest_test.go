@@ -14,6 +14,7 @@ const e2eSuitesManifestPath = "suites.yaml"
 const (
 	ciWorkflowPath            = "../../.github/workflows/ci.yml"
 	releaseWorkflowPath       = "../../.github/workflows/release.yml"
+	reusableBuildWorkflowPath = "../../.github/workflows/reusable-build.yml"
 	versionsPolicyPath        = "../../.ci/versions.yaml"
 	e2eMakefilePath           = "../../mk/e2e.mk"
 	releaseOpenBaoMakeTarget  = "test-e2e-release-preview-openbao"
@@ -267,6 +268,38 @@ func TestReleaseWorkflowRunsE2EAgainstBuiltImage(t *testing.T) {
 		"make test-e2e-release-preview-kind",
 	} {
 		requireContains(t, kind, want, "release Kind E2E job")
+	}
+}
+
+func TestReleaseWorkflowKeepsPublicAttestationsAndPrivateDryRunFallback(t *testing.T) {
+	releaseWorkflow := readTextFile(t, releaseWorkflowPath)
+	reusableBuildWorkflow := readTextFile(t, reusableBuildWorkflowPath)
+
+	for _, workflow := range []struct {
+		name string
+		body string
+	}{
+		{name: releaseWorkflowPath, body: releaseWorkflow},
+		{name: reusableBuildWorkflowPath, body: reusableBuildWorkflow},
+	} {
+		requireContains(
+			t,
+			workflow.body,
+			"uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32",
+			workflow.name,
+		)
+		requireContains(t, workflow.body, "if: ${{ !github.event.repository.private }}", workflow.name)
+		requireContains(t, workflow.body, "private repository dry run", workflow.name)
+	}
+
+	promote := workflowJobSection(t, releaseWorkflow, "promote")
+	for _, want := range []string{
+		"name: Verify image attestation",
+		"name: Verify release asset attestations",
+		"ATTESTATIONS_AVAILABLE: ${{ !github.event.repository.private }}",
+		"ATTESTATIONS_UNAVAILABLE_REASON: private-repository-dry-run",
+	} {
+		requireContains(t, promote, want, "release promote job")
 	}
 }
 
