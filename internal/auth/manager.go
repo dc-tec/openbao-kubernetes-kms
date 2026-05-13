@@ -23,6 +23,9 @@ const (
 	authStatusJWTExpired       = "jwt_expired"
 	authStatusJWTNearExpiry    = "jwt_near_expiry"
 	authStatusJWTInvalid       = "jwt_invalid"
+	authStatusCertExpired      = "cert_expired"
+	authStatusCertNearExpiry   = "cert_near_expiry"
+	authStatusCertInvalid      = "cert_invalid"
 	authStatusAuthFailed       = "auth_failed"
 	authStatusNoUsableSession  = "no_usable_session"
 )
@@ -46,6 +49,16 @@ var safeAuthErrorClasses = []error{
 	ErrJWTIssuerMismatch,
 	ErrJWTAudienceMismatch,
 	ErrJWTSubjectMismatch,
+	ErrCertificateRead,
+	ErrCertificateMalformed,
+	ErrCertificateExpired,
+	ErrCertificateNearExpiry,
+	ErrCertificateNotYetValid,
+	ErrCertificateWeakSignature,
+	ErrCertificateUsage,
+	ErrCertificateIdentityMismatch,
+	ErrCertificateSignerMismatch,
+	ErrCertificateSignerProbe,
 	ErrAuthConfig,
 	ErrAuthFailed,
 	ErrTokenUnavailable,
@@ -689,6 +702,19 @@ func authStatus(err error) string {
 		errors.Is(err, ErrJWTSubjectMismatch),
 		errors.Is(err, ErrJWTRead):
 		return authStatusJWTInvalid
+	case errors.Is(err, ErrCertificateExpired):
+		return authStatusCertExpired
+	case errors.Is(err, ErrCertificateNearExpiry):
+		return authStatusCertNearExpiry
+	case errors.Is(err, ErrCertificateMalformed),
+		errors.Is(err, ErrCertificateNotYetValid),
+		errors.Is(err, ErrCertificateWeakSignature),
+		errors.Is(err, ErrCertificateUsage),
+		errors.Is(err, ErrCertificateIdentityMismatch),
+		errors.Is(err, ErrCertificateSignerMismatch),
+		errors.Is(err, ErrCertificateSignerProbe),
+		errors.Is(err, ErrCertificateRead):
+		return authStatusCertInvalid
 	case errors.Is(err, ErrAuthFailed),
 		errors.Is(err, ErrTokenUnavailable):
 		if errors.Is(err, ErrTokenUnavailable) {
@@ -711,6 +737,10 @@ func safeErrorMessage(err error) string {
 		return ErrJWTAudienceMismatch.Error()
 	case errors.Is(err, ErrJWTSubjectMismatch):
 		return ErrJWTSubjectMismatch.Error()
+	case errors.Is(err, ErrCertificateIdentityMismatch):
+		return ErrCertificateIdentityMismatch.Error()
+	case errors.Is(err, ErrCertificateSignerMismatch):
+		return ErrCertificateSignerMismatch.Error()
 	}
 	var openBaoErr *openbao.Error
 	if errors.As(err, &openBaoErr) {
