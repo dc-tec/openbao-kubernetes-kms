@@ -57,12 +57,13 @@ type ClientConfig struct {
 
 // AuthClientConfig contains OpenBao auth client construction settings.
 type AuthClientConfig struct {
-	Address       string
-	Namespace     string
-	CACertFile    string
-	TLSServerName string
-	Timeout       time.Duration
-	Observer      RequestObserver
+	Address              string
+	Namespace            string
+	CACertFile           string
+	TLSServerName        string
+	Timeout              time.Duration
+	GetClientCertificate func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+	Observer             RequestObserver
 }
 
 // Client is a narrow OpenBao API client for Transit and diagnostics.
@@ -128,7 +129,12 @@ func NewClientWithHTTPClient(cfg ClientConfig, httpClient *http.Client) (*Client
 
 // NewAuthClient builds an OpenBao auth client with pinned CA roots and server-name validation.
 func NewAuthClient(cfg AuthClientConfig) (*AuthClient, error) {
-	httpClient, err := NewHTTPClient(cfg.CACertFile, cfg.TLSServerName, cfg.Timeout)
+	httpClient, err := NewHTTPClientWithTLSOptions(HTTPClientConfig{
+		CACertFile:           cfg.CACertFile,
+		TLSServerName:        cfg.TLSServerName,
+		Timeout:              cfg.Timeout,
+		GetClientCertificate: cfg.GetClientCertificate,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -178,21 +184,44 @@ func NewTLSConfig(caCertFile string, serverName string) (*tls.Config, error) {
 	}, nil
 }
 
+// HTTPClientConfig contains TLS policy for OpenBao HTTP clients.
+type HTTPClientConfig struct {
+	CACertFile           string
+	TLSServerName        string
+	Timeout              time.Duration
+	GetClientCertificate func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+}
+
 // NewHTTPClient returns an HTTP client with bounded timeout and explicit TLS policy.
 func NewHTTPClient(caCertFile string, serverName string, timeout time.Duration) (*http.Client, error) {
-	if timeout <= 0 {
+	return NewHTTPClientWithTLSOptions(HTTPClientConfig{
+		CACertFile:    caCertFile,
+		TLSServerName: serverName,
+		Timeout:       timeout,
+	})
+}
+
+// NewHTTPClientWithTLSOptions returns an HTTP client with bounded timeout and explicit TLS policy.
+func NewHTTPClientWithTLSOptions(cfg HTTPClientConfig) (*http.Client, error) {
+	if cfg.Timeout <= 0 {
 		return nil, fmt.Errorf("OpenBao timeout must be positive")
 	}
-	tlsConfig, err := NewTLSConfig(caCertFile, serverName)
+	tlsConfig, err := NewTLSConfig(cfg.CACertFile, cfg.TLSServerName)
 	if err != nil {
 		return nil, err
 	}
+	tlsConfig.GetClientCertificate = cfg.GetClientCertificate
 	return &http.Client{
-		Timeout: timeout,
+		Timeout: cfg.Timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: tlsConfig,
 		},
 	}, nil
+}
+
+// CloseIdleConnections closes idle HTTP connections held by the auth client.
+func (c *AuthClient) CloseIdleConnections() {
+	c.httpClient.CloseIdleConnections()
 }
 
 func (c *Client) do(

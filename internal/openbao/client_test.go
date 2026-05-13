@@ -2,9 +2,15 @@ package openbao
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -117,6 +123,49 @@ func TestNewClientUsesCAAndServerNameValidation(t *testing.T) {
 	var openBaoErr *Error
 	if !errors.As(err, &openBaoErr) || openBaoErr.Class != ErrorClassUnavailable {
 		t.Fatalf("expected unavailable on TLS name mismatch, got %v", err)
+	}
+}
+
+func TestNewAuthClientUsesClientCertificateCallback(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil || len(r.TLS.PeerCertificates) != 1 {
+			t.Fatalf("expected one TLS peer certificate, got %#v", r.TLS)
+		}
+		_, _ = w.Write([]byte(`{
+			"auth": {
+				"client_token": "` + testToken + `",
+				"lease_duration": 600,
+				"renewable": true
+			}
+		}`))
+	}))
+	server.TLS = &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ClientAuth: tls.RequireAnyClientCert,
+	}
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	caFile := writeServerCAFile(t, server)
+	parsed, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	cert := newClientTLSCertificate(t)
+	client, err := NewAuthClient(AuthClientConfig{
+		Address:       server.URL,
+		CACertFile:    caFile,
+		TLSServerName: parsed.Hostname(),
+		Timeout:       time.Second,
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new auth client: %v", err)
+	}
+	if _, err := client.LoginCert(context.Background(), CertLoginRequest{MountPath: "auth/cert"}); err != nil {
+		t.Fatalf("login cert with client certificate: %v", err)
 	}
 }
 
@@ -263,4 +312,33 @@ func writeServerCAFile(t *testing.T, server *httptest.Server) string {
 		t.Fatalf("write CA file: %v", err)
 	}
 	return path
+}
+
+func newClientTLSCertificate(t *testing.T) tls.Certificate {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate client key: %v", err)
+	}
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "openbao-kms-control-plane",
+		},
+		NotBefore: time.Now().Add(-time.Minute),
+		NotAfter:  time.Now().Add(time.Hour),
+		KeyUsage:  x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageClientAuth,
+		},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create client certificate: %v", err)
+	}
+	return tls.Certificate{
+		Certificate: [][]byte{der},
+		PrivateKey:  key,
+	}
 }

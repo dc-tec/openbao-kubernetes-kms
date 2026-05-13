@@ -13,8 +13,11 @@ import (
 
 const (
 	testAuthMountPath     = "auth/k8s-workload-a-jwt"
+	testCertAuthMountPath = "auth/k8s-workload-a-cert"
 	testAuthLoginPath     = "/v1/auth/k8s-workload-a-jwt/login"
+	testCertAuthLoginPath = "/v1/auth/k8s-workload-a-cert/login"
 	testAuthRole          = "openbao-kms-control-plane"
+	testCertName          = "openbao-kms-control-plane"
 	testJWT               = "header.payload.signature"
 	testAuthToken         = "bao-client-token"
 	testAuthPolicy        = "openbao-kms"
@@ -66,6 +69,76 @@ func TestAuthClientLoginJWT(t *testing.T) {
 		token.LeaseDuration != time.Duration(testLoginLeaseSeconds)*time.Second ||
 		!token.Renewable {
 		t.Fatalf("unexpected token response: %#v", token)
+	}
+}
+
+func TestAuthClientLoginCert(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != testCertAuthLoginPath {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get(vaultTokenHeader) != "" {
+			t.Fatal("cert login must not send an OpenBao token header")
+		}
+		if r.Header.Get(vaultNamespaceHeader) != testNamespace {
+			t.Fatalf("missing namespace header")
+		}
+		var body certLoginRequestBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode login body: %v", err)
+		}
+		if body.Name != testCertName {
+			t.Fatalf("unexpected cert login name: %q", body.Name)
+		}
+		_, _ = w.Write([]byte(`{
+			"auth": {
+				"client_token": "` + testAuthToken + `",
+				"lease_duration": 600,
+				"renewable": true,
+				"policies": ["` + testAuthPolicy + `"],
+				"token_policies": ["` + testAuthPolicy + `"]
+			}
+		}`))
+	}))
+	client := newTestAuthClient(t, server)
+
+	token, err := client.LoginCert(context.Background(), CertLoginRequest{
+		MountPath: " /" + testCertAuthMountPath + "/ ",
+		Name:      " " + testCertName + " ",
+	})
+	if err != nil {
+		t.Fatalf("login cert: %v", err)
+	}
+	if token.ClientToken != testAuthToken ||
+		token.LeaseDuration != time.Duration(testLoginLeaseSeconds)*time.Second ||
+		!token.Renewable {
+		t.Fatalf("unexpected token response: %#v", token)
+	}
+}
+
+func TestAuthClientLoginCertOmitsEmptyName(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode login body: %v", err)
+		}
+		if _, ok := body["name"]; ok {
+			t.Fatalf("empty cert login name should be omitted: %#v", body)
+		}
+		_, _ = w.Write([]byte(`{
+			"auth": {
+				"client_token": "` + testAuthToken + `",
+				"lease_duration": 600,
+				"renewable": true
+			}
+		}`))
+	}))
+	client := newTestAuthClient(t, server)
+
+	if _, err := client.LoginCert(context.Background(), CertLoginRequest{
+		MountPath: testCertAuthMountPath,
+	}); err != nil {
+		t.Fatalf("login cert without name: %v", err)
 	}
 }
 
