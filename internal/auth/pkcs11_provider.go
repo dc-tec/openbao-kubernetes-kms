@@ -23,11 +23,12 @@ const (
 
 // PKCS11CertificateProvider returns a client certificate backed by a PKCS#11 signer.
 type PKCS11CertificateProvider struct {
-	cfg    PKCS11ProviderConfig
-	ctx    *crypto11.Context
-	signer crypto.Signer
-	mu     sync.Mutex
-	closed bool
+	cfg       PKCS11ProviderConfig
+	lifecycle context.Context
+	ctx       *crypto11.Context
+	signer    crypto.Signer
+	mu        sync.Mutex
+	closed    bool
 }
 
 // NewPKCS11CertificateProvider creates a PKCS#11-backed certificate provider.
@@ -35,6 +36,9 @@ func NewPKCS11CertificateProvider(
 	ctx context.Context,
 	cfg PKCS11ProviderConfig,
 ) (ClientCertificateProvider, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("%w: provider context is required", ErrAuthConfig)
+	}
 	normalized, err := validatePKCS11ProviderConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -53,8 +57,9 @@ func NewPKCS11CertificateProvider(
 		return nil, fmt.Errorf("%w: initialize pkcs11 context", ErrAuthConfig)
 	}
 	provider := &PKCS11CertificateProvider{
-		cfg: normalized,
-		ctx: pkcs11Ctx,
+		cfg:       normalized,
+		lifecycle: ctx,
+		ctx:       pkcs11Ctx,
 	}
 	if err := provider.loadSigner(); err != nil {
 		_ = provider.Close()
@@ -96,9 +101,13 @@ func (p *PKCS11CertificateProvider) CurrentCertificate(ctx context.Context) (tls
 
 // GetClientCertificate returns the current client certificate for TLS handshakes.
 func (p *PKCS11CertificateProvider) GetClientCertificate(
-	*tls.CertificateRequestInfo,
+	info *tls.CertificateRequestInfo,
 ) (*tls.Certificate, error) {
-	cert, err := p.CurrentCertificate(context.Background())
+	ctx := p.lifecycle
+	if info != nil {
+		ctx = info.Context()
+	}
+	cert, err := p.CurrentCertificate(ctx)
 	if err != nil {
 		return nil, err
 	}

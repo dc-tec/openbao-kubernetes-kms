@@ -15,8 +15,9 @@ import (
 
 // SPIFFECertificateProvider returns X.509 SVIDs from the SPIFFE Workload API.
 type SPIFFECertificateProvider struct {
-	cfg    SPIFFEProviderConfig
-	source *workloadapi.X509Source
+	cfg       SPIFFEProviderConfig
+	lifecycle context.Context
+	source    *workloadapi.X509Source
 }
 
 // NewSPIFFECertificateProvider creates a SPIFFE Workload API certificate provider.
@@ -24,6 +25,9 @@ func NewSPIFFECertificateProvider(
 	ctx context.Context,
 	cfg SPIFFEProviderConfig,
 ) (ClientCertificateProvider, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("%w: provider context is required", ErrAuthConfig)
+	}
 	normalized, err := validateSPIFFEProviderConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -52,8 +56,9 @@ func NewSPIFFECertificateProvider(
 		return nil, fmt.Errorf("%w: initialize spiffe workload api source", ErrAuthConfig)
 	}
 	provider := &SPIFFECertificateProvider{
-		cfg:    normalized,
-		source: source,
+		cfg:       normalized,
+		lifecycle: ctx,
+		source:    source,
 	}
 	if _, err := provider.CurrentCertificate(ctx); err != nil {
 		_ = provider.Close()
@@ -89,9 +94,13 @@ func (p *SPIFFECertificateProvider) CurrentCertificate(ctx context.Context) (tls
 
 // GetClientCertificate returns the current SVID for TLS handshakes.
 func (p *SPIFFECertificateProvider) GetClientCertificate(
-	*tls.CertificateRequestInfo,
+	info *tls.CertificateRequestInfo,
 ) (*tls.Certificate, error) {
-	cert, err := p.CurrentCertificate(context.Background())
+	ctx := p.lifecycle
+	if info != nil {
+		ctx = info.Context()
+	}
+	cert, err := p.CurrentCertificate(ctx)
 	if err != nil {
 		return nil, err
 	}
