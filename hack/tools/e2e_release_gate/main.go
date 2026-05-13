@@ -99,7 +99,11 @@ func run(args []string) error {
 	manifestPath := flags.String("manifest", defaultManifestPath, "Path to E2E suite manifest")
 	versionsPath := flags.String("versions", "", "Path to version policy file")
 	group := flags.String("group", "", "Release gate group to run")
-	kubernetesLine := flags.String("kubernetes-line", os.Getenv("E2E_KUBERNETES_LINE"), "Kubernetes release line to run for Kind release gates")
+	kubernetesLine := flags.String(
+		"kubernetes-line",
+		os.Getenv("E2E_KUBERNETES_LINE"),
+		"Kubernetes release line to run for Kind release gates",
+	)
 	makeCommand := flags.String("make", "make", "Make command to execute")
 	matrix := flags.Bool("matrix", false, "Print GitHub Actions JSON matrix for the selected release gate group")
 	dryRun := flags.Bool("dry-run", false, "Print selected targets without running them")
@@ -142,6 +146,7 @@ func run(args []string) error {
 			continue
 		}
 		fmt.Fprintf(os.Stderr, "==> %s %s\n", *makeCommand, target)
+		// #nosec G204 -- release gate helper intentionally runs the selected make command and manifest target.
 		cmd := exec.Command(*makeCommand, target)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -154,6 +159,7 @@ func run(args []string) error {
 }
 
 func loadManifest(path string) (suitesManifest, error) {
+	// #nosec G304 -- release gate helper intentionally reads the caller-selected manifest path.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return suitesManifest{}, fmt.Errorf("read manifest: %w", err)
@@ -206,6 +212,7 @@ func releaseGateTargets(manifest suitesManifest, group string) ([]string, error)
 }
 
 func loadVersions(path string) (versionsConfig, error) {
+	// #nosec G304 -- release gate helper intentionally reads the caller-selected version policy path.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return versionsConfig{}, fmt.Errorf("read versions: %w", err)
@@ -279,14 +286,33 @@ func printKubernetesMatrix(entries []kubernetesPreviewEntry) error {
 	return nil
 }
 
-func runKubernetesMatrixTargets(makeCommand string, targets []string, entries []kubernetesPreviewEntry, dryRun bool) error {
+func runKubernetesMatrixTargets(
+	makeCommand string,
+	targets []string,
+	entries []kubernetesPreviewEntry,
+	dryRun bool,
+) error {
 	for _, entry := range entries {
 		for _, target := range targets {
 			if dryRun {
-				fmt.Printf("kubernetes=%s version=%s image=%s target=%s\n", entry.Line, entry.ExactVersion, entry.KindNodeImage, target)
+				fmt.Printf(
+					"kubernetes=%s version=%s image=%s target=%s\n",
+					entry.Line,
+					entry.ExactVersion,
+					entry.KindNodeImage,
+					target,
+				)
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "==> E2E_KUBERNETES_LINE=%s E2E_KIND_NODE_IMAGE=%s %s %s\n", entry.Line, entry.KindNodeImage, makeCommand, target)
+			fmt.Fprintf(
+				os.Stderr,
+				"==> E2E_KUBERNETES_LINE=%s E2E_KIND_NODE_IMAGE=%s %s %s\n",
+				entry.Line,
+				entry.KindNodeImage,
+				makeCommand,
+				target,
+			)
+			// #nosec G204 -- release gate helper intentionally runs the selected make command and manifest target.
 			cmd := exec.Command(makeCommand, target)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

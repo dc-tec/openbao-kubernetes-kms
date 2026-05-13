@@ -194,6 +194,7 @@ func readE2EManifest(t *testing.T) e2eSuitesManifest {
 func readTextFile(t *testing.T, path string) string {
 	t.Helper()
 
+	// #nosec G304 -- tests read fixed repository paths from local constants.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
@@ -257,6 +258,17 @@ func validateKubernetesPreviewMatrix(t *testing.T, policy versionsPolicy) {
 	t.Helper()
 
 	kubernetes := policy.Validation.Kubernetes
+	validateKubernetesLinePolicy(t, kubernetes)
+	releaseGateLines := collectKubernetesReleaseGateLines(t, kubernetes)
+	validateKubernetesRequiredReleaseGateLines(t, releaseGateLines)
+	validateKubernetesPrimaryLine(t, kubernetes, releaseGateLines)
+	validateKubernetesIntendedNextValidation(t, kubernetes)
+	validateKubernetesReleaseGateRows(t, policy.Validation.ReleaseGateRows, releaseGateLines)
+}
+
+func validateKubernetesLinePolicy(t *testing.T, kubernetes kubernetesValidationPolicy) {
+	t.Helper()
+
 	if kubernetes.KMSV2StableMinimumLine != "1.29" {
 		t.Fatalf("kmsV2StableMinimumLine = %q, want 1.29", kubernetes.KMSV2StableMinimumLine)
 	}
@@ -266,20 +278,45 @@ func validateKubernetesPreviewMatrix(t *testing.T, policy versionsPolicy) {
 	if kubernetes.PrimaryLine != "1.34" {
 		t.Fatalf("primaryLine = %q, want 1.34", kubernetes.PrimaryLine)
 	}
+}
+
+func collectKubernetesReleaseGateLines(
+	t *testing.T,
+	kubernetes kubernetesValidationPolicy,
+) map[string]kubernetesPreviewMatrixEntry {
+	t.Helper()
 
 	releaseGateLines := make(map[string]kubernetesPreviewMatrixEntry, len(kubernetes.PreviewMatrix))
 	for _, entry := range kubernetes.PreviewMatrix {
 		if !entry.ReleaseGate {
 			continue
 		}
-		if entry.Line == "" || entry.ExactVersion == "" || entry.KindNodeImage == "" || entry.KindNodeImageDigest == "" {
-			t.Fatalf("release-gated Kubernetes matrix entry must have line, exactVersion, kindNodeImage, and kindNodeImageDigest: %#v", entry)
-		}
-		if !strings.Contains(entry.KindNodeImage, "@"+entry.KindNodeImageDigest) {
-			t.Fatalf("Kubernetes %s kindNodeImage must include kindNodeImageDigest", entry.Line)
-		}
+		validateKubernetesReleaseGateEntry(t, entry)
 		releaseGateLines[entry.Line] = entry
 	}
+	return releaseGateLines
+}
+
+func validateKubernetesReleaseGateEntry(t *testing.T, entry kubernetesPreviewMatrixEntry) {
+	t.Helper()
+
+	if entry.Line == "" || entry.ExactVersion == "" ||
+		entry.KindNodeImage == "" || entry.KindNodeImageDigest == "" {
+		t.Fatalf(
+			"release-gated Kubernetes matrix entry must have line, exactVersion, kindNodeImage, and digest: %#v",
+			entry,
+		)
+	}
+	if !strings.Contains(entry.KindNodeImage, "@"+entry.KindNodeImageDigest) {
+		t.Fatalf("Kubernetes %s kindNodeImage must include kindNodeImageDigest", entry.Line)
+	}
+}
+
+func validateKubernetesRequiredReleaseGateLines(
+	t *testing.T,
+	releaseGateLines map[string]kubernetesPreviewMatrixEntry,
+) {
+	t.Helper()
 
 	for _, line := range []string{"1.34", "1.35"} {
 		if _, ok := releaseGateLines[line]; !ok {
@@ -289,6 +326,15 @@ func validateKubernetesPreviewMatrix(t *testing.T, policy versionsPolicy) {
 	if _, ok := releaseGateLines["1.36"]; ok {
 		t.Fatalf("Kubernetes 1.36 must remain outside the release gate until a pinned Kind node image exists")
 	}
+}
+
+func validateKubernetesPrimaryLine(
+	t *testing.T,
+	kubernetes kubernetesValidationPolicy,
+	releaseGateLines map[string]kubernetesPreviewMatrixEntry,
+) {
+	t.Helper()
+
 	primary, ok := releaseGateLines[kubernetes.PrimaryLine]
 	if !ok {
 		t.Fatalf("primaryLine %q must be present in the release-gated preview matrix", kubernetes.PrimaryLine)
@@ -300,8 +346,16 @@ func validateKubernetesPreviewMatrix(t *testing.T, policy versionsPolicy) {
 		t.Fatalf("primary kindNodeImage = %q, want %q from preview matrix", kubernetes.KindNodeImage, primary.KindNodeImage)
 	}
 	if kubernetes.KindNodeImageDigest != primary.KindNodeImageDigest {
-		t.Fatalf("primary kindNodeImageDigest = %q, want %q from preview matrix", kubernetes.KindNodeImageDigest, primary.KindNodeImageDigest)
+		t.Fatalf(
+			"primary kindNodeImageDigest = %q, want %q from preview matrix",
+			kubernetes.KindNodeImageDigest,
+			primary.KindNodeImageDigest,
+		)
 	}
+}
+
+func validateKubernetesIntendedNextValidation(t *testing.T, kubernetes kubernetesValidationPolicy) {
+	t.Helper()
 
 	found136 := false
 	for _, entry := range kubernetes.IntendedNextValidation {
@@ -312,9 +366,17 @@ func validateKubernetesPreviewMatrix(t *testing.T, policy versionsPolicy) {
 	if !found136 {
 		t.Fatalf("Kubernetes intendedNextValidation must include 1.36 awaiting a pinned Kind node image")
 	}
+}
 
-	releaseGateRowsByVersion := make(map[string]releaseGateRow, len(policy.Validation.ReleaseGateRows))
-	for _, row := range policy.Validation.ReleaseGateRows {
+func validateKubernetesReleaseGateRows(
+	t *testing.T,
+	rows []releaseGateRow,
+	releaseGateLines map[string]kubernetesPreviewMatrixEntry,
+) {
+	t.Helper()
+
+	releaseGateRowsByVersion := make(map[string]releaseGateRow, len(rows))
+	for _, row := range rows {
 		if row.Component == "kubernetes" {
 			releaseGateRowsByVersion[row.Version] = row
 		}
@@ -325,7 +387,11 @@ func validateKubernetesPreviewMatrix(t *testing.T, policy versionsPolicy) {
 			t.Fatalf("releaseGateRows must include Kubernetes exact version %s", entry.ExactVersion)
 		}
 		if row.ExactPinStatus != "pinned-kind-node" {
-			t.Fatalf("releaseGateRows Kubernetes %s exactPinStatus = %q, want pinned-kind-node", entry.ExactVersion, row.ExactPinStatus)
+			t.Fatalf(
+				"releaseGateRows Kubernetes %s exactPinStatus = %q, want pinned-kind-node",
+				entry.ExactVersion,
+				row.ExactPinStatus,
+			)
 		}
 	}
 }

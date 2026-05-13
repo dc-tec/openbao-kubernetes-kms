@@ -333,28 +333,19 @@ func doOpenBao(
 		}
 	}()
 
-	var body io.Reader
-	if requestBody != nil {
-		encoded, err := json.Marshal(requestBody)
-		if err != nil {
-			return fmt.Errorf("encode OpenBao %s request: %w", operation, err)
-		}
-		body = bytes.NewReader(encoded)
-	}
-
-	requestURL := resolveOpenBao(baseURL, apiPath)
-	req, err := http.NewRequestWithContext(ctx, method, requestURL, body)
+	req, err := newOpenBaoRequest(
+		ctx,
+		baseURL,
+		namespace,
+		operation,
+		method,
+		apiPath,
+		requestBody,
+		token,
+		includeToken,
+	)
 	if err != nil {
-		return fmt.Errorf("build OpenBao %s request: %w", operation, err)
-	}
-	if requestBody != nil {
-		req.Header.Set(contentTypeHeader, contentTypeJSON)
-	}
-	if includeToken {
-		req.Header.Set(vaultTokenHeader, token)
-	}
-	if namespace != "" {
-		req.Header.Set(vaultNamespaceHeader, namespace)
+		return err
 	}
 
 	resp, err := httpClient.Do(req)
@@ -371,20 +362,71 @@ func doOpenBao(
 		_ = resp.Body.Close()
 	}()
 
+	requestID, err = readOpenBaoResponse(operation, resp, response)
+	return err
+}
+
+func newOpenBaoRequest(
+	ctx context.Context,
+	baseURL *url.URL,
+	namespace string,
+	operation string,
+	method string,
+	apiPath string,
+	requestBody requestPayload,
+	token string,
+	includeToken bool,
+) (*http.Request, error) {
+	body, err := openBaoRequestBody(operation, requestBody)
+	if err != nil {
+		return nil, err
+	}
+
+	requestURL := resolveOpenBao(baseURL, apiPath)
+	req, err := http.NewRequestWithContext(ctx, method, requestURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("build OpenBao %s request: %w", operation, err)
+	}
+	if requestBody != nil {
+		req.Header.Set(contentTypeHeader, contentTypeJSON)
+	}
+	if includeToken {
+		req.Header.Set(vaultTokenHeader, token)
+	}
+	if namespace != "" {
+		req.Header.Set(vaultNamespaceHeader, namespace)
+	}
+	return req, nil
+}
+
+func openBaoRequestBody(operation string, requestBody requestPayload) (io.Reader, error) {
+	if requestBody == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("encode OpenBao %s request: %w", operation, err)
+	}
+	return bytes.NewReader(encoded), nil
+}
+
+func readOpenBaoResponse(
+	operation string,
+	resp *http.Response,
+	response responsePayload,
+) (string, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body := decodeErrorBody(resp.Body)
-		requestID = safeRequestID(body.RequestID)
-		return newHTTPError(operation, resp.StatusCode, body.Errors)
+		return safeRequestID(body.RequestID), newHTTPError(operation, resp.StatusCode, body.Errors)
 	}
 	if response == nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil
+		return "", nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
-		return fmt.Errorf("decode OpenBao %s response: %w", operation, err)
+		return "", fmt.Errorf("decode OpenBao %s response: %w", operation, err)
 	}
-	requestID = requestIDFromResponse(response)
-	return nil
+	return requestIDFromResponse(response), nil
 }
 
 func (c *Client) resolve(apiPath string) string {
