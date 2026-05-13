@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 )
 
@@ -22,5 +23,19 @@ func TestBuildAuthManagerRejectsCertAuthInDefaultBuild(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "certauth build variant") {
 		t.Fatalf("expected certauth build variant error, got %v", err)
+	}
+}
+
+func TestDoctorCertAuthDefaultBuildFailsLocalSourceCheck(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Auth.Method = authMethodCert
+	cfg.Auth.Cert.Source = certSourceSPIFFE
+	report := cli.Report{Name: reportNameDoctor}
+
+	if checkLocalAuthForDoctor(context.Background(), &report, cfg) {
+		t.Fatal("default build should not pass cert-auth local checks")
+	}
+	if !report.HasFailures() || !reportContains(report, "certauth build variant") {
+		t.Fatalf("expected certauth build variant failure, got %#v", report.Checks)
 	}
 }

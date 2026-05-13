@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -9,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"io"
 	"math/big"
 	"net/url"
 	"os"
@@ -69,6 +71,39 @@ func TestValidateCertificateRejectsNearExpiry(t *testing.T) {
 	}
 }
 
+func TestValidateCertificateRejectsExpired(t *testing.T) {
+	now := time.Unix(testCurrentUnix, 0).UTC()
+	_, cert, _ := newCertificateFixture(t, certificateFixtureOptions{
+		Now:       now,
+		NotBefore: now.Add(-2 * time.Hour),
+		NotAfter:  now.Add(-time.Hour),
+	})
+
+	err := ValidateCertificateChain([]*x509.Certificate{cert}, CertificateValidationOptions{
+		Clock: &fakeClock{now: now},
+	})
+	if !errors.Is(err, ErrCertificateExpired) {
+		t.Fatalf("expected expired certificate, got %v", err)
+	}
+}
+
+func TestValidateCertificateRejectsNotYetValidOutsideSkew(t *testing.T) {
+	now := time.Unix(testCurrentUnix, 0).UTC()
+	_, cert, _ := newCertificateFixture(t, certificateFixtureOptions{
+		Now:       now,
+		NotBefore: now.Add(time.Hour),
+		NotAfter:  now.Add(2 * time.Hour),
+	})
+
+	err := ValidateCertificateChain([]*x509.Certificate{cert}, CertificateValidationOptions{
+		ClockSkewLeeway: time.Minute,
+		Clock:           &fakeClock{now: now},
+	})
+	if !errors.Is(err, ErrCertificateNotYetValid) {
+		t.Fatalf("expected not-yet-valid certificate, got %v", err)
+	}
+}
+
 func TestValidateCertificateRequiresClientAuthUsage(t *testing.T) {
 	now := time.Unix(testCurrentUnix, 0).UTC()
 	_, cert, _ := newCertificateFixture(t, certificateFixtureOptions{
@@ -82,6 +117,38 @@ func TestValidateCertificateRequiresClientAuthUsage(t *testing.T) {
 	})
 	if !errors.Is(err, ErrCertificateUsage) {
 		t.Fatalf("expected certificate usage failure, got %v", err)
+	}
+}
+
+func TestValidateCertificateAcceptsAnyExtKeyUsage(t *testing.T) {
+	now := time.Unix(testCurrentUnix, 0).UTC()
+	_, cert, _ := newCertificateFixture(t, certificateFixtureOptions{
+		Now:      now,
+		NotAfter: now.Add(time.Hour),
+		EKU:      []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	})
+
+	if err := ValidateCertificateChain([]*x509.Certificate{cert}, CertificateValidationOptions{
+		Clock: &fakeClock{now: now},
+	}); err != nil {
+		t.Fatalf("validate any-EKU certificate: %v", err)
+	}
+}
+
+func TestValidateCertificateRejectsWeakSignatureInChain(t *testing.T) {
+	now := time.Unix(testCurrentUnix, 0).UTC()
+	_, leaf, _ := newCertificateFixture(t, certificateFixtureOptions{
+		Now:      now,
+		NotAfter: now.Add(time.Hour),
+	})
+	intermediate := *leaf
+	intermediate.SignatureAlgorithm = x509.SHA1WithRSA
+
+	err := ValidateCertificateChain([]*x509.Certificate{leaf, &intermediate}, CertificateValidationOptions{
+		Clock: &fakeClock{now: now},
+	})
+	if !errors.Is(err, ErrCertificateWeakSignature) {
+		t.Fatalf("expected weak chain signature failure, got %v", err)
 	}
 }
 
@@ -160,6 +227,19 @@ func TestValidateCertificateSignerRejectsMismatch(t *testing.T) {
 	}
 }
 
+func TestValidateCertificateSignerRejectsProbeFailure(t *testing.T) {
+	now := time.Unix(testCurrentUnix, 0).UTC()
+	_, cert, signer := newCertificateFixture(t, certificateFixtureOptions{
+		Now:      now,
+		NotAfter: now.Add(time.Hour),
+	})
+
+	err := ValidateCertificateSigner(cert, failingSigner{public: signer.Public()})
+	if !errors.Is(err, ErrCertificateSignerProbe) {
+		t.Fatalf("expected signer probe failure, got %v", err)
+	}
+}
+
 func TestCertLoginSourceLogsInWithValidatedCertificate(t *testing.T) {
 	now := time.Unix(testCurrentUnix, 0).UTC()
 	_, cert, signer := newCertificateFixture(t, certificateFixtureOptions{
@@ -170,6 +250,7 @@ func TestCertLoginSourceLogsInWithValidatedCertificate(t *testing.T) {
 	source, err := NewCertLoginSource(CertLoginSourceConfig{
 		MountPath:        "auth/k8s-workload-a-cert",
 		Name:             "openbao-kms-control-plane",
+		Source:           certSourceSPIFFE,
 		MinRemainingTTL:  24 * time.Hour,
 		ClockSkewLeeway:  time.Minute,
 		ExpectedSPIFFEID: testSPIFFEID,
@@ -218,6 +299,9 @@ func TestCertLoginSourceLogsInWithValidatedCertificate(t *testing.T) {
 	if state.CertExpiresAt.IsZero() || state.CertTTL <= 0 {
 		t.Fatalf("expected certificate TTL state, got %#v", state)
 	}
+	if state.AuthMethod != authMethodCert || state.CertificateSource != certSourceSPIFFE {
+		t.Fatalf("unexpected cert auth source state: %#v", state)
+	}
 }
 
 func TestCertLoginSourceFailsClosedBeforeOpenBao(t *testing.T) {
@@ -264,10 +348,11 @@ func TestCertLoginSourceFailsClosedBeforeOpenBao(t *testing.T) {
 }
 
 type certificateFixtureOptions struct {
-	Now      time.Time
-	NotAfter time.Time
-	EKU      []x509.ExtKeyUsage
-	URIs     []string
+	Now       time.Time
+	NotBefore time.Time
+	NotAfter  time.Time
+	EKU       []x509.ExtKeyUsage
+	URIs      []string
 }
 
 func newCertificateFixture(
@@ -288,6 +373,10 @@ func newCertificateFixture(
 	if notAfter.IsZero() {
 		notAfter = opts.Now.Add(time.Hour)
 	}
+	notBefore := opts.NotBefore
+	if notBefore.IsZero() {
+		notBefore = opts.Now.Add(-time.Minute)
+	}
 	uris := make([]*url.URL, 0, len(opts.URIs))
 	for _, rawURI := range opts.URIs {
 		parsed, err := url.Parse(rawURI)
@@ -301,7 +390,7 @@ func newCertificateFixture(
 		Subject: pkix.Name{
 			CommonName: testCertCommonName,
 		},
-		NotBefore:   opts.Now.Add(-time.Minute),
+		NotBefore:   notBefore,
 		NotAfter:    notAfter,
 		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: eku,
@@ -335,6 +424,18 @@ func writeCertificateFile(t *testing.T, content []byte, mode os.FileMode) string
 type fakeCertificateProvider struct {
 	cert tls.Certificate
 	err  error
+}
+
+type failingSigner struct {
+	public crypto.PublicKey
+}
+
+func (s failingSigner) Public() crypto.PublicKey {
+	return s.public
+}
+
+func (s failingSigner) Sign(io.Reader, []byte, crypto.SignerOpts) ([]byte, error) {
+	return nil, errors.New("signer unavailable")
 }
 
 func (f fakeCertificateProvider) CurrentCertificate(context.Context) (tls.Certificate, error) {

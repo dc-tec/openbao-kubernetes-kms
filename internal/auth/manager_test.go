@@ -48,7 +48,9 @@ func TestManagerLogsInAndReturnsToken(t *testing.T) {
 		t.Fatalf("expected login with JWT fixture")
 	}
 	state := manager.State()
-	if state.Status != StatusAuthenticated || state.LastTokenSource != tokenSourceMemory {
+	if state.Status != StatusAuthenticated ||
+		state.LastTokenSource != tokenSourceMemory ||
+		state.AuthMethod != authMethodJWT {
 		t.Fatalf("unexpected state: %#v", state)
 	}
 }
@@ -64,6 +66,9 @@ func TestManagerStateBeforeLoginHasZeroTTLs(t *testing.T) {
 	}
 	if state.TokenTTL != 0 || state.JWTTTL != 0 {
 		t.Fatalf("expected zero TTLs before login, got token=%s jwt=%s", state.TokenTTL, state.JWTTTL)
+	}
+	if state.AuthMethod != authMethodJWT {
+		t.Fatalf("expected JWT source before login, got %#v", state)
 	}
 }
 

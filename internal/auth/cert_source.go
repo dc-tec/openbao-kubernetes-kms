@@ -46,6 +46,7 @@ type SPIFFEProviderConfig struct {
 type CertLoginSourceConfig struct {
 	MountPath        string
 	Name             string
+	Source           string
 	MinRemainingTTL  time.Duration
 	ClockSkewLeeway  time.Duration
 	ExpectedSPIFFEID string
@@ -73,31 +74,37 @@ func NewCertLoginSource(
 	return &CertLoginSource{cfg: normalized, provider: provider}, nil
 }
 
-// Login validates the current client certificate and exchanges it for an OpenBao token.
-func (s *CertLoginSource) Login(
-	ctx context.Context,
-	client OpenBaoAuthClient,
-	clock Clock,
-) (LoginResult, error) {
+// SourceInfo returns bounded metadata for the certificate auth source.
+func (s *CertLoginSource) SourceInfo() SourceInfo {
+	return SourceInfo{
+		AuthMethod:        authMethodCert,
+		CertificateSource: s.cfg.Source,
+	}
+}
+
+// ValidateLocal checks the current certificate and signer without contacting OpenBao.
+func (s *CertLoginSource) ValidateLocal(ctx context.Context, clock Clock) (Certificate, error) {
 	tlsCert, err := s.provider.CurrentCertificate(ctx)
 	if err != nil {
-		return LoginResult{}, err
+		return Certificate{}, err
 	}
-	cert, err := certificateFromTLS(tlsCert, CertificateValidationOptions{
+	return validateTLSClientCertificate(tlsCert, CertificateValidationOptions{
 		MinRemainingTTL:  s.cfg.MinRemainingTTL,
 		ClockSkewLeeway:  s.cfg.ClockSkewLeeway,
 		ExpectedSPIFFEID: s.cfg.ExpectedSPIFFEID,
 		TrustDomain:      s.cfg.TrustDomain,
 		Clock:            clock,
 	})
+}
+
+// Login validates the current client certificate and exchanges it for an OpenBao token.
+func (s *CertLoginSource) Login(
+	ctx context.Context,
+	client OpenBaoAuthClient,
+	clock Clock,
+) (LoginResult, error) {
+	cert, err := s.ValidateLocal(ctx, clock)
 	if err != nil {
-		return LoginResult{}, err
-	}
-	signer, ok := tlsCert.PrivateKey.(crypto.Signer)
-	if !ok {
-		return LoginResult{}, fmt.Errorf("%w: TLS certificate private key is not a signer", ErrCertificateSignerMismatch)
-	}
-	if err := ValidateCertificateSigner(cert.Leaf, signer); err != nil {
 		return LoginResult{}, err
 	}
 
@@ -114,6 +121,7 @@ func (s *CertLoginSource) Login(
 func validateCertLoginSourceConfig(cfg CertLoginSourceConfig) (CertLoginSourceConfig, error) {
 	cfg.MountPath = strings.TrimSpace(cfg.MountPath)
 	cfg.Name = strings.TrimSpace(cfg.Name)
+	cfg.Source = strings.TrimSpace(cfg.Source)
 	cfg.ExpectedSPIFFEID = strings.TrimSpace(cfg.ExpectedSPIFFEID)
 	cfg.TrustDomain = strings.TrimSpace(cfg.TrustDomain)
 	if cfg.MountPath == "" {
@@ -128,6 +136,11 @@ func validateCertLoginSourceConfig(cfg CertLoginSourceConfig) (CertLoginSourceCo
 	if containsUnsafeIdentifierChars(cfg.Name) {
 		return CertLoginSourceConfig{}, fmt.Errorf("%w: auth cert name contains unsafe characters", ErrAuthConfig)
 	}
+	switch cfg.Source {
+	case "", certSourcePKCS11, certSourceSPIFFE:
+	default:
+		return CertLoginSourceConfig{}, fmt.Errorf("%w: auth certificate source is unsupported", ErrAuthConfig)
+	}
 	if cfg.MinRemainingTTL <= 0 {
 		return CertLoginSourceConfig{}, fmt.Errorf("%w: minimum certificate remaining TTL must be positive", ErrAuthConfig)
 	}
@@ -135,6 +148,21 @@ func validateCertLoginSourceConfig(cfg CertLoginSourceConfig) (CertLoginSourceCo
 		return CertLoginSourceConfig{}, fmt.Errorf("%w: clock skew leeway must not be negative", ErrAuthConfig)
 	}
 	return cfg, nil
+}
+
+func validateTLSClientCertificate(tlsCert tls.Certificate, opts CertificateValidationOptions) (Certificate, error) {
+	cert, err := certificateFromTLS(tlsCert, opts)
+	if err != nil {
+		return Certificate{}, err
+	}
+	signer, ok := tlsCert.PrivateKey.(crypto.Signer)
+	if !ok {
+		return Certificate{}, fmt.Errorf("%w: TLS certificate private key is not a signer", ErrCertificateSignerMismatch)
+	}
+	if err := ValidateCertificateSigner(cert.Leaf, signer); err != nil {
+		return Certificate{}, err
+	}
+	return cert, nil
 }
 
 func certificateFromTLS(tlsCert tls.Certificate, opts CertificateValidationOptions) (Certificate, error) {

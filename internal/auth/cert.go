@@ -151,10 +151,13 @@ func ParseCertificateChainPEM(content []byte) ([]*x509.Certificate, error) {
 
 // ValidateCertificateChain enforces local certificate validity and identity checks.
 func ValidateCertificateChain(chain []*x509.Certificate, opts CertificateValidationOptions) error {
-	if len(chain) == 0 || chain[0] == nil {
-		return fmt.Errorf("%w: certificate chain is empty", ErrCertificateMalformed)
+	leaf, err := validatedCertificateLeaf(chain)
+	if err != nil {
+		return err
 	}
-	leaf := chain[0]
+	if err := validateCertificateSignatureAlgorithms(chain); err != nil {
+		return err
+	}
 	now := clockOrReal(opts.Clock).Now()
 	leeway := opts.ClockSkewLeeway
 	if leeway < 0 {
@@ -170,14 +173,32 @@ func ValidateCertificateChain(chain []*x509.Certificate, opts CertificateValidat
 	if opts.MinRemainingTTL > 0 && leaf.NotAfter.Sub(now) <= opts.MinRemainingTTL {
 		return fmt.Errorf("%w: remaining TTL is below minimum", ErrCertificateNearExpiry)
 	}
-	if usesWeakSignature(leaf.SignatureAlgorithm) {
-		return fmt.Errorf("%w: certificate signature algorithm is disallowed", ErrCertificateWeakSignature)
-	}
 	if !hasClientAuthUsage(leaf.ExtKeyUsage) {
 		return fmt.Errorf("%w: client auth EKU is required", ErrCertificateUsage)
 	}
 	if err := validateCertificateSPIFFEIdentity(leaf, opts); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validatedCertificateLeaf(chain []*x509.Certificate) (*x509.Certificate, error) {
+	if len(chain) == 0 || chain[0] == nil {
+		return nil, fmt.Errorf("%w: certificate chain is empty", ErrCertificateMalformed)
+	}
+	for _, cert := range chain {
+		if cert == nil {
+			return nil, fmt.Errorf("%w: certificate chain contains an empty certificate", ErrCertificateMalformed)
+		}
+	}
+	return chain[0], nil
+}
+
+func validateCertificateSignatureAlgorithms(chain []*x509.Certificate) error {
+	for _, cert := range chain {
+		if usesWeakSignature(cert.SignatureAlgorithm) {
+			return fmt.Errorf("%w: certificate signature algorithm is disallowed", ErrCertificateWeakSignature)
+		}
 	}
 	return nil
 }

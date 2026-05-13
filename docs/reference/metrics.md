@@ -46,6 +46,8 @@ The provider applies these rules to every metric:
 |---|---|---|---|
 | `openbao_kms_auth_login_total` | counter | `status` | Auth-method login attempts by outcome. |
 | `openbao_kms_auth_renewal_total` | counter | `status` | Token renewal attempts by outcome. |
+| `openbao_kms_auth_method_info` | gauge | `method` | Reports `1` for the configured bounded auth method (`jwt`, `cert`, or `unknown`). |
+| `openbao_kms_certificate_source_info` | gauge | `source` | Reports `1` for the configured bounded certificate source (`pkcs11`, `spiffe`, `none`, or `unknown`). |
 | `openbao_kms_token_ttl_seconds` | gauge | none | Remaining TTL of the current OpenBao token. |
 | `openbao_kms_certificate_ttl_seconds` | gauge | none | Remaining TTL of the current cert-auth client certificate. Zero when certificate auth is not in use or no certificate has been observed. |
 

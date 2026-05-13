@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
@@ -44,6 +45,40 @@ func newCertAuthManager(
 	})
 }
 
+func checkLocalCertificateAuthForDoctor(
+	ctx context.Context,
+	report *cli.Report,
+	cfg config.Config,
+) bool {
+	provider, err := newCertificateProvider(ctx, cfg)
+	sourceCheck := certificateSourceCheckID(cfg)
+	if err != nil {
+		report.Fail(sourceCheck, certificateSourceCheckTitle(cfg), safeMessage(err))
+		report.Skip(checkCertLocal, "Certificate identity", "certificate source is unavailable")
+		report.Skip(checkCertSigner, "Certificate signer", "certificate source is unavailable")
+		return false
+	}
+	defer func() {
+		_ = provider.Close()
+	}()
+	report.Pass(sourceCheck, certificateSourceCheckTitle(cfg), "configured certificate source is reachable")
+
+	source, err := auth.NewCertLoginSource(certLoginSourceConfig(cfg), provider)
+	if err != nil {
+		report.Fail(checkCertLocal, "Certificate identity", safeMessage(err))
+		report.Skip(checkCertSigner, "Certificate signer", "certificate identity validation failed")
+		return false
+	}
+	if _, err := source.ValidateLocal(ctx, nil); err != nil {
+		report.Fail(checkCertLocal, "Certificate identity", safeMessage(err))
+		report.Skip(checkCertSigner, "Certificate signer", "certificate identity validation failed")
+		return false
+	}
+	report.Pass(checkCertLocal, "Certificate identity", "certificate is locally valid for cert auth")
+	report.Pass(checkCertSigner, "Certificate signer", "signer matches certificate and accepts probe")
+	return true
+}
+
 func newCertificateProvider(
 	ctx context.Context,
 	cfg config.Config,
@@ -73,6 +108,7 @@ func certLoginSourceConfig(cfg config.Config) auth.CertLoginSourceConfig {
 	return auth.CertLoginSourceConfig{
 		MountPath:        cfg.Auth.Cert.MountPath,
 		Name:             cfg.Auth.Cert.Name,
+		Source:           cfg.Auth.Cert.Source,
 		MinRemainingTTL:  cfg.Auth.Cert.MinRemainingTTL,
 		ClockSkewLeeway:  cfg.Auth.Cert.ClockSkewLeeway,
 		ExpectedSPIFFEID: cfg.Auth.Cert.SPIFFE.SPIFFEID,

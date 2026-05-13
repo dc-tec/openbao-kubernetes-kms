@@ -24,6 +24,7 @@ const (
 	labelMethod    = "method"
 	labelOperation = "operation"
 	labelReason    = "reason"
+	labelSource    = "source"
 	labelState     = "state"
 	labelStatus    = "status"
 )

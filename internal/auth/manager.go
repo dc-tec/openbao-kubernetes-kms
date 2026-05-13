@@ -18,6 +18,10 @@ const (
 	tokenSourceMemory          = "memory"
 	defaultRefreshRetryBackoff = time.Second
 	defaultMaxRefreshBackoff   = time.Minute
+	authMethodJWT              = "jwt"
+	authMethodCert             = "cert"
+	certSourcePKCS11           = "pkcs11"
+	certSourceSPIFFE           = "spiffe"
 	authStatusOK               = "ok"
 	authStatusError            = "error"
 	authStatusJWTExpired       = "jwt_expired"
@@ -111,11 +115,18 @@ type LoginResult struct {
 // LoginSource performs one auth-method-specific OpenBao login.
 type LoginSource interface {
 	Login(context.Context, OpenBaoAuthClient, Clock) (LoginResult, error)
+	SourceInfo() SourceInfo
 }
 
 // JWTLoginSource performs JWT file validation and OpenBao JWT login.
 type JWTLoginSource struct {
 	cfg ManagerConfig
+}
+
+// SourceInfo contains bounded method/source labels for redacted auth state.
+type SourceInfo struct {
+	AuthMethod        string
+	CertificateSource string
 }
 
 // ManagerOptions contains testable lifecycle behavior settings.
@@ -136,6 +147,8 @@ type Observer interface {
 
 // State is the redacted auth state exposed to status and readiness code.
 type State struct {
+	AuthMethod          string
+	CertificateSource   string
 	Status              Status
 	TokenRenewable      bool
 	TokenExpiresAt      time.Time
@@ -264,6 +277,8 @@ func (m *Manager) State() State {
 
 	now := m.clock.Now()
 	state := State{
+		AuthMethod:          m.source.SourceInfo().AuthMethod,
+		CertificateSource:   m.source.SourceInfo().CertificateSource,
 		Status:              StatusUnknown,
 		TokenRenewable:      m.current.renewable,
 		TokenExpiresAt:      m.current.expiresAt,
@@ -563,6 +578,11 @@ func NewJWTLoginSource(cfg ManagerConfig) (*JWTLoginSource, error) {
 		return nil, err
 	}
 	return &JWTLoginSource{cfg: normalized}, nil
+}
+
+// SourceInfo returns bounded metadata for the JWT auth source.
+func (s *JWTLoginSource) SourceInfo() SourceInfo {
+	return SourceInfo{AuthMethod: authMethodJWT}
 }
 
 // Login validates the current JWT file and exchanges it for an OpenBao token.

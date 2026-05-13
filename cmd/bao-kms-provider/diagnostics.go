@@ -32,6 +32,9 @@ const (
 	checkSocketGroup            = "socket.group"
 	checkJWTLocal               = "jwt.local"
 	checkCertLocal              = "auth.cert.local"
+	checkCertSigner             = "auth.cert.signer"
+	checkCertPKCS11             = "auth.cert.pkcs11"
+	checkCertSPIFFE             = "auth.cert.spiffe"
 	checkEncryptionConfig       = "kubernetes.encryption_config"
 	checkOpenBaoTLS             = "openbao.tls"
 	checkOpenBaoAuth            = "openbao.auth"
@@ -157,7 +160,7 @@ func runDoctor(
 		report.Pass(checkSocketGroup, "Socket group", "configured group resolves locally")
 	}
 
-	authLocalValid := checkLocalAuthForDoctor(&report, cfg)
+	authLocalValid := checkLocalAuthForDoctor(ctx, &report, cfg)
 
 	checkEncryptionConfiguration(&report, cfg, encryptionConfigPath)
 	if !authLocalValid {
@@ -186,7 +189,7 @@ func jwtValidationOptions(cfg config.Config) auth.JWTValidationOptions {
 	}
 }
 
-func checkLocalAuthForDoctor(report *cli.Report, cfg config.Config) bool {
+func checkLocalAuthForDoctor(ctx context.Context, report *cli.Report, cfg config.Config) bool {
 	switch cfg.Auth.Method {
 	case authMethodJWT:
 		if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWT.JWTFile, jwtValidationOptions(cfg)); err != nil {
@@ -196,8 +199,7 @@ func checkLocalAuthForDoctor(report *cli.Report, cfg config.Config) bool {
 		report.Pass(checkJWTLocal, "JWT file", "readable and locally valid")
 		return true
 	case authMethodCert:
-		report.Skip(checkCertLocal, "Certificate identity", "checked during certificate auth login")
-		return true
+		return checkLocalCertificateAuthForDoctor(ctx, report, cfg)
 	default:
 		report.Skip(checkCertLocal, "Certificate identity", "unsupported auth method")
 		return false
@@ -286,6 +288,28 @@ func openBaoAuthPassMessage(cfg config.Config) string {
 		return "authenticated with configured certificate role"
 	}
 	return "authenticated with configured JWT role"
+}
+
+func certificateSourceCheckID(cfg config.Config) string {
+	switch cfg.Auth.Cert.Source {
+	case certSourcePKCS11:
+		return checkCertPKCS11
+	case certSourceSPIFFE:
+		return checkCertSPIFFE
+	default:
+		return checkCertLocal
+	}
+}
+
+func certificateSourceCheckTitle(cfg config.Config) string {
+	switch cfg.Auth.Cert.Source {
+	case certSourcePKCS11:
+		return "PKCS#11 certificate source"
+	case certSourceSPIFFE:
+		return "SPIFFE certificate source"
+	default:
+		return "Certificate source"
+	}
 }
 
 func runTransitDiagnostics(

@@ -48,7 +48,7 @@ Checks:
 |---|---|
 | OpenBao reachable | HTTPS connection succeeds with configured CA and SNI. |
 | TLS valid | Certificate chain and server name validate. |
-| Local auth material | For JWT auth, the JWT file exists, permissions are safe, content parses, expiry is acceptable, and configured claims match. For cert auth, certificate validation runs during OpenBao login. |
+| Local auth material | For JWT auth, the JWT file exists, permissions are safe, content parses, expiry is acceptable, and configured claims match. For cert auth, the configured certificate source must be reachable, the current certificate must be locally valid, and the signer must match the certificate and accept a non-secret probe. |
 | OpenBao auth login | The configured OpenBao auth method login succeeds. |
 | Token policy | Token can read Transit metadata and perform encrypt and decrypt. |
 | Transit key exists | Metadata read succeeds. |
