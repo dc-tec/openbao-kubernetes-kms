@@ -79,5 +79,5 @@ versions-check: ## Check central version policy exists and contains no floating 
 	@! grep -R -n 'latest' .ci/versions.yaml
 
 .PHONY: verify-e2e-manifest
-verify-e2e-manifest: ## Validate the E2E suite manifest.
-	@"$(GO)" test ./test/e2e -run '^TestE2EManifest$$' -count=1
+verify-e2e-manifest: ## Validate the E2E suite manifest and version-pin policy.
+	@"$(GO)" test ./test/e2e -run '^Test(E2EManifest|KubernetesPreviewMatrixPolicy|OpenBaoVersionPolicy|ReleaseWorkflowUsesManifestGate|ReleaseGateMakeTargetsExist)$$' -count=1

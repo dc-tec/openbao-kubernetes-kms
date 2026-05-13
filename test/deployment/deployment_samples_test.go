@@ -158,6 +158,51 @@ func TestDockerfileUsesPinnedDistrolessNonRootRuntime(t *testing.T) {
 	}
 }
 
+func TestPublicDeploymentSurfacesAvoidFloatingInputs(t *testing.T) {
+	publicSurfaces := []string{
+		"README.md",
+		"docs/getting-started/install.md",
+		"docs/deployment/choosing-a-model.md",
+		"docs/deployment/static-pod.md",
+		"docs/deployment/systemd.md",
+		"deploy/README.md",
+		"deploy/package/bundles/static-pod/README.md",
+		"deploy/package/bundles/systemd/README.md",
+		"deploy/package/linux/README.md",
+		"deploy/static-pod/bao-kms-provider.yaml",
+	}
+	for _, path := range publicSurfaces {
+		content := readSample(t, path)
+		for _, forbidden := range []string{":latest", "@main", "@master", "@HEAD"} {
+			if strings.Contains(content, forbidden) {
+				t.Fatalf("%s must not contain floating input %q", path, forbidden)
+			}
+		}
+		if strings.Contains(content, "curl") &&
+			(strings.Contains(content, "| sh") || strings.Contains(content, "| bash")) {
+			t.Fatalf("%s must not contain curl-pipe-shell install guidance", path)
+		}
+	}
+}
+
+func TestProviderImageReferencesAreDigestAddressed(t *testing.T) {
+	for _, path := range []string{
+		"docs/getting-started/install.md",
+		"docs/deployment/static-pod.md",
+		"deploy/static-pod/bao-kms-provider.yaml",
+	} {
+		content := readSample(t, path)
+		for _, line := range strings.Split(content, "\n") {
+			if !strings.Contains(line, "ghcr.io/dc-tec/bao-kms-provider") {
+				continue
+			}
+			if !strings.Contains(line, "@sha256:") {
+				t.Fatalf("%s provider image reference must be digest-addressed: %s", path, strings.TrimSpace(line))
+			}
+		}
+	}
+}
+
 func TestSystemdAndPackageSamplesUseResolvedIdentity(t *testing.T) {
 	unit := readSample(t, "deploy/systemd/bao-kms-provider.service")
 	requiredUnitLines := []string{

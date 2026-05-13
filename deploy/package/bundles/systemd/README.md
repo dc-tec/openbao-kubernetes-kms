@@ -12,7 +12,9 @@ It contains:
 - `config/provider-systemd.yaml`
 - `kubernetes/encryption-config.yaml`
 
-Install the binary and metadata on every control-plane host, run
+Install only after verifying the package or tarball against the selected
+release's checksums, signature, and provenance evidence. Then install the binary
+and metadata on every control-plane host, run
 `systemd-sysusers`, run `systemd-tmpfiles --create`, and then run
 `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml` before enabling
 or starting `bao-kms-provider.service`.

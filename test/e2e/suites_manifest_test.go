@@ -70,9 +70,17 @@ type e2eLane struct {
 
 type versionsPolicy struct {
 	Validation struct {
+		OpenBao         openBaoValidationPolicy    `yaml:"openbao"`
 		Kubernetes      kubernetesValidationPolicy `yaml:"kubernetes"`
 		ReleaseGateRows []releaseGateRow           `yaml:"releaseGateRows"`
 	} `yaml:"validation"`
+}
+
+type openBaoValidationPolicy struct {
+	Primary      string `yaml:"primary"`
+	Image        string `yaml:"image"`
+	ImageDigest  string `yaml:"imageDigest"`
+	DigestStatus string `yaml:"digestStatus"`
 }
 
 type kubernetesValidationPolicy struct {
@@ -114,6 +122,11 @@ func TestE2EManifest(t *testing.T) {
 func TestKubernetesPreviewMatrixPolicy(t *testing.T) {
 	policy := readVersionsPolicy(t)
 	validateKubernetesPreviewMatrix(t, policy)
+}
+
+func TestOpenBaoVersionPolicy(t *testing.T) {
+	policy := readVersionsPolicy(t)
+	validateOpenBaoVersionPolicy(t, policy)
 }
 
 func TestReleaseWorkflowUsesManifestGate(t *testing.T) {
@@ -315,6 +328,31 @@ func validateKubernetesPreviewMatrix(t *testing.T, policy versionsPolicy) {
 			t.Fatalf("releaseGateRows Kubernetes %s exactPinStatus = %q, want pinned-kind-node", entry.ExactVersion, row.ExactPinStatus)
 		}
 	}
+}
+
+func validateOpenBaoVersionPolicy(t *testing.T, policy versionsPolicy) {
+	t.Helper()
+
+	openbao := policy.Validation.OpenBao
+	if openbao.Primary == "" {
+		t.Fatalf("OpenBao primary version is required")
+	}
+	if openbao.Image == "" || openbao.ImageDigest == "" {
+		t.Fatalf("OpenBao image and imageDigest are required")
+	}
+	if openbao.DigestStatus != "pinned" {
+		t.Fatalf("OpenBao digestStatus = %q, want pinned", openbao.DigestStatus)
+	}
+	if !strings.Contains(openbao.Image, ":"+openbao.Primary+"@"+openbao.ImageDigest) {
+		t.Fatalf("OpenBao image must include primary version and imageDigest, got %q", openbao.Image)
+	}
+
+	for _, row := range policy.Validation.ReleaseGateRows {
+		if row.Component == "openbao" && row.Version == openbao.Primary {
+			return
+		}
+	}
+	t.Fatalf("releaseGateRows must include OpenBao primary version %s", openbao.Primary)
 }
 
 func validateE2ELane(t *testing.T, lane e2eLane, seenIDs map[string]struct{}) {

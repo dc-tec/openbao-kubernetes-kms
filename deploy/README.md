@@ -12,4 +12,7 @@ Deployment and packaging samples:
 - `harvester/openbao-kms-lab`: local-only Harvester VM lab chart for kubeadm validation outside public CI.
 - `opentofu/openbao-kubernetes-kms`: OpenTofu module skeleton for OpenBao Transit engine, key, and provider policy setup.
 
-Replace sample OpenBao addresses, identity-bearing fields, image digests, and host socket GIDs before deployment.
+Replace sample OpenBao addresses, identity-bearing fields, image digests, and
+host socket GIDs before deployment. Static-pod image references must use the
+digest from the selected release evidence; do not deploy the placeholder zero
+digest or a tag-only image reference.

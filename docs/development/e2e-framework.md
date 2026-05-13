@@ -183,7 +183,7 @@ broad harness abstractions wait until multiple specs need them.
 | Variable | Default | Purpose |
 |---|---|---|
 | `E2E_OPENBAO_CI` | set by `make test-e2e-openbao-ci` | Enables the PR-capable OpenBao CI spec. |
-| `E2E_OPENBAO_IMAGE` | `validation.openbao.image` from `.ci/versions.yaml` | OpenBao image used by CI E2E environments. |
+| `E2E_OPENBAO_IMAGE` | `validation.openbao.image` from `.ci/versions.yaml` | Digest-pinned OpenBao image used by CI E2E environments. |
 | `E2E_KUBERNETES_LINE` | unset | Optional release-gate selector for one Kubernetes preview matrix line. |
 | `E2E_KIND_NODE_IMAGE` | `validation.kubernetes.kindNodeImage` from `.ci/versions.yaml` | Kind node image used by individual Kubernetes lanes. The Kind release gate overrides this from `validation.kubernetes.previewMatrix`. |
 | `E2E_PROVIDER_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-<commit>` | Provider image loaded into Kind or run in Docker full-stack tests. |

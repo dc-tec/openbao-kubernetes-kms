@@ -28,7 +28,7 @@ Choose the artifact that matches the deployment model you will use.
 | Native package | systemd deployment | `.deb` or `.rpm` with systemd unit, sysusers, tmpfiles, examples, checksum, signature, and attestation. |
 | Linux binary tarball | systemd deployment fallback | Deterministic tarball with binary, systemd metadata, examples, checksum, signature, and attestation. |
 | Static-pod bundle | static-pod deployment | Deterministic tarball with static-pod manifest, provider config sample, encryption config, image reference, checksum, signature, and attestation. |
-| Container image | static-pod runtime | Distroless non-root image, runs as `65532:65532`, pinned to a base image digest in `.ci/versions.yaml`. |
+| Container image | static-pod runtime | Distroless non-root image, runs as `65532:65532`, published and verified by image digest. The runtime base image is pinned by digest in `.ci/versions.yaml`. |
 
 Published release artifacts use the default JWT-only auth build. Certificate
 auth is an opt-in build variant:
@@ -77,6 +77,9 @@ Verify in this order:
 3. Verify the signature over the checksum file against the release workflow identity.
 4. Verify the artifact provenance attestation against the release workflow identity.
 5. For static-pod deployments, verify the image signature and image provenance for the digest referenced by the static-pod bundle.
+
+Do not replace the release image digest with a tag-only reference. The static
+pod manifest should use the image digest from the selected release evidence.
 
 The examples below use `cosign` and the GitHub CLI.
 
@@ -163,7 +166,7 @@ tar -xzf bao-kms-provider_<version>_static-pod.tar.gz
 
 The bundle contains the static pod manifest, provider configuration sample, Kubernetes `EncryptionConfiguration` sample, and image reference. Before placing the manifest under `/etc/kubernetes/manifests/`, replace:
 
-- the image digest,
+- the image digest with the digest from the selected release evidence,
 - the numeric `supplementalGroups` entry,
 - the provider config values,
 - the OpenBao CA path,
