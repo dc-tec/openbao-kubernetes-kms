@@ -42,23 +42,72 @@ const configSchemaJSON = `{
     "auth": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["method", "mountPath", "role", "jwtFile"],
+      "required": ["method"],
       "properties": {
-        "method": {"type": "string", "const": "jwt"},
+        "method": {"type": "string", "enum": ["jwt", "cert"]},
+        "loginBeforeTokenExpiry": {"type": "string"},
+        "tokenRenewalIncrement": {"type": "string"},
+        "loginTimeout": {"type": "string"},
+        "jwt": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mountPath": {"type": "string", "minLength": 1},
+            "role": {"type": "string", "minLength": 1},
+            "jwtFile": {"type": "string", "minLength": 1},
+            "minRemainingTtl": {"type": "string"},
+            "clockSkewLeeway": {"type": "string"},
+            "expectedIssuer": {"type": "string"},
+            "expectedAudience": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "expectedSubject": {"type": "string"}
+          }
+        },
+        "cert": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mountPath": {"type": "string", "minLength": 1},
+            "name": {"type": "string"},
+            "minRemainingTtl": {"type": "string"},
+            "clockSkewLeeway": {"type": "string"},
+            "source": {"type": "string", "enum": ["pkcs11", "spiffe"]},
+            "pkcs11": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "certificateFile": {"type": "string", "minLength": 1},
+                "modulePath": {"type": "string", "minLength": 1},
+                "tokenLabel": {"type": "string", "minLength": 1},
+                "keyLabel": {"type": "string", "minLength": 1},
+                "pinFile": {"type": "string", "minLength": 1},
+                "maxSessions": {"type": "integer", "minimum": 1}
+              }
+            },
+            "spiffe": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "workloadAPISocket": {"type": "string", "pattern": "^unix:///.+"},
+                "spiffeID": {"type": "string", "pattern": "^spiffe://[^/]+/.+"},
+                "trustDomain": {"type": "string"}
+              }
+            }
+          }
+        },
         "mountPath": {"type": "string", "minLength": 1},
         "role": {"type": "string", "minLength": 1},
         "jwtFile": {"type": "string", "minLength": 1},
-	        "minJwtRemainingTtl": {"type": "string"},
-	        "clockSkewLeeway": {"type": "string"},
-	        "loginBeforeTokenExpiry": {"type": "string"},
-	        "tokenRenewalIncrement": {"type": "string"},
-	        "loginTimeout": {"type": "string"},
-	        "expectedIssuer": {"type": "string"},
-	        "expectedAudience": {
-	          "type": "array",
-	          "items": {"type": "string", "minLength": 1}
-	        },
-	        "expectedSubject": {"type": "string"}
+        "minJwtRemainingTtl": {"type": "string"},
+        "clockSkewLeeway": {"type": "string"},
+        "expectedIssuer": {"type": "string"},
+        "expectedAudience": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "expectedSubject": {"type": "string"}
 	      }
 	    },
     "transit": {

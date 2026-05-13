@@ -27,6 +27,7 @@ const (
 	defaultOpenBaoTimeout         = 2 * time.Second
 	defaultAuthMethod             = "jwt"
 	defaultMinJWTRemainingTTL     = 2 * time.Minute
+	defaultMinCertRemainingTTL    = 24 * time.Hour
 	defaultClockSkewLeeway        = 30 * time.Second
 	defaultLoginBeforeExpiry      = 5 * time.Minute
 	defaultTokenRenewalIncrement  = time.Hour
@@ -90,18 +91,61 @@ type OpenBaoConfig struct {
 
 // AuthConfig contains OpenBao authentication settings.
 type AuthConfig struct {
-	Method                 string        `mapstructure:"method"`
-	MountPath              string        `mapstructure:"mountPath"`
-	Role                   string        `mapstructure:"role"`
-	JWTFile                string        `mapstructure:"jwtFile"`
-	MinJWTRemainingTTL     time.Duration `mapstructure:"minJwtRemainingTtl"`
-	ClockSkewLeeway        time.Duration `mapstructure:"clockSkewLeeway"`
-	LoginBeforeTokenExpiry time.Duration `mapstructure:"loginBeforeTokenExpiry"`
-	TokenRenewalIncrement  time.Duration `mapstructure:"tokenRenewalIncrement"`
-	LoginTimeout           time.Duration `mapstructure:"loginTimeout"`
-	ExpectedIssuer         string        `mapstructure:"expectedIssuer"`
-	ExpectedAudience       []string      `mapstructure:"expectedAudience"`
-	ExpectedSubject        string        `mapstructure:"expectedSubject"`
+	Method                 string         `mapstructure:"method"`
+	LoginBeforeTokenExpiry time.Duration  `mapstructure:"loginBeforeTokenExpiry"`
+	TokenRenewalIncrement  time.Duration  `mapstructure:"tokenRenewalIncrement"`
+	LoginTimeout           time.Duration  `mapstructure:"loginTimeout"`
+	JWT                    JWTAuthConfig  `mapstructure:"jwt"`
+	Cert                   CertAuthConfig `mapstructure:"cert"`
+	// Legacy flat JWT fields remain accepted for v1alpha1 config compatibility.
+	MountPath          string        `mapstructure:"mountPath"`
+	Role               string        `mapstructure:"role"`
+	JWTFile            string        `mapstructure:"jwtFile"`
+	MinJWTRemainingTTL time.Duration `mapstructure:"minJwtRemainingTtl"`
+	ClockSkewLeeway    time.Duration `mapstructure:"clockSkewLeeway"`
+	ExpectedIssuer     string        `mapstructure:"expectedIssuer"`
+	ExpectedAudience   []string      `mapstructure:"expectedAudience"`
+	ExpectedSubject    string        `mapstructure:"expectedSubject"`
+}
+
+// JWTAuthConfig contains OpenBao JWT auth settings.
+type JWTAuthConfig struct {
+	MountPath        string        `mapstructure:"mountPath"`
+	Role             string        `mapstructure:"role"`
+	JWTFile          string        `mapstructure:"jwtFile"`
+	MinRemainingTTL  time.Duration `mapstructure:"minRemainingTtl"`
+	ClockSkewLeeway  time.Duration `mapstructure:"clockSkewLeeway"`
+	ExpectedIssuer   string        `mapstructure:"expectedIssuer"`
+	ExpectedAudience []string      `mapstructure:"expectedAudience"`
+	ExpectedSubject  string        `mapstructure:"expectedSubject"`
+}
+
+// CertAuthConfig contains OpenBao certificate auth settings.
+type CertAuthConfig struct {
+	MountPath       string               `mapstructure:"mountPath"`
+	Name            string               `mapstructure:"name"`
+	MinRemainingTTL time.Duration        `mapstructure:"minRemainingTtl"`
+	ClockSkewLeeway time.Duration        `mapstructure:"clockSkewLeeway"`
+	Source          string               `mapstructure:"source"`
+	PKCS11          PKCS11CertAuthConfig `mapstructure:"pkcs11"`
+	SPIFFE          SPIFFECertAuthConfig `mapstructure:"spiffe"`
+}
+
+// PKCS11CertAuthConfig contains PKCS#11-backed certificate auth settings.
+type PKCS11CertAuthConfig struct {
+	CertificateFile string `mapstructure:"certificateFile"`
+	ModulePath      string `mapstructure:"modulePath"`
+	TokenLabel      string `mapstructure:"tokenLabel"`
+	KeyLabel        string `mapstructure:"keyLabel"`
+	PINFile         string `mapstructure:"pinFile"`
+	MaxSessions     int    `mapstructure:"maxSessions"`
+}
+
+// SPIFFECertAuthConfig contains SPIFFE Workload API certificate auth settings.
+type SPIFFECertAuthConfig struct {
+	WorkloadAPISocket string `mapstructure:"workloadAPISocket"`
+	SPIFFEID          string `mapstructure:"spiffeID"`
+	TrustDomain       string `mapstructure:"trustDomain"`
 }
 
 // TransitConfig contains Transit key and AAD settings.
@@ -229,6 +273,7 @@ func Load(runtime *Runtime, opts LoadOptions) (Config, error) {
 	if err := runtime.v.UnmarshalExact(&cfg, viper.DecodeHook(mapstructure.StringToTimeDurationHookFunc())); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
+	normalizeLoadedConfig(&cfg, runtime.v)
 
 	return cfg, nil
 }
@@ -245,6 +290,8 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("auth.clockSkewLeeway", defaultClockSkewLeeway)
 	runtime.v.SetDefault("auth.loginBeforeTokenExpiry", defaultLoginBeforeExpiry)
 	runtime.v.SetDefault("auth.tokenRenewalIncrement", defaultTokenRenewalIncrement)
+	runtime.v.SetDefault("auth.cert.minRemainingTtl", defaultMinCertRemainingTTL)
+	runtime.v.SetDefault("auth.cert.clockSkewLeeway", defaultClockSkewLeeway)
 	runtime.v.SetDefault("bootstrap.graceTimeout", defaultBootstrapGraceTimeout)
 	runtime.v.SetDefault("bootstrap.retryInterval", defaultBootstrapRetryInterval)
 	runtime.v.SetDefault("status.probeInterval", defaultProbeInterval)
@@ -260,4 +307,44 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("logging.logOpenBaoRequestIDs", defaultLogOpenBaoRequestIDs)
 	runtime.v.SetDefault("logging.debugCorrelation.enabled", false)
 	runtime.v.SetDefault("logging.debugCorrelation.ttl", defaultDebugCorrelationTTL)
+}
+
+func normalizeLoadedConfig(cfg *Config, v *viper.Viper) {
+	normalizeJWTAuthConfig(&cfg.Auth, v)
+}
+
+func normalizeJWTAuthConfig(auth *AuthConfig, v *viper.Viper) {
+	if !v.InConfig("auth.jwt.mountPath") {
+		auth.JWT.MountPath = auth.MountPath
+	}
+	if !v.InConfig("auth.jwt.role") {
+		auth.JWT.Role = auth.Role
+	}
+	if !v.InConfig("auth.jwt.jwtFile") {
+		auth.JWT.JWTFile = auth.JWTFile
+	}
+	if !v.InConfig("auth.jwt.minRemainingTtl") {
+		auth.JWT.MinRemainingTTL = auth.MinJWTRemainingTTL
+	}
+	if !v.InConfig("auth.jwt.clockSkewLeeway") {
+		auth.JWT.ClockSkewLeeway = auth.ClockSkewLeeway
+	}
+	if !v.InConfig("auth.jwt.expectedIssuer") {
+		auth.JWT.ExpectedIssuer = auth.ExpectedIssuer
+	}
+	if !v.InConfig("auth.jwt.expectedAudience") {
+		auth.JWT.ExpectedAudience = auth.ExpectedAudience
+	}
+	if !v.InConfig("auth.jwt.expectedSubject") {
+		auth.JWT.ExpectedSubject = auth.ExpectedSubject
+	}
+
+	auth.MountPath = auth.JWT.MountPath
+	auth.Role = auth.JWT.Role
+	auth.JWTFile = auth.JWT.JWTFile
+	auth.MinJWTRemainingTTL = auth.JWT.MinRemainingTTL
+	auth.ClockSkewLeeway = auth.JWT.ClockSkewLeeway
+	auth.ExpectedIssuer = auth.JWT.ExpectedIssuer
+	auth.ExpectedAudience = auth.JWT.ExpectedAudience
+	auth.ExpectedSubject = auth.JWT.ExpectedSubject
 }

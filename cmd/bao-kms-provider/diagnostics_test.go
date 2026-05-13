@@ -102,10 +102,10 @@ func TestTransitDiagnosticsFlagsDangerousCapabilities(t *testing.T) {
 
 func TestDoctorJWTLocalCheckUsesExpectedClaims(t *testing.T) {
 	cfg := loadCommandConfig(t)
-	cfg.Auth.JWTFile = copyJWTFixture(t)
-	cfg.Auth.ExpectedSubject = "system:serviceaccount:secret-namespace:other-sa"
+	cfg.Auth.JWT.JWTFile = copyJWTFixture(t)
+	cfg.Auth.JWT.ExpectedSubject = "system:serviceaccount:secret-namespace:other-sa"
 
-	_, err := auth.ReadAndValidateJWT(cfg.Auth.JWTFile, jwtValidationOptions(cfg))
+	_, err := auth.ReadAndValidateJWT(cfg.Auth.JWT.JWTFile, jwtValidationOptions(cfg))
 	if !errors.Is(err, auth.ErrJWTSubjectMismatch) {
 		t.Fatalf("expected local JWT subject mismatch, got %v", err)
 	}

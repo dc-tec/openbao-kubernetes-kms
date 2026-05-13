@@ -157,7 +157,7 @@ func runDoctor(
 	}
 
 	jwtValid := true
-	if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWTFile, jwtValidationOptions(cfg)); err != nil {
+	if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWT.JWTFile, jwtValidationOptions(cfg)); err != nil {
 		jwtValid = false
 		report.Fail(checkJWTLocal, "JWT file", safeMessage(err))
 	} else {
@@ -183,11 +183,11 @@ func runDoctor(
 
 func jwtValidationOptions(cfg config.Config) auth.JWTValidationOptions {
 	return auth.JWTValidationOptions{
-		MinRemainingTTL:  cfg.Auth.MinJWTRemainingTTL,
-		ClockSkewLeeway:  cfg.Auth.ClockSkewLeeway,
-		ExpectedIssuer:   cfg.Auth.ExpectedIssuer,
-		ExpectedAudience: cfg.Auth.ExpectedAudience,
-		ExpectedSubject:  cfg.Auth.ExpectedSubject,
+		MinRemainingTTL:  cfg.Auth.JWT.MinRemainingTTL,
+		ClockSkewLeeway:  cfg.Auth.JWT.ClockSkewLeeway,
+		ExpectedIssuer:   cfg.Auth.JWT.ExpectedIssuer,
+		ExpectedAudience: cfg.Auth.JWT.ExpectedAudience,
+		ExpectedSubject:  cfg.Auth.JWT.ExpectedSubject,
 	}
 }
 

@@ -44,14 +44,14 @@ func TestProviderAndEncryptionSamplesValidate(t *testing.T) {
 func requireHardenedAuthConfig(t *testing.T, name string, cfg config.Config) {
 	t.Helper()
 
-	if cfg.Auth.ExpectedIssuer == "" {
-		t.Fatalf("%s provider config should set auth.expectedIssuer", name)
+	if cfg.Auth.JWT.ExpectedIssuer == "" {
+		t.Fatalf("%s provider config should set auth.jwt.expectedIssuer", name)
 	}
-	if len(cfg.Auth.ExpectedAudience) == 0 {
-		t.Fatalf("%s provider config should set auth.expectedAudience", name)
+	if len(cfg.Auth.JWT.ExpectedAudience) == 0 {
+		t.Fatalf("%s provider config should set auth.jwt.expectedAudience", name)
 	}
-	if cfg.Auth.ExpectedSubject == "" {
-		t.Fatalf("%s provider config should set auth.expectedSubject", name)
+	if cfg.Auth.JWT.ExpectedSubject == "" {
+		t.Fatalf("%s provider config should set auth.jwt.expectedSubject", name)
 	}
 }
 

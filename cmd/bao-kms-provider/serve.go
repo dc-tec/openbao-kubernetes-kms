@@ -275,16 +275,16 @@ func runServe(ctx context.Context, deps serveDependencies) error {
 
 func authConfig(cfg config.Config) auth.ManagerConfig {
 	return auth.ManagerConfig{
-		MountPath:              cfg.Auth.MountPath,
-		Role:                   cfg.Auth.Role,
-		JWTFile:                cfg.Auth.JWTFile,
-		MinJWTRemainingTTL:     cfg.Auth.MinJWTRemainingTTL,
-		ClockSkewLeeway:        cfg.Auth.ClockSkewLeeway,
+		MountPath:              cfg.Auth.JWT.MountPath,
+		Role:                   cfg.Auth.JWT.Role,
+		JWTFile:                cfg.Auth.JWT.JWTFile,
+		MinJWTRemainingTTL:     cfg.Auth.JWT.MinRemainingTTL,
+		ClockSkewLeeway:        cfg.Auth.JWT.ClockSkewLeeway,
 		LoginBeforeTokenExpiry: cfg.Auth.LoginBeforeTokenExpiry,
 		TokenRenewalIncrement:  cfg.Auth.TokenRenewalIncrement,
-		ExpectedIssuer:         cfg.Auth.ExpectedIssuer,
-		ExpectedAudience:       cfg.Auth.ExpectedAudience,
-		ExpectedSubject:        cfg.Auth.ExpectedSubject,
+		ExpectedIssuer:         cfg.Auth.JWT.ExpectedIssuer,
+		ExpectedAudience:       cfg.Auth.JWT.ExpectedAudience,
+		ExpectedSubject:        cfg.Auth.JWT.ExpectedSubject,
 	}
 }
 
