@@ -88,6 +88,9 @@ func (p *PKCS11CertificateProvider) CurrentCertificate(ctx context.Context) (tls
 	if err != nil {
 		return tls.Certificate{}, err
 	}
+	if err := validateCertificateSignerPublicKey(chain[0], p.signer); err != nil {
+		return tls.Certificate{}, err
+	}
 	cert := tls.Certificate{
 		Certificate: make([][]byte, 0, len(chain)),
 		PrivateKey:  p.signer,
@@ -151,6 +154,14 @@ func validatePKCS11ProviderConfig(cfg PKCS11ProviderConfig) (PKCS11ProviderConfi
 	if cfg.CertificateFile == "" || cfg.ModulePath == "" || cfg.TokenLabel == "" || cfg.KeyLabel == "" || cfg.PINFile == "" {
 		return PKCS11ProviderConfig{}, fmt.Errorf("%w: pkcs11 provider settings are required", ErrAuthConfig)
 	}
+	for _, path := range []string{cfg.CertificateFile, cfg.ModulePath, cfg.PINFile} {
+		if !filepath.IsAbs(path) {
+			return PKCS11ProviderConfig{}, fmt.Errorf("%w: pkcs11 provider paths must be absolute", ErrAuthConfig)
+		}
+	}
+	if containsUnsafeIdentifierChars(cfg.TokenLabel) || containsUnsafeIdentifierChars(cfg.KeyLabel) {
+		return PKCS11ProviderConfig{}, fmt.Errorf("%w: pkcs11 labels contain unsafe characters", ErrAuthConfig)
+	}
 	if cfg.MaxSessions < 2 {
 		return PKCS11ProviderConfig{}, fmt.Errorf("%w: pkcs11 max sessions must be at least 2", ErrAuthConfig)
 	}
@@ -189,6 +200,9 @@ func readPKCS11PINFile(path string) (string, error) {
 	pin := strings.TrimRight(string(content), "\r\n")
 	if pin == "" {
 		return "", fmt.Errorf("%w: pin file is empty", ErrPKCS11PINRead)
+	}
+	if strings.ContainsAny(pin, "\x00\r\n") {
+		return "", fmt.Errorf("%w: pin file must contain exactly one line", ErrPKCS11PINRead)
 	}
 	return pin, nil
 }

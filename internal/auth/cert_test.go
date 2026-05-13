@@ -210,6 +210,20 @@ func TestReadCertificateRejectsSymlink(t *testing.T) {
 	}
 }
 
+func TestParseCertificateChainRejectsMixedPEMBlocks(t *testing.T) {
+	now := time.Unix(testCurrentUnix, 0).UTC()
+	pemBytes, _, _ := newCertificateFixture(t, certificateFixtureOptions{
+		Now:      now,
+		NotAfter: now.Add(time.Hour),
+	})
+	pemBytes = append(pemBytes, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte("not-a-key")})...)
+
+	_, err := ParseCertificateChainPEM(pemBytes)
+	if !errors.Is(err, ErrCertificateMalformed) {
+		t.Fatalf("expected malformed certificate chain, got %v", err)
+	}
+}
+
 func TestValidateCertificateSignerRejectsMismatch(t *testing.T) {
 	now := time.Unix(testCurrentUnix, 0).UTC()
 	_, cert, _ := newCertificateFixture(t, certificateFixtureOptions{
@@ -313,6 +327,7 @@ func TestCertLoginSourceFailsClosedBeforeOpenBao(t *testing.T) {
 	})
 	source, err := NewCertLoginSource(CertLoginSourceConfig{
 		MountPath:        "auth/k8s-workload-a-cert",
+		Source:           certSourcePKCS11,
 		MinRemainingTTL:  24 * time.Hour,
 		ClockSkewLeeway:  time.Minute,
 		ExpectedSPIFFEID: "spiffe://example.org/openbao-kms/other",
@@ -344,6 +359,16 @@ func TestCertLoginSourceFailsClosedBeforeOpenBao(t *testing.T) {
 	}
 	if len(client.CertLogins()) != 0 {
 		t.Fatal("invalid certificate should fail before OpenBao login")
+	}
+}
+
+func TestCertLoginSourceRequiresSource(t *testing.T) {
+	_, err := NewCertLoginSource(CertLoginSourceConfig{
+		MountPath:       "auth/k8s-workload-a-cert",
+		MinRemainingTTL: 24 * time.Hour,
+	}, fakeCertificateProvider{})
+	if !errors.Is(err, ErrAuthConfig) {
+		t.Fatalf("expected auth config error, got %v", err)
 	}
 }
 

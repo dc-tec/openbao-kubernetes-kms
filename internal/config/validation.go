@@ -292,7 +292,11 @@ func validateCertAuthValues(problems *[]ValidationProblem, cert CertAuthConfig) 
 		validatePKCS11AuthValues(problems, cert.PKCS11)
 	case certSourceSPIFFE:
 		if !unsupportedSPIFFECertAuthAllowed {
-			appendProblem(problems, "auth.cert.source", "spiffe is unavailable until the supported OpenBao version can derive certificate identity aliases from URI SANs")
+			appendProblem(
+				problems,
+				"auth.cert.source",
+				"spiffe is unavailable until the supported OpenBao version can derive certificate identity aliases from URI SANs",
+			)
 			return
 		}
 		validateSPIFFEAuthValues(problems, cert.SPIFFE)

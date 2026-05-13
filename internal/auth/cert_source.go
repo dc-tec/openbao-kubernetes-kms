@@ -137,7 +137,9 @@ func validateCertLoginSourceConfig(cfg CertLoginSourceConfig) (CertLoginSourceCo
 		return CertLoginSourceConfig{}, fmt.Errorf("%w: auth cert name contains unsafe characters", ErrAuthConfig)
 	}
 	switch cfg.Source {
-	case "", certSourcePKCS11, certSourceSPIFFE:
+	case certSourcePKCS11, certSourceSPIFFE:
+	case "":
+		return CertLoginSourceConfig{}, fmt.Errorf("%w: auth certificate source is required", ErrAuthConfig)
 	default:
 		return CertLoginSourceConfig{}, fmt.Errorf("%w: auth certificate source is unsupported", ErrAuthConfig)
 	}

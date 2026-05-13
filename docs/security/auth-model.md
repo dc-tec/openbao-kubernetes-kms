@@ -97,7 +97,7 @@ The provider keeps the OpenBao client token in memory only. File-backed JWTs and
 
 | Source | Local validation | Operational notes |
 |---|---|---|
-| PKCS#11 | Certificate file safety, certificate lifetime, client-auth usage, weak signature rejection, and signer public key match. | The private key remains behind the PKCS#11 module. The PIN file must be local, regular, absolute, and tightly permissioned. CI exercises this path with SoftHSM, OpenBao cert auth, and Transit. |
+| PKCS#11 | Certificate file safety, certificate lifetime, client-auth usage, weak signature rejection, and signer public key match. | The private key remains behind the PKCS#11 module. The certificate file must contain only PEM `CERTIFICATE` blocks. The PIN file must be local, regular, absolute, tightly permissioned, and single-line. CI exercises this path with SoftHSM, OpenBao cert auth, and Transit. |
 | SPIFFE | X.509 SVID lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | Wiring is present for local verification, and CI exercises the source with real SPIRE Workload API SVIDs. It is not a supported user configuration yet. |
 
 The provider does not accept a PEM private key file as a certificate source.

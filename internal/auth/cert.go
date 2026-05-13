@@ -135,7 +135,7 @@ func ParseCertificateChainPEM(content []byte) ([]*x509.Certificate, error) {
 		}
 		remaining = bytes.TrimSpace(remaining)
 		if block.Type != "CERTIFICATE" {
-			continue
+			return nil, fmt.Errorf("%w: unexpected PEM block type", ErrCertificateMalformed)
 		}
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
@@ -205,6 +205,16 @@ func validateCertificateSignatureAlgorithms(chain []*x509.Certificate) error {
 
 // ValidateCertificateSigner checks signer public-key match and performs a non-secret signature probe.
 func ValidateCertificateSigner(cert *x509.Certificate, signer crypto.Signer) error {
+	if err := validateCertificateSignerPublicKey(cert, signer); err != nil {
+		return err
+	}
+	if err := probeSigner(signer); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCertificateSignerPublicKey(cert *x509.Certificate, signer crypto.Signer) error {
 	if cert == nil {
 		return fmt.Errorf("%w: certificate is required", ErrCertificateMalformed)
 	}
@@ -221,9 +231,6 @@ func ValidateCertificateSigner(cert *x509.Certificate, signer crypto.Signer) err
 	}
 	if !bytes.Equal(certPublic, signerPublic) {
 		return fmt.Errorf("%w: signer public key does not match certificate", ErrCertificateSignerMismatch)
-	}
-	if err := probeSigner(signer); err != nil {
-		return err
 	}
 	return nil
 }

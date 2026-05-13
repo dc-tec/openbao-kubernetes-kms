@@ -205,6 +205,12 @@ auth:
 
 OpenBao must be configured to request TLS client certificates on the listener used by the provider. In OpenBao listener terms, do not set `tls_disable` or `tls_disable_client_certs` to true for that listener. Role constraints should bind certificate identity, for example through `allowed_uri_sans` for URI identities. Keep cert auth binding enabled during token renewal and keep OCSP fail-open disabled when OCSP is used.
 
+For the PKCS#11 source, `auth.cert.pkcs11.certificateFile` must be a PEM chain
+containing only `CERTIFICATE` blocks. Do not place a PEM private key in that
+file; the private key must remain behind the PKCS#11 module. The PIN file must
+be an absolute, regular, tightly permissioned file containing one PIN line, with
+only an optional trailing newline.
+
 Current CI exercises PKCS#11 certificate auth end-to-end with SoftHSM and
 OpenBao. The SPIFFE lane exercises the real SPIRE Workload API provider source
 and local certificate validation, but `auth.cert.source: spiffe` is not a
