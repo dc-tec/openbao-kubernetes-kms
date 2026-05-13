@@ -7,6 +7,7 @@ Deployment and packaging samples:
 - `systemd/bao-kms-provider.service`: hardened sample systemd unit.
 - `static-pod/bao-kms-provider.yaml`: kubeadm-compatible static pod sample.
 - `kubernetes/encryption-config.yaml`: Kubernetes KMS v2 `EncryptionConfiguration` sample.
+- `grafana/dashboards/openbao-kms-overview.json`: Grafana dashboard sample for the provider's Prometheus metrics.
 - `package/linux`: nFPM, `sysusers.d`, `tmpfiles.d`, and maintainer-script inputs for `.deb` and `.rpm` packages.
 - `package/bundles`: deterministic tarball bundle README inputs for systemd and static-pod release bundles.
 - `harvester/openbao-kms-lab`: local-only Harvester VM lab chart for kubeadm validation outside public CI.

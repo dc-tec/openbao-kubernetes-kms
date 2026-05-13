@@ -68,7 +68,9 @@ Open Grafana at:
 http://127.0.0.1:18300
 ```
 
-Username and password are both `admin`.
+Username and password are both `admin`. The dev environment provisions the
+dashboard from `deploy/grafana/dashboards/openbao-kms-overview.json`, so local
+Grafana uses the same dashboard sample shipped with the deployment artifacts.
 
 ## Useful Targets
 

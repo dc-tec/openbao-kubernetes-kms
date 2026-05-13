@@ -1,6 +1,7 @@
 package deployment_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,6 +40,69 @@ func TestProviderAndEncryptionSamplesValidate(t *testing.T) {
 	if staticPodConfig.Server.SocketGroup != "1234" {
 		t.Fatalf("static pod config should use numeric socket group, got %q", staticPodConfig.Server.SocketGroup)
 	}
+}
+
+func TestGrafanaDashboardSampleIsValid(t *testing.T) {
+	data := readSample(t, "deploy/grafana/dashboards/openbao-kms-overview.json")
+
+	var dashboard grafanaDashboard
+	if err := json.Unmarshal([]byte(data), &dashboard); err != nil {
+		t.Fatalf("decode Grafana dashboard sample: %v", err)
+	}
+	if dashboard.Title != "OpenBao Kubernetes KMS Overview" {
+		t.Fatalf("unexpected dashboard title: %q", dashboard.Title)
+	}
+	if dashboard.UID != "openbao-kms-overview" {
+		t.Fatalf("unexpected dashboard uid: %q", dashboard.UID)
+	}
+	if len(dashboard.Panels) < 12 {
+		t.Fatalf("expected a deployment dashboard with broad metric coverage, got %d panels", len(dashboard.Panels))
+	}
+
+	requiredMetrics := []string{
+		"openbao_kms_grpc_requests_total",
+		"openbao_kms_grpc_duration_seconds_bucket",
+		"openbao_kms_openbao_requests_total",
+		"openbao_kms_openbao_duration_seconds_bucket",
+		"openbao_kms_auth_login_total",
+		"openbao_kms_auth_renewal_total",
+		"openbao_kms_status_key_id_hash",
+		"openbao_kms_rotation_state",
+		"openbao_kms_aad_validation_errors_total",
+		"openbao_kms_decrypt_key_id_errors_total",
+		"openbao_kms_circuit_breaker_state",
+		"openbao_kms_socket_restarts_total",
+	}
+	for _, metric := range requiredMetrics {
+		if !dashboardContainsTarget(dashboard, metric) {
+			t.Fatalf("Grafana dashboard sample missing metric %q", metric)
+		}
+	}
+}
+
+type grafanaDashboard struct {
+	Title  string         `json:"title"`
+	UID    string         `json:"uid"`
+	Panels []grafanaPanel `json:"panels"`
+}
+
+type grafanaPanel struct {
+	Targets []grafanaTarget `json:"targets"`
+}
+
+type grafanaTarget struct {
+	Expression string `json:"expr"`
+}
+
+func dashboardContainsTarget(dashboard grafanaDashboard, metric string) bool {
+	for _, panel := range dashboard.Panels {
+		for _, target := range panel.Targets {
+			if strings.Contains(target.Expression, metric) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func requireHardenedAuthConfig(t *testing.T, name string, cfg config.Config) {

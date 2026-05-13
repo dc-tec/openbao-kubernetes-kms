@@ -105,6 +105,8 @@ Recommended alert conditions:
 
 Example Prometheus alerting rules ship at `docs/operations/prometheus-alerts.yaml` (also published as a static asset on this site). Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
 
+An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Deployment: Observability](/deployment/observability/) for scrape and import guidance.
+
 ## Correlation With OpenBao
 
 OpenBao request IDs may be logged when available and safe. They must not be stored in KMS annotations by default.

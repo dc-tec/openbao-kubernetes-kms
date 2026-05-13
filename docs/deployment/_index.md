@@ -7,6 +7,7 @@ browse:
   - "/deployment/systemd"
   - "/deployment/static-pod"
   - "/deployment/linux-identity-model"
+  - "/deployment/observability"
 ---
 
 # Deployment
@@ -19,6 +20,7 @@ Use this section to select a deployment model and apply the matching system iden
 2. [systemd Deployment](/deployment/systemd/) for a hardened systemd unit on the control-plane host.
 3. [Static Pod Deployment](/deployment/static-pod/) for a kubelet-managed static pod alongside the API server.
 4. [Linux Identity Model](/deployment/linux-identity-model/) for the user, group, file ownership, and permission model that both deployment styles depend on.
+5. [Observability Deployment](/deployment/observability/) for Prometheus scrape wiring and the maintained Grafana dashboard sample.
 
 ## Use Another Section If
 
