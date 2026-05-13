@@ -67,22 +67,23 @@ const (
 var ErrDockerUnavailable = errors.New("docker is not available")
 
 type OpenBaoEnvironmentConfig struct {
-	Image          string
-	Namespace      string
-	TransitMount   string
-	TransitKey     string
-	TransitKeyType string
-	StartupWait    time.Duration
-	DockerBinary   string
-	NetworkName    string
-	StorageVolume  string
-	JWTTTL         time.Duration
-	JWTTokenTTL    string
-	JWTMaxTTL      string
-	JWTIssuer      string
-	JWTAudience    string
-	JWTSubject     string
-	CertAuth       bool
+	Image                   string
+	Namespace               string
+	TransitMount            string
+	TransitKey              string
+	TransitKeyType          string
+	StartupWait             time.Duration
+	DockerBinary            string
+	NetworkName             string
+	StorageVolume           string
+	JWTTTL                  time.Duration
+	JWTTokenTTL             string
+	JWTMaxTTL               string
+	JWTIssuer               string
+	JWTAudience             string
+	JWTSubject              string
+	CertAuth                bool
+	CertAuthAliasNameSource string
 }
 
 type OpenBaoEnvironment struct {
@@ -102,25 +103,26 @@ type OpenBaoEnvironment struct {
 	ClientCertFile string
 	ClientKeyFile  string
 
-	image                string
-	containerName        string
-	certDir              string
-	dockerBinary         string
-	networkName          string
-	storageVolume        string
-	transitKeyType       string
-	unsealKey            string
-	jwtPrivateKey        *rsa.PrivateKey
-	jwtPublicKey         string
-	jwtPublicKeys        []string
-	jwtTTL               time.Duration
-	jwtTokenTTL          string
-	jwtMaxTTL            string
-	jwtIssuer            string
-	jwtAudience          string
-	jwtSubject           string
-	certAuth             bool
-	managedStorageVolume bool
+	image                   string
+	containerName           string
+	certDir                 string
+	dockerBinary            string
+	networkName             string
+	storageVolume           string
+	transitKeyType          string
+	unsealKey               string
+	jwtPrivateKey           *rsa.PrivateKey
+	jwtPublicKey            string
+	jwtPublicKeys           []string
+	jwtTTL                  time.Duration
+	jwtTokenTTL             string
+	jwtMaxTTL               string
+	jwtIssuer               string
+	jwtAudience             string
+	jwtSubject              string
+	certAuthAliasNameSource string
+	certAuth                bool
+	managedStorageVolume    bool
 }
 
 type mountRequestBody struct {
@@ -186,12 +188,13 @@ type certAuthConfigRequestBody struct {
 }
 
 type certAuthRoleRequestBody struct {
-	DisplayName    string   `json:"display_name"`
-	Policies       []string `json:"policies"`
-	Certificate    string   `json:"certificate"`
-	AllowedURISANs []string `json:"allowed_uri_sans,omitempty"`
-	TTL            string   `json:"ttl"`
-	MaxTTL         string   `json:"max_ttl"`
+	DisplayName     string   `json:"display_name"`
+	Policies        []string `json:"policies"`
+	Certificate     string   `json:"certificate"`
+	AllowedURISANs  []string `json:"allowed_uri_sans,omitempty"`
+	AliasNameSource string   `json:"alias_name_source,omitempty"`
+	TTL             string   `json:"ttl"`
+	MaxTTL          string   `json:"max_ttl"`
 }
 
 type jwtHeader struct {
@@ -275,31 +278,32 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 	}
 
 	environment := &OpenBaoEnvironment{
-		TLSServerName:        openBaoTLSServerName,
-		Token:                token,
-		Namespace:            cfg.Namespace,
-		TransitMount:         cfg.TransitMount,
-		TransitKey:           cfg.TransitKey,
-		AuthMount:            openBaoJWTAuthMount,
-		AuthRole:             openBaoJWTAuthRole,
-		CertAuthMount:        openBaoCertAuthMount,
-		CertAuthRole:         openBaoCertAuthRole,
-		CertSPIFFEID:         openBaoCertAuthSPIFFEID,
-		image:                cfg.Image,
-		containerName:        containerName,
-		certDir:              certDir,
-		dockerBinary:         dockerPath,
-		networkName:          cfg.NetworkName,
-		storageVolume:        cfg.StorageVolume,
-		transitKeyType:       cfg.TransitKeyType,
-		jwtTTL:               cfg.JWTTTL,
-		jwtTokenTTL:          cfg.JWTTokenTTL,
-		jwtMaxTTL:            cfg.JWTMaxTTL,
-		jwtIssuer:            cfg.JWTIssuer,
-		jwtAudience:          cfg.JWTAudience,
-		jwtSubject:           cfg.JWTSubject,
-		certAuth:             cfg.CertAuth,
-		managedStorageVolume: managedStorageVolume,
+		TLSServerName:           openBaoTLSServerName,
+		Token:                   token,
+		Namespace:               cfg.Namespace,
+		TransitMount:            cfg.TransitMount,
+		TransitKey:              cfg.TransitKey,
+		AuthMount:               openBaoJWTAuthMount,
+		AuthRole:                openBaoJWTAuthRole,
+		CertAuthMount:           openBaoCertAuthMount,
+		CertAuthRole:            openBaoCertAuthRole,
+		CertSPIFFEID:            openBaoCertAuthSPIFFEID,
+		image:                   cfg.Image,
+		containerName:           containerName,
+		certDir:                 certDir,
+		dockerBinary:            dockerPath,
+		networkName:             cfg.NetworkName,
+		storageVolume:           cfg.StorageVolume,
+		transitKeyType:          cfg.TransitKeyType,
+		jwtTTL:                  cfg.JWTTTL,
+		jwtTokenTTL:             cfg.JWTTokenTTL,
+		jwtMaxTTL:               cfg.JWTMaxTTL,
+		jwtIssuer:               cfg.JWTIssuer,
+		jwtAudience:             cfg.JWTAudience,
+		jwtSubject:              cfg.JWTSubject,
+		certAuthAliasNameSource: cfg.CertAuthAliasNameSource,
+		certAuth:                cfg.CertAuth,
+		managedStorageVolume:    managedStorageVolume,
 	}
 	if err := environment.startContainer(ctx, cfg.Image); err != nil {
 		_ = environment.Close(context.Background())
@@ -417,12 +421,13 @@ func (f *OpenBaoEnvironment) ConfigureCertAuthRole(
 		return err
 	}
 	return f.write(ctx, httpClient, path.Join(f.CertAuthMount, "certs", f.CertAuthRole), certAuthRoleRequestBody{
-		DisplayName:    f.CertAuthRole,
-		Policies:       []string{openBaoJWTPolicyName},
-		Certificate:    string(certificatePEM),
-		AllowedURISANs: []string{allowedURISAN},
-		TTL:            openBaoCertAuthTokenTTL,
-		MaxTTL:         openBaoCertAuthTokenMaxTTL,
+		DisplayName:     f.CertAuthRole,
+		Policies:        []string{openBaoJWTPolicyName},
+		Certificate:     string(certificatePEM),
+		AllowedURISANs:  []string{allowedURISAN},
+		AliasNameSource: f.certAuthAliasNameSource,
+		TTL:             openBaoCertAuthTokenTTL,
+		MaxTTL:          openBaoCertAuthTokenMaxTTL,
 	})
 }
 

@@ -55,6 +55,11 @@ test-e2e-provider-certauth-spiffe-openbao-ci: verify-e2e-manifest ## Run provide
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image-certauth-spiffe; fi
 	@E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" E2E_SPIRE_SERVER_IMAGE="$(E2E_SPIRE_SERVER_IMAGE)" E2E_SPIRE_AGENT_IMAGE="$(E2E_SPIRE_AGENT_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderCertAuthSPIREWorkloadAPISourceE2E$$' -count=1 -timeout=7m
 
+.PHONY: test-e2e-provider-certauth-spiffe-openbao-local
+test-e2e-provider-certauth-spiffe-openbao-local: verify-e2e-manifest ## Run provider E2E with real SPIRE Workload API and OpenBao cert login.
+	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image-certauth-spiffe; fi
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_CERT_AUTH_URI_SAN_ALIAS=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" E2E_SPIRE_SERVER_IMAGE="$(E2E_SPIRE_SERVER_IMAGE)" E2E_SPIRE_AGENT_IMAGE="$(E2E_SPIRE_AGENT_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestProviderCertAuthSPIREOpenBaoE2E$$' -count=1 -timeout=7m
+
 .PHONY: test-e2e-provider-certauth-pkcs11-openbao-ci
 test-e2e-provider-certauth-pkcs11-openbao-ci: verify-e2e-manifest ## Run provider E2E with real PKCS#11 SoftHSM cert source.
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then $(MAKE) image-certauth-pkcs11-e2e; fi

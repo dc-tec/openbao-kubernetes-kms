@@ -18,12 +18,14 @@ import (
 )
 
 const (
-	envSPIREServerImage = "E2E_SPIRE_SERVER_IMAGE"
-	envSPIREAgentImage  = "E2E_SPIRE_AGENT_IMAGE"
+	envSPIREServerImage           = "E2E_SPIRE_SERVER_IMAGE"
+	envSPIREAgentImage            = "E2E_SPIRE_AGENT_IMAGE"
+	envOpenBaoCertAuthURISANAlias = "E2E_OPENBAO_CERT_AUTH_URI_SAN_ALIAS"
 
-	spireServerSocketPath = "/run/spire/server/private/api.sock"
-	spireAgentSocketPath  = "/run/spire/sockets/agent.sock"
-	testCertAuthSPIFFEID  = "spiffe://example.org/openbao-kms/workload-a"
+	spireServerSocketPath                = "/run/spire/server/private/api.sock"
+	spireAgentSocketPath                 = "/run/spire/sockets/agent.sock"
+	testCertAuthSPIFFEID                 = "spiffe://example.org/openbao-kms/workload-a"
+	openBaoCertAuthAliasNameSourceURISAN = "uri_san"
 )
 
 func TestProviderCertAuthPKCS11SoftHSME2E(t *testing.T) {
@@ -78,6 +80,34 @@ func TestProviderCertAuthSPIREWorkloadAPISourceE2E(t *testing.T) {
 	probePath := filepath.Join(t.TempDir(), "certauth-spiffe-probe")
 	buildSPIFFECertAuthProbe(t, ctx, probePath)
 	runSPIFFEProviderSourceProbe(t, ctx, dockerPath, providerImage, networkName, source.SocketDir, probePath, testCertAuthSPIFFEID)
+}
+
+func TestProviderCertAuthSPIREOpenBaoE2E(t *testing.T) {
+	if !strings.EqualFold(os.Getenv(envOpenBaoCertAuthURISANAlias), "true") {
+		t.Skip(envOpenBaoCertAuthURISANAlias + "=true is required")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
+	defer cancel()
+
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-certauth-spire-openbao", providerFailureStackOptions{
+		Environment: framework.OpenBaoEnvironmentConfig{
+			CertAuth:                true,
+			CertAuthAliasNameSource: openBaoCertAuthAliasNameSourceURISAN,
+		},
+		Config: providerContainerConfigOptions{
+			AuthMethod: providerAuthMethodCert,
+			Cert: providerCertAuthConfigOptions{
+				Source: providerCertAuthSourceSPIFFE,
+			},
+		},
+		BeforeProviderStart: func(t *testing.T, ctx context.Context, stack *providerFailureStack) {
+			t.Helper()
+			source := startSPIREProviderSource(t, ctx, stack)
+			configureOpenBaoCertAuthForProviderSource(t, ctx, stack, source.BundlePEM, "SPIRE bundle")
+		},
+	})
+	stack.runClient(ctx, "certauth-spire-client", kmsClientModeFullStack, sampleNotMounted)
 }
 
 func configureSoftHSMProviderSource(t *testing.T, ctx context.Context, stack *providerFailureStack) {
