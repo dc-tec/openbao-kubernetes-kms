@@ -43,6 +43,22 @@ lanes:
     status: active
     reports: true
 
+  - id: openbao-cert-auth-ci
+    name: OpenBao Certificate Auth CI
+    package: ./test/e2e
+    labelFilter: openbao && certauth && ci
+    prScope: pr
+    environment: local-openbao
+    isolation: local-container
+    timeout: 6m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
   - id: kind-convergence
     name: Kubernetes KMS v2 Kind Multi-Control-Plane Convergence
     package: ./test/e2e

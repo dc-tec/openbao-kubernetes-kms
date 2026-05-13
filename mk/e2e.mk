@@ -46,6 +46,10 @@ $(eval $(call provider-e2e-target,test-e2e-provider-load-soak-openbao-ci,^TestPr
 $(eval $(call provider-e2e-target,test-e2e-provider-restore-openbao-ci,^TestProvider(OpenBaoBackendReplacement|ContainerizedDRRestore)E2E$$$$,8m))
 $(eval $(call provider-e2e-target,test-e2e-provider-rotation-openbao-ci,^TestProvider(TransitRotation|TransitMinDecryptionVersionBlocksHistorical|MissingStateAfterRotationFailsClosed)E2E$$$$,18m))
 
+.PHONY: test-e2e-cert-auth-openbao-ci
+test-e2e-cert-auth-openbao-ci: verify-e2e-manifest ## Run the OpenBao TLS certificate auth E2E lane.
+	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1 -timeout=6m -ginkgo.label-filter='openbao && certauth && ci'
+
 .PHONY: test-e2e-provider-upgrade-rollback-openbao-ci
 test-e2e-provider-upgrade-rollback-openbao-ci: verify-e2e-manifest
 	@if [ "$(E2E_PROVIDER_BUILD)" != "false" ]; then \

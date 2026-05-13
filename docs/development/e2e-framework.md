@@ -21,6 +21,7 @@ behavior.
 |---|---|---|---|
 | Full enabled E2E suite | `make test-e2e` | Runs the enabled Ginkgo E2E specs selected by labels. | Depends on selected labels |
 | OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
+| OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao TLS cert auth method, listener client-certificate request, URI SAN role binding, cert login, and Transit access with the issued token. | Docker-compatible runtime |
 | Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and provider auth. | Docker-compatible runtime |
 | Provider CLI | `make test-e2e-provider-cli-openbao-ci` | Provider image CLI commands against real OpenBao/config/state, including diagnostics and hardening failures. | Docker-compatible runtime |
 | Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted auth material, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
@@ -47,6 +48,7 @@ Labels are the routing API. Prefer small composable labels:
 
 ```go
 Label("openbao", "transit", "ci")
+Label("openbao", "certauth", "ci")
 Label("openbao", "kmsv2", "failure", "ci")
 Label("openbao", "kmsv2", "ha", "ci")
 Label("openbao", "kmsv2", "restore", "ci")
@@ -80,6 +82,7 @@ Current lane IDs:
 | Lane ID | Status |
 |---|---|
 | `openbao-ci` | active |
+| `openbao-cert-auth-ci` | active |
 | `openbao-failure-ci` | active |
 | `openbao-provider-cli-ci` | active |
 | `openbao-ha-ci` | active |
@@ -112,6 +115,7 @@ test/e2e/
   kind_dr_test.go
   kind_smoke_test.go
   openbao_transit_test.go
+  openbao_cert_auth_test.go
   provider_cli_test.go
   provider_container_test.go
   provider_failure_test.go

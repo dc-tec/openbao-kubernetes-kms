@@ -16,6 +16,18 @@ make test-e2e-provider-openbao-ci
 
 That target builds `E2E_PROVIDER_IMAGE` and runs the provider plus KMS v2 socket client in Docker containers. Set `E2E_PROVIDER_BUILD=false` to test a prebuilt image tag.
 
+Run only the OpenBao certificate auth slice with:
+
+```sh
+make test-e2e-cert-auth-openbao-ci
+```
+
+That target runs real OpenBao with a TLS listener that requests client
+certificates. It configures the OpenBao cert auth method with a URI SAN-bound
+role, logs in through cert auth, and verifies Transit access with the issued
+token. It does not replace provider E2E coverage for PKCS#11 or SPIFFE source
+availability.
+
 Run only the provider CLI slice with:
 
 ```sh
