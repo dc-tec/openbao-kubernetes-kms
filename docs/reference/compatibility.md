@@ -19,7 +19,7 @@ The initial public release envelope is:
 - Kubernetes KMS v2,
 - OpenBao `2.5.3`,
 - OpenBao Transit,
-- JWT auth in default builds,
+- JWT auth in default release artifacts,
 - PKCS#11 certificate auth only when the selected release includes matching
   opt-in artifacts and E2E evidence,
 - SPIFFE/SPIRE source wiring as implementation evidence only, not as supported
@@ -103,9 +103,9 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 
 | Auth method | Build | Status |
 |---|---|---|
-| JWT | default | Supported. |
-| Certificate with PKCS#11 source | `certauth_pkcs11` | Opt-in preview only when the selected release includes the PKCS#11 artifact evidence and E2E result. CI exercises a real SoftHSM token, PKCS#11 signer, OpenBao cert login, and Transit access. |
-| Certificate with SPIFFE source | `certauth_spiffe` | Wiring is present for local verification and upstream OpenBao alignment work, and CI exercises real SPIRE Workload API source validation. `auth.cert.source: spiffe` is not a supported user configuration until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
+| JWT | default release artifacts | Supported preview path. |
+| Certificate with PKCS#11 source | `certauth_pkcs11` opt-in host artifact | Opt-in preview only when the selected release includes the PKCS#11 artifact evidence and E2E result. CI exercises a real SoftHSM token, PKCS#11 signer, OpenBao cert login, and Transit access. |
+| Certificate with SPIFFE source | `certauth_spiffe` validation artifact | Wiring is present for local verification and upstream OpenBao alignment work, and CI exercises real SPIRE Workload API source validation. `auth.cert.source: spiffe` is not a supported user configuration and SPIFFE artifacts are not public preview support artifacts until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
 | OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
 ## Compatibility Promises

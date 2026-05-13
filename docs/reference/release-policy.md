@@ -176,18 +176,20 @@ Checksums are written to:
 dist/release/checksums.txt
 ```
 
-The published release asset is `checksums.txt`. The checksum file uses SHA-256 and contains one line per published release artifact. `release-artifacts` builds the default JWT-capable Linux binary matrix, `release-packages` builds `.deb` and `.rpm` packages for systemd hosts, and `release-bundles` builds deterministic systemd and static-pod tarballs.
+The published release asset is `checksums.txt`. The checksum file uses SHA-256 and contains one line per published release artifact. `release-artifacts` builds the default JWT-only Linux binary matrix, `release-packages` builds `.deb` and `.rpm` packages for systemd hosts, and `release-bundles` builds deterministic systemd and static-pod tarballs.
 
-Certificate-auth artifacts are explicit opt-in builds. PKCS#11 cert-auth
-variants are host CGO artifact builds through
-`release-artifact-certauth-pkcs11-host`. A release must not claim PKCS#11
-cert-auth source support unless the release evidence includes the relevant
-artifact lane and the SoftHSM provider source E2E result. SPIFFE source wiring
-remains in tree for local verification and upstream OpenBao alignment work, but
-release artifacts must not claim `auth.cert.source: spiffe` support until the
-supported OpenBao version can derive cert-auth identity aliases from URI SANs
-and release evidence includes successful OpenBao cert-auth login with the
-selected SPIFFE issuer profile.
+Release evidence must distinguish artifact families:
+
+| Artifact family | Build target | Public preview claim |
+|---|---|---|
+| Default `bao-kms-provider_${VERSION}_linux_${GOARCH}` | `release-artifacts` | JWT auth only. |
+| `bao-kms-provider-certauth-pkcs11_${VERSION}_${GOOS}_${GOARCH}` | `release-artifact-certauth-pkcs11-host` | PKCS#11 certificate auth only when the release evidence includes this artifact lane and the SoftHSM provider source E2E result. |
+| SPIFFE or combined cert-auth validation artifacts | `release-artifacts-certauth-spiffe`, `release-artifact-certauth-combined-host` | No public preview support claim. These artifacts are for local verification and upstream OpenBao alignment work. |
+
+Release artifacts and docs must not claim `auth.cert.source: spiffe` support
+until the supported OpenBao version can derive cert-auth identity aliases from
+URI SANs and release evidence includes successful OpenBao cert-auth login with
+the selected SPIFFE issuer profile.
 
 ## Release Evidence
 

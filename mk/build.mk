@@ -6,7 +6,7 @@ build: ## Build bao-kms-provider with version metadata.
 	@"$(GO)" build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o "$(BIN)" ./cmd/bao-kms-provider
 
 .PHONY: build-certauth-spiffe
-build-certauth-spiffe: ## Build host binary with SPIFFE certificate auth enabled.
+build-certauth-spiffe: ## Build host binary with SPIFFE certificate source for validation.
 	@mkdir -p "$$(dirname "$(CERTAUTH_SPIFFE_BIN)")"
 	@CGO_ENABLED=0 "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_SPIFFE_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$(CERTAUTH_SPIFFE_BIN)" ./cmd/bao-kms-provider
 
@@ -16,7 +16,7 @@ build-certauth-pkcs11: ## Build host binary with PKCS#11 certificate auth enable
 	@CGO_ENABLED=1 "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_PKCS11_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$(CERTAUTH_PKCS11_BIN)" ./cmd/bao-kms-provider
 
 .PHONY: build-certauth-combined
-build-certauth-combined: ## Build host binary with PKCS#11 and SPIFFE certificate auth enabled.
+build-certauth-combined: ## Build host binary with PKCS#11 and SPIFFE certificate sources for validation.
 	@mkdir -p "$$(dirname "$(CERTAUTH_COMBINED_BIN)")"
 	@CGO_ENABLED=1 "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_COMBINED_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$(CERTAUTH_COMBINED_BIN)" ./cmd/bao-kms-provider
 
@@ -33,7 +33,7 @@ image: ## Build local distroless non-root container image.
 		-t "$(IMAGE)" .
 
 .PHONY: image-certauth-spiffe
-image-certauth-spiffe: ## Build local E2E provider image with SPIFFE certificate auth enabled.
+image-certauth-spiffe: ## Build local E2E provider image with SPIFFE certificate source for validation.
 	@$(MAKE) image IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" IMAGE_CGO_ENABLED=0 IMAGE_GO_BUILD_TAGS="$(CERTAUTH_SPIFFE_BUILD_TAGS)"
 
 .PHONY: image-certauth-pkcs11-e2e
@@ -78,12 +78,12 @@ release-artifacts-default:
 	done
 
 .PHONY: release-artifacts-certauth-spiffe
-release-artifacts-certauth-spiffe: clean-dist ## Build Linux SPIFFE cert-auth release binaries and checksums.
+release-artifacts-certauth-spiffe: clean-dist ## Build Linux SPIFFE cert-auth validation binaries and checksums.
 	@$(MAKE) release-artifacts-certauth-spiffe-binaries
 	@$(MAKE) checksums
 
 .PHONY: release-artifacts-with-certauth-spiffe
-release-artifacts-with-certauth-spiffe: clean-dist ## Build default and SPIFFE cert-auth Linux release binaries.
+release-artifacts-with-certauth-spiffe: clean-dist ## Build default and SPIFFE validation Linux binaries.
 	@$(MAKE) release-artifacts-default
 	@$(MAKE) release-artifacts-certauth-spiffe-binaries
 	@$(MAKE) checksums
@@ -112,7 +112,7 @@ release-artifact-certauth-pkcs11-host: ## Build host PKCS#11 cert-auth artifact 
 	@$(MAKE) checksums
 
 .PHONY: release-artifact-certauth-combined-host
-release-artifact-certauth-combined-host: ## Build host combined cert-auth artifact and checksums.
+release-artifact-certauth-combined-host: ## Build host combined cert-auth validation artifact and checksums.
 	@set -eu; \
 	mkdir -p "$(DIST_DIR)"; \
 	goos="$$("$(GO)" env GOOS)"; \

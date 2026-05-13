@@ -163,10 +163,10 @@ is treated as identity-bearing provider scope.
 ## Auth Timing
 
 `auth.method` selects how the provider obtains its OpenBao token. The default
-preview release path is `jwt`. The `cert` method is available only in binaries
-built with a certificate-auth build tag, and PKCS#11 certificate auth is a
-supported preview path only when the selected release includes matching opt-in
-artifacts and E2E evidence.
+preview release artifacts are JWT-only and use `jwt`. The `cert` method is
+available only in binaries built with a certificate-auth build tag, and PKCS#11
+certificate auth is a supported preview path only when the selected release
+includes matching opt-in artifacts and E2E evidence.
 
 `auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. Once the remaining OpenBao token TTL drops below this value, the provider renews or re-logs in before the next request.
 
@@ -206,6 +206,10 @@ auth:
       pinFile: /etc/openbao-kms/pkcs11/pin
       maxSessions: 4
 ```
+
+This is the only certificate source inside the current preview support envelope
+when the selected release includes the matching PKCS#11 artifact evidence and
+E2E result.
 
 OpenBao must be configured to request TLS client certificates on the listener used by the provider. In OpenBao listener terms, do not set `tls_disable` or `tls_disable_client_certs` to true for that listener. Role constraints should bind certificate identity, for example through `allowed_uri_sans` for URI identities. Keep cert auth binding enabled during token renewal and keep OCSP fail-open disabled when OCSP is used.
 

@@ -148,19 +148,21 @@ make build
 bin/bao-kms-provider version
 ```
 
-Certificate auth variants are opt-in build tags:
+The default build and public release workflow produce JWT-only auth artifacts.
+Certificate auth variants are separate opt-in build tags:
 
 ```sh
 make build-certauth-pkcs11
 ```
 
-PKCS#11 cert-auth artifacts are host CGO builds via
+PKCS#11 cert-auth artifacts are separate host CGO builds via
 `make release-artifact-certauth-pkcs11-host`.
 
 SPIFFE certificate-source wiring remains in tree for local verification and
 upstream OpenBao alignment work, but `auth.cert.source: spiffe` is not a
 supported user configuration until the supported OpenBao version can derive
-cert-auth identity aliases from URI SANs.
+cert-auth identity aliases from URI SANs. SPIFFE build artifacts are validation
+artifacts, not public preview support artifacts.
 
 Selected E2E entrypoints:
 

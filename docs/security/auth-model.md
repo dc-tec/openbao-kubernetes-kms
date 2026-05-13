@@ -16,6 +16,12 @@ This page describes how `bao-kms-provider` authenticates to OpenBao. For the ope
 | `cert` with `pkcs11` source | Opt-in preview when release artifacts and E2E evidence include it | The deployment has a hardware or software token that can hold the private key outside the filesystem. |
 | `cert` with `spiffe` source | Not user-configurable | SPIFFE source wiring remains in tree for local verification and upstream OpenBao alignment work. It is not a supported configuration until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
 
+The default public release artifacts are JWT-only. PKCS#11 certificate auth is a
+separate opt-in artifact family, and it is inside the preview support envelope
+only when the selected release includes matching artifact evidence and E2E
+evidence. SPIFFE and combined cert-auth artifacts are validation artifacts, not
+public preview support artifacts.
+
 OpenBao Kubernetes auth is intentionally not a provider auth method for this plugin. It calls Kubernetes TokenReview, which depends on the API server the KMS plugin may be required to unlock during bootstrap or disaster recovery.
 
 OpenBao JWT auth verifies JWTs cryptographically using local keys, JWKS, or OIDC discovery. OpenBao cert auth verifies the TLS client certificate chain and configured role constraints. Both avoid TokenReview on the protected cluster.

@@ -30,13 +30,14 @@ Choose the artifact that matches the deployment model you will use.
 | Static-pod bundle | static-pod deployment | Deterministic tarball with static-pod manifest, provider config sample, encryption config, image reference, checksum, signature, and attestation. |
 | Container image | static-pod runtime | Distroless non-root image, runs as `65532:65532`, pinned to a base image digest in `.ci/versions.yaml`. |
 
-Published release artifacts use the default JWT-capable build. Certificate auth is an opt-in build variant:
+Published release artifacts use the default JWT-only auth build. Certificate
+auth is an opt-in build variant:
 
 ```sh
 make build-certauth-pkcs11
 ```
 
-PKCS#11 cert-auth artifacts are host CGO builds via
+PKCS#11 cert-auth artifacts are separate host CGO builds via
 `make release-artifact-certauth-pkcs11-host`.
 
 PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. PKCS#11 is
@@ -46,6 +47,14 @@ certificate-source wiring remains in tree for local verification and upstream
 OpenBao alignment work, but `auth.cert.source: spiffe` is not a supported user
 configuration until the supported OpenBao version can derive cert-auth identity
 aliases from URI SANs.
+
+Release evidence distinguishes these artifact families:
+
+| Artifact family | Auth support claim |
+|---|---|
+| Default `bao-kms-provider` artifacts | JWT auth only. |
+| `bao-kms-provider-certauth-pkcs11` host artifacts | PKCS#11 certificate auth only when matching artifact evidence and E2E evidence are present for that release. |
+| SPIFFE or combined cert-auth validation artifacts | Not public preview support artifacts. They exist for local verification and upstream OpenBao alignment work. |
 
 The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) once the artifact is in place.
 
