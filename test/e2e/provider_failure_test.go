@@ -241,6 +241,8 @@ type providerFailureStackOptions struct {
 	ProviderImage       string
 	Config              providerContainerConfigOptions
 	Environment         framework.OpenBaoEnvironmentConfig
+	MountSoftHSM        bool
+	ProviderStart       providerContainerStartOptions
 	BeforePopulate      func(t *testing.T, environment *framework.OpenBaoEnvironment, stagingDir string)
 	BeforeProviderStart func(t *testing.T, ctx context.Context, stack *providerFailureStack)
 }
@@ -256,6 +258,7 @@ type providerFailureStack struct {
 	sampleVolume  string
 	volumes       providerVolumes
 	environment   *framework.OpenBaoEnvironment
+	providerStart providerContainerStartOptions
 }
 
 type sampleMountMode string
@@ -290,6 +293,12 @@ func startProviderFailureStack(
 		run:    prefix + "-run",
 		state:  prefix + "-state",
 	}
+	providerStart := opts.ProviderStart
+	if opts.MountSoftHSM {
+		volumes.hsm = prefix + "-hsm"
+		providerStart.Env = append(providerStart.Env, "SOFTHSM2_CONF="+containerSoftHSMConfigPath)
+		providerStart.Volumes = append(providerStart.Volumes, volumes.hsm+":/hsm")
+	}
 	stack := &providerFailureStack{
 		t:             t,
 		dockerPath:    dockerPath,
@@ -299,6 +308,7 @@ func startProviderFailureStack(
 		providerName:  providerName,
 		sampleVolume:  sampleVolume,
 		volumes:       volumes,
+		providerStart: providerStart,
 	}
 	var providerStarted bool
 	t.Cleanup(func() {
@@ -351,7 +361,7 @@ func startProviderFailureStack(
 		opts.BeforeProviderStart(t, ctx, stack)
 	}
 
-	startProviderContainer(t, ctx, dockerPath, providerName, networkName, providerImage, volumes)
+	startProviderContainerWithOptions(t, ctx, dockerPath, providerName, networkName, providerImage, volumes, stack.providerStart)
 	providerStarted = true
 	return stack
 }
@@ -429,7 +439,7 @@ func (s *providerFailureStack) restartProvider(ctx context.Context, image string
 		s.t.Fatal("provider restart image is empty")
 	}
 	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
-	startProviderContainer(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes)
+	startProviderContainerWithOptions(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes, s.providerStart)
 	s.providerImage = image
 }
 
@@ -440,7 +450,7 @@ func (s *providerFailureStack) restartProviderWithEmptyState(ctx context.Context
 	}
 	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
 	s.clearProviderState(ctx)
-	startProviderContainer(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes)
+	startProviderContainerWithOptions(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes, s.providerStart)
 	s.providerImage = image
 }
 

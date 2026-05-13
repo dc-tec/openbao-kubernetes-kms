@@ -28,7 +28,25 @@ image: ## Build local distroless non-root container image.
 		--build-arg COMMIT="$(COMMIT)" \
 		--build-arg BUILD_DATE="$(BUILD_DATE)" \
 		--build-arg DIRTY="$(DIRTY)" \
+		--build-arg CGO_ENABLED="$(IMAGE_CGO_ENABLED)" \
+		--build-arg GO_BUILD_TAGS="$(IMAGE_GO_BUILD_TAGS)" \
 		-t "$(IMAGE)" .
+
+.PHONY: image-certauth-spiffe
+image-certauth-spiffe: ## Build local E2E provider image with SPIFFE certificate auth enabled.
+	@$(MAKE) image IMAGE="$(E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE)" IMAGE_CGO_ENABLED=0 IMAGE_GO_BUILD_TAGS="$(CERTAUTH_SPIFFE_BUILD_TAGS)"
+
+.PHONY: image-certauth-pkcs11-e2e
+image-certauth-pkcs11-e2e: ## Build local E2E provider image with PKCS#11 certificate auth and SoftHSM.
+	@DOCKER_BUILDKIT=1 "$(DOCKER)" build \
+		--platform "$(IMAGE_PLATFORM)" \
+		--file Dockerfile.e2e-certauth-pkcs11 \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg COMMIT="$(COMMIT)" \
+		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg DIRTY="$(DIRTY)" \
+		--build-arg GO_BUILD_TAGS="$(CERTAUTH_PKCS11_BUILD_TAGS)" \
+		-t "$(E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE)" .
 
 .PHONY: image-smoke
 image-smoke: image ## Build and smoke-test local container image.

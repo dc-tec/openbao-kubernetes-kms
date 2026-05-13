@@ -86,10 +86,10 @@ jobs:
 
           set_output workflow '^(\.github/workflows/|\.github/actions/)'
           set_output docs '^(docs/|website/|README\.md|hugo\.toml|CHANGELOG\.md)'
-          set_output image '^(Dockerfile|\.dockerignore|go\.(mod|sum)$|vendor/|cmd/|internal/|Makefile|\.ci/versions\.yaml)'
+          set_output image '^(Dockerfile(\..*)?|\.dockerignore|go\.(mod|sum)$|vendor/|cmd/|internal/|Makefile|\.ci/versions\.yaml)'
           set_output deployment '^(deploy/|hack/kubeadm/|test/deployment/)'
-          set_output openbao_e2e '^(test/e2e/|internal/(openbao|auth|kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile|go\.(mod|sum)$|vendor/|Makefile)'
-          set_output kind_e2e '^(test/e2e/|deploy/|hack/kubeadm/|internal/(kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile|go\.(mod|sum)$|vendor/|Makefile|\.ci/versions\.yaml)'
+          set_output openbao_e2e '^(test/e2e/|internal/(openbao|auth|kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile(\..*)?|go\.(mod|sum)$|vendor/|Makefile|\.ci/versions\.yaml)'
+          set_output kind_e2e '^(test/e2e/|deploy/|hack/kubeadm/|internal/(kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile(\..*)?|go\.(mod|sum)$|vendor/|Makefile|\.ci/versions\.yaml)'
 
   core:
     name: Core Quality
@@ -190,7 +190,7 @@ jobs:
   openbao-e2e:
     name: OpenBao E2E
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 55
     needs: [changes, core]
     if: github.event_name == 'push' || needs.changes.outputs.openbao_e2e == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_openbao_e2e)
     env:
@@ -207,6 +207,7 @@ jobs:
           make test-e2e-openbao-ci
           make test-e2e-provider-failure-openbao-ci
           make test-e2e-provider-rotation-openbao-ci
+          make test-e2e-provider-certauth-sources-openbao-ci
 
       - name: Upload E2E artifacts
         if: always()

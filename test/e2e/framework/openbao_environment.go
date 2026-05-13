@@ -401,6 +401,31 @@ func (f *OpenBaoEnvironment) NewCertAuthClient() (*openbao.AuthClient, error) {
 	})
 }
 
+func (f *OpenBaoEnvironment) ConfigureCertAuthRole(
+	ctx context.Context,
+	certificatePEM []byte,
+	allowedURISAN string,
+) error {
+	if len(certificatePEM) == 0 {
+		return fmt.Errorf("OpenBao cert-auth CA certificate is required")
+	}
+	if strings.TrimSpace(allowedURISAN) == "" {
+		return fmt.Errorf("OpenBao cert-auth allowed URI SAN is required")
+	}
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, path.Join(f.CertAuthMount, "certs", f.CertAuthRole), certAuthRoleRequestBody{
+		DisplayName:    f.CertAuthRole,
+		Policies:       []string{openBaoJWTPolicyName},
+		Certificate:    string(certificatePEM),
+		AllowedURISANs: []string{allowedURISAN},
+		TTL:            openBaoCertAuthTokenTTL,
+		MaxTTL:         openBaoCertAuthTokenMaxTTL,
+	})
+}
+
 func (f *OpenBaoEnvironment) WriteJWTFile(now time.Time, ttl time.Duration) error {
 	return f.WriteJWTFileAt(f.JWTFile, now, ttl)
 }
@@ -831,8 +856,7 @@ func removeOpenBaoStorageVolume(ctx context.Context, dockerBinary string, storag
 func writeOpenBaoRaftStorageConfig(dir string, requestClientCerts bool) error {
 	clientCertConfig := ""
 	if requestClientCerts {
-		clientCertConfig = `  tls_client_ca_file = "/bao/tls/client-ca.pem"
-  tls_disable_client_certs = false
+		clientCertConfig = `  tls_disable_client_certs = false
 `
 	}
 	raw := fmt.Sprintf(`api_addr = "https://localhost:8200"
@@ -1410,14 +1434,7 @@ func (f *OpenBaoEnvironment) bootstrapCertAuth(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
-	return f.write(ctx, httpClient, path.Join(f.CertAuthMount, "certs", f.CertAuthRole), certAuthRoleRequestBody{
-		DisplayName:    f.CertAuthRole,
-		Policies:       []string{openBaoJWTPolicyName},
-		Certificate:    string(caPEM),
-		AllowedURISANs: []string{f.CertSPIFFEID},
-		TTL:            openBaoCertAuthTokenTTL,
-		MaxTTL:         openBaoCertAuthTokenMaxTTL,
-	})
+	return f.ConfigureCertAuthRole(ctx, caPEM, f.CertSPIFFEID)
 }
 
 func (f *OpenBaoEnvironment) writeJWTAuthConfig(ctx context.Context) error {

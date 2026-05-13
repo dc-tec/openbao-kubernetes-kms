@@ -59,6 +59,44 @@ lanes:
     status: active
     reports: true
 
+  - id: openbao-provider-certauth-spiffe-source-ci
+    name: Provider SPIRE Certificate Source CI
+    package: ./test/e2e
+    labelFilter: certauth && spiffe && ci
+    prScope: pr
+    environment: local-spire
+    isolation: local-container
+    timeout: 7m
+    parallelNodes: 1
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+      - E2E_SPIRE_SERVER_IMAGE
+      - E2E_SPIRE_AGENT_IMAGE
+    versionRefs:
+      - validation.spire.primary
+      - validation.spire.serverImage
+      - validation.spire.agentImage
+    status: active
+    reports: true
+
+  - id: openbao-provider-certauth-pkcs11-source-ci
+    name: OpenBao Provider PKCS#11 SoftHSM Certificate Source CI
+    package: ./test/e2e
+    labelFilter: openbao && certauth && pkcs11 && ci
+    prScope: pr
+    environment: local-openbao-softhsm
+    isolation: local-container
+    timeout: 7m
+    parallelNodes: 1
+    enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+    versionRefs:
+      - validation.openbao.primary
+      - validation.openbao.image
+    status: active
+    reports: true
+
   - id: kind-convergence
     name: Kubernetes KMS v2 Kind Multi-Control-Plane Convergence
     package: ./test/e2e

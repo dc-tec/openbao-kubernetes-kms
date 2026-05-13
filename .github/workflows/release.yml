@@ -177,7 +177,7 @@ jobs:
   e2e-openbao:
     name: Release Gate OpenBao E2E
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 75
     needs: prepare
     env:
       GOFLAGS: -mod=vendor
@@ -201,6 +201,7 @@ jobs:
           make test-e2e-provider-restore-openbao-ci
           make test-e2e-provider-rotation-openbao-ci
           make test-e2e-provider-upgrade-rollback-openbao-ci
+          make test-e2e-provider-certauth-sources-openbao-ci
 
       - name: Upload OpenBao E2E artifacts
         if: always()

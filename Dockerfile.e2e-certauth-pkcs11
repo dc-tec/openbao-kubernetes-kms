@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
+FROM --platform=$TARGETPLATFORM docker.io/library/golang:1.26.3-bookworm@sha256:e793a1af16c4c259864819c8ac9c4068df32617375a4dc025be66c76f1d141ab AS build
+
+WORKDIR /src
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION=0.0.0-dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=1970-01-01T00:00:00Z
+ARG DIRTY=false
+ARG GO_BUILD_TAGS=certauth_pkcs11
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev pkg-config softhsm2 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -tags "$GO_BUILD_TAGS" \
+      -ldflags="-s -w -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.version=$VERSION -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.commit=$COMMIT -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.buildDate=$BUILD_DATE -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.dirty=$DIRTY" \
+      -o /out/bao-kms-provider ./cmd/bao-kms-provider \
+    && CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -tags certauth_pkcs11 \
+      -o /out/certauth-pkcs11-setup ./test/e2e/certauthsetup
+
+FROM docker.io/library/golang:1.26.3-bookworm@sha256:e793a1af16c4c259864819c8ac9c4068df32617375a4dc025be66c76f1d141ab
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates softhsm2 \
+    && module_path="$(find /usr/lib -path '*/softhsm/libsofthsm2.so' -print -quit)" \
+    && test -n "$module_path" \
+    && mkdir -p /usr/lib/softhsm \
+    && ln -sf "$module_path" /usr/lib/softhsm/libsofthsm2.so \
+    && rm -rf /var/lib/apt/lists/*
+
+LABEL org.opencontainers.image.title="bao-kms-provider-e2e-certauth-pkcs11" \
+      org.opencontainers.image.description="E2E-only OpenBao Kubernetes KMS provider image with PKCS#11 certificate auth and SoftHSM" \
+      org.opencontainers.image.source="https://github.com/dc-tec/openbao-kubernetes-kms"
+
+COPY --from=build /out/bao-kms-provider /bao-kms-provider
+COPY --from=build /out/certauth-pkcs11-setup /certauth-pkcs11-setup
+
+USER 65532:65532
+ENTRYPOINT ["/bao-kms-provider"]

@@ -18,6 +18,11 @@
 !internal/*.go
 !internal/**/*.go
 
+!test/
+!test/e2e/
+!test/e2e/certauthsetup/
+!test/e2e/certauthsetup/*.go
+
 # Keep local artifacts out even when they sit below allowed source directories.
 **/.DS_Store
 **/artifacts/**

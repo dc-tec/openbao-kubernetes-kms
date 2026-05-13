@@ -4,13 +4,15 @@ FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.3-bookworm@sha256:e
 
 WORKDIR /src
 
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 ARG VERSION=0.0.0-dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=1970-01-01T00:00:00Z
 ARG DIRTY=false
 ARG SOURCE_DATE_EPOCH=0
+ARG CGO_ENABLED=0
+ARG GO_BUILD_TAGS=
 
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -19,7 +21,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false \
+    if [ -n "$GO_BUILD_TAGS" ]; then set -- -tags "$GO_BUILD_TAGS"; else set --; fi; \
+    CGO_ENABLED=$CGO_ENABLED GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false "$@" \
       -ldflags="-s -w -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.version=$VERSION -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.commit=$COMMIT -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.buildDate=$BUILD_DATE -X github.com/dc-tec/openbao-kubernetes-kms/internal/version.dirty=$DIRTY" \
       -o /out/bao-kms-provider ./cmd/bao-kms-provider
 

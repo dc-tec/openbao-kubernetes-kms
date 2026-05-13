@@ -71,6 +71,13 @@ validation:
     image: ghcr.io/openbao/openbao:2.5.3
     imageDigest: sha256:fdc6da21ca6963560c32336fd7feb9cf2d5e52668f1a1647205a4b41171f0806
     digestStatus: pinned
+  spire:
+    primary: "1.13.2"
+    serverImage: ghcr.io/spiffe/spire-server:1.13.2@sha256:45b9f09a393bebdae793979e5bea10d7db30373d231e4eb76977ab8c39f40099
+    serverImageDigest: sha256:45b9f09a393bebdae793979e5bea10d7db30373d231e4eb76977ab8c39f40099
+    agentImage: ghcr.io/spiffe/spire-agent:1.13.2@sha256:6d8a6691d3fc9d391cfe365c4f223c66728fab79732739ebf089e628ad6328d9
+    agentImageDigest: sha256:6d8a6691d3fc9d391cfe365c4f223c66728fab79732739ebf089e628ad6328d9
+    pinStatus: pinned
   kubernetes:
     minimumLine: "1.34"
     primaryLine: "1.34"
