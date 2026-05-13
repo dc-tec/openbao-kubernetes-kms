@@ -119,6 +119,20 @@ Required behavior:
 The provider requires valid AAD annotations. There is no supported mode that
 decrypts without AAD. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
 
+## Protocol Limits
+
+The provider enforces the Kubernetes KMS v2 field limits at the gRPC boundary:
+
+- `ciphertext` is non-empty and less than 1024 bytes.
+- `key_id` is non-empty and less than 1024 bytes.
+- annotation keys plus values are less than 32768 bytes in total.
+- annotation keys and values must be valid UTF-8.
+- annotation keys must be fully qualified domain names.
+
+Decrypt requests that exceed these limits are rejected before Transit decrypt is called. Encrypt fails closed if Transit returns a ciphertext or response metadata that would exceed the KMS v2 response limits.
+
+The gRPC server also caps inbound and outbound protobuf messages at 65536 bytes. This keeps the transport envelope bounded while leaving room for protobuf overhead around the KMS v2 field limits.
+
 ## Annotations
 
 KMS v2 annotations are plaintext metadata stored with encrypted data. They are non-secret and use fully qualified domain-name keys.
@@ -178,6 +192,7 @@ Errors map to stable classes in logs and metrics:
 - `aad_missing`
 - `aad_mismatch`
 - `annotation_invalid`
+- `protocol_limit`
 - `status_stale`
 - `timeout`
 - `canceled`
@@ -214,7 +229,10 @@ Blocking cases:
 - healthy Status returns a non-empty `key_id`,
 - repeated Status calls do not call OpenBao,
 - encrypt returns the Status `key_id`,
+- encrypt output stays within KMS v2 ciphertext, `key_id`, and annotation limits,
 - decrypt accepts encrypt output,
+- decrypt rejects oversized ciphertext, `key_id`, and annotations before Transit,
+- oversized gRPC messages are rejected over the Unix socket before Transit,
 - decrypt rejects unknown `key_id` before the Transit call,
 - decrypt rejects malformed annotations,
 - decrypt rejects AAD mismatch,

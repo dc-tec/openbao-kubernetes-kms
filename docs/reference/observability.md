@@ -67,6 +67,7 @@ The provider tags every failed operation with one of these stable error classes.
 - `aad_missing`
 - `aad_mismatch`
 - `annotation_invalid`
+- `protocol_limit`
 - `status_stale`
 - `timeout`
 - `canceled`

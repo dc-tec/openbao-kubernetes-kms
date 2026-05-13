@@ -24,6 +24,7 @@ const (
 	errorClassOpenBaoRateLimited  = "openbao_rate_limited"
 	errorClassOpenBaoSealed       = "openbao_sealed"
 	errorClassOpenBaoUnavailable  = "openbao_unavailable"
+	errorClassProtocolLimit       = "protocol_limit"
 	errorClassStatusStale         = "status_stale"
 	errorClassTimeout             = "timeout"
 	errorClassTransitKeyMissing   = "transit_key_missing"
@@ -118,12 +119,12 @@ func (s *Server) observeValidationError(err error) {
 
 func statusLabel(err error) string {
 	if err == nil {
-		return "ok"
+		return grpcStatusLabels[codes.OK]
 	}
 	if label, ok := grpcStatusLabels[grpcstatus.Code(err)]; ok {
 		return label
 	}
-	return "unknown"
+	return grpcStatusLabels[codes.Unknown]
 }
 
 func errorClass(err error) string {
@@ -164,6 +165,9 @@ func validationErrorClass(err error) string {
 		return errorClassAnnotationInvalid
 	case errors.Is(err, aad.ErrAnnotationMismatch):
 		return errorClassAADMismatched
+	case errors.Is(err, ErrRequestLimitExceeded),
+		errors.Is(err, ErrResponseLimitExceeded):
+		return errorClassProtocolLimit
 	case errors.Is(err, ErrStatusUnavailable),
 		errors.Is(err, ErrStatusUnhealthy),
 		errors.Is(err, ErrActiveKeyUnavailable),

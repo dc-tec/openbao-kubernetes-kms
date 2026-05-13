@@ -165,7 +165,10 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 	if err != nil {
 		return serveDependencies{}, err
 	}
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(kmsv2.MaxGRPCMessageBytes),
+		grpc.MaxSendMsgSize(kmsv2.MaxGRPCMessageBytes),
+	)
 	kmsv2.Register(grpcServer, kmsServer)
 
 	rt, err := appruntime.New(appruntime.Options{
