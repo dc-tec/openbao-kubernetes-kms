@@ -19,6 +19,7 @@ import (
 const (
 	defaultManifestPath = "test/e2e/suites.yaml"
 	defaultGinkgoBinary = "ginkgo"
+	ginkgoSuiteRunRegex = "^TestE2E$"
 )
 
 type suitesManifest struct {
@@ -500,6 +501,8 @@ func buildGinkgoArgs(
 	args = append(args, packagePath)
 	if entry.RunRegex != "" {
 		args = append(args, "--", "-test.run="+entry.RunRegex)
+	} else {
+		args = append(args, "--", "-test.run="+ginkgoSuiteRunRegex)
 	}
 	return args
 }

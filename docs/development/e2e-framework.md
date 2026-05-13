@@ -93,7 +93,9 @@ Those targets prepare the required local images once, then the release-gate
 runner reads `releaseGate.preview.groups` from the suite manifest and executes
 the listed lanes directly. The per-lane `makeTarget` values remain supported
 operator/developer entrypoints, but release evidence must come from the
-manifest-defined groups, run selectors, timeouts, and environment.
+manifest-defined groups, run selectors, timeouts, and environment. Ginkgo
+label lanes constrain Go's test entrypoint to `TestE2E`; plain `testing` lanes
+must be selected explicitly with manifest `runRegex`.
 
 The Kind aggregate also reads `validation.kubernetes.previewMatrix` from
 `.ci/versions.yaml`. By default it runs the Kind lane group once for every

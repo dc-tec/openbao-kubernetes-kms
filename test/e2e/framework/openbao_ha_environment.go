@@ -123,6 +123,10 @@ func StartOpenBaoHAEnvironment(ctx context.Context, cfg OpenBaoHAEnvironmentConf
 	if err != nil {
 		return nil, fmt.Errorf("create OpenBao HA TLS directory: %w", err)
 	}
+	if err := os.Chmod(certDir, 0o777); err != nil {
+		_ = os.RemoveAll(certDir)
+		return nil, fmt.Errorf("make OpenBao HA TLS directory container-readable: %w", err)
+	}
 	suffix, err := randomHex(6)
 	if err != nil {
 		_ = os.RemoveAll(certDir)

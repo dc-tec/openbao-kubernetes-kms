@@ -7,7 +7,7 @@ test-e2e: verify-e2e-manifest ## Run Ginkgo/Gomega E2E tests; filter with E2E_LA
 		set -- --tags=e2e --timeout="$(E2E_TIMEOUT)" --junit-report="$(E2E_JUNIT_REPORT)" --json-report="$(E2E_JSON_REPORT)"; \
 		if [ "$(E2E_PARALLEL_NODES)" != "1" ]; then set -- "$$@" --procs="$(E2E_PARALLEL_NODES)"; fi; \
 		if [ -n "$(E2E_LABEL_FILTER)" ]; then set -- "$$@" --label-filter="$(E2E_LABEL_FILTER)"; fi; \
-		set -- "$$@" $(E2E_GINKGO_EXTRA_ARGS) "$(E2E_PACKAGE)"; \
+		set -- "$$@" $(E2E_GINKGO_EXTRA_ARGS) "$(E2E_PACKAGE)" -- -test.run='^TestE2E$$'; \
 		"$(GINKGO)" "$$@"; \
 	else \
 		if [ -n "$(E2E_LABEL_FILTER)" ]; then \

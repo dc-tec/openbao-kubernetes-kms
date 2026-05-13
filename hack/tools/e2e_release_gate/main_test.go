@@ -218,6 +218,7 @@ func TestBuildLaneCommandUsesGinkgoReportsForLabelLane(t *testing.T) {
 		"--junit-report=junit.xml",
 		"--json-report=ginkgo.json",
 		"--label-filter=openbao && transit && ci",
+		"-test.run=^TestE2E$",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("command args %q must contain %q", joined, want)

@@ -356,6 +356,11 @@ func TestOpenBaoAggregateClearsProviderImageEnvironment(t *testing.T) {
 	}
 }
 
+func TestGinkgoE2ETargetOnlyRunsGinkgoSuite(t *testing.T) {
+	makefile := readTextFile(t, e2eMakefilePath)
+	requireContains(t, makefile, "-test.run='^TestE2E$$'", "Ginkgo E2E target")
+}
+
 func readE2EManifest(t *testing.T) e2eSuitesManifest {
 	t.Helper()
 
