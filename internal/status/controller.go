@@ -167,11 +167,13 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	if hasState {
 		result, err = c.observer.Observe(state, profile, now)
 	} else {
-		if !CanAutoBootstrapState(profile) {
+		assessment := AssessAutoBootstrapState(profile)
+		if !assessment.Allowed {
 			c.store.PublishUnhealthy(now)
 			return fmt.Errorf(
-				"%w: local registry state is absent for non-initial Transit metadata",
+				"%w: local registry state is absent and cannot be auto-bootstrapped: %s",
 				ErrStateUnavailable,
+				assessment.Reason,
 			)
 		}
 		rebuilt, rebuildErr := c.observer.RebuildState(profile, now)
@@ -195,13 +197,6 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	}
 	c.recordProbeSuccess()
 	return nil
-}
-
-// CanAutoBootstrapState reports whether absent local state may be synthesized from Transit metadata.
-func CanAutoBootstrapState(profile openbao.KeyProfile) bool {
-	return profile.LatestVersion == initialTransitVersion &&
-		profile.MinAvailableVersion <= initialTransitVersion &&
-		profile.MinDecryptionVersion <= initialTransitVersion
 }
 
 // DeepProbeOnce performs a non-secret Transit round trip for the active cached version.

@@ -103,6 +103,30 @@ func TestTransitDiagnosticsFlagsDangerousCapabilities(t *testing.T) {
 	}
 }
 
+func TestRegistryStateReportsAutoBootstrapDecisionWhenMissing(t *testing.T) {
+	cfg := loadCommandConfig(t)
+	cfg.State.Path = filepath.Join(t.TempDir(), "missing-key-registry.json")
+
+	initialReport := cli.Report{Name: reportNameVerifyKey}
+	checkRegistryVersionRestrictions(&initialReport, cfg, commandTestProfile(nil))
+	if !reportContains(initialReport, "auto-bootstrap eligible=true") {
+		t.Fatalf("expected initial metadata to report bootstrap eligibility: %#v", initialReport.Checks)
+	}
+
+	rotatedReport := cli.Report{Name: reportNameVerifyKey}
+	checkRegistryVersionRestrictions(&rotatedReport, cfg, commandTestProfile(func(profile *openbao.KeyProfile) {
+		profile.LatestVersion = 2
+		profile.VersionCreationTimes = append(profile.VersionCreationTimes, openbao.KeyVersion{
+			Version:   2,
+			CreatedAt: time.Unix(1_778_277_660, 0).UTC(),
+		})
+	}))
+	if !reportContains(rotatedReport, "auto-bootstrap eligible=false") ||
+		!reportContains(rotatedReport, "latest_version=2") {
+		t.Fatalf("expected rotated metadata to report bootstrap denial: %#v", rotatedReport.Checks)
+	}
+}
+
 func TestDoctorJWTLocalCheckUsesExpectedClaims(t *testing.T) {
 	cfg := loadCommandConfig(t)
 	cfg.Auth.JWT.JWTFile = copyJWTFixture(t)

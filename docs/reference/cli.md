@@ -128,6 +128,7 @@ Reports:
 - whether local registry state was loaded,
 - registry generation and state hash when available,
 - registry checkpoint status, generation, and hash when available,
+- state bootstrap eligibility and reason when local registry state is absent,
 - current active Transit version,
 - current Kubernetes `key_id` hash,
 - latest observed Transit version,
@@ -145,6 +146,9 @@ If local registry state is missing, `rotation-plan` only synthesizes initial
 bootstrap state from initial Transit metadata. It fails instead of reporting an
 active key hash from live Transit metadata after rotation. If a checkpoint is
 present but the state file is missing or rolled back, the command fails closed.
+When local state is absent and OpenBao metadata is readable, the command reports
+or returns the exact auto-bootstrap reason, such as an advanced
+`latest_version`, `min_available_version`, or `min_decryption_version`.
 
 ## verify-rotation
 

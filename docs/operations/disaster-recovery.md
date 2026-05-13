@@ -32,6 +32,14 @@ The recovery posture is conservative:
 - use `doctor` and `verify-key` to check the KMS path before restarting API servers,
 - restore OpenBao and etcd from a compatible backup pair when key versions or ciphertext epochs no longer line up.
 
+Brownfield adoption of an existing Transit key at version `2` or later is not a
+runtime bootstrap path in the preview line. Use `doctor`, `verify-key`,
+`rotation-plan`, or `verify-rotation` to inspect the auto-bootstrap decision.
+They report whether missing state is eligible and why it is denied. A denied
+decision is expected when `latest_version`, `min_available_version`, or
+`min_decryption_version` proves the provider cannot safely infer a complete
+first-use registry state.
+
 ## Recovery Decision Flow
 
 ```mermaid

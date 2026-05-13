@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,9 @@ func TestRotationReportRejectsMissingStateAfterTransitRotation(t *testing.T) {
 	)
 	if !errors.Is(err, status.ErrStateUnavailable) {
 		t.Fatalf("expected missing rotated state to fail closed, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "latest_version=2") {
+		t.Fatalf("expected bootstrap denial reason in error, got %v", err)
 	}
 }
 

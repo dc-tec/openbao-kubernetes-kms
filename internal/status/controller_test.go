@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,6 +171,9 @@ func TestControllerFailsClosedWhenStateMissingAfterTransitRotation(t *testing.T)
 	err := controller.ProbeOnce(context.Background())
 	if !errors.Is(err, status.ErrStateUnavailable) {
 		t.Fatalf("expected missing-state recovery failure, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "latest_version=4") {
+		t.Fatalf("expected bootstrap denial reason in error, got %v", err)
 	}
 	if stateStore.saveCalls != 0 {
 		t.Fatalf("missing rotated state should not be rebuilt, got %d saves", stateStore.saveCalls)

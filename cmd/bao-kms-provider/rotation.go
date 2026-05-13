@@ -33,6 +33,8 @@ type rotationReport struct {
 	StateCheckpointStatus     string
 	StateCheckpointGeneration uint64
 	StateCheckpointHash       string
+	StateBootstrapEligible    bool
+	StateBootstrapReason      string
 	ActiveKeyIDHash           string
 	ActiveTransitVersion      int
 	LatestTransitVersion      int
@@ -150,10 +152,14 @@ func applyTransitProfileToRotationReport(
 ) (rotationReport, error) {
 	report.LatestTransitVersion = profile.LatestVersion
 	if !report.StateLoaded {
-		if !status.CanAutoBootstrapState(profile) {
+		assessment := status.AssessAutoBootstrapState(profile)
+		report.StateBootstrapEligible = assessment.Allowed
+		report.StateBootstrapReason = assessment.Reason
+		if !assessment.Allowed {
 			return rotationReport{}, fmt.Errorf(
-				"%w: local registry state is absent for non-initial Transit metadata",
+				"%w: local registry state is absent and cannot be auto-bootstrapped: %s",
 				status.ErrStateUnavailable,
+				assessment.Reason,
 			)
 		}
 		observer, observerErr := status.NewObserver(snapshotScope(cfg), rotationPolicy(cfg))
@@ -220,6 +226,10 @@ func printRotationReportText(out io.Writer, report rotationReport) {
 		_, _ = fmt.Fprintf(out, "stateCheckpointGeneration: %d\n", report.StateCheckpointGeneration)
 		_, _ = fmt.Fprintf(out, "stateCheckpointHash: %s\n", report.StateCheckpointHash)
 	}
+	if report.StateBootstrapReason != "" {
+		_, _ = fmt.Fprintf(out, "stateBootstrapEligible: %t\n", report.StateBootstrapEligible)
+		_, _ = fmt.Fprintf(out, "stateBootstrapReason: %s\n", report.StateBootstrapReason)
+	}
 	_, _ = fmt.Fprintf(out, "rotationState: %s\n", report.RotationState)
 	_, _ = fmt.Fprintf(out, "activeKeyIdHash: %s\n", report.ActiveKeyIDHash)
 	_, _ = fmt.Fprintf(out, "activeTransitVersion: %d\n", report.ActiveTransitVersion)
@@ -249,6 +259,8 @@ type rotationReportJSON struct {
 	StateCheckpointStatus         string               `json:"stateCheckpointStatus,omitempty"`
 	StateCheckpointGeneration     uint64               `json:"stateCheckpointGeneration,omitempty"`
 	StateCheckpointHash           string               `json:"stateCheckpointHash,omitempty"`
+	StateBootstrapEligible        bool                 `json:"stateBootstrapEligible,omitempty"`
+	StateBootstrapReason          string               `json:"stateBootstrapReason,omitempty"`
 	ActiveKeyIDHash               string               `json:"activeKeyIdHash,omitempty"`
 	ActiveTransitVersion          int                  `json:"activeTransitVersion,omitempty"`
 	LatestTransitVersion          int                  `json:"latestTransitVersion,omitempty"`
@@ -271,6 +283,8 @@ func printRotationReportJSON(out io.Writer, report rotationReport) error {
 		StateCheckpointStatus:         report.StateCheckpointStatus,
 		StateCheckpointGeneration:     report.StateCheckpointGeneration,
 		StateCheckpointHash:           report.StateCheckpointHash,
+		StateBootstrapEligible:        report.StateBootstrapEligible,
+		StateBootstrapReason:          report.StateBootstrapReason,
 		ActiveKeyIDHash:               report.ActiveKeyIDHash,
 		ActiveTransitVersion:          report.ActiveTransitVersion,
 		LatestTransitVersion:          report.LatestTransitVersion,

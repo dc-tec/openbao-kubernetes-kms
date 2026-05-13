@@ -187,11 +187,11 @@ func TestProviderCLIRotationMissingStateFailsClosedE2E(t *testing.T) {
 	stack.clearProviderState(ctx)
 
 	rotationPlanOutput := stack.runProviderCLIExpectFailure(ctx, "cli-rotation-plan-missing-state", "rotation-plan", "--config", containerConfigPath)
-	assertOutputContains(t, rotationPlanOutput, "local registry state is absent for non-initial Transit metadata")
+	assertOutputContains(t, rotationPlanOutput, "local registry state is absent and cannot be auto-bootstrapped", "latest_version=2")
 	assertOutputNotContains(t, rotationPlanOutput, "activeKeyIdHash:")
 
 	verifyRotationOutput := stack.runProviderCLIExpectFailure(ctx, "cli-verify-rotation-missing-state", "verify-rotation", "--config", containerConfigPath)
-	assertOutputContains(t, verifyRotationOutput, "local registry state is absent for non-initial Transit metadata")
+	assertOutputContains(t, verifyRotationOutput, "local registry state is absent and cannot be auto-bootstrapped", "latest_version=2")
 	assertOutputNotContains(t, verifyRotationOutput, "activeKeyIdHash:")
 }
 

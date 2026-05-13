@@ -600,7 +600,16 @@ func diagnosticPluginVersion(info version.Info) string {
 func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, profile openbao.KeyProfile) {
 	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
 	if errors.Is(err, keyregistry.ErrStateNotFound) {
-		report.Warn(checkRegistryState, "Registry state", "state file is absent; checked latest Transit metadata only")
+		assessment := status.AssessAutoBootstrapState(profile)
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			fmt.Sprintf(
+				"state file is absent; auto-bootstrap eligible=%t: %s",
+				assessment.Allowed,
+				assessment.Reason,
+			),
+		)
 		checkLatestVersionRestrictions(report, profile)
 		return
 	}
