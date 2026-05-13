@@ -56,9 +56,9 @@ server may need the KMS plugin during startup to read encrypted resources.
 |---|---|
 | Kubernetes API | KMS v2 only. KMS v1 is not implemented. |
 | Kubernetes target | Kubernetes `1.34` release line, with exact runnable pins in `.ci/versions.yaml`. |
-| OpenBao target | OpenBao `2.5.3` with Transit, JWT auth, and cert auth. |
+| OpenBao target | OpenBao `2.5.3` with Transit and JWT auth. Certificate auth implementation targets OpenBao TLS certificate auth in build-tagged variants. |
 | Transit key type | `aes256-gcm96` is the supported and recommended default. |
-| Authentication | JWT auth by default. Certificate auth is available in build-tagged variants for PKCS#11 or SPIFFE-backed identities. OpenBao tokens stay in process memory. |
+| Authentication | JWT auth by default. Certificate auth is implemented in build-tagged PKCS#11 and SPIFFE variants; release support is gated on provider source E2E and release artifact evidence. OpenBao tokens stay in process memory. |
 | Deployment models | Hardened systemd unit or kubelet-managed static pod. |
 | Release maturity | Preview release line; see the [Support Policy](https://dc-tec.github.io/openbao-kubernetes-kms/reference/support-policy/). |
 | Release cadence | Event-driven releases, scheduled validation. |
@@ -144,9 +144,17 @@ bin/bao-kms-provider version
 Certificate auth variants are opt-in build tags:
 
 ```sh
-go build -tags certauth_spiffe ./cmd/bao-kms-provider
-go build -tags certauth_pkcs11 ./cmd/bao-kms-provider
+make build-certauth-spiffe
+make build-certauth-pkcs11
+make build-certauth-combined
 ```
+
+SPIFFE cert-auth Linux artifacts can be built with
+`make release-artifacts-certauth-spiffe` or alongside the default JWT Linux
+matrix with `make release-artifacts-with-certauth-spiffe`. PKCS#11 and combined
+cert-auth artifacts are host CGO builds via
+`make release-artifact-certauth-pkcs11-host` and
+`make release-artifact-certauth-combined-host`.
 
 Selected E2E entrypoints:
 

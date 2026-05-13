@@ -5,6 +5,21 @@ build: ## Build bao-kms-provider with version metadata.
 	@mkdir -p "$$(dirname "$(BIN)")"
 	@"$(GO)" build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o "$(BIN)" ./cmd/bao-kms-provider
 
+.PHONY: build-certauth-spiffe
+build-certauth-spiffe: ## Build host binary with SPIFFE certificate auth enabled.
+	@mkdir -p "$$(dirname "$(CERTAUTH_SPIFFE_BIN)")"
+	@CGO_ENABLED=0 "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_SPIFFE_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$(CERTAUTH_SPIFFE_BIN)" ./cmd/bao-kms-provider
+
+.PHONY: build-certauth-pkcs11
+build-certauth-pkcs11: ## Build host binary with PKCS#11 certificate auth enabled.
+	@mkdir -p "$$(dirname "$(CERTAUTH_PKCS11_BIN)")"
+	@CGO_ENABLED=1 "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_PKCS11_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$(CERTAUTH_PKCS11_BIN)" ./cmd/bao-kms-provider
+
+.PHONY: build-certauth-combined
+build-certauth-combined: ## Build host binary with PKCS#11 and SPIFFE certificate auth enabled.
+	@mkdir -p "$$(dirname "$(CERTAUTH_COMBINED_BIN)")"
+	@CGO_ENABLED=1 "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_COMBINED_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$(CERTAUTH_COMBINED_BIN)" ./cmd/bao-kms-provider
+
 .PHONY: image
 image: ## Build local distroless non-root container image.
 	@DOCKER_BUILDKIT=1 "$(DOCKER)" build \
@@ -29,6 +44,11 @@ build-linux: release-artifacts ## Cross-compile Linux release artifacts.
 
 .PHONY: release-artifacts
 release-artifacts: clean-dist ## Build Linux release binaries and checksums.
+	@$(MAKE) release-artifacts-default
+	@$(MAKE) checksums
+
+.PHONY: release-artifacts-default
+release-artifacts-default:
 	@set -eu; \
 	mkdir -p "$(DIST_DIR)"; \
 	for target in $(RELEASE_TARGETS); do \
@@ -36,8 +56,52 @@ release-artifacts: clean-dist ## Build Linux release binaries and checksums.
 		goarch="$${target#*/}"; \
 		artifact="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
 		printf 'building %s\n' "$$artifact"; \
-			CGO_ENABLED=0 GOOS="$$goos" GOARCH="$$goarch" "$(GO)" build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o "$$artifact" ./cmd/bao-kms-provider; \
+				CGO_ENABLED=0 GOOS="$$goos" GOARCH="$$goarch" "$(GO)" build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o "$$artifact" ./cmd/bao-kms-provider; \
 	done
+
+.PHONY: release-artifacts-certauth-spiffe
+release-artifacts-certauth-spiffe: clean-dist ## Build Linux SPIFFE cert-auth release binaries and checksums.
+	@$(MAKE) release-artifacts-certauth-spiffe-binaries
+	@$(MAKE) checksums
+
+.PHONY: release-artifacts-with-certauth-spiffe
+release-artifacts-with-certauth-spiffe: clean-dist ## Build default and SPIFFE cert-auth Linux release binaries.
+	@$(MAKE) release-artifacts-default
+	@$(MAKE) release-artifacts-certauth-spiffe-binaries
+	@$(MAKE) checksums
+
+.PHONY: release-artifacts-certauth-spiffe-binaries
+release-artifacts-certauth-spiffe-binaries:
+	@set -eu; \
+	mkdir -p "$(DIST_DIR)"; \
+	for target in $(RELEASE_TARGETS); do \
+		goos="$${target%/*}"; \
+		goarch="$${target#*/}"; \
+		artifact="$(DIST_DIR)/$(CERTAUTH_SPIFFE_ARTIFACT_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
+		printf 'building %s\n' "$$artifact"; \
+			CGO_ENABLED=0 GOOS="$$goos" GOARCH="$$goarch" "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_SPIFFE_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$$artifact" ./cmd/bao-kms-provider; \
+	done
+
+.PHONY: release-artifact-certauth-pkcs11-host
+release-artifact-certauth-pkcs11-host: ## Build host PKCS#11 cert-auth artifact and checksums.
+	@set -eu; \
+	mkdir -p "$(DIST_DIR)"; \
+	goos="$$("$(GO)" env GOOS)"; \
+	goarch="$$("$(GO)" env GOARCH)"; \
+	artifact="$(DIST_DIR)/$(CERTAUTH_PKCS11_ARTIFACT_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
+	printf 'building %s\n' "$$artifact"; \
+	CGO_ENABLED=1 GOOS="$$goos" GOARCH="$$goarch" "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_PKCS11_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$$artifact" ./cmd/bao-kms-provider
+	@$(MAKE) checksums
+
+.PHONY: release-artifact-certauth-combined-host
+release-artifact-certauth-combined-host: ## Build host combined cert-auth artifact and checksums.
+	@set -eu; \
+	mkdir -p "$(DIST_DIR)"; \
+	goos="$$("$(GO)" env GOOS)"; \
+	goarch="$$("$(GO)" env GOARCH)"; \
+	artifact="$(DIST_DIR)/$(CERTAUTH_COMBINED_ARTIFACT_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
+	printf 'building %s\n' "$$artifact"; \
+	CGO_ENABLED=1 GOOS="$$goos" GOARCH="$$goarch" "$(GO)" build $(GO_BUILD_FLAGS) -tags "$(CERTAUTH_COMBINED_BUILD_TAGS)" -ldflags "$(LDFLAGS)" -o "$$artifact" ./cmd/bao-kms-provider
 	@$(MAKE) checksums
 
 .PHONY: release-packages

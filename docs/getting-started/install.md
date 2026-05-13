@@ -33,12 +33,23 @@ Choose the artifact that matches the deployment model you will use.
 Published release artifacts use the default JWT-capable build. Certificate auth is an opt-in build variant:
 
 ```sh
-go build -tags certauth_spiffe ./cmd/bao-kms-provider
-go build -tags certauth_pkcs11 ./cmd/bao-kms-provider
-go build -tags "certauth_pkcs11 certauth_spiffe" ./cmd/bao-kms-provider
+make build-certauth-spiffe
+make build-certauth-pkcs11
+make build-certauth-combined
 ```
 
-PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. SPIFFE builds require a reachable SPIFFE Workload API socket at the configured `auth.cert.spiffe.workloadAPISocket`.
+SPIFFE cert-auth Linux artifacts can be built with
+`make release-artifacts-certauth-spiffe` or alongside the default JWT Linux
+matrix with `make release-artifacts-with-certauth-spiffe`. PKCS#11 and combined
+cert-auth artifacts are host CGO builds via
+`make release-artifact-certauth-pkcs11-host` and
+`make release-artifact-certauth-combined-host`.
+
+PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. SPIFFE
+builds require a reachable SPIFFE Workload API socket at the configured
+`auth.cert.spiffe.workloadAPISocket`. Cert-auth release support is gated on
+provider source E2E and release artifact evidence for the selected deployment
+lane.
 
 The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) once the artifact is in place.
 

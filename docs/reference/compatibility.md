@@ -19,7 +19,7 @@ The initial public release envelope is:
 - OpenBao `2.5.3`,
 - OpenBao Transit,
 - JWT auth in default builds,
-- certificate auth in build-tagged PKCS#11 and SPIFFE variants,
+- certificate auth implementation in build-tagged PKCS#11 and SPIFFE variants, with release support pending provider source E2E and release artifact evidence,
 - Linux control-plane nodes with filesystem Unix domain sockets.
 
 ## Kubernetes
@@ -99,8 +99,8 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 | Auth method | Build | Status |
 |---|---|---|
 | JWT | default | Supported. |
-| Certificate with PKCS#11 source | `certauth_pkcs11` | Supported for deployments that provide a compatible PKCS#11 module and token. |
-| Certificate with SPIFFE source | `certauth_spiffe` | Supported for deployments that provide an X.509 SVID through the SPIFFE Workload API. |
+| Certificate with PKCS#11 source | `certauth_pkcs11` | Implemented. Release support is pending host artifact evidence plus provider source E2E evidence with a compatible PKCS#11 module and token. |
+| Certificate with SPIFFE source | `certauth_spiffe` | Implemented. Release support is pending SPIFFE artifact evidence plus provider source E2E evidence with an X.509 SVID from the SPIFFE Workload API. |
 | OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
 ## Compatibility Promises
