@@ -40,6 +40,8 @@ The provider applies these rules to every metric:
 | `openbao_kms_openbao_requests_total` | counter | `operation`, `status` | OpenBao API call counts by operation (`jwt_login`, `cert_login`, `token_renew_self`, `transit_metadata_read`, `transit_disable_upsert_read`, `transit_encrypt`, `transit_decrypt`, `transit_batch_decrypt`, `capabilities_self`) and outcome. |
 | `openbao_kms_openbao_duration_seconds` | histogram | `operation` | Per-operation latency for OpenBao calls. |
 
+Metric `operation` label values are normalized for Prometheus. The matching log `openbao_operation` field uses the unnormalized operation names with spaces.
+
 ### Auth And Token
 
 | Metric | Type | Labels | Description |
@@ -94,13 +96,16 @@ Stable JSON log fields. Operators can rely on these names across preview patch r
 |---|---|---|
 | `ts` | string | RFC 3339 timestamp. |
 | `level` | string | Log level (`debug`, `info`, `warn`, `error`). |
-| `operation` | string | Logical operation name in logs (`kms.encrypt`, `kms.decrypt`, `kms.status`, `openbao.encrypt`, `openbao.decrypt`, `openbao.metadata`, `auth.login`, `auth.renew`). |
+| `message` | string | Stable event name (`kms.request`, `openbao.request`, `auth.login`, `auth.renewal`, `status.probe`, `socket.stale_removed`). |
+| `operation` | string | Logical operation name in logs (`kms.encrypt`, `kms.decrypt`, `kms.status`, `openbao.request`, `auth.login`, `auth.renewal`, `status.probe`, `socket.stale_removed`). |
+| `openbao_operation` | string | Specific OpenBao call when `operation=openbao.request` (`jwt login`, `cert login`, `token renew self`, `transit metadata read`, `transit disable_upsert read`, `transit encrypt`, `transit decrypt`, `transit batch decrypt`, `capabilities self`). |
 | `status` | string | Operation outcome (`ok`, `error`). |
 | `duration_ms` | number | Operation latency in milliseconds. |
 | `key_id_hash` | string | `base64url-sha256` of the active `key_id`. Never the raw `key_id`. |
 | `transit_key_version` | number | OpenBao Transit key version associated with the operation. |
-| `openbao_request_duration_ms` | number | Latency of the underlying OpenBao call, when applicable. |
 | `openbao_request_id` | string | OpenBao request ID when debug correlation is enabled and OpenBao returned a safe ID. |
+| `probe_kind` | string | Status-controller probe kind (`metadata`, `deep`) on `status.probe` events. |
+| `healthz` | string | KMS v2 Status health value on `kms.status` request events. |
 | `error_class` | string | One of the stable error classes; see [Observability: Error Classes](/reference/observability/#error-classes). |
 | `request_uid_hash` | string | Hash of the KMS request UID when debug correlation is enabled. |
 | `debug_correlation_incident` | string | Operator-supplied incident ID when debug correlation is enabled. |

@@ -24,14 +24,13 @@ Example log entry:
 ```json
 {
   "ts": "2026-05-08T12:00:00Z",
-  "level": "info",
+  "level": "debug",
+  "message": "kms.request",
   "operation": "kms.decrypt",
   "status": "ok",
   "duration_ms": 4.2,
   "key_id_hash": "uK...",
   "transit_key_version": 3,
-  "openbao_request_duration_ms": 3.1,
-  "openbao_request_id": "optional-redacted",
   "error_class": ""
 }
 ```

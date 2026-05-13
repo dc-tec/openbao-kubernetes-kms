@@ -246,4 +246,4 @@ Every public release publishes or retains:
 - `provenance-index.json`,
 - release notes.
 
-Install-time verification is documented in [Getting Started: Install](/getting-started/install/#verify-release-evidence/).
+Install-time verification is documented in [Getting Started: Install](/getting-started/install/#verify-release-evidence).

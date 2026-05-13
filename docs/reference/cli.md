@@ -1,14 +1,16 @@
 ---
 title: "CLI"
-description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, config, policy openbao, exit codes."
+description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, config, policy openbao, completion, exit codes."
 weight: 10
 ---
 
 # CLI
 
-This page documents every command and flag supported by `bao-kms-provider`.
-Commands print stable text or JSON output where documented and use stable exit
-codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
+This page documents the provider-owned operational commands, the Cobra-generated
+shell completion entry point, and the provider flags supported by
+`bao-kms-provider`. Commands print stable text or JSON output where documented
+and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or
+full ciphertext.
 
 ## serve
 
@@ -207,6 +209,18 @@ Output fields:
 - `dirty`
 
 Use this command when comparing control-plane nodes during upgrades, rollback checks, and incident response.
+
+## completion
+
+Generate shell completion scripts through Cobra's standard completion command:
+
+```sh
+bao-kms-provider completion zsh
+```
+
+Supported shells are `bash`, `fish`, `powershell`, and `zsh`. Use
+`bao-kms-provider completion <shell> --help` for shell-specific installation
+text. Cobra also provides the standard `help` command for local command help.
 
 ## policy openbao
 

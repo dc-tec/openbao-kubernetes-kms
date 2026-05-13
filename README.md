@@ -132,11 +132,12 @@ The user documentation is published on GitHub Pages:
 1. [Overview](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/overview/)
 2. [OpenBao Setup](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/openbao-setup/)
 3. [Install](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/install/)
-4. [Kubernetes EncryptionConfiguration](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/kubernetes-encryption-config/)
-5. [First Encrypt](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/first-encrypt/)
+4. [Deployment: Choosing A Model](https://dc-tec.github.io/openbao-kubernetes-kms/deployment/choosing-a-model/)
+5. [Kubernetes EncryptionConfiguration](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/kubernetes-encryption-config/)
+6. [First Encrypt](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/first-encrypt/)
 
 Release artifact verification is documented in
-[Getting Started: Install](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/install/#verify-release-evidence/).
+[Getting Started: Install](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/install/#verify-release-evidence).
 
 ## Build And Test
 

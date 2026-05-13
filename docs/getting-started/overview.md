@@ -112,5 +112,6 @@ The current release line does not include:
 
 1. [OpenBao Setup](/getting-started/openbao-setup/) to provision the Transit mount, key, policy, and provider authentication.
 2. [Install](/getting-started/install/) to fetch a verified provider binary.
-3. [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) to write the `EncryptionConfiguration` consumed by the API server.
-4. [First Encrypt](/getting-started/first-encrypt/) to verify the path end-to-end.
+3. [Deployment: Choosing A Model](/deployment/choosing-a-model/) to run the provider on every control-plane node.
+4. [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) to write the `EncryptionConfiguration` consumed by the API server.
+5. [First Encrypt](/getting-started/first-encrypt/) to verify the path end-to-end.

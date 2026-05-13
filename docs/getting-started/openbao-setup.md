@@ -6,7 +6,7 @@ weight: 20
 
 # OpenBao Setup
 
-The provider expects an existing OpenBao deployment with the Transit secrets engine enabled, a single named key per Kubernetes cluster, a least-privilege policy, and one release-supported auth method for the host running the provider. This page lists the OpenBao-side commands in order. Run them as an OpenBao administrator before installing the provider.
+The provider expects an existing OpenBao deployment with the Transit secrets engine enabled, a single named key per Kubernetes cluster, a least-privilege policy, and one release-supported auth method for the host running the provider. This page lists the OpenBao-side commands in order. Run them as an OpenBao administrator before installing the provider; the static policy template in Step 4 is the bootstrap path before the provider binary and configuration file exist.
 
 ## Prerequisites
 
@@ -59,7 +59,7 @@ Recommended properties:
 
 For the current release line, `aes256-gcm96` is the only validated and supported key type. Other AEAD Transit key types require implementation and release evidence before they can be documented as supported.
 
-Once the key exists, do not enable `exportable`, `allow_plaintext_backup`, or `deletion_allowed` after the fact. OpenBao does not allow these flags to be turned off again, so the safety properties of the key cannot be restored.
+Once the key exists, do not enable `exportable` or `allow_plaintext_backup`: OpenBao treats both settings as irreversible once enabled. Keep `deletion_allowed=false` as well; unlike those two flags it is a tunable deletion guard, but enabling it permits catastrophic key deletion if a token also has delete capability.
 
 ## Step 3: Capture The Key Lineage ID
 
@@ -88,18 +88,12 @@ An existing platform inventory ID or ULID can be used if it has the same propert
 
 If the Transit key is deleted and recreated, generate a new lineage ID and treat the event as a destructive migration. The provider uses this ID to reject decrypt requests carrying ciphertext from a different key generation.
 
-## Step 4: Generate The Policy
+## Step 4: Create The Policy
 
-Generate a least-privilege policy from the provider configuration file:
+Write the least-privilege policy before creating the auth role:
 
 ```sh
-bao-kms-provider policy openbao \
-  --config /etc/openbao-kms/config.yaml
-```
-
-Example policy:
-
-```hcl
+cat >/tmp/openbao-kms-workload-a.hcl <<'HCL'
 # Read Transit key metadata.
 path "transit/keys/k8s-workload-a-etcd" {
   capabilities = ["read"]
@@ -124,7 +118,28 @@ path "transit/config/keys" {
 path "sys/capabilities-self" {
   capabilities = ["update"]
 }
+
+# Allow token renewal when the auth role disables the default policy.
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+HCL
 ```
+
+Apply the policy:
+
+```sh
+bao policy write openbao-kms-workload-a /tmp/openbao-kms-workload-a.hcl
+```
+
+After the provider binary and `/etc/openbao-kms/config.yaml` exist, you can generate the hot-path Transit policy from the active configuration and compare the rendered paths with the policy above:
+
+```sh
+bao-kms-provider policy openbao \
+  --config /etc/openbao-kms/config.yaml
+```
+
+The generated policy includes the Transit and `sys/capabilities-self` paths. Keep the token-renewal self path in the applied policy when the provider configuration uses token renewal and the auth role sets `token_no_default_policy=true`.
 
 The policy must not grant:
 
@@ -135,45 +150,38 @@ The policy must not grant:
 - `read` on plaintext backup paths,
 - broad `sudo` or admin permissions.
 
-Apply the policy:
-
-```sh
-bao policy write openbao-kms-workload-a /tmp/openbao-kms-workload-a.hcl
-```
-
 For policy variants and rationale see [Reference: Transit Policy Examples](/reference/transit-policy-examples/).
 
-## Step 5: Configure Auth
+## Step 5: Configure JWT Auth
 
-Choose one provider auth method. JWT auth is the default preview build and
-release path. PKCS#11 certificate auth is an opt-in preview path only when the
-selected release includes matching artifacts and E2E evidence.
-
-### JWT Auth
+JWT auth is the default preview build and release path. This getting-started path uses OIDC discovery for a concrete sequential setup. For JWKS, pinned local public keys, or PKCS#11 certificate auth variants, use [Reference: Transit Policy Examples](/reference/transit-policy-examples/) after this happy path is understood.
 
 Enable JWT auth at a dedicated path:
 
 ```sh
-bao auth enable -path=auth/k8s-workload-a-jwt jwt
+bao auth enable -path=k8s-workload-a-jwt jwt
 ```
 
-Configure JWT validation using one of:
+Configure JWT validation for the issuer that signs the provider host JWT:
 
-- local public keys,
-- a JWKS URL,
-- an OIDC discovery URL.
+```sh
+bao write auth/k8s-workload-a-jwt/config \
+  oidc_discovery_url="https://issuer.example.internal" \
+  bound_issuer="https://issuer.example.internal"
+```
 
 Create a role bound to the control-plane plugin identity:
 
 ```sh
 bao write auth/k8s-workload-a-jwt/role/openbao-kms-control-plane \
   role_type=jwt \
-  bound_audiences="bao-kms-provider" \
+  bound_audiences='["bao-kms-provider"]' \
   bound_subject="system:openbao-kms:workload-a" \
   user_claim="sub" \
-  policies="openbao-kms-workload-a" \
-  ttl="30m" \
-  max_ttl="1h"
+  token_policies='["openbao-kms-workload-a"]' \
+  token_ttl="30m" \
+  token_max_ttl="1h" \
+  token_no_default_policy=true
 ```
 
 Recommended role constraints:
@@ -183,53 +191,10 @@ Recommended role constraints:
 - bound subject,
 - bound cluster or environment claim,
 - short token TTL,
-- no default policy unless the deployment requires it,
+- no default policy,
 - the narrow policy from Step 4.
 
 The provider reads JWTs from a host-mounted file. The JWT issuer should be reachable independently of the protected Kubernetes API server. Avoid using a Kubernetes ServiceAccount token from the same protected cluster as the only credential source. If that API server is unavailable, refreshing the token may be impossible during the recovery the provider is meant to support. See [Security: Auth Model](/security/auth-model/) for the trust-boundary discussion.
-
-### PKCS#11 Certificate Auth
-
-Enable cert auth at a dedicated path:
-
-```sh
-bao auth enable -path=auth/k8s-workload-a-cert cert
-```
-
-The OpenBao listener used by the provider must request TLS client certificates. Keep TLS enabled and do not set `tls_disable_client_certs=true` on that listener.
-
-Keep cert auth binding enabled for token renewal:
-
-```sh
-bao write auth/k8s-workload-a-cert/config \
-  disable_binding=false
-```
-
-Configure a cert role bound to the provider identity. For a CA-issued provider
-certificate, use the issuing CA as the trusted certificate and bind stable
-identity fields such as URI SAN, DNS SAN, common name, OU, or required
-extensions. This example binds a URI SAN:
-
-```sh
-bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
-  display_name=openbao-kms-control-plane \
-  certificate=@/etc/openbao/trust/openbao-kms-client-ca.pem \
-  allowed_uri_sans="urn:openbao-kms:workload-a" \
-  token_policies="openbao-kms-workload-a" \
-  token_ttl="30m" \
-  token_max_ttl="1h" \
-  token_no_default_policy=true \
-  ocsp_fail_open=false
-```
-
-For PKCS#11-backed client certificates, keep the private key inside the PKCS#11
-module and give the provider only the certificate chain, module path, token
-label, key label, and local PIN file path.
-
-SPIFFE certificate-source wiring remains in tree for local verification and
-upstream OpenBao alignment work, but `auth.cert.source: spiffe` is not a
-supported user configuration until the supported OpenBao version can derive
-cert-auth identity aliases from URI SANs.
 
 ## Step 6: Verify
 
@@ -258,4 +223,5 @@ bao-kms-provider verify-key \
 ## Read Next
 
 1. [Install](/getting-started/install/) to fetch the provider binary and verify the local environment.
-2. [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) once the provider runs and exposes its Unix socket.
+2. [Deployment: Choosing A Model](/deployment/choosing-a-model/) to run the provider on every control-plane node.
+3. [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) once the provider runs and exposes its Unix socket.

@@ -65,7 +65,7 @@ The exact ordering depends on the Kubernetes distribution. For kubeadm-style hos
 Use `deploy/config/provider-systemd.yaml` as the starting provider configuration
 for host-service deployments. Install only packages or tarballs that have passed
 the checksum, signature, and provenance verification described in
-[Getting Started: Install](/getting-started/install/#verify-release-evidence/).
+[Getting Started: Install](/getting-started/install/#verify-release-evidence).
 
 The sample unit is written for the default JWT config. PKCS#11 certificate-auth
 deployments should replace the JWT `ConditionPathExists=` line with checks for

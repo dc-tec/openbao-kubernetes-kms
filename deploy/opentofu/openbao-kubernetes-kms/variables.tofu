@@ -50,6 +50,6 @@ variable "disable_transit_key_upsert" {
 
 variable "include_token_renewal_capabilities" {
   type        = bool
-  description = "Add auth/token/lookup-self and auth/token/renew-self to the provider policy for token renewal."
+  description = "Add auth/token/renew-self to the provider policy for token renewal."
   default     = true
 }

@@ -299,7 +299,6 @@ func TestOpenTofuModuleConfiguresOpenBaoTransit(t *testing.T) {
 		`auto_rotate_period`,
 		`resource "vault_policy" "provider"`,
 		`path "sys/capabilities-self"`,
-		`path "auth/token/lookup-self"`,
 		`path "auth/token/renew-self"`,
 	}
 	for _, want := range required {

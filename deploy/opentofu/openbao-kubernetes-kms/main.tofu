@@ -30,10 +30,6 @@ locals {
 
   token_renewal_policy_hcl = <<-EOT
   # Allow in-process OpenBao token renewal when the JWT role disables the default policy.
-  path "auth/token/lookup-self" {
-    capabilities = ["read"]
-  }
-
   path "auth/token/renew-self" {
     capabilities = ["update"]
   }
