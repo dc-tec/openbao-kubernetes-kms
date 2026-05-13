@@ -101,6 +101,9 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 	if err := os.Mkdir(sampleDir, 0o700); err != nil {
 		t.Fatalf("create sample directory: %v", err)
 	}
+	if err := os.Chmod(sampleDir, 0o777); err != nil {
+		t.Fatalf("make sample directory container-writable: %v", err)
+	}
 
 	startProviderContainer(t, ctx, dockerPath, providerName, networkName, providerImage, volumes)
 	providerStarted = true
