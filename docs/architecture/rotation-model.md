@@ -26,7 +26,7 @@ stateDiagram-v2
     PendingStability --> PendingStability: successful observation count below threshold
     PendingStability --> PendingActivationDelay: stable observation threshold met
     PendingActivationDelay --> Active: activation delay elapsed
-    Active --> RetiredAfterMigration: storage migration verified
+    Active --> RetiredAfterMigration: operator migration evidence retained
 
     NewVersionObserved --> Rejected: metadata inconsistent
     PendingStability --> Rejected: version rollback or probe failure
@@ -54,8 +54,8 @@ sequenceDiagram
     API->>Status: observe changed Status.key_id
     API->>API: mark older encrypted data stale
     Operator->>API: run storage migration / resource rewrite
-    Operator->>Watcher: verify-rotation
-    Operator->>Bao: consider min_decryption_version only after verification
+    Operator->>Watcher: collect local verify-rotation preflight
+    Operator->>Bao: consider min_decryption_version only after independent rewrite and backup evidence
 ```
 
 ## Avoiding Key ID Flip-Flop
@@ -68,6 +68,11 @@ The plugin must not flip-flop between `key_id` values during rotation. Recommend
 - keep old snapshots in the registry for decrypt,
 - do not promote a key while OpenBao metadata is stale or inconsistent,
 - do not promote when Transit metadata read fails,
+- retain complete intermediate Transit version metadata as decrypt-only
+  historical snapshots if a node observes `latest_version` jump over one or
+  more versions,
+- fail closed when an observed `latest_version` jump is missing intermediate
+  Transit version creation metadata,
 - do not promote based on an encrypt response.
 
 The flip-flop guard is critical because Kubernetes treats Status `key_id` changes as a signal that older data is stale. A flip-flop would oscillate the staleness signal and confuse the API server's storage migration tracking.
@@ -85,6 +90,18 @@ The flip-flop guard is critical because Kubernetes treats Status `key_id` change
 - backups are aligned with retained Transit versions,
 - disaster recovery drills have passed,
 - OpenBao and etcd backup retention implications are understood.
+
+The current preview implementation does not prove those conditions. It validates
+local registry state and Transit metadata, then leaves rewrite proof,
+backup-retention proof, and `min_decryption_version` decisions to operator
+change control.
+
+Runtime status probes validate `min_decryption_version` and
+`min_available_version` against every retained active, retired, and
+historical snapshot in the local registry. If any retained historical version is
+blocked, Status becomes unhealthy instead of advertising a decrypt registry that
+OpenBao can no longer serve. `min_encryption_version` is checked against the
+active version only.
 
 The operator runbook for raising `min_decryption_version` lives at [Operations: Rotation: min_decryption_version](/operations/rotation/#min_decryption_version).
 

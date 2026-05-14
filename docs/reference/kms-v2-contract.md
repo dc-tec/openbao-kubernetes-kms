@@ -10,7 +10,7 @@ This page is the authoritative reference for the Kubernetes KMS v2 protocol beha
 
 ## Baseline
 
-The provider implements Kubernetes KMS v2. KMS v1 is out of scope for the v0.1 implementation.
+The provider implements Kubernetes KMS v2. KMS v1 is out of scope for the current implementation.
 
 Kubernetes KMS v2 is stable from Kubernetes 1.29. Kubernetes recommends KMS v2 for current clusters; KMS v1 is deprecated and disabled by default in Kubernetes 1.29 and later.
 
@@ -116,7 +116,28 @@ Required behavior:
 - never log plaintext,
 - never log full ciphertext.
 
-For v0.1 the provider requires valid AAD annotations. A future bounded compatibility mode may support known pre-AAD epochs; it must be explicit, observable, and time-bound. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
+The provider requires valid AAD annotations. There is no supported mode that
+decrypts without AAD. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
+
+## Protocol Limits
+
+The provider enforces the Kubernetes KMS v2 field limits at the gRPC boundary:
+
+- `ciphertext` is non-empty and less than 1024 bytes.
+- `key_id` is non-empty and less than 1024 bytes.
+- annotation keys plus values are less than 32768 bytes in total.
+- annotation keys and values must be valid UTF-8.
+- annotation keys must be fully qualified domain names.
+
+Decrypt requests that exceed these limits are rejected before Transit decrypt is called. Encrypt fails closed if Transit returns a ciphertext or response metadata that would exceed the KMS v2 response limits.
+
+The gRPC server also caps inbound and outbound protobuf messages at 65536 bytes. This keeps the transport envelope bounded while leaving room for protobuf overhead around the KMS v2 field limits.
+
+The deep status probe also checks that a real non-secret Transit encrypt/decrypt
+round trip returns the expected Transit key version and ciphertext within the
+KMS v2 ciphertext limit. This turns backend response-shape drift into a
+readiness failure before Kubernetes depends on that response shape for new
+writes.
 
 ## Annotations
 
@@ -129,6 +150,7 @@ Allowed annotation content:
 - Transit key version,
 - hash of Transit mount ID,
 - hash of Transit key lineage ID,
+- hash of OpenBao namespace when configured,
 - plugin version,
 - AAD version.
 
@@ -147,9 +169,15 @@ For the full annotation schema and AAD envelope shape see [Reference: Key ID And
 
 ## Decrypt Micro-Batching
 
-OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider includes decrypt micro-batching as a v0.1 performance feature, disabled by default until benchmarked. See `performance.decryptMicroBatching` in [Configuration](/reference/configuration/) for the field semantics.
+OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider
+does not implement KMS decrypt micro-batching in this release line because the
+current direct decrypt path is simpler and has been sufficient in validation so
+far.
 
-When enabled, micro-batching adds request queueing, per-request deadlines, cancellation behavior, order preservation, fairness, and failure fan-out concerns. Keep it disabled until benchmarks show it improves API server startup behavior without violating the latency targets below.
+Micro-batching adds request queueing, per-request deadlines, cancellation
+behavior, order preservation, fairness, and failure fan-out concerns. Do not add
+or enable it until benchmarks show it improves API server startup behavior
+without violating the validation thresholds below.
 
 ## Error Semantics
 
@@ -159,7 +187,10 @@ Errors map to stable classes in logs and metrics:
 - `socket_unavailable`
 - `auth_failed`
 - `auth_expired`
+- `openbao_rate_limited`
+- `openbao_sealed`
 - `openbao_unavailable`
+- `panic`
 - `transit_key_missing`
 - `transit_policy_denied`
 - `key_id_unknown`
@@ -167,14 +198,17 @@ Errors map to stable classes in logs and metrics:
 - `aad_missing`
 - `aad_mismatch`
 - `annotation_invalid`
+- `protocol_limit`
 - `status_stale`
 - `timeout`
+- `canceled`
+- `unknown`
 
 Errors returned to Kubernetes are specific enough for diagnosis but contain no secrets, tokens, plaintext, full ciphertext, or raw sensitive paths. See [Reference: Observability: Error Classes](/reference/observability/#error-classes).
 
-## Latency Targets
+## Validation Thresholds
 
-Initial v0.1 targets (subject to validation against real OpenBao and Kubernetes API server tests):
+Initial validation thresholds used by tests and examples:
 
 ```yaml
 status:
@@ -188,7 +222,9 @@ decrypt:
   p99: 50ms
 ```
 
-These targets must be validated with real OpenBao and Kubernetes API server tests before any production-readiness claim.
+These thresholds are not production SLOs. Validate alert thresholds against the
+operator's OpenBao deployment, network path, and Kubernetes API server behavior
+before using them for paging.
 
 ## Conformance Tests
 
@@ -199,7 +235,10 @@ Blocking cases:
 - healthy Status returns a non-empty `key_id`,
 - repeated Status calls do not call OpenBao,
 - encrypt returns the Status `key_id`,
+- encrypt output stays within KMS v2 ciphertext, `key_id`, and annotation limits,
 - decrypt accepts encrypt output,
+- decrypt rejects oversized ciphertext, `key_id`, and annotations before Transit,
+- oversized gRPC messages are rejected over the Unix socket before Transit,
 - decrypt rejects unknown `key_id` before the Transit call,
 - decrypt rejects malformed annotations,
 - decrypt rejects AAD mismatch,

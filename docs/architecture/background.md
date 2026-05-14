@@ -41,13 +41,15 @@ Important behaviors:
 
 KMS v2 `key_id` semantics are central to correctness. Kubernetes treats the `key_id` from Status as authoritative. If `EncryptResponse.key_id` does not match the currently observed `Status.key_id`, the API server discards the encrypt result and treats the plugin as unhealthy. The `key_id` is public and may appear in logs. It must be stable, must not flip-flop, and must never be reused.
 
+KMS v2 caches unwrapped data encryption keys inside the API server after decrypt. Cold API server startup can still create a large initial decrypt burst while caches and watch state are rebuilt. This is why the project tracks both direct provider decrypt soak and API-server cold-start behavior in release evidence.
+
 KMS v2 annotations are plaintext metadata stored in etcd with the encrypted object. Annotation keys are fully qualified domain names; the total annotation size is bounded. This design uses annotations only for non-secret metadata needed to validate and reconstruct AAD; see [Reference: Key ID And AAD](/reference/key-id-and-aad/).
 
 ## Kubernetes Static Pods
 
 Static pods are managed directly by kubelet without requiring the Kubernetes API server. Kubernetes documentation states that kubelet runs static pods from a host directory of manifests and that kubelet can run them without observing them through the API server.
 
-Static pods cannot reference Kubernetes API objects such as ServiceAccounts, ConfigMaps, or Secrets. The static-pod deployment of `bao-kms-provider` therefore mounts every required file (configuration, CA bundle, JWT, runtime socket directory, optional state directory) from the host. See [Deployment: Static Pod Deployment](/deployment/static-pod/).
+Static pods cannot reference Kubernetes API objects such as ServiceAccounts, ConfigMaps, or Secrets. The static-pod deployment of `bao-kms-provider` therefore mounts every required file or socket, including configuration, CA bundle, selected auth material, runtime socket directory, and optional state directory, from the host. See [Deployment: Static Pod Deployment](/deployment/static-pod/).
 
 ## OpenBao Transit
 
@@ -72,7 +74,7 @@ Transit decrypt accepts:
 - optional matching `associated_data`,
 - optional `batch_input`.
 
-Transit supports key types including `aes256-gcm96`, `chacha20-poly1305`, and `xchacha20-poly1305`. `aes256-gcm96` is the recommended default compatibility choice for this design. `xchacha20-poly1305` is available as an optional non-FIPS hardened mode after testing.
+Transit supports multiple symmetric key types. The current release line validates and supports `aes256-gcm96` only. Additional AEAD key types are future candidates and need implementation, compatibility, and release evidence before they are part of the supported matrix.
 
 Transit keys can be rotated. After rotation, new encrypt operations use the new key version; existing ciphertexts can be decrypted while old versions remain available.
 
@@ -85,4 +87,5 @@ Transit key deletion is catastrophic for this use case. OpenBao documentation wa
 - [Kubernetes static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
 - [OpenBao Transit documentation](https://openbao.org/docs/secrets/transit/)
-- [OpenBao JWT auth](https://openbao.org/docs/2.4.x/auth/jwt/)
+- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
+- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)

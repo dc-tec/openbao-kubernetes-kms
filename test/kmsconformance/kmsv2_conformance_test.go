@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -37,6 +38,23 @@ func TestKMSV2ProtocolOverUnixSocket(t *testing.T) {
 	encrypted := assertEncryptOverSocket(t, ctx, client, statusResponse.GetKeyId())
 	assertDecryptOverSocket(t, ctx, client, encrypted)
 	assertInvalidDecryptRequestsDoNotReachTransit(t, ctx, client, transit, active, encrypted)
+}
+
+func TestKMSV2RejectsOversizedGRPCMessageOverUnixSocket(t *testing.T) {
+	client, transit, active := startKMSV2Server(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	assertHealthyStatus(t, ctx, client, active)
+
+	_, err := client.Encrypt(ctx, &kmsapi.EncryptRequest{
+		Plaintext: bytes.Repeat([]byte("p"), kmsv2.MaxGRPCMessageBytes),
+		Uid:       conformanceRequestUID,
+	})
+	assertCode(t, err, codes.ResourceExhausted)
+	if transit.EncryptCalls() != 0 {
+		t.Fatalf("oversized gRPC message reached transit encrypt %d times", transit.EncryptCalls())
+	}
 }
 
 func assertHealthyStatus(
@@ -197,13 +215,16 @@ func startKMSV2Server(t *testing.T) (kmsapi.KeyManagementServiceClient, *fakes.K
 		t.Fatalf("new KMS v2 server: %v", err)
 	}
 
-	socketPath := filepath.Join(t.TempDir(), conformanceSocketName)
+	socketPath := filepath.Join(shortTempDir(t), conformanceSocketName)
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		t.Fatalf("listen on Unix socket: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(kmsv2.MaxGRPCMessageBytes),
+		grpc.MaxSendMsgSize(kmsv2.MaxGRPCMessageBytes),
+	)
 	kmsv2.Register(grpcServer, server)
 	serveDone := make(chan error, 1)
 	go func() {
@@ -229,6 +250,17 @@ func startKMSV2Server(t *testing.T) (kmsapi.KeyManagementServiceClient, *fakes.K
 	})
 
 	return kmsapi.NewKeyManagementServiceClient(conn), transit, active
+}
+
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("/tmp", "obk-kms-")
+	if err != nil {
+		t.Fatalf("mkdtemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
 func testSnapshot(t *testing.T) keyregistry.KeySnapshot {

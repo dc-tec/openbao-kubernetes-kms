@@ -6,8 +6,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,6 +26,16 @@ const (
 	openBaoAPIVersion    = "v1"
 	addressSchemeHTTPS   = "https"
 	maxRequestIDLength   = 128
+
+	defaultHTTPDialTimeout           = 10 * time.Second
+	defaultHTTPKeepAlive             = 30 * time.Second
+	defaultHTTPTLSHandshakeTimeout   = 10 * time.Second
+	defaultHTTPResponseHeaderTimeout = 30 * time.Second
+	defaultHTTPExpectContinueTimeout = time.Second
+	defaultHTTPIdleConnTimeout       = 90 * time.Second
+	defaultHTTPMaxIdleConns          = 64
+	defaultHTTPMaxIdleConnsPerHost   = 16
+	defaultHTTPMaxConnsPerHost       = 0
 )
 
 // TokenSource returns the current OpenBao token for one request.
@@ -57,12 +69,13 @@ type ClientConfig struct {
 
 // AuthClientConfig contains OpenBao auth client construction settings.
 type AuthClientConfig struct {
-	Address       string
-	Namespace     string
-	CACertFile    string
-	TLSServerName string
-	Timeout       time.Duration
-	Observer      RequestObserver
+	Address              string
+	Namespace            string
+	CACertFile           string
+	TLSServerName        string
+	Timeout              time.Duration
+	GetClientCertificate func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+	Observer             RequestObserver
 }
 
 // Client is a narrow OpenBao API client for Transit and diagnostics.
@@ -94,11 +107,6 @@ type RequestObservation struct {
 // RequestObserver receives redacted OpenBao HTTP request observations.
 type RequestObserver interface {
 	ObserveOpenBaoRequest(context.Context, RequestObservation)
-}
-
-// DecryptBatchObserver receives bounded Transit batch size observations.
-type DecryptBatchObserver interface {
-	ObserveOpenBaoDecryptBatchSize(int)
 }
 
 // NewClient builds an OpenBao client with pinned CA roots and server-name validation.
@@ -133,7 +141,12 @@ func NewClientWithHTTPClient(cfg ClientConfig, httpClient *http.Client) (*Client
 
 // NewAuthClient builds an OpenBao auth client with pinned CA roots and server-name validation.
 func NewAuthClient(cfg AuthClientConfig) (*AuthClient, error) {
-	httpClient, err := NewHTTPClient(cfg.CACertFile, cfg.TLSServerName, cfg.Timeout)
+	httpClient, err := NewHTTPClientWithTLSOptions(HTTPClientConfig{
+		CACertFile:           cfg.CACertFile,
+		TLSServerName:        cfg.TLSServerName,
+		Timeout:              cfg.Timeout,
+		GetClientCertificate: cfg.GetClientCertificate,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -183,21 +196,61 @@ func NewTLSConfig(caCertFile string, serverName string) (*tls.Config, error) {
 	}, nil
 }
 
+// HTTPClientConfig contains TLS policy for OpenBao HTTP clients.
+type HTTPClientConfig struct {
+	CACertFile           string
+	TLSServerName        string
+	Timeout              time.Duration
+	GetClientCertificate func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+}
+
 // NewHTTPClient returns an HTTP client with bounded timeout and explicit TLS policy.
 func NewHTTPClient(caCertFile string, serverName string, timeout time.Duration) (*http.Client, error) {
-	if timeout <= 0 {
+	return NewHTTPClientWithTLSOptions(HTTPClientConfig{
+		CACertFile:    caCertFile,
+		TLSServerName: serverName,
+		Timeout:       timeout,
+	})
+}
+
+// NewHTTPClientWithTLSOptions returns an HTTP client with bounded timeout and explicit TLS policy.
+func NewHTTPClientWithTLSOptions(cfg HTTPClientConfig) (*http.Client, error) {
+	if cfg.Timeout <= 0 {
 		return nil, fmt.Errorf("OpenBao timeout must be positive")
 	}
-	tlsConfig, err := NewTLSConfig(caCertFile, serverName)
+	tlsConfig, err := NewTLSConfig(cfg.CACertFile, cfg.TLSServerName)
 	if err != nil {
 		return nil, err
 	}
+	tlsConfig.GetClientCertificate = cfg.GetClientCertificate
 	return &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
+		Timeout:   cfg.Timeout,
+		Transport: newHTTPTransport(tlsConfig),
 	}, nil
+}
+
+func newHTTPTransport(tlsConfig *tls.Config) *http.Transport {
+	dialer := &net.Dialer{
+		Timeout:   defaultHTTPDialTimeout,
+		KeepAlive: defaultHTTPKeepAlive,
+	}
+	return &http.Transport{
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		TLSClientConfig:       tlsConfig,
+		TLSHandshakeTimeout:   defaultHTTPTLSHandshakeTimeout,
+		ResponseHeaderTimeout: defaultHTTPResponseHeaderTimeout,
+		ExpectContinueTimeout: defaultHTTPExpectContinueTimeout,
+		IdleConnTimeout:       defaultHTTPIdleConnTimeout,
+		MaxIdleConns:          defaultHTTPMaxIdleConns,
+		MaxIdleConnsPerHost:   defaultHTTPMaxIdleConnsPerHost,
+		MaxConnsPerHost:       defaultHTTPMaxConnsPerHost,
+	}
+}
+
+// CloseIdleConnections closes idle HTTP connections held by the auth client.
+func (c *AuthClient) CloseIdleConnections() {
+	c.httpClient.CloseIdleConnections()
 }
 
 func (c *Client) do(
@@ -308,19 +361,59 @@ func doOpenBao(
 		}
 	}()
 
-	var body io.Reader
-	if requestBody != nil {
-		encoded, err := json.Marshal(requestBody)
-		if err != nil {
-			return fmt.Errorf("encode OpenBao %s request: %w", operation, err)
+	req, err := newOpenBaoRequest(
+		ctx,
+		baseURL,
+		namespace,
+		operation,
+		method,
+		apiPath,
+		requestBody,
+		token,
+		includeToken,
+	)
+	if err != nil {
+		return err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
 		}
-		body = bytes.NewReader(encoded)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return &Error{Class: ErrorClassUnavailable, Operation: operation}
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	requestID, err = readOpenBaoResponse(operation, resp, response)
+	return err
+}
+
+func newOpenBaoRequest(
+	ctx context.Context,
+	baseURL *url.URL,
+	namespace string,
+	operation string,
+	method string,
+	apiPath string,
+	requestBody requestPayload,
+	token string,
+	includeToken bool,
+) (*http.Request, error) {
+	body, err := openBaoRequestBody(operation, requestBody)
+	if err != nil {
+		return nil, err
 	}
 
 	requestURL := resolveOpenBao(baseURL, apiPath)
 	req, err := http.NewRequestWithContext(ctx, method, requestURL, body)
 	if err != nil {
-		return fmt.Errorf("build OpenBao %s request: %w", operation, err)
+		return nil, fmt.Errorf("build OpenBao %s request: %w", operation, err)
 	}
 	if requestBody != nil {
 		req.Header.Set(contentTypeHeader, contentTypeJSON)
@@ -331,29 +424,37 @@ func doOpenBao(
 	if namespace != "" {
 		req.Header.Set(vaultNamespaceHeader, namespace)
 	}
+	return req, nil
+}
 
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return &Error{Class: ErrorClassUnavailable, Operation: operation}
+func openBaoRequestBody(operation string, requestBody requestPayload) (io.Reader, error) {
+	if requestBody == nil {
+		return nil, nil
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	encoded, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("encode OpenBao %s request: %w", operation, err)
+	}
+	return bytes.NewReader(encoded), nil
+}
 
+func readOpenBaoResponse(
+	operation string,
+	resp *http.Response,
+	response responsePayload,
+) (string, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body := decodeErrorBody(resp.Body)
-		requestID = safeRequestID(body.RequestID)
-		return newHTTPError(operation, resp.StatusCode, body.Errors)
+		return safeRequestID(body.RequestID), newHTTPError(operation, resp.StatusCode, body.Errors)
 	}
 	if response == nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return nil
+		return "", nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
-		return fmt.Errorf("decode OpenBao %s response: %w", operation, err)
+		return "", fmt.Errorf("decode OpenBao %s response: %w", operation, err)
 	}
-	requestID = requestIDFromResponse(response)
-	return nil
+	return requestIDFromResponse(response), nil
 }
 
 func (c *Client) resolve(apiPath string) string {

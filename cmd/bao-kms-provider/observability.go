@@ -84,6 +84,9 @@ func (c debugCorrelation) appendFields(attrs []slog.Attr) []slog.Attr {
 
 func (o observability) ObserveKMSRequest(ctx context.Context, obs kmsv2.RequestObservation) {
 	o.metrics.RecordGRPCRequest(obs.Method, obs.Status, obs.Duration)
+	if obs.PanicRecovered {
+		o.metrics.RecordPanicRecovery(obs.Method)
+	}
 
 	attrs := []slog.Attr{
 		logging.String(logging.FieldOperation, logOperationKMSPrefix+obs.Method),
@@ -91,6 +94,10 @@ func (o observability) ObserveKMSRequest(ctx context.Context, obs kmsv2.RequestO
 		logging.DurationMilliseconds(logging.FieldDurationMS, obs.Duration),
 	}
 	attrs = appendStringAttr(attrs, logging.FieldKeyIDHash, obs.KeyIDHash)
+	if obs.PanicRecovered {
+		attrs = append(attrs, logging.Bool(logging.FieldPanicRecovered, true))
+		attrs = appendStringAttr(attrs, logging.FieldPanicType, obs.PanicType)
+	}
 	if obs.TransitKeyVersion > 0 {
 		attrs = append(attrs, logging.Int(logging.FieldTransitKeyVersion, obs.TransitKeyVersion))
 	}
@@ -138,10 +145,6 @@ func (o observability) ObserveOpenBaoRequest(ctx context.Context, obs openbao.Re
 		return
 	}
 	o.logger.Warn(ctx, logMessageOpenBao, attrs...)
-}
-
-func (o observability) ObserveOpenBaoDecryptBatchSize(size int) {
-	o.metrics.RecordDecryptBatchSize(size)
 }
 
 func (o observability) ObserveAuthLogin(ctx context.Context, authStatus string) {
@@ -203,9 +206,8 @@ func appendStringAttr(attrs []slog.Attr, key string, value string) []slog.Attr {
 }
 
 var (
-	_ kmsv2.Observer               = observability{}
-	_ openbao.RequestObserver      = observability{}
-	_ openbao.DecryptBatchObserver = observability{}
-	_ auth.Observer                = observability{}
-	_ status.ProbeObserver         = observability{}
+	_ kmsv2.Observer          = observability{}
+	_ openbao.RequestObserver = observability{}
+	_ auth.Observer           = observability{}
+	_ status.ProbeObserver    = observability{}
 )

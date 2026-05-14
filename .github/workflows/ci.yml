@@ -86,10 +86,10 @@ jobs:
 
           set_output workflow '^(\.github/workflows/|\.github/actions/)'
           set_output docs '^(docs/|website/|README\.md|hugo\.toml|CHANGELOG\.md)'
-          set_output image '^(Dockerfile|\.dockerignore|go\.(mod|sum)$|vendor/|cmd/|internal/|Makefile|\.ci/versions\.yaml)'
+          set_output image '^(Dockerfile(\..*)?|\.dockerignore|go\.(mod|sum)$|vendor/|cmd/|internal/|Makefile|\.ci/versions\.yaml)'
           set_output deployment '^(deploy/|hack/kubeadm/|test/deployment/)'
-          set_output openbao_e2e '^(test/e2e/|internal/(openbao|auth|kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile|go\.(mod|sum)$|vendor/|Makefile)'
-          set_output kind_e2e '^(test/e2e/|deploy/|hack/kubeadm/|internal/(kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile|go\.(mod|sum)$|vendor/|Makefile|\.ci/versions\.yaml)'
+          set_output openbao_e2e '^(test/e2e/|internal/(openbao|auth|kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile(\..*)?|go\.(mod|sum)$|vendor/|Makefile|\.ci/versions\.yaml)'
+          set_output kind_e2e '^(test/e2e/|deploy/|hack/kubeadm/|internal/(kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile(\..*)?|go\.(mod|sum)$|vendor/|Makefile|\.ci/versions\.yaml)'
 
   core:
     name: Core Quality
@@ -137,21 +137,30 @@ jobs:
   image-security:
     name: Image Security
     runs-on: ubuntu-24.04
-    needs: changes
+    needs: [changes, e2e-provider-images]
     if: github.event_name == 'push' || needs.changes.outputs.image == 'true'
+    env:
+      E2E_PROVIDER_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:e2e-${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download provider image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-provider-base-image
+          path: artifacts/e2e-images
+
+      - name: Load provider image
+        run: docker load --input artifacts/e2e-images/provider-base.tar
 
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
           version: v0.69.3
 
-      - name: Build and scan image
-        run: |
-          make image IMAGE="local/bao-kms-provider-ci:${GITHUB_SHA}"
-          make security-scan-image IMAGE="local/bao-kms-provider-ci:${GITHUB_SHA}"
+      - name: Scan image
+        run: make security-scan-image IMAGE="${E2E_PROVIDER_IMAGE}"
 
   docs:
     name: Docs Build
@@ -187,11 +196,57 @@ jobs:
       - name: Check deployment samples
         run: make deployment-samples-check
 
+  e2e-provider-images:
+    name: E2E Provider Images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    needs: changes
+    if: github.event_name == 'push' || needs.changes.outputs.image == 'true' || needs.changes.outputs.openbao_e2e == 'true' || needs.changes.outputs.kind_e2e == 'true' || (github.event_name == 'workflow_dispatch' && (inputs.force_openbao_e2e || inputs.force_kind_e2e))
+    env:
+      E2E_PROVIDER_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:e2e-${{ github.sha }}
+      E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:e2e-certauth-pkcs11-${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Build provider images
+        run: |
+          make image IMAGE="${E2E_PROVIDER_IMAGE}"
+          make image-certauth-pkcs11-e2e
+
+      - name: Save base provider image
+        run: |
+          mkdir -p artifacts/e2e-images
+          docker save --output artifacts/e2e-images/provider-base.tar "${E2E_PROVIDER_IMAGE}"
+
+      - name: Save OpenBao provider variants
+        run: |
+          docker save --output artifacts/e2e-images/provider-openbao-variants.tar \
+            "${E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE}"
+
+      - name: Upload base provider image
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-provider-base-image
+          path: artifacts/e2e-images/provider-base.tar
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 1
+
+      - name: Upload OpenBao provider variants
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-provider-openbao-images
+          path: artifacts/e2e-images/provider-openbao-variants.tar
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 1
+
   openbao-e2e:
     name: OpenBao E2E
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
-    needs: [changes, core]
+    timeout-minutes: 55
+    needs: [changes, core, e2e-provider-images]
     if: github.event_name == 'push' || needs.changes.outputs.openbao_e2e == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_openbao_e2e)
     env:
       GOFLAGS: -mod=vendor
@@ -202,11 +257,33 @@ jobs:
       - name: Setup repo tools
         uses: ./.github/actions/setup-repo-tools
 
+      - name: Download base provider image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-provider-base-image
+          path: artifacts/e2e-images
+
+      - name: Download OpenBao provider variants
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-provider-openbao-images
+          path: artifacts/e2e-images
+
+      - name: Load E2E provider images
+        run: |
+          docker load --input artifacts/e2e-images/provider-base.tar
+          docker load --input artifacts/e2e-images/provider-openbao-variants.tar
+
       - name: Run OpenBao E2E lanes
+        env:
+          PROVIDER_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:e2e-${{ github.sha }}
+          CERTAUTH_PKCS11_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:e2e-certauth-pkcs11-${{ github.sha }}
         run: |
           make test-e2e-openbao-ci
-          make test-e2e-provider-failure-openbao-ci
-          make test-e2e-provider-rotation-openbao-ci
+          E2E_PROVIDER_BUILD=false E2E_PROVIDER_IMAGE="${PROVIDER_IMAGE}" make test-e2e-provider-openbao-ci
+          E2E_PROVIDER_BUILD=false E2E_PROVIDER_IMAGE="${PROVIDER_IMAGE}" make test-e2e-provider-failure-openbao-ci
+          E2E_PROVIDER_BUILD=false E2E_PROVIDER_IMAGE="${PROVIDER_IMAGE}" make test-e2e-provider-rotation-openbao-ci
+          E2E_PROVIDER_BUILD=false E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE="${CERTAUTH_PKCS11_IMAGE}" make test-e2e-provider-certauth-pkcs11-openbao-ci
 
       - name: Upload E2E artifacts
         if: always()
@@ -221,10 +298,12 @@ jobs:
     name: Kind E2E
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    needs: [changes, core]
+    needs: [changes, core, e2e-provider-images]
     if: github.event_name == 'push' || needs.changes.outputs.kind_e2e == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_kind_e2e)
     env:
       GOFLAGS: -mod=vendor
+      E2E_PROVIDER_BUILD: "false"
+      E2E_PROVIDER_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:e2e-${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -234,6 +313,15 @@ jobs:
 
       - name: Install kind
         uses: ./.github/actions/install-kind
+
+      - name: Download provider image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-provider-base-image
+          path: artifacts/e2e-images
+
+      - name: Load provider image
+        run: docker load --input artifacts/e2e-images/provider-base.tar
 
       - name: Run Kind E2E lanes
         run: |

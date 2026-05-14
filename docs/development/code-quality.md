@@ -43,7 +43,7 @@ Every exception is local, documented in code, covered by tests, and does not cro
 | `internal/config` | Viper and environment binding allowed only here or in command setup. Output is typed immutable configuration. |
 | `internal/aad` | Canonical serialization with golden tests. No dynamic maps or string-built JSON. |
 | `internal/keyregistry` | Typed snapshots and state transitions. Deterministic IDs. Rollback tests. |
-| `internal/transit` | Typed request and response DTOs and typed domain conversion. |
+| `internal/openbao` | Typed auth and Transit request and response DTOs, typed domain conversion, and redacted error handling. |
 | `internal/kmsv2` | No Transit fallback loops. Validation order tested. |
 | `internal/logging` | Redaction helpers and bounded structured fields. |
 | `internal/socket` | Explicit Unix permission and file-type checks. |

@@ -59,6 +59,72 @@ func TestProviderTransitRotationE2E(t *testing.T) {
 	stack.runClientWithEnv(ctx, "rollback-client", kmsClientModeExpectRotationRollback, sampleReadOnly, rotationEnv)
 }
 
+func TestProviderTransitMinDecryptionVersionBlocksHistoricalE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+
+	dockerPath := requireDocker(t, ctx)
+	prefix := fmt.Sprintf("obk-e2e-min-decrypt-%d", time.Now().UnixNano())
+	primaryVolume := prefix + "-bao-primary"
+	createDockerVolumes(t, ctx, dockerPath, primaryVolume)
+	t.Cleanup(func() {
+		removeVolume(t, context.Background(), dockerPath, primaryVolume)
+	})
+
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-min-decrypt", providerFailureStackOptions{
+		Environment: framework.OpenBaoEnvironmentConfig{
+			StorageVolume: primaryVolume,
+		},
+	})
+	rotationEnv := []string{
+		kmsSamplePathEnv + "=" + preRotationSamplePath,
+		kmsRotationSamplePathEnv + "=" + postRotationSamplePath,
+	}
+	stack.runClientWithEnv(ctx, "pre-rotation-client", kmsClientModeWriteSample, sampleReadWrite, rotationEnv)
+
+	if err := stack.environment.RotateTransitKey(ctx); err != nil {
+		t.Fatalf("rotate OpenBao Transit key: %v", err)
+	}
+	stack.runClientWithEnv(ctx, "rotation-client", kmsClientModeExpectRotationPromotion, sampleReadWrite, rotationEnv)
+
+	if err := stack.environment.SetTransitMinDecryptionVersion(ctx, 2); err != nil {
+		t.Fatalf("set OpenBao Transit min_decryption_version: %v", err)
+	}
+	stack.runClientWithEnv(ctx, "min-decryption-client", kmsClientModeExpectUnhealthy, sampleNotMounted, nil)
+}
+
+func TestProviderMissingStateAfterRotationFailsClosedE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+
+	dockerPath := requireDocker(t, ctx)
+	prefix := fmt.Sprintf("obk-e2e-missing-state-%d", time.Now().UnixNano())
+	primaryVolume := prefix + "-bao-primary"
+	createDockerVolumes(t, ctx, dockerPath, primaryVolume)
+	t.Cleanup(func() {
+		removeVolume(t, context.Background(), dockerPath, primaryVolume)
+	})
+
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-missing-state", providerFailureStackOptions{
+		Environment: framework.OpenBaoEnvironmentConfig{
+			StorageVolume: primaryVolume,
+		},
+	})
+	rotationEnv := []string{
+		kmsSamplePathEnv + "=" + preRotationSamplePath,
+		kmsRotationSamplePathEnv + "=" + postRotationSamplePath,
+	}
+	stack.runClientWithEnv(ctx, "pre-rotation-client", kmsClientModeWriteSample, sampleReadWrite, rotationEnv)
+
+	if err := stack.environment.RotateTransitKey(ctx); err != nil {
+		t.Fatalf("rotate OpenBao Transit key: %v", err)
+	}
+	stack.runClientWithEnv(ctx, "rotation-client", kmsClientModeExpectRotationPromotion, sampleReadWrite, rotationEnv)
+
+	stack.restartProviderWithEmptyState(ctx, stack.providerImage)
+	stack.runClient(ctx, "missing-state-client", kmsClientModeExpectSocketUnavailable, sampleNotMounted)
+}
+
 func requireOpenBaoTransitVersion(
 	t *testing.T,
 	ctx context.Context,

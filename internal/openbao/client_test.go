@@ -2,9 +2,15 @@ package openbao
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"io"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -120,6 +126,85 @@ func TestNewClientUsesCAAndServerNameValidation(t *testing.T) {
 	}
 }
 
+func TestNewAuthClientUsesClientCertificateCallback(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil || len(r.TLS.PeerCertificates) != 1 {
+			t.Fatalf("expected one TLS peer certificate, got %#v", r.TLS)
+		}
+		_, _ = w.Write([]byte(`{
+			"auth": {
+				"client_token": "` + testToken + `",
+				"lease_duration": 600,
+				"renewable": true
+			}
+		}`))
+	}))
+	server.TLS = &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ClientAuth: tls.RequireAnyClientCert,
+	}
+	server.StartTLS()
+	t.Cleanup(server.Close)
+
+	caFile := writeServerCAFile(t, server)
+	parsed, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	cert := newClientTLSCertificate(t)
+	client, err := NewAuthClient(AuthClientConfig{
+		Address:       server.URL,
+		CACertFile:    caFile,
+		TLSServerName: parsed.Hostname(),
+		Timeout:       time.Second,
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new auth client: %v", err)
+	}
+	if _, err := client.LoginCert(context.Background(), CertLoginRequest{MountPath: "auth/cert"}); err != nil {
+		t.Fatalf("login cert with client certificate: %v", err)
+	}
+}
+
+func TestNewHTTPTransportUsesExplicitControlPlaneDefaults(t *testing.T) {
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+	transport := newHTTPTransport(tlsConfig)
+
+	if transport.TLSClientConfig != tlsConfig {
+		t.Fatal("transport did not preserve TLS config")
+	}
+	if transport.DialContext == nil {
+		t.Fatal("transport must use an explicit dialer")
+	}
+	if !transport.ForceAttemptHTTP2 {
+		t.Fatal("transport should attempt HTTP/2")
+	}
+	if transport.TLSHandshakeTimeout != defaultHTTPTLSHandshakeTimeout {
+		t.Fatalf("unexpected TLS handshake timeout: %s", transport.TLSHandshakeTimeout)
+	}
+	if transport.ResponseHeaderTimeout != defaultHTTPResponseHeaderTimeout {
+		t.Fatalf("unexpected response header timeout: %s", transport.ResponseHeaderTimeout)
+	}
+	if transport.ExpectContinueTimeout != defaultHTTPExpectContinueTimeout {
+		t.Fatalf("unexpected expect-continue timeout: %s", transport.ExpectContinueTimeout)
+	}
+	if transport.IdleConnTimeout != defaultHTTPIdleConnTimeout {
+		t.Fatalf("unexpected idle connection timeout: %s", transport.IdleConnTimeout)
+	}
+	if transport.MaxIdleConns != defaultHTTPMaxIdleConns {
+		t.Fatalf("unexpected max idle connections: %d", transport.MaxIdleConns)
+	}
+	if transport.MaxIdleConnsPerHost != defaultHTTPMaxIdleConnsPerHost {
+		t.Fatalf("unexpected max idle connections per host: %d", transport.MaxIdleConnsPerHost)
+	}
+	if transport.MaxConnsPerHost != defaultHTTPMaxConnsPerHost {
+		t.Fatalf("unexpected max connections per host: %d", transport.MaxConnsPerHost)
+	}
+}
+
 func TestClientRequestFailureIsRedacted(t *testing.T) {
 	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path != "/v1/sys/capabilities-self" {
@@ -158,6 +243,23 @@ func TestClientRequestFailureIsRedacted(t *testing.T) {
 	}
 	if strings.Contains(openBaoErr.Error(), "permission denied") {
 		t.Fatalf("error exposed raw OpenBao message: %q", openBaoErr.Error())
+	}
+}
+
+func TestClientPreservesRequestContextCancellation(t *testing.T) {
+	client, err := NewClientWithHTTPClient(ClientConfig{
+		Address:     "https://bao.example.internal",
+		TokenSource: StaticTokenSource{TokenValue: testToken},
+	}, &http.Client{})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = client.ReadDisableUpsert(ctx, testMountPath)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
 	}
 }
 
@@ -263,4 +365,33 @@ func writeServerCAFile(t *testing.T, server *httptest.Server) string {
 		t.Fatalf("write CA file: %v", err)
 	}
 	return path
+}
+
+func newClientTLSCertificate(t *testing.T) tls.Certificate {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate client key: %v", err)
+	}
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "openbao-kms-control-plane",
+		},
+		NotBefore: time.Now().Add(-time.Minute),
+		NotAfter:  time.Now().Add(time.Hour),
+		KeyUsage:  x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageClientAuth,
+		},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create client certificate: %v", err)
+	}
+	return tls.Certificate{
+		Certificate: [][]byte{der},
+		PrivateKey:  key,
+	}
 }

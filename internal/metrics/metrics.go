@@ -24,14 +24,12 @@ const (
 	labelMethod    = "method"
 	labelOperation = "operation"
 	labelReason    = "reason"
+	labelSource    = "source"
 	labelState     = "state"
 	labelStatus    = "status"
 )
 
-var (
-	requestDurationBuckets = prometheus.ExponentialBuckets(0.001, 2, 12)
-	decryptBatchBuckets    = []float64{1, 2, 4, 8, 16, 32, 64, 128}
-)
+var requestDurationBuckets = prometheus.ExponentialBuckets(0.001, 2, 12)
 
 // StatusProvider exposes redacted status diagnostics for collection.
 type StatusProvider interface {
@@ -53,7 +51,7 @@ type Recorder struct {
 	openbaoDuration      *prometheus.HistogramVec
 	authRenewal          *prometheus.CounterVec
 	authLogin            *prometheus.CounterVec
-	decryptBatchSize     prometheus.Histogram
+	panicRecoveries      *prometheus.CounterVec
 	socketRestarts       prometheus.Counter
 	metadataObservation  *prometheus.CounterVec
 	aadValidationErrors  *prometheus.CounterVec
@@ -106,16 +104,16 @@ func NewRecorder() (*Recorder, error) {
 		authLogin: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "openbao_kms_auth_login_total",
-				Help: "Total OpenBao JWT login attempts by bounded status.",
+				Help: "Total OpenBao auth-method login attempts by bounded status.",
 			},
 			[]string{labelStatus},
 		),
-		decryptBatchSize: prometheus.NewHistogram(
-			prometheus.HistogramOpts{
-				Name:    "openbao_kms_decrypt_batch_size",
-				Help:    "Observed OpenBao Transit decrypt batch sizes.",
-				Buckets: decryptBatchBuckets,
+		panicRecoveries: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "openbao_kms_panic_recoveries_total",
+				Help: "Total recovered KMS handler panics by bounded method.",
 			},
+			[]string{labelMethod},
 		),
 		socketRestarts: prometheus.NewCounter(
 			prometheus.CounterOpts{
@@ -202,7 +200,7 @@ func (r *Recorder) RecordOpenBaoRequest(operation string, requestStatus string, 
 	r.openbaoDuration.WithLabelValues(operationLabel).Observe(duration.Seconds())
 }
 
-// RecordAuthLogin records one JWT login attempt.
+// RecordAuthLogin records one auth-method login attempt.
 func (r *Recorder) RecordAuthLogin(requestStatus string) {
 	r.authLogin.WithLabelValues(normalizeStatus(requestStatus)).Inc()
 }
@@ -212,17 +210,14 @@ func (r *Recorder) RecordAuthRenewal(requestStatus string) {
 	r.authRenewal.WithLabelValues(normalizeStatus(requestStatus)).Inc()
 }
 
-// RecordDecryptBatchSize records one Transit batch decrypt size.
-func (r *Recorder) RecordDecryptBatchSize(size int) {
-	if size <= 0 {
-		return
-	}
-	r.decryptBatchSize.Observe(float64(size))
-}
-
 // RecordSocketRestart records one verified-dead stale socket cleanup.
 func (r *Recorder) RecordSocketRestart() {
 	r.socketRestarts.Inc()
+}
+
+// RecordPanicRecovery records one recovered KMS handler panic.
+func (r *Recorder) RecordPanicRecovery(method string) {
+	r.panicRecoveries.WithLabelValues(normalize(method)).Inc()
 }
 
 // RecordTransitMetadataObservation records one status-controller metadata observation.
@@ -248,7 +243,7 @@ func (r *Recorder) registerBaseCollectors() error {
 		r.openbaoDuration,
 		r.authRenewal,
 		r.authLogin,
-		r.decryptBatchSize,
+		r.panicRecoveries,
 		r.socketRestarts,
 		r.metadataObservation,
 		r.aadValidationErrors,

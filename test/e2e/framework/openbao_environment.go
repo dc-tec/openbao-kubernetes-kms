@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -21,6 +22,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -37,7 +39,7 @@ const (
 	EnvDockerBinary = "DOCKER"
 	EnvSkipCleanup  = "E2E_SKIP_CLEANUP"
 
-	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.5.3"
+	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.5.3@sha256:fdc6da21ca6963560c32336fd7feb9cf2d5e52668f1a1647205a4b41171f0806"
 
 	openBaoListenAddress  = "0.0.0.0:8200"
 	openBaoTLSServerName  = "localhost"
@@ -54,53 +56,74 @@ const (
 	openBaoJWTTokenMaxTTL      = "30m"
 	openBaoJWTClockSkewLeeway  = "30s"
 	openBaoJWTExpirationLeeway = "30s"
+	openBaoEndpointProbeWait   = 5 * time.Second
+
+	openBaoCertAuthMount       = "auth/k8s-workload-a-cert"
+	openBaoCertAuthRole        = "openbao-kms-control-plane"
+	openBaoCertAuthSPIFFEID    = "spiffe://example.org/openbao-kms/workload-a"
+	openBaoCertAuthTokenTTL    = "10m"
+	openBaoCertAuthTokenMaxTTL = "30m"
 )
 
 var ErrDockerUnavailable = errors.New("docker is not available")
 
 type OpenBaoEnvironmentConfig struct {
-	Image         string
-	TransitMount  string
-	TransitKey    string
-	StartupWait   time.Duration
-	DockerBinary  string
-	NetworkName   string
-	StorageVolume string
-	JWTTTL        time.Duration
-	JWTTokenTTL   string
-	JWTMaxTTL     string
-	JWTIssuer     string
-	JWTAudience   string
-	JWTSubject    string
+	Image                   string
+	Namespace               string
+	TransitMount            string
+	TransitKey              string
+	TransitKeyType          string
+	StartupWait             time.Duration
+	DockerBinary            string
+	NetworkName             string
+	StorageVolume           string
+	JWTTTL                  time.Duration
+	JWTTokenTTL             string
+	JWTMaxTTL               string
+	JWTIssuer               string
+	JWTAudience             string
+	JWTSubject              string
+	CertAuth                bool
+	CertAuthAliasNameSource string
 }
 
 type OpenBaoEnvironment struct {
-	Address       string
-	CACertFile    string
-	TLSServerName string
-	Token         string
-	TransitMount  string
-	TransitKey    string
-	AuthMount     string
-	AuthRole      string
-	JWTFile       string
+	Address        string
+	CACertFile     string
+	TLSServerName  string
+	Token          string
+	TransitMount   string
+	TransitKey     string
+	Namespace      string
+	AuthMount      string
+	AuthRole       string
+	JWTFile        string
+	CertAuthMount  string
+	CertAuthRole   string
+	CertSPIFFEID   string
+	ClientCertFile string
+	ClientKeyFile  string
 
-	image         string
-	containerName string
-	certDir       string
-	dockerBinary  string
-	networkName   string
-	storageVolume string
-	unsealKey     string
-	jwtPrivateKey *rsa.PrivateKey
-	jwtPublicKey  string
-	jwtPublicKeys []string
-	jwtTTL        time.Duration
-	jwtTokenTTL   string
-	jwtMaxTTL     string
-	jwtIssuer     string
-	jwtAudience   string
-	jwtSubject    string
+	image                   string
+	containerName           string
+	certDir                 string
+	dockerBinary            string
+	networkName             string
+	storageVolume           string
+	transitKeyType          string
+	unsealKey               string
+	jwtPrivateKey           *rsa.PrivateKey
+	jwtPublicKey            string
+	jwtPublicKeys           []string
+	jwtTTL                  time.Duration
+	jwtTokenTTL             string
+	jwtMaxTTL               string
+	jwtIssuer               string
+	jwtAudience             string
+	jwtSubject              string
+	certAuthAliasNameSource string
+	certAuth                bool
+	managedStorageVolume    bool
 }
 
 type mountRequestBody struct {
@@ -113,6 +136,10 @@ type disableUpsertRequestBody struct {
 
 type transitKeyRequestBody struct {
 	Type string `json:"type"`
+}
+
+type transitKeyConfigRequestBody struct {
+	MinDecryptionVersion int `json:"min_decryption_version,omitempty"`
 }
 
 type policyRequestBody struct {
@@ -157,6 +184,20 @@ type jwtAuthRoleRequestBody struct {
 	ExpirationLeeway     string   `json:"expiration_leeway"`
 }
 
+type certAuthConfigRequestBody struct {
+	DisableBinding bool `json:"disable_binding"`
+}
+
+type certAuthRoleRequestBody struct {
+	DisplayName     string   `json:"display_name"`
+	Policies        []string `json:"policies"`
+	Certificate     string   `json:"certificate"`
+	AllowedURISANs  []string `json:"allowed_uri_sans,omitempty"`
+	AliasNameSource string   `json:"alias_name_source,omitempty"`
+	TTL             string   `json:"ttl"`
+	MaxTTL          string   `json:"max_ttl"`
+}
+
 type jwtHeader struct {
 	Algorithm string `json:"alg"`
 	Type      string `json:"typ"`
@@ -181,13 +222,16 @@ type environmentSetupPayload interface {
 	environmentSetupPayload()
 }
 
-func (mountRequestBody) environmentSetupPayload()         {}
-func (disableUpsertRequestBody) environmentSetupPayload() {}
-func (transitKeyRequestBody) environmentSetupPayload()    {}
-func (policyRequestBody) environmentSetupPayload()        {}
-func (emptyRequestBody) environmentSetupPayload()         {}
-func (jwtAuthConfigRequestBody) environmentSetupPayload() {}
-func (jwtAuthRoleRequestBody) environmentSetupPayload()   {}
+func (mountRequestBody) environmentSetupPayload()            {}
+func (disableUpsertRequestBody) environmentSetupPayload()    {}
+func (transitKeyRequestBody) environmentSetupPayload()       {}
+func (transitKeyConfigRequestBody) environmentSetupPayload() {}
+func (policyRequestBody) environmentSetupPayload()           {}
+func (emptyRequestBody) environmentSetupPayload()            {}
+func (jwtAuthConfigRequestBody) environmentSetupPayload()    {}
+func (jwtAuthRoleRequestBody) environmentSetupPayload()      {}
+func (certAuthConfigRequestBody) environmentSetupPayload()   {}
+func (certAuthRoleRequestBody) environmentSetupPayload()     {}
 
 func OpenBaoCIEnabled() bool {
 	return strings.EqualFold(os.Getenv(EnvOpenBaoCI), "true")
@@ -215,6 +259,13 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 	if err != nil {
 		return nil, fmt.Errorf("create OpenBao environment TLS directory: %w", err)
 	}
+	// OpenBao dev TLS material is generated inside Docker; rootless or userns-remapped
+	// runners need write access to this host-mounted test directory.
+	// #nosec G302 -- e2e Docker container needs write access to generated dev TLS files.
+	if err := os.Chmod(certDir, 0o777); err != nil {
+		_ = os.RemoveAll(certDir)
+		return nil, fmt.Errorf("prepare OpenBao environment TLS directory permissions: %w", err)
+	}
 	token, err := randomHex(24)
 	if err != nil {
 		return nil, fmt.Errorf("generate OpenBao environment token: %w", err)
@@ -224,26 +275,43 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 		return nil, fmt.Errorf("generate OpenBao environment name: %w", err)
 	}
 	containerName := "bao-kms-e2e-" + suffix
+	managedStorageVolume := false
+	if cfg.CertAuth && cfg.StorageVolume == "" {
+		cfg.StorageVolume = "bao-kms-e2e-certauth-" + suffix
+		managedStorageVolume = true
+		if err := createOpenBaoStorageVolume(ctx, dockerPath, cfg.StorageVolume); err != nil {
+			_ = os.RemoveAll(certDir)
+			return nil, err
+		}
+	}
 
 	environment := &OpenBaoEnvironment{
-		TLSServerName: openBaoTLSServerName,
-		Token:         token,
-		TransitMount:  cfg.TransitMount,
-		TransitKey:    cfg.TransitKey,
-		AuthMount:     openBaoJWTAuthMount,
-		AuthRole:      openBaoJWTAuthRole,
-		image:         cfg.Image,
-		containerName: containerName,
-		certDir:       certDir,
-		dockerBinary:  dockerPath,
-		networkName:   cfg.NetworkName,
-		storageVolume: cfg.StorageVolume,
-		jwtTTL:        cfg.JWTTTL,
-		jwtTokenTTL:   cfg.JWTTokenTTL,
-		jwtMaxTTL:     cfg.JWTMaxTTL,
-		jwtIssuer:     cfg.JWTIssuer,
-		jwtAudience:   cfg.JWTAudience,
-		jwtSubject:    cfg.JWTSubject,
+		TLSServerName:           openBaoTLSServerName,
+		Token:                   token,
+		Namespace:               cfg.Namespace,
+		TransitMount:            cfg.TransitMount,
+		TransitKey:              cfg.TransitKey,
+		AuthMount:               openBaoJWTAuthMount,
+		AuthRole:                openBaoJWTAuthRole,
+		CertAuthMount:           openBaoCertAuthMount,
+		CertAuthRole:            openBaoCertAuthRole,
+		CertSPIFFEID:            openBaoCertAuthSPIFFEID,
+		image:                   cfg.Image,
+		containerName:           containerName,
+		certDir:                 certDir,
+		dockerBinary:            dockerPath,
+		networkName:             cfg.NetworkName,
+		storageVolume:           cfg.StorageVolume,
+		transitKeyType:          cfg.TransitKeyType,
+		jwtTTL:                  cfg.JWTTTL,
+		jwtTokenTTL:             cfg.JWTTokenTTL,
+		jwtMaxTTL:               cfg.JWTMaxTTL,
+		jwtIssuer:               cfg.JWTIssuer,
+		jwtAudience:             cfg.JWTAudience,
+		jwtSubject:              cfg.JWTSubject,
+		certAuthAliasNameSource: cfg.CertAuthAliasNameSource,
+		certAuth:                cfg.CertAuth,
+		managedStorageVolume:    managedStorageVolume,
 	}
 	if err := environment.startContainer(ctx, cfg.Image); err != nil {
 		_ = environment.Close(context.Background())
@@ -272,11 +340,19 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 		}
 	}
 	if bootstrapRequired {
+		if err := environment.bootstrapNamespace(ctx); err != nil {
+			_ = environment.Close(context.Background())
+			return nil, err
+		}
 		if err := environment.bootstrapTransit(ctx); err != nil {
 			_ = environment.Close(context.Background())
 			return nil, err
 		}
 		if err := environment.bootstrapJWTAuth(ctx); err != nil {
+			_ = environment.Close(context.Background())
+			return nil, err
+		}
+		if err := environment.bootstrapCertAuth(ctx); err != nil {
 			_ = environment.Close(context.Background())
 			return nil, err
 		}
@@ -303,6 +379,7 @@ func (f *OpenBaoEnvironment) NewClientWithTokenSource(tokenSource openbao.TokenS
 		TLSServerName: f.TLSServerName,
 		Timeout:       5 * time.Second,
 		TokenSource:   tokenSource,
+		Namespace:     f.Namespace,
 	})
 }
 
@@ -312,6 +389,53 @@ func (f *OpenBaoEnvironment) NewAuthClient() (*openbao.AuthClient, error) {
 		CACertFile:    f.CACertFile,
 		TLSServerName: f.TLSServerName,
 		Timeout:       5 * time.Second,
+		Namespace:     f.Namespace,
+	})
+}
+
+func (f *OpenBaoEnvironment) NewCertAuthClient() (*openbao.AuthClient, error) {
+	if f.ClientCertFile == "" || f.ClientKeyFile == "" {
+		return nil, fmt.Errorf("OpenBao environment cert-auth client certificate is not initialized")
+	}
+	cert, err := tls.LoadX509KeyPair(f.ClientCertFile, f.ClientKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("load OpenBao cert-auth client certificate: %w", err)
+	}
+	return openbao.NewAuthClient(openbao.AuthClientConfig{
+		Address:       f.Address,
+		CACertFile:    f.CACertFile,
+		TLSServerName: f.TLSServerName,
+		Timeout:       5 * time.Second,
+		Namespace:     f.Namespace,
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		},
+	})
+}
+
+func (f *OpenBaoEnvironment) ConfigureCertAuthRole(
+	ctx context.Context,
+	certificatePEM []byte,
+	allowedURISAN string,
+) error {
+	if len(certificatePEM) == 0 {
+		return fmt.Errorf("OpenBao cert-auth CA certificate is required")
+	}
+	if strings.TrimSpace(allowedURISAN) == "" {
+		return fmt.Errorf("OpenBao cert-auth allowed URI SAN is required")
+	}
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, path.Join(f.CertAuthMount, "certs", f.CertAuthRole), certAuthRoleRequestBody{
+		DisplayName:     f.CertAuthRole,
+		Policies:        []string{openBaoJWTPolicyName},
+		Certificate:     string(certificatePEM),
+		AllowedURISANs:  []string{allowedURISAN},
+		AliasNameSource: f.certAuthAliasNameSource,
+		TTL:             openBaoCertAuthTokenTTL,
+		MaxTTL:          openBaoCertAuthTokenMaxTTL,
 	})
 }
 
@@ -416,7 +540,7 @@ func (f *OpenBaoEnvironment) Seal(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return f.write(ctx, httpClient, "sys/seal", emptyRequestBody{})
+	return f.writeRoot(ctx, httpClient, "sys/seal", emptyRequestBody{})
 }
 
 func (f *OpenBaoEnvironment) RotateTransitKey(ctx context.Context) error {
@@ -427,11 +551,30 @@ func (f *OpenBaoEnvironment) RotateTransitKey(ctx context.Context) error {
 	return f.write(ctx, httpClient, path.Join(f.TransitMount, "keys", f.TransitKey, "rotate"), emptyRequestBody{})
 }
 
+func (f *OpenBaoEnvironment) SetTransitMinDecryptionVersion(ctx context.Context, version int) error {
+	if version <= 0 {
+		return fmt.Errorf("OpenBao Transit min_decryption_version must be positive")
+	}
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, path.Join(f.TransitMount, "keys", f.TransitKey, "config"), transitKeyConfigRequestBody{
+		MinDecryptionVersion: version,
+	})
+}
+
 func (f *OpenBaoEnvironment) Close(ctx context.Context) error {
 	stopErr := f.StopContainer(ctx)
-	if !strings.EqualFold(os.Getenv(EnvSkipCleanup), "true") && f.certDir != "" {
+	skipCleanup := strings.EqualFold(os.Getenv(EnvSkipCleanup), "true")
+	if !skipCleanup && f.certDir != "" {
 		if err := os.RemoveAll(f.certDir); err != nil && stopErr == nil {
 			stopErr = fmt.Errorf("remove OpenBao environment TLS directory: %w", err)
+		}
+	}
+	if !skipCleanup && f.managedStorageVolume && f.storageVolume != "" {
+		if err := removeOpenBaoStorageVolume(ctx, f.dockerBinary, f.storageVolume); err != nil && stopErr == nil {
+			stopErr = err
 		}
 	}
 	return stopErr
@@ -559,6 +702,9 @@ func defaultOpenBaoEnvironmentConfig(cfg OpenBaoEnvironmentConfig) OpenBaoEnviro
 	if cfg.TransitKey == "" {
 		cfg.TransitKey = DefaultOpenBaoTransitKey
 	}
+	if cfg.TransitKeyType == "" {
+		cfg.TransitKeyType = openBaoTransitKeyType
+	}
 	if cfg.StartupWait <= 0 {
 		cfg.StartupWait = 45 * time.Second
 	}
@@ -647,7 +793,15 @@ func (f *OpenBaoEnvironment) startRaftStorageContainer(ctx context.Context, imag
 	if err := writeOpenBaoServerTLSFiles(f.certDir); err != nil {
 		return err
 	}
-	if err := writeOpenBaoRaftStorageConfig(f.certDir); err != nil {
+	if f.certAuth {
+		clientCertFile, clientKeyFile, err := writeOpenBaoClientTLSFiles(f.certDir, f.CertSPIFFEID)
+		if err != nil {
+			return err
+		}
+		f.ClientCertFile = clientCertFile
+		f.ClientKeyFile = clientKeyFile
+	}
+	if err := writeOpenBaoRaftStorageConfig(f.certDir, f.certAuth); err != nil {
 		return err
 	}
 	if err := f.prepareStorageVolume(ctx, image); err != nil {
@@ -696,8 +850,30 @@ func prepareOpenBaoStorageVolume(ctx context.Context, dockerBinary string, image
 	return nil
 }
 
-func writeOpenBaoRaftStorageConfig(dir string) error {
-	raw := `api_addr = "https://localhost:8200"
+func createOpenBaoStorageVolume(ctx context.Context, dockerBinary string, storageVolume string) error {
+	cmd := exec.CommandContext(ctx, dockerBinary, "volume", "create", storageVolume)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("create OpenBao storage volume: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func removeOpenBaoStorageVolume(ctx context.Context, dockerBinary string, storageVolume string) error {
+	cmd := exec.CommandContext(ctx, dockerBinary, "volume", "rm", "-f", storageVolume)
+	if output, err := cmd.CombinedOutput(); err != nil && !strings.Contains(string(output), "No such volume") {
+		return fmt.Errorf("remove OpenBao storage volume: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func writeOpenBaoRaftStorageConfig(dir string, requestClientCerts bool) error {
+	clientCertConfig := ""
+	if requestClientCerts {
+		clientCertConfig = `  tls_disable_client_certs = false
+`
+	}
+	raw := fmt.Sprintf(`disable_mlock = true
+api_addr = "https://localhost:8200"
 cluster_addr = "https://localhost:8201"
 
 storage "raft" {
@@ -710,8 +886,9 @@ listener "tcp" {
   cluster_address = "0.0.0.0:8201"
   tls_cert_file = "/bao/tls/server.crt"
   tls_key_file = "/bao/tls/server.key"
+%s
 }
-`
+`, clientCertConfig)
 	if err := os.WriteFile(filepath.Join(dir, "openbao.hcl"), []byte(raw), 0o644); err != nil {
 		return fmt.Errorf("write OpenBao raft storage config: %w", err)
 	}
@@ -775,6 +952,88 @@ func writeOpenBaoServerTLSFilesForHosts(dir string, dnsNames []string) error {
 	return nil
 }
 
+func writeOpenBaoClientTLSFiles(dir string, spiffeID string) (string, string, error) {
+	caFile := filepath.Join(dir, "client-ca.pem")
+	certFile := filepath.Join(dir, "client.crt")
+	keyFile := filepath.Join(dir, "client.key")
+	if _, err := os.Stat(caFile); err == nil {
+		if _, err := os.Stat(certFile); err != nil {
+			return "", "", fmt.Errorf("stat OpenBao client certificate: %w", err)
+		}
+		if _, err := os.Stat(keyFile); err != nil {
+			return "", "", fmt.Errorf("stat OpenBao client key: %w", err)
+		}
+		return certFile, keyFile, nil
+	}
+
+	parsedSPIFFEID, err := url.Parse(spiffeID)
+	if err != nil {
+		return "", "", fmt.Errorf("parse OpenBao cert-auth SPIFFE ID: %w", err)
+	}
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", "", fmt.Errorf("generate OpenBao client CA key: %w", err)
+	}
+	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", "", fmt.Errorf("generate OpenBao client key: %w", err)
+	}
+	now := time.Now().UTC()
+	caTemplate, err := certificateTemplate("openbao-kms-e2e-client-ca", now)
+	if err != nil {
+		return "", "", err
+	}
+	caTemplate.IsCA = true
+	caTemplate.KeyUsage = x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+
+	clientTemplate, err := certificateTemplate(openBaoCertAuthRole, now)
+	if err != nil {
+		return "", "", err
+	}
+	clientTemplate.KeyUsage = x509.KeyUsageDigitalSignature
+	clientTemplate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	clientTemplate.URIs = []*url.URL{parsedSPIFFEID}
+
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		return "", "", fmt.Errorf("create OpenBao client CA certificate: %w", err)
+	}
+	clientDER, err := x509.CreateCertificate(rand.Reader, clientTemplate, caTemplate, &clientKey.PublicKey, caKey)
+	if err != nil {
+		return "", "", fmt.Errorf("create OpenBao client certificate: %w", err)
+	}
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey)})
+	if err := os.WriteFile(caFile, caPEM, 0o644); err != nil {
+		return "", "", fmt.Errorf("write OpenBao client CA certificate: %w", err)
+	}
+	if err := os.WriteFile(certFile, certPEM, 0o644); err != nil {
+		return "", "", fmt.Errorf("write OpenBao client certificate: %w", err)
+	}
+	if err := os.WriteFile(keyFile, keyPEM, 0o600); err != nil {
+		return "", "", fmt.Errorf("write OpenBao client key: %w", err)
+	}
+	return certFile, keyFile, nil
+}
+
+func certificateTemplate(commonName string, now time.Time) (*x509.Certificate, error) {
+	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serial, err := rand.Int(rand.Reader, serialLimit)
+	if err != nil {
+		return nil, fmt.Errorf("generate OpenBao TLS serial: %w", err)
+	}
+	return &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			CommonName: commonName,
+		},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(24 * time.Hour),
+		BasicConstraintsValid: true,
+	}, nil
+}
+
 func uniqueDNSNames(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	names := make([]string, 0, len(values))
@@ -799,6 +1058,7 @@ func (f *OpenBaoEnvironment) waitUntilEndpoint(ctx context.Context, timeout time
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	var lastErr error
 	for {
 		if err := f.refreshEndpoint(waitCtx); err == nil {
 			httpClient, clientErr := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 2*time.Second)
@@ -811,13 +1071,24 @@ func (f *OpenBaoEnvironment) waitUntilEndpoint(ctx context.Context, timeout time
 						_ = response.Body.Close()
 						return nil
 					}
+					lastErr = responseErr
+				} else {
+					lastErr = requestErr
 				}
+			} else {
+				lastErr = clientErr
 			}
+		} else {
+			lastErr = err
 		}
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("OpenBao environment endpoint did not become reachable: %w", waitCtx.Err())
+			return openBaoReadinessTimeoutError(
+				"OpenBao environment endpoint did not become reachable",
+				waitCtx.Err(),
+				lastErr,
+			)
 		case <-ticker.C:
 		}
 	}
@@ -1028,23 +1299,35 @@ func (f *OpenBaoEnvironment) waitUntilReady(ctx context.Context, timeout time.Du
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	var lastErr error
 	for {
 		if err := f.refreshEndpoint(waitCtx); err == nil {
 			if err := f.probeHealth(waitCtx); err == nil {
 				return nil
+			} else {
+				lastErr = err
 			}
+		} else {
+			lastErr = err
 		}
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("OpenBao environment did not become ready: %w", waitCtx.Err())
+			return openBaoReadinessTimeoutError(
+				"OpenBao environment did not become ready",
+				waitCtx.Err(),
+				lastErr,
+			)
 		case <-ticker.C:
 		}
 	}
 }
 
 func (f *OpenBaoEnvironment) refreshEndpoint(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, f.dockerBinary, "port", f.containerName, "8200/tcp")
+	probeCtx, cancel := context.WithTimeout(ctx, openBaoEndpointProbeWait)
+	defer cancel()
+
+	cmd := exec.CommandContext(probeCtx, f.dockerBinary, "port", f.containerName, "8200/tcp")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("resolve OpenBao environment port: %w", err)
@@ -1062,9 +1345,16 @@ func (f *OpenBaoEnvironment) refreshEndpoint(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	f.Address = "https://localhost:" + port
+	f.Address = "https://" + net.JoinHostPort("127.0.0.1", port)
 	f.CACertFile = caFile
 	return nil
+}
+
+func openBaoReadinessTimeoutError(message string, timeoutErr error, lastErr error) error {
+	if lastErr == nil {
+		return fmt.Errorf("%s: %w", message, timeoutErr)
+	}
+	return fmt.Errorf("%s: %w (last readiness error: %v)", message, timeoutErr, lastErr)
 }
 
 func (f *OpenBaoEnvironment) probeHealth(ctx context.Context) error {
@@ -1090,6 +1380,22 @@ func (f *OpenBaoEnvironment) probeHealth(ctx context.Context) error {
 	return nil
 }
 
+func (f *OpenBaoEnvironment) bootstrapNamespace(ctx context.Context) error {
+	if f.Namespace == "" {
+		return nil
+	}
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	for _, namespace := range namespacePrefixes(f.Namespace) {
+		if err := f.writeRoot(ctx, httpClient, "sys/namespaces/"+namespace, emptyRequestBody{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (f *OpenBaoEnvironment) bootstrapTransit(ctx context.Context) error {
 	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
 	if err != nil {
@@ -1098,7 +1404,7 @@ func (f *OpenBaoEnvironment) bootstrapTransit(ctx context.Context) error {
 	if err := f.write(ctx, httpClient, "sys/mounts/"+f.TransitMount, mountRequestBody{Type: "transit"}); err != nil {
 		return err
 	}
-	if err := f.write(ctx, httpClient, f.TransitMount+"/keys/"+f.TransitKey, transitKeyRequestBody{Type: openBaoTransitKeyType}); err != nil {
+	if err := f.write(ctx, httpClient, f.TransitMount+"/keys/"+f.TransitKey, transitKeyRequestBody{Type: f.transitKeyType}); err != nil {
 		return err
 	}
 	if err := f.write(ctx, httpClient, f.TransitMount+"/config/keys", disableUpsertRequestBody{DisableUpsert: true}); err != nil {
@@ -1151,6 +1457,29 @@ func (f *OpenBaoEnvironment) bootstrapJWTAuth(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (f *OpenBaoEnvironment) bootstrapCertAuth(ctx context.Context) error {
+	if !f.certAuth {
+		return nil
+	}
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	caPEM, err := os.ReadFile(filepath.Join(f.certDir, "client-ca.pem"))
+	if err != nil {
+		return fmt.Errorf("read OpenBao cert-auth client CA: %w", err)
+	}
+	if err := f.write(ctx, httpClient, "sys/auth/"+authMountName(f.CertAuthMount), mountRequestBody{Type: "cert"}); err != nil {
+		return err
+	}
+	if err := f.write(ctx, httpClient, path.Join(f.CertAuthMount, "config"), certAuthConfigRequestBody{
+		DisableBinding: false,
+	}); err != nil {
+		return err
+	}
+	return f.ConfigureCertAuthRole(ctx, caPEM, f.CertSPIFFEID)
 }
 
 func (f *OpenBaoEnvironment) writeJWTAuthConfig(ctx context.Context) error {
@@ -1274,6 +1603,20 @@ func encodeJWTClaims(value jwtClaims) (string, error) {
 }
 
 func (f *OpenBaoEnvironment) write(ctx context.Context, httpClient *http.Client, apiPath string, body environmentSetupPayload) error {
+	return f.writeWithNamespace(ctx, httpClient, apiPath, body, f.Namespace)
+}
+
+func (f *OpenBaoEnvironment) writeRoot(ctx context.Context, httpClient *http.Client, apiPath string, body environmentSetupPayload) error {
+	return f.writeWithNamespace(ctx, httpClient, apiPath, body, "")
+}
+
+func (f *OpenBaoEnvironment) writeWithNamespace(
+	ctx context.Context,
+	httpClient *http.Client,
+	apiPath string,
+	body environmentSetupPayload,
+	namespace string,
+) error {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("encode OpenBao environment setup request: %w", err)
@@ -1289,18 +1632,36 @@ func (f *OpenBaoEnvironment) write(ctx context.Context, httpClient *http.Client,
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Vault-Token", f.Token)
+	if namespace != "" {
+		request.Header.Set("X-Vault-Namespace", namespace)
+	}
 	response, err := httpClient.Do(request)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, response.Body)
-		_ = response.Body.Close()
-	}()
+	responseBody, readErr := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if readErr != nil {
+		return fmt.Errorf("read OpenBao environment setup response: %w", readErr)
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("OpenBao environment setup %q status %d", apiPath, response.StatusCode)
+		return fmt.Errorf(
+			"OpenBao environment setup %q status %d: %s",
+			apiPath,
+			response.StatusCode,
+			strings.TrimSpace(string(responseBody)),
+		)
 	}
 	return nil
+}
+
+func namespacePrefixes(namespace string) []string {
+	segments := strings.Split(namespace, "/")
+	prefixes := make([]string, 0, len(segments))
+	for i := range segments {
+		prefixes = append(prefixes, strings.Join(segments[:i+1], "/"))
+	}
+	return prefixes
 }
 
 func findOpenBaoEnvironmentCA(dir string) (string, error) {

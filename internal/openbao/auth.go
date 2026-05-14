@@ -12,6 +12,7 @@ import (
 
 const (
 	authOperationJWTLogin  = "jwt login"
+	authOperationCertLogin = "cert login"
 	authOperationRenewSelf = "token renew self"
 	authTokenRenewSelfPath = "auth/token/renew-self" // #nosec G101 -- OpenBao API path, not a credential.
 	authLoginPathSegment   = "login"
@@ -23,6 +24,12 @@ type JWTLoginRequest struct {
 	MountPath string
 	Role      string
 	JWT       string
+}
+
+// CertLoginRequest is an OpenBao cert auth login request.
+type CertLoginRequest struct {
+	MountPath string
+	Name      string
 }
 
 // AuthToken is a redaction-sensitive OpenBao client token response.
@@ -67,6 +74,30 @@ func (c *AuthClient) LoginJWT(ctx context.Context, req JWTLoginRequest) (AuthTok
 	return response.Auth.token(), nil
 }
 
+// LoginCert exchanges the configured TLS client certificate for an OpenBao client token.
+func (c *AuthClient) LoginCert(ctx context.Context, req CertLoginRequest) (AuthToken, error) {
+	mountPath := strings.TrimSpace(req.MountPath)
+	name := strings.TrimSpace(req.Name)
+	if mountPath == "" {
+		return AuthToken{}, fmt.Errorf("auth mount path is required")
+	}
+
+	c.CloseIdleConnections()
+	body := certLoginRequestBody{Name: name}
+	var response authResponseBody
+	if err := c.doUnauthenticated(
+		ctx,
+		authOperationCertLogin,
+		http.MethodPost,
+		path.Join(strings.Trim(mountPath, "/"), authLoginPathSegment),
+		body,
+		&response,
+	); err != nil {
+		return AuthToken{}, err
+	}
+	return response.Auth.token(), nil
+}
+
 // RenewSelfToken renews the supplied OpenBao token using auth/token/renew-self.
 func (c *AuthClient) RenewSelfToken(ctx context.Context, token string, increment time.Duration) (AuthToken, error) {
 	if token == "" {
@@ -98,6 +129,12 @@ type jwtLoginRequestBody struct {
 }
 
 func (jwtLoginRequestBody) requestPayload() {}
+
+type certLoginRequestBody struct {
+	Name string `json:"name,omitempty"`
+}
+
+func (certLoginRequestBody) requestPayload() {}
 
 type renewSelfRequestBody struct {
 	Increment string `json:"increment"`

@@ -32,7 +32,7 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 	recorder.RecordTransitMetadataObservation("ok")
 	recorder.RecordAADValidationError("annotation_invalid")
 	recorder.RecordDecryptKeyIDError("key_id_unknown")
-	recorder.RecordDecryptBatchSize(4)
+	recorder.RecordPanicRecovery("encrypt")
 	recorder.RecordSocketRestart()
 
 	output := scrapeMetrics(t, recorder.Handler())
@@ -44,10 +44,14 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 		`openbao_kms_transit_metadata_observation_total{status="ok"} 1`,
 		`openbao_kms_aad_validation_errors_total{reason="annotation_invalid"} 1`,
 		`openbao_kms_decrypt_key_id_errors_total{reason="key_id_unknown"} 1`,
+		`openbao_kms_panic_recoveries_total{method="encrypt"} 1`,
 		`openbao_kms_socket_restarts_total 1`,
 		`openbao_kms_status_key_id_hash{hash="safe-key-id-hash"} 1`,
 		`openbao_kms_key_version 7`,
+		`openbao_kms_auth_method_info{method="cert"} 1`,
+		`openbao_kms_certificate_source_info{source="spiffe"} 1`,
 		`openbao_kms_token_ttl_seconds 300`,
+		`openbao_kms_certificate_ttl_seconds 7200`,
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("metrics output missing %q:\n%s", want, output)
@@ -92,7 +96,10 @@ type fakeAuthProvider struct{}
 
 func (fakeAuthProvider) State() auth.State {
 	return auth.State{
-		Status:   auth.StatusAuthenticated,
-		TokenTTL: 5 * time.Minute,
+		AuthMethod:        "cert",
+		CertificateSource: "spiffe",
+		Status:            auth.StatusAuthenticated,
+		TokenTTL:          5 * time.Minute,
+		CertTTL:           2 * time.Hour,
 	}
 }

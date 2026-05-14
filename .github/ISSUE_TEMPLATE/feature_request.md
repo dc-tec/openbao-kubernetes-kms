@@ -11,10 +11,6 @@ labels: enhancement
 
 ## Proposed Scope
 
-## Workstream
-
-- Related workstream ID:
-
 ## Compatibility Or Security Impact
 
 - Key ID/AAD impact:

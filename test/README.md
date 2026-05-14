@@ -1,10 +1,10 @@
 # Test Layout
 
-This directory holds non-unit test harnesses once the implementation reaches the relevant workstreams.
+This directory holds non-unit test harnesses and shared fixtures.
 
 | Directory | Purpose |
 |---|---|
-| `e2e` | Ginkgo/Gomega end-to-end suite, manifest, ephemeral OpenBao CI lane, provider full-stack OpenBao/KMS v2 socket coverage, and future Kind/control-plane scenarios. |
+| `e2e` | Ginkgo/Gomega end-to-end suite, manifest, ephemeral OpenBao CI lanes, provider full-stack OpenBao/KMS v2 socket coverage, and Kind control-plane scenarios. |
 | `fakes` | Reusable test doubles for fake Transit, fake Status cache, and fake OpenBao auth/token lifecycle tests. |
 | `integration` | OpenBao-backed integration tests. |
 | `kmsconformance` | Kubernetes KMS v2 protocol conformance tests. |

@@ -84,7 +84,22 @@ type labConfig struct {
 	staticPodHost    string
 	providerImage    string
 	providerAssetDir string
-	loadSecretCount  int
+
+	loadSecretCount int
+
+	decryptWarmupSecretCount       int
+	decryptWarmupDuration          time.Duration
+	decryptWarmupWorkers           int
+	decryptWarmupMaxP95            time.Duration
+	decryptWarmupMinLists          int
+	decryptWarmupRestartAPIServers bool
+	decryptWarmupRestartParallel   bool
+	decryptWarmupReuseCorpus       bool
+	decryptWarmupSeedBatchSize     int
+	decryptWarmupSeedWorkers       int
+
+	decryptColdStartMaxP95  time.Duration
+	decryptColdStartTimeout time.Duration
 }
 
 type versionsConfig struct {
@@ -166,6 +181,8 @@ var labCommands = []labCommand{
 	{name: "verify-recovery", run: labVerifyRecovery},
 	{name: "verify-openbao-outage", run: labVerifyOpenBaoOutage},
 	{name: "verify-load", run: labVerifyLoad},
+	{name: "verify-decrypt-warmup", run: labVerifyDecryptWarmup},
+	{name: "verify-decrypt-cold-start", run: labVerifyDecryptColdStart},
 	{name: "verify-upgrade-rollback", run: labVerifyUpgradeRollback},
 	{name: "verify-paired-restore", run: labVerifyPairedRestore},
 	{name: "verify-mcp-recovery", run: labVerifyMultiControlPlaneRecovery},
@@ -248,6 +265,47 @@ func newLabConfig() (*labConfig, error) {
 		providerImage:          envOrDefault("PROVIDER_IMAGE", providerImageDefault),
 		providerAssetDir:       envOrDefault("HARVESTER_PROVIDER_ASSET_DIR", filepath.Join(artifactDir, "provider")),
 		loadSecretCount:        envInt("HARVESTER_LOAD_SECRET_COUNT", 25),
+		decryptWarmupSecretCount: envInt(
+			"HARVESTER_DECRYPT_WARMUP_SECRET_COUNT",
+			2500,
+		),
+		decryptWarmupDuration: envDuration(
+			"HARVESTER_DECRYPT_WARMUP_DURATION",
+			10*time.Minute,
+		),
+		decryptWarmupWorkers: envInt("HARVESTER_DECRYPT_WARMUP_WORKERS", 0),
+		decryptWarmupMaxP95: envDuration(
+			"HARVESTER_DECRYPT_WARMUP_MAX_P95",
+			30*time.Second,
+		),
+		decryptWarmupMinLists: envInt("HARVESTER_DECRYPT_WARMUP_MIN_LISTS", 3),
+		decryptWarmupRestartAPIServers: envBoolDefault(
+			"HARVESTER_DECRYPT_WARMUP_RESTART_APISERVERS",
+			true,
+		),
+		decryptWarmupRestartParallel: envBool(
+			"HARVESTER_DECRYPT_WARMUP_RESTART_PARALLEL",
+		),
+		decryptWarmupReuseCorpus: envBoolDefault(
+			"HARVESTER_DECRYPT_WARMUP_REUSE_CORPUS",
+			true,
+		),
+		decryptWarmupSeedBatchSize: envInt(
+			"HARVESTER_DECRYPT_WARMUP_SEED_BATCH_SIZE",
+			500,
+		),
+		decryptWarmupSeedWorkers: envInt(
+			"HARVESTER_DECRYPT_WARMUP_SEED_WORKERS",
+			1,
+		),
+		decryptColdStartMaxP95: envDuration(
+			"HARVESTER_DECRYPT_COLD_START_MAX_P95",
+			30*time.Second,
+		),
+		decryptColdStartTimeout: envDuration(
+			"HARVESTER_DECRYPT_COLD_START_TIMEOUT",
+			5*time.Minute,
+		),
 	}
 	if cfg.openBaoVersion == "" || cfg.kubernetesVersion == "" || cfg.flannelVersion == "" {
 		return nil, errors.New("missing OpenBao or Kubernetes versions in .ci/versions.yaml")
@@ -307,18 +365,42 @@ func envBool(name string) bool {
 	return strings.EqualFold(os.Getenv(name), "true")
 }
 
+func envBoolDefault(name string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+	return strings.EqualFold(value, "true")
+}
+
 func envDuration(name string, fallback time.Duration) time.Duration {
 	value := os.Getenv(name)
 	if value == "" {
 		return fallback
 	}
-	if seconds, err := time.ParseDuration(value + "s"); err == nil {
+	if isDigitsOnly(value) {
+		seconds, err := time.ParseDuration(value + "s")
+		if err != nil {
+			return fallback
+		}
 		return seconds
 	}
 	if duration, err := time.ParseDuration(value); err == nil {
 		return duration
 	}
 	return fallback
+}
+
+func isDigitsOnly(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func envInt(name string, fallback int) int {
@@ -379,6 +461,31 @@ func outputCmd(ctx context.Context, cfg *labConfig, name string, args ...string)
 	return output, nil
 }
 
+func outputCmdEnv(ctx context.Context, cfg *labConfig, env []string, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- local lab invokes configured developer tools.
+	cmd.Dir = cfg.root
+	cmd.Env = append(baseLabEnv(cfg), env...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, stderr.String())
+	}
+	return output, nil
+}
+
+func runCmdEnvDiscardOutput(ctx context.Context, cfg *labConfig, env []string, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- local lab invokes configured developer tools.
+	cmd.Dir = cfg.root
+	cmd.Env = append(baseLabEnv(cfg), env...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, stderr.String())
+	}
+	return nil
+}
+
 func baseLabEnv(cfg *labConfig) []string {
 	return append(os.Environ(), "KUBECONFIG="+cfg.kubeconfig)
 }
@@ -401,7 +508,7 @@ func ensureValues(cfg *labConfig) error {
 	// #nosec G304 -- local lab reads the configured values file.
 	data, err := os.ReadFile(cfg.valuesPath)
 	if err != nil {
-		return fmt.Errorf("values file not found: %s; run: make harvester-lab-values", cfg.valuesPath)
+		return fmt.Errorf("values file not found: %s; run: make -C hack/harvester values", cfg.valuesPath)
 	}
 	if strings.Contains(string(data), defaultHarvesterImageName) {
 		return errors.New("HARVESTER_IMAGE_NAME must be set to an existing Harvester image before creating VMs")
@@ -530,7 +637,7 @@ func labCreate(ctx context.Context, cfg *labConfig, _ []string) error {
 	if err := runCmd(ctx, cfg, "helm", helmArgs(cfg, args...)...); err != nil {
 		return err
 	}
-	fmt.Println("VM resources submitted. Run: make harvester-lab-status")
+	fmt.Println("VM resources submitted. Run: make -C hack/harvester status")
 	return nil
 }
 
@@ -1311,10 +1418,10 @@ func requireProviderInputs(cfg *labConfig) (string, error) {
 		return "", errors.New("could not resolve OpenBao host IP from SSH config")
 	}
 	if _, err := os.Stat(filepath.Join(cfg.artifactDir, "openbao-ca.crt")); err != nil {
-		return "", fmt.Errorf("OpenBao CA not found; run: make harvester-lab-bootstrap-openbao")
+		return "", fmt.Errorf("OpenBao CA not found; run: make -C hack/harvester bootstrap-openbao")
 	}
 	if _, err := os.Stat(filepath.Join(cfg.identityDir, "identity.jwt")); err != nil {
-		return "", fmt.Errorf("lab identity JWT not found; run: make harvester-lab-bootstrap-openbao")
+		return "", fmt.Errorf("lab identity JWT not found; run: make -C hack/harvester bootstrap-openbao")
 	}
 	return openBaoIP, nil
 }
@@ -1577,8 +1684,6 @@ server:
   socketGroup: "%s"
   metricsAddress: "127.0.0.1:8081"
   healthAddress: "127.0.0.1:8082"
-  adminAddress: ""
-  unsafeDebugEndpoints: false
 openbao:
   address: https://%s:8200
   namespace: ""
@@ -1600,7 +1705,6 @@ auth:
   expectedAudience:
     - bao-kms-provider
   expectedSubject: system:openbao-kms:workload-a
-  tokenStorage: memory
 transit:
   mountPath: transit
   keyName: k8s-workload-a-etcd
@@ -1609,7 +1713,6 @@ transit:
     clusterId: %s
     transitMountId: transit-harvester-lab
     keyLineageId: 01HXEXAMPLEKEYLINEAGEID
-  useAssociatedData: true
 bootstrap:
   graceTimeout: 60s
   retryInterval: 5s
@@ -1624,15 +1727,9 @@ rotation:
   activationDelay: 1s
   requireStableObservationCount: 1
   rejectVersionRollback: true
-performance:
-  decryptMicroBatching:
-    enabled: false
-    maxBatchSize: 32
-    maxWait: 2ms
 logging:
   level: info
   format: json
-  redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
   debugCorrelation:
     enabled: false

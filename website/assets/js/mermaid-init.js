@@ -1,5 +1,5 @@
 (() => {
-  const initMermaid = () => {
+  const initMermaid = async () => {
     if (!window.mermaid) {
       return;
     }
@@ -57,9 +57,18 @@
       }
     });
 
-    window.mermaid.run({
-      querySelector: ".mermaid"
-    });
+    const diagrams = Array.from(document.querySelectorAll(".mermaid"));
+    for (const diagram of diagrams) {
+      try {
+        await window.mermaid.run({
+          nodes: [diagram]
+        });
+      } catch (error) {
+        diagram.dataset.mermaidError = "true";
+        diagram.setAttribute("aria-label", "Diagram failed to render");
+        console.error("Mermaid diagram failed to render", error);
+      }
+    }
   };
 
   if (document.readyState === "loading") {

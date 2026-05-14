@@ -16,13 +16,56 @@ make test-e2e-provider-openbao-ci
 
 That target builds `E2E_PROVIDER_IMAGE` and runs the provider plus KMS v2 socket client in Docker containers. Set `E2E_PROVIDER_BUILD=false` to test a prebuilt image tag.
 
+Run only the OpenBao certificate auth slice with:
+
+```sh
+make test-e2e-cert-auth-openbao-ci
+```
+
+That target runs real OpenBao with a TLS listener that requests client
+certificates. It configures the OpenBao cert auth method with a URI SAN-bound
+role, logs in through cert auth, and verifies Transit access with the issued
+token. It does not replace provider E2E coverage for PKCS#11 source
+availability.
+
+Run the provider certificate-source lanes with:
+
+```sh
+make test-e2e-provider-certauth-sources-openbao-ci
+```
+
+That target runs the supported source-specific provider check. The PKCS#11 lane
+builds an E2E image with SoftHSM, creates a real PKCS#11 key pair and client
+certificate, configures OpenBao cert auth with the generated CA, and runs the
+KMS v2 socket client through the provider.
+
+Run the SPIFFE source implementation check explicitly with:
+
+```sh
+make test-e2e-provider-certauth-spiffe-openbao-ci
+```
+
+That lane starts real SPIRE server and agent containers, registers the provider
+UID selector, fetches a real X.509 SVID from the Workload API, and validates it
+through the provider SPIFFE certificate source code. It is not wired into CI or
+the preview release gate, and it is not a support claim until the OpenBao
+cert-auth identity alias behavior is compatible with URI-SAN-only SVIDs.
+
+Run only the provider CLI slice with:
+
+```sh
+make test-e2e-provider-cli-openbao-ci
+```
+
+That target runs the real provider image CLI against mounted provider config, TLS/JWT files, local state, and real OpenBao. It covers `doctor`, `verify-key`, `rotation-plan`, `verify-rotation`, `config`, and `policy openbao`, plus JWT claim drift redaction, unsupported Transit key type diagnostics, and missing-state-after-rotation fail-closed behavior.
+
 Run only the provider/OpenBao failure-mode slice with:
 
 ```sh
 make test-e2e-provider-failure-openbao-ci
 ```
 
-That target uses real OpenBao Transit/JWT auth and the real provider image. It covers OpenBao down, OpenBao sealed, reduced provider policy, expired JWT startup fail-closed behavior, JWT file rotation and re-login, provider re-login after signing-key rollover, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
+That target uses real OpenBao Transit/JWT auth and the real provider image. It covers OpenBao down, OpenBao sealed, reduced provider policy with `PermissionDenied` KMS errors, expired JWT and expected-claim drift startup fail-closed behavior, JWT file rotation and re-login, provider re-login after signing-key rollover, missing Transit key startup fail-closed behavior, Status staleness, and stale socket reclamation.
 
 Run only the provider/OpenBao HA failover slice with:
 
@@ -39,6 +82,14 @@ make test-e2e-provider-decrypt-storm-openbao-ci
 ```
 
 That target performs concurrent KMS v2 Decrypt calls through the provider against real OpenBao. It is a smoke test, not a replacement for release-candidate load testing.
+
+Run only the sustained direct decrypt soak slice with:
+
+```sh
+make test-e2e-provider-decrypt-soak-openbao-ci
+```
+
+That target prepares a fixed corpus of encrypted samples, sustains concurrent KMS v2 Decrypt calls through the real provider/OpenBao path, requires zero client-visible errors, enforces operation-count and p95-latency thresholds, and compares Docker memory/PID counts before and after the run.
 
 Run only the provider/OpenBao load-soak slice with:
 
@@ -62,7 +113,7 @@ Run only the provider/OpenBao Transit rotation slice with:
 make test-e2e-provider-rotation-openbao-ci
 ```
 
-That target runs OpenBao with integrated raft storage in Docker. It writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, restores the pre-rotation snapshot, and verifies the provider rejects the observed Transit version rollback.
+That target runs OpenBao with integrated raft storage in Docker. It writes ciphertext on the initial Transit version, saves a pre-rotation raft snapshot, rotates the Transit key, waits for provider Status to promote a new `key_id`, verifies old and new ciphertext decrypt, rejects Transit `min_decryption_version` changes that strand retained historical versions, fails closed when local provider state disappears after rotation, restores the pre-rotation snapshot, and verifies the provider rejects the observed Transit version rollback.
 
 Run only the provider binary upgrade/rollback slice with:
 

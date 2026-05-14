@@ -1,0 +1,41 @@
+//go:build !certauth_pkcs11 && !certauth_spiffe
+
+package main
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
+)
+
+func TestBuildAuthManagerRejectsCertAuthInDefaultBuild(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Auth.Method = authMethodCert
+
+	_, err := buildAuthManager(context.Background(), cfg, nil)
+	if !errors.Is(err, auth.ErrAuthConfig) {
+		t.Fatalf("expected auth config error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "certauth build variant") {
+		t.Fatalf("expected certauth build variant error, got %v", err)
+	}
+}
+
+func TestDoctorCertAuthDefaultBuildFailsLocalSourceCheck(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Auth.Method = authMethodCert
+	cfg.Auth.Cert.Source = certSourceSPIFFE
+	report := cli.Report{Name: reportNameDoctor}
+
+	if checkLocalAuthForDoctor(context.Background(), &report, cfg) {
+		t.Fatal("default build should not pass cert-auth local checks")
+	}
+	if !report.HasFailures() || !reportContains(report, "certauth build variant") {
+		t.Fatalf("expected certauth build variant failure, got %#v", report.Checks)
+	}
+}

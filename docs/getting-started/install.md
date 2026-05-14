@@ -6,54 +6,173 @@ weight: 30
 
 # Install
 
-This page covers fetching a verified `bao-kms-provider` artifact, placing the runtime files, and confirming the local environment is sane before wiring the provider into Kubernetes. It assumes [OpenBao Setup](/getting-started/openbao-setup/) has been completed.
+This page covers fetching a verified `bao-kms-provider` artifact, placing the runtime files, and confirming the local environment before wiring the provider into Kubernetes. It assumes [OpenBao Setup](/getting-started/openbao-setup/) has been completed.
 
-## Status
+## Release Artifacts
 
-No public release exists for v0.1 yet. The repository ships sample build and deployment artifacts that release engineering will replace with published binaries and signed container images:
+Every public release publishes native packages, tarballs, a static-pod bundle,
+a container image, and verification files such as checksums, signatures, SBOMs,
+and provenance attestations.
 
-- `Dockerfile` for the `bao-kms-provider` container image,
-- `deploy/config/provider-systemd.yaml` and `deploy/config/provider-static-pod.yaml` configuration samples,
-- `deploy/systemd/bao-kms-provider.service` systemd unit,
-- `deploy/static-pod/bao-kms-provider.yaml` static pod manifest,
-- `deploy/kubernetes/encryption-config.yaml` API server `EncryptionConfiguration` sample,
-- `deploy/package/linux` native package inputs,
-- `deploy/package/bundles` release bundle inputs.
-
-For local builds during development, see [Development: Contributing](/development/contributing/).
+Verify the release artifacts before placing the provider on a control-plane
+host, and validate the deployment in a staging environment before using it to
+protect cluster data. See [Support Policy](/reference/support-policy/) for the
+current release maturity.
 
 ## Choose The Artifact
 
-The provider ships in two forms.
+Choose the artifact that matches the deployment model you will use.
 
 | Form | Use | Details |
 |---|---|---|
 | Native package | systemd deployment | `.deb` or `.rpm` with systemd unit, sysusers, tmpfiles, examples, checksum, signature, and attestation. |
 | Linux binary tarball | systemd deployment fallback | Deterministic tarball with binary, systemd metadata, examples, checksum, signature, and attestation. |
 | Static-pod bundle | static-pod deployment | Deterministic tarball with static-pod manifest, provider config sample, encryption config, image reference, checksum, signature, and attestation. |
-| Container image | static-pod runtime | Distroless non-root image, runs as `65532:65532`, pinned to a base image digest in `.ci/versions.yaml`. |
+| Container image | static-pod runtime | Distroless non-root image, runs as `65532:65532`, published and verified by image digest. The runtime base image is pinned by digest in `.ci/versions.yaml`. |
+
+Published release artifacts use the default JWT-only auth build. Certificate
+auth is an opt-in build variant:
+
+```sh
+make build-certauth-pkcs11
+```
+
+PKCS#11 cert-auth artifacts are separate host CGO builds via
+`make release-artifact-certauth-pkcs11-host`.
+
+PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. PKCS#11 is
+an opt-in preview path only when the selected release publishes the matching
+artifact and marks that path as tested. `auth.cert.source: spiffe` is not a
+supported preview user configuration.
+
+Release artifacts distinguish these auth paths:
+
+| Artifact family | Preview support |
+|---|---|
+| Default `bao-kms-provider` artifacts | JWT auth only. |
+| `bao-kms-provider-certauth-pkcs11` host artifacts | PKCS#11 certificate auth only when the release marks that path as tested. |
+| SPIFFE or combined cert-auth artifacts | Not a supported preview user configuration. |
 
 The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) once the artifact is in place.
 
-## Verify The Artifact
+## Verify Release Artifacts
 
-The release evidence for each stable release includes:
+Verify the artifact before placing it on a control-plane host. The release
+verification files include:
 
-- a checksum file (`SHA256SUMS`),
-- detached cryptographic signatures over the checksum file,
+- a checksum file (`checksums.txt`),
+- a keyless cosign signature bundle for the checksum file (`checksums.txt.bundle`),
 - an SBOM per binary and per image,
-- a provenance attestation generated during the release workflow.
+- GitHub build-provenance attestations generated during the release workflow,
+- a reproducibility report,
+- a provenance index (`provenance-index.json`).
 
 Verify in this order:
 
 1. Fetch the artifact and the checksum file from the release page.
 2. Compare the SHA-256 of the artifact against the entry in the checksum file.
-3. Verify the signature over the checksum file using the public key documented in the release evidence.
-4. Verify the provenance attestation against the expected workflow identity.
+3. Verify the signature over the checksum file against the release workflow identity.
+4. Verify the artifact provenance attestation against the release workflow identity.
+5. For static-pod deployments, verify the image signature and image provenance for the digest referenced by the static-pod bundle.
 
-For the full evidence catalog and supply-chain controls behind these artifacts, see [Development: CI And Supply Chain](/development/ci-supply-chain/).
+Do not replace the release image digest with a tag-only reference. The static
+pod manifest should use the verified image digest from the selected release.
 
-## Place The Files
+The examples below use `cosign` and the GitHub CLI.
+
+Example:
+
+```sh
+VERSION=0.1.0
+REPO=dc-tec/openbao-kubernetes-kms
+WORKFLOW_IDENTITY="https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${VERSION}"
+
+sha256sum --check --ignore-missing checksums.txt
+
+cosign verify-blob \
+  --new-bundle-format=true \
+  --bundle checksums.txt.bundle \
+  --certificate-identity "${WORKFLOW_IDENTITY}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+
+gh attestation verify ./bao-kms-provider_${VERSION}_linux_amd64 \
+  --repo "${REPO}" \
+  --signer-workflow "${REPO}/.github/workflows/release.yml" \
+  --source-ref "refs/tags/${VERSION}" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --deny-self-hosted-runners
+```
+
+For the provider image, verify by digest:
+
+```sh
+IMAGE="ghcr.io/dc-tec/bao-kms-provider@sha256:<digest>"
+
+cosign verify \
+  --new-bundle-format=true \
+  --certificate-identity "${WORKFLOW_IDENTITY}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "${IMAGE}"
+
+gh attestation verify "oci://${IMAGE}" \
+  --repo "${REPO}" \
+  --signer-workflow "${REPO}/.github/workflows/release.yml" \
+  --source-ref "refs/tags/${VERSION}" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --deny-self-hosted-runners
+```
+
+For the full supply-chain controls behind these artifacts, see
+[Development: CI And Supply Chain](/development/ci-supply-chain/).
+
+## Install A Native Package
+
+Use the native package when deploying with systemd on a supported Linux distribution.
+
+Debian or Ubuntu:
+
+```sh
+sudo dpkg -i bao-kms-provider_<version>_linux_amd64.deb
+```
+
+RHEL-family distributions:
+
+```sh
+sudo rpm -Uvh bao-kms-provider_<version>_linux_amd64.rpm
+```
+
+The package installs the binary, systemd unit, sysusers and tmpfiles inputs, and example configuration files. Review and replace the example configuration before starting the service.
+
+## Install The systemd Tarball
+
+Use the systemd tarball when native packaging is not available for your host image:
+
+```sh
+sudo tar -C / -xzf bao-kms-provider_<version>_systemd_linux_amd64.tar.gz
+```
+
+Then create the `openbao-kms` user, `openbao-kms` group, and `openbao-kms-socket` group according to [Deployment: Linux Identity Model](/deployment/linux-identity-model/). The tarball contains installable files, but distribution-specific user and group creation remains a host image responsibility.
+
+## Install The Static-Pod Bundle
+
+Use the static-pod bundle when the provider will run as a kubelet-managed static pod:
+
+```sh
+tar -xzf bao-kms-provider_<version>_static-pod.tar.gz
+```
+
+The bundle contains the static pod manifest, provider configuration sample, Kubernetes `EncryptionConfiguration` sample, and image reference. Before placing the manifest under `/etc/kubernetes/manifests/`, replace:
+
+- the image digest with the verified digest from the selected release,
+- the numeric `supplementalGroups` entry,
+- the provider config values,
+- the OpenBao CA path,
+- the configured auth material paths.
+
+Preload the referenced image on every control-plane node before relying on it for recovery-sensitive boot. See [Deployment: Static Pod Deployment](/deployment/static-pod/) for the host preparation and pod hardening details.
+
+## Place Runtime Files
 
 Recommended host layout:
 
@@ -62,6 +181,8 @@ Recommended host layout:
 /etc/openbao-kms/config.yaml
 /etc/openbao-kms/tls/ca.crt
 /var/lib/openbao-kms/identity.jwt
+/etc/openbao-kms/client/client-chain.pem
+/etc/openbao-kms/pkcs11/pin
 /run/openbao-kms/kms.sock
 ```
 
@@ -74,16 +195,32 @@ Recommended ownership:
 /etc/openbao-kms/tls/ca.crt        root:root                       0644
 /var/lib/openbao-kms               openbao-kms:openbao-kms         0750
 /var/lib/openbao-kms/identity.jwt  root:openbao-kms                0640
+/etc/openbao-kms/client/client-chain.pem root:openbao-kms           0640
+/etc/openbao-kms/pkcs11/pin        root:openbao-kms                0640
 /run/openbao-kms                   openbao-kms:openbao-kms-socket  2750
 ```
 
-The provider runs as a non-root user (`openbao-kms`). The Kubernetes API server connects to the socket through the supplementary `openbao-kms-socket` group, which keeps API-server socket access separate from access to the provider JWT. For the full identity model and rationale, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+The provider runs as a non-root user (`openbao-kms`). The Kubernetes API server connects to the socket through the supplementary `openbao-kms-socket` group, which keeps API-server socket access separate from access to provider auth material. For the full identity model and rationale, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
 For the configuration file shape and field reference, see [Configuration](/reference/configuration/).
 
-## Run Doctor
+## Validate Before Kubernetes Wiring
 
-Before starting the provider, run the bootstrap check:
+Inspect the resolved configuration:
+
+```sh
+bao-kms-provider config \
+  --config /etc/openbao-kms/config.yaml
+```
+
+Verify the Transit key profile:
+
+```sh
+bao-kms-provider verify-key \
+  --config /etc/openbao-kms/config.yaml
+```
+
+Run the bootstrap check:
 
 ```sh
 bao-kms-provider doctor \
@@ -93,15 +230,23 @@ bao-kms-provider doctor \
 `doctor` validates:
 
 - configuration file permissions and shape,
-- JWT file readability and expiry,
+- auth material readability and local validity,
 - OpenBao TLS reachability,
-- JWT login against the configured OpenBao role,
+- login against the configured OpenBao auth method and role,
 - Transit key metadata read and capability negation,
 - probe encrypt and decrypt operations,
 - key_id stability across probe operations,
 - socket directory ownership and permissions.
 
-Run `doctor` with the new artifact on every control-plane node before promoting the binary or image. For the full doctor flag set, see [Reference: CLI](/reference/cli/).
+After the Kubernetes `EncryptionConfiguration` exists, run `doctor` with that file too:
+
+```sh
+bao-kms-provider doctor \
+  --config /etc/openbao-kms/config.yaml \
+  --encryption-config /etc/kubernetes/encryption-config.yaml
+```
+
+Run these checks with the new artifact on every control-plane node before promoting the binary or image. For the full command reference, see [Reference: CLI](/reference/cli/).
 
 ## Read Next
 

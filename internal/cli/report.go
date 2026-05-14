@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 )
@@ -21,16 +22,16 @@ const (
 
 // Check is one redacted, stable diagnostic result.
 type Check struct {
-	ID      string
-	Title   string
-	Status  CheckStatus
-	Message string
+	ID      string      `json:"id"`
+	Title   string      `json:"title"`
+	Status  CheckStatus `json:"status"`
+	Message string      `json:"message,omitempty"`
 }
 
 // Report is a command diagnostic report.
 type Report struct {
-	Name   string
-	Checks []Check
+	Name   string  `json:"name"`
+	Checks []Check `json:"checks"`
 }
 
 // Add appends one check result.
@@ -83,4 +84,11 @@ func PrintText(out io.Writer, report Report) {
 		}
 		_, _ = fmt.Fprintf(out, "[%s] %s: %s - %s\n", check.Status, check.ID, check.Title, check.Message)
 	}
+}
+
+// PrintJSON writes a stable machine-readable report.
+func PrintJSON(out io.Writer, report Report) error {
+	encoder := json.NewEncoder(out)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(report)
 }

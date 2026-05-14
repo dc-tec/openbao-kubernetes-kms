@@ -10,7 +10,7 @@
         {{- $isSection := eq .Kind "section" -}}
         {{- $isAncestor := and $isSection (not $isCurrent) (hasPrefix $current.RelPermalink .RelPermalink) -}}
         <li class="docs-nav__item{{ if $isCurrent }} is-current{{ end }}{{ if $isAncestor }} is-ancestor{{ end }}">
-          <a class="docs-nav__link{{ if $isSection }} docs-nav__link--subsection{{ end }}" href="{{ .RelPermalink }}">
+          <a class="docs-nav__link{{ if $isSection }} docs-nav__link--subsection{{ end }}" href="{{ .RelPermalink }}"{{ if $isCurrent }} aria-current="page"{{ end }}>
             {{ partial "page_title.html" . }}
           </a>
           {{ if $isSection }}
@@ -29,7 +29,7 @@
         {{- $isSection := eq .Kind "section" -}}
         {{- $isAncestor := and $isSection (not $isCurrent) (hasPrefix $current.RelPermalink .RelPermalink) -}}
         <li class="docs-nav__item{{ if $isCurrent }} is-current{{ end }}{{ if $isAncestor }} is-ancestor{{ end }}">
-          <a class="docs-nav__link{{ if $isSection }} docs-nav__link--subsection{{ end }}" href="{{ .RelPermalink }}">
+          <a class="docs-nav__link{{ if $isSection }} docs-nav__link--subsection{{ end }}" href="{{ .RelPermalink }}"{{ if $isCurrent }} aria-current="page"{{ end }}>
             {{ partial "page_title.html" . }}
           </a>
           {{ if $isSection }}

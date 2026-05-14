@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os/user"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
@@ -29,6 +31,10 @@ import (
 const (
 	diagnosticCiphertext   = "openbao-kms-provider-diagnostic-ciphertext"
 	messageContextRequired = "context is required"
+	authMethodJWT          = "jwt"
+	authMethodCert         = "cert"
+	certSourcePKCS11       = "pkcs11"
+	certSourceSPIFFE       = "spiffe"
 )
 
 type runtimeBuilder struct {
@@ -117,21 +123,7 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 		return serveDependencies{}, err
 	}
 
-	authClient, err := openbao.NewAuthClient(openbao.AuthClientConfig{
-		Address:       cfg.OpenBao.Address,
-		Namespace:     cfg.OpenBao.Namespace,
-		CACertFile:    cfg.OpenBao.CACertFile,
-		TLSServerName: cfg.OpenBao.TLSServerName,
-		Timeout:       authLoginTimeout(cfg),
-		Observer:      observer,
-	})
-	if err != nil {
-		return serveDependencies{}, err
-	}
-	authManager, err := auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{
-		RenewalEnabled: true,
-		Observer:       observer,
-	})
+	authManager, err := buildAuthManager(ctx, cfg, observer)
 	if err != nil {
 		return serveDependencies{}, err
 	}
@@ -173,7 +165,10 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 	if err != nil {
 		return serveDependencies{}, err
 	}
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(kmsv2.MaxGRPCMessageBytes),
+		grpc.MaxSendMsgSize(kmsv2.MaxGRPCMessageBytes),
+	)
 	kmsv2.Register(grpcServer, kmsServer)
 
 	rt, err := appruntime.New(appruntime.Options{
@@ -212,6 +207,7 @@ func buildStatusRuntime(
 		ProviderName:        cfg.Transit.KeyIDScope.ProviderName,
 		ClusterID:           cfg.Transit.KeyIDScope.ClusterID,
 		OpenBaoInstanceID:   cfg.OpenBao.InstanceID,
+		OpenBaoNamespace:    cfg.OpenBao.Namespace,
 		TransitMountID:      cfg.Transit.KeyIDScope.TransitMountID,
 		TransitKeyLineageID: cfg.Transit.KeyIDScope.KeyLineageID,
 		AADMode:             keyregistry.AADModeRequired,
@@ -272,17 +268,51 @@ func runServe(ctx context.Context, deps serveDependencies) error {
 
 func authConfig(cfg config.Config) auth.ManagerConfig {
 	return auth.ManagerConfig{
-		MountPath:              cfg.Auth.MountPath,
-		Role:                   cfg.Auth.Role,
-		JWTFile:                cfg.Auth.JWTFile,
-		MinJWTRemainingTTL:     cfg.Auth.MinJWTRemainingTTL,
-		ClockSkewLeeway:        cfg.Auth.ClockSkewLeeway,
+		MountPath:              cfg.Auth.JWT.MountPath,
+		Role:                   cfg.Auth.JWT.Role,
+		JWTFile:                cfg.Auth.JWT.JWTFile,
+		MinJWTRemainingTTL:     cfg.Auth.JWT.MinRemainingTTL,
+		ClockSkewLeeway:        cfg.Auth.JWT.ClockSkewLeeway,
 		LoginBeforeTokenExpiry: cfg.Auth.LoginBeforeTokenExpiry,
 		TokenRenewalIncrement:  cfg.Auth.TokenRenewalIncrement,
-		ExpectedIssuer:         cfg.Auth.ExpectedIssuer,
-		ExpectedAudience:       cfg.Auth.ExpectedAudience,
-		ExpectedSubject:        cfg.Auth.ExpectedSubject,
+		ExpectedIssuer:         cfg.Auth.JWT.ExpectedIssuer,
+		ExpectedAudience:       cfg.Auth.JWT.ExpectedAudience,
+		ExpectedSubject:        cfg.Auth.JWT.ExpectedSubject,
 	}
+}
+
+func buildAuthManager(
+	ctx context.Context,
+	cfg config.Config,
+	observer authRuntimeObserver,
+) (*auth.Manager, error) {
+	switch cfg.Auth.Method {
+	case authMethodJWT:
+		authClient, err := openbao.NewAuthClient(openbao.AuthClientConfig{
+			Address:       cfg.OpenBao.Address,
+			Namespace:     cfg.OpenBao.Namespace,
+			CACertFile:    cfg.OpenBao.CACertFile,
+			TLSServerName: cfg.OpenBao.TLSServerName,
+			Timeout:       authLoginTimeout(cfg),
+			Observer:      observer,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{
+			RenewalEnabled: true,
+			Observer:       observer,
+		})
+	case authMethodCert:
+		return newCertAuthManager(ctx, cfg, observer)
+	default:
+		return nil, fmt.Errorf("%w: unsupported auth method", auth.ErrAuthConfig)
+	}
+}
+
+type authRuntimeObserver interface {
+	auth.Observer
+	openbao.RequestObserver
 }
 
 type bootstrapProbeController interface {
@@ -437,23 +467,52 @@ func (r readinessAdapter) Ready(ctx context.Context) (status.Diagnostics, error)
 	return r.store.Diagnostics(ctx)
 }
 
-type diagnosticTransit struct{}
+type diagnosticTransit struct {
+	mu      sync.Mutex
+	records map[string]diagnosticTransitRecord
+}
 
-func (diagnosticTransit) Encrypt(
+type diagnosticTransitRecord struct {
+	plaintext      []byte
+	associatedData []byte
+}
+
+func (d *diagnosticTransit) Encrypt(
 	_ context.Context,
 	req kmsv2.TransitEncryptRequest,
 ) (kmsv2.TransitEncryptResponse, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.records == nil {
+		d.records = make(map[string]diagnosticTransitRecord)
+	}
+	ciphertext := fmt.Sprintf("%s-%d", diagnosticCiphertext, len(d.records)+1)
+	d.records[ciphertext] = diagnosticTransitRecord{
+		plaintext:      append([]byte(nil), req.Plaintext...),
+		associatedData: append([]byte(nil), req.AssociatedData...),
+	}
 	return kmsv2.TransitEncryptResponse{
-		Ciphertext: []byte(diagnosticCiphertext),
+		Ciphertext: []byte(ciphertext),
 		KeyVersion: req.KeyVersion,
 	}, nil
 }
 
-func (diagnosticTransit) Decrypt(
+func (d *diagnosticTransit) Decrypt(
 	_ context.Context,
-	_ kmsv2.TransitDecryptRequest,
+	req kmsv2.TransitDecryptRequest,
 ) (kmsv2.TransitDecryptResponse, error) {
-	return kmsv2.TransitDecryptResponse{}, fmt.Errorf("diagnostic decrypt is not implemented")
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	record, ok := d.records[string(req.Ciphertext)]
+	if !ok {
+		return kmsv2.TransitDecryptResponse{}, fmt.Errorf("diagnostic ciphertext not found")
+	}
+	if !bytes.Equal(record.associatedData, req.AssociatedData) {
+		return kmsv2.TransitDecryptResponse{}, fmt.Errorf("diagnostic associated data mismatch")
+	}
+	return kmsv2.TransitDecryptResponse{
+		Plaintext: append([]byte(nil), record.plaintext...),
+	}, nil
 }
 
 func commandContext(cmd *cobra.Command) context.Context {

@@ -1,12 +1,12 @@
 ---
 title: "Transit Policy Examples"
-description: "Reference OpenBao policy, JWT auth role, and Transit key configuration examples for bao-kms-provider, plus capabilities to avoid."
+description: "Reference OpenBao policy, auth role, and Transit key configuration examples for bao-kms-provider, plus capabilities to avoid."
 weight: 110
 ---
 
 # Transit Policy Examples
 
-This page collects the reference OpenBao policy, JWT auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies these examples, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace the workload-specific identifiers (mount path, key name, role name, audience, subject) with values from your environment.
+This page collects the reference OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies these examples, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace the workload-specific identifiers such as mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
 
 ## Plugin Hot-Path Policy
 
@@ -22,6 +22,9 @@ path "transit/decrypt/k8s-workload-a-etcd" {
 path "transit/keys/k8s-workload-a-etcd" {
   capabilities = ["read"]
 }
+path "transit/config/keys" {
+  capabilities = ["read"]
+}
 path "sys/capabilities-self" {
   capabilities = ["update"]
 }
@@ -29,18 +32,15 @@ path "sys/capabilities-self" {
 
 `sys/capabilities-self` is required so `bao-kms-provider doctor` can verify the token's effective capabilities.
 
-If token renewal is enabled and the JWT role disables the default policy, add only the required self-token paths:
+If token renewal is enabled and the JWT role disables the default policy, add the required self-renewal path:
 
 ```hcl
-path "auth/token/lookup-self" {
-  capabilities = ["read"]
-}
 path "auth/token/renew-self" {
   capabilities = ["update"]
 }
 ```
 
-If the default mode is re-login instead of token renewal, these paths can be omitted.
+The provider runtime does not call `auth/token/lookup-self`. Grant `lookup-self` only to separate operator diagnostics that need to inspect the token. If the provider uses re-login instead of token renewal, `renew-self` can be omitted.
 
 ## Capabilities To Avoid
 
@@ -66,7 +66,7 @@ bao write auth/k8s-workload-a-jwt/role/openbao-kms-control-plane \
   role_type="jwt" \
   user_claim="sub" \
   bound_audiences='["bao-kms-provider"]' \
-  bound_subject="system:openbao-kms:workload-a:control-plane" \
+  bound_subject="system:openbao-kms:workload-a" \
   token_policies='["openbao-kms-workload-a"]' \
   token_ttl="10m" \
   token_max_ttl="30m" \
@@ -86,6 +86,25 @@ bao write auth/k8s-workload-a-jwt/config \
 ```
 
 OpenBao JWT auth requires one of: OIDC discovery, a JWKS URL, or local validation public keys.
+
+## Certificate Auth Role: URI SAN
+
+```sh
+bao auth enable -path=k8s-workload-a-cert cert
+bao write auth/k8s-workload-a-cert/config \
+  disable_binding=false
+bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
+  display_name="openbao-kms-control-plane" \
+  certificate=@/etc/openbao/trust/openbao-kms-client-ca.pem \
+  allowed_uri_sans="urn:openbao-kms:workload-a" \
+  token_policies='["openbao-kms-workload-a"]' \
+  token_ttl="10m" \
+  token_max_ttl="30m" \
+  token_no_default_policy="true" \
+  ocsp_fail_open="false"
+```
+
+The OpenBao listener used by the provider must request client certificates. Keep cert auth binding enabled so renewal remains tied to the certificate identity used during login.
 
 ## Transit Key Configuration
 

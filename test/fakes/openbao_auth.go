@@ -20,12 +20,15 @@ type OpenBaoAuthClient struct {
 	mu sync.Mutex
 
 	LoginResponses []openbao.AuthToken
+	CertResponses  []openbao.AuthToken
 	RenewResponses []openbao.AuthToken
 	LoginErr       error
+	CertErr        error
 	RenewErr       error
 
-	logins   []openbao.JWTLoginRequest
-	renewals []RenewalCall
+	logins     []openbao.JWTLoginRequest
+	certLogins []openbao.CertLoginRequest
+	renewals   []RenewalCall
 }
 
 // LoginJWT records a login request and returns the next scripted response.
@@ -45,6 +48,26 @@ func (f *OpenBaoAuthClient) LoginJWT(
 	}
 	response := f.LoginResponses[0]
 	f.LoginResponses = f.LoginResponses[1:]
+	return response, nil
+}
+
+// LoginCert records a cert login request and returns the next scripted response.
+func (f *OpenBaoAuthClient) LoginCert(
+	_ context.Context,
+	req openbao.CertLoginRequest,
+) (openbao.AuthToken, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.certLogins = append(f.certLogins, req)
+	if f.CertErr != nil {
+		return openbao.AuthToken{}, f.CertErr
+	}
+	if len(f.CertResponses) == 0 {
+		return openbao.AuthToken{}, errors.New("missing fake cert login response")
+	}
+	response := f.CertResponses[0]
+	f.CertResponses = f.CertResponses[1:]
 	return response, nil
 }
 
@@ -75,6 +98,14 @@ func (f *OpenBaoAuthClient) Logins() []openbao.JWTLoginRequest {
 	defer f.mu.Unlock()
 
 	return append([]openbao.JWTLoginRequest(nil), f.logins...)
+}
+
+// CertLogins returns recorded cert login requests.
+func (f *OpenBaoAuthClient) CertLogins() []openbao.CertLoginRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]openbao.CertLoginRequest(nil), f.certLogins...)
 }
 
 // Renewals returns recorded token renewal requests.
@@ -183,6 +214,14 @@ func (b *BlockingOpenBaoAuthClient) LoginJWT(
 		return openbao.AuthToken{}, ctx.Err()
 	}
 	return b.token, nil
+}
+
+// LoginCert fails because the blocking fake is only for initial JWT login tests.
+func (b *BlockingOpenBaoAuthClient) LoginCert(
+	_ context.Context,
+	_ openbao.CertLoginRequest,
+) (openbao.AuthToken, error) {
+	return openbao.AuthToken{}, errors.New("cert login should not be called")
 }
 
 // RenewSelfToken fails because the blocking fake is only for initial login tests.

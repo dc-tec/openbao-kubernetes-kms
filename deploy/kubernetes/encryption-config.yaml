@@ -3,7 +3,6 @@ kind: EncryptionConfiguration
 resources:
   - resources:
       - secrets
-      - configmaps
     providers:
       - kms:
           apiVersion: v2

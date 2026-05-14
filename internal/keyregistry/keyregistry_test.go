@@ -21,11 +21,11 @@ type snapshotFixture struct {
 	ProviderName                string `json:"providerName"`
 	ClusterID                   string `json:"clusterId"`
 	OpenBaoInstanceID           string `json:"openbaoInstanceId"`
+	OpenBaoNamespace            string `json:"openbaoNamespace"`
 	TransitMountID              string `json:"transitMountId"`
 	TransitKeyLineageID         string `json:"transitKeyLineageId"`
 	TransitVersion              int    `json:"transitVersion"`
 	TransitVersionCreatedAtUnix int64  `json:"transitVersionCreatedAtUnix"`
-	KeyEpoch                    string `json:"keyEpoch"`
 	State                       string `json:"state"`
 	AADMode                     string `json:"aadMode"`
 }
@@ -84,6 +84,13 @@ func TestDeriveKeyIDChangesForIdentityFields(t *testing.T) {
 			},
 		},
 		{
+			name: "OpenBao namespace",
+			change: func(snapshot keyregistry.KeySnapshot) keyregistry.KeySnapshot {
+				snapshot.OpenBaoNamespace = "admin/workload-a"
+				return snapshot
+			},
+		},
+		{
 			name: "Transit mount ID",
 			change: func(snapshot keyregistry.KeySnapshot) keyregistry.KeySnapshot {
 				snapshot.TransitMountID = "transit-prod-secondary"
@@ -111,13 +118,6 @@ func TestDeriveKeyIDChangesForIdentityFields(t *testing.T) {
 				return snapshot
 			},
 		},
-		{
-			name: "key epoch",
-			change: func(snapshot keyregistry.KeySnapshot) keyregistry.KeySnapshot {
-				snapshot.KeyEpoch = "emergency-epoch-1"
-				return snapshot
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -128,6 +128,49 @@ func TestDeriveKeyIDChangesForIdentityFields(t *testing.T) {
 			}
 			if changedKeyID == baseKeyID {
 				t.Fatalf("key ID did not change when %s changed", tt.name)
+			}
+		})
+	}
+}
+
+func TestDeriveKeyIDCanonicalizesTransitCreationTimeToUnixSeconds(t *testing.T) {
+	base := loadGoldenFixture(t).Snapshot.keySnapshot()
+	withSubsecondPrecision := base
+	withSubsecondPrecision.TransitVersionCreatedAt = base.TransitVersionCreatedAt.Add(987 * time.Millisecond)
+
+	baseKeyID, err := keyregistry.DeriveKeyID(base)
+	if err != nil {
+		t.Fatalf("derive base key ID: %v", err)
+	}
+	subsecondKeyID, err := keyregistry.DeriveKeyID(withSubsecondPrecision)
+	if err != nil {
+		t.Fatalf("derive subsecond key ID: %v", err)
+	}
+	if subsecondKeyID != baseKeyID {
+		t.Fatalf("subsecond precision changed key ID: base %s subsecond %s", baseKeyID, subsecondKeyID)
+	}
+
+	normalized, err := withSubsecondPrecision.Normalize()
+	if err != nil {
+		t.Fatalf("normalize subsecond snapshot: %v", err)
+	}
+	if !normalized.TransitVersionCreatedAt.Equal(base.TransitVersionCreatedAt) {
+		t.Fatalf(
+			"creation time was not canonicalized: want %s got %s",
+			base.TransitVersionCreatedAt,
+			normalized.TransitVersionCreatedAt,
+		)
+	}
+}
+
+func TestDeriveKeyIDRejectsInvalidTransitCreationTime(t *testing.T) {
+	base := loadGoldenFixture(t).Snapshot.keySnapshot()
+	for _, createdAt := range []time.Time{{}, time.Unix(0, 0).UTC()} {
+		t.Run(createdAt.String(), func(t *testing.T) {
+			snapshot := base
+			snapshot.TransitVersionCreatedAt = createdAt
+			if _, err := keyregistry.DeriveKeyID(snapshot); err == nil {
+				t.Fatal("expected invalid Transit creation time to fail")
 			}
 		})
 	}
@@ -251,6 +294,59 @@ func TestStateFileRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStateFileRegistryExcludesPendingAndRejectedSnapshots(t *testing.T) {
+	active, err := loadGoldenFixture(t).Snapshot.keySnapshot().Normalize()
+	if err != nil {
+		t.Fatalf("normalize active: %v", err)
+	}
+	pending := active
+	pending.TransitVersion++
+	pending.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(time.Hour)
+	pending.KubernetesKeyID = ""
+	pending.State = keyregistry.StatePending
+	pending, err = pending.Normalize()
+	if err != nil {
+		t.Fatalf("normalize pending: %v", err)
+	}
+	rejected := active
+	rejected.TransitVersion += 2
+	rejected.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(2 * time.Hour)
+	rejected.KubernetesKeyID = ""
+	rejected.State = keyregistry.StateRejected
+	rejected, err = rejected.Normalize()
+	if err != nil {
+		t.Fatalf("normalize rejected: %v", err)
+	}
+
+	state, err := keyregistry.NewStateFileFromRecords(
+		active.KubernetesKeyID,
+		[]keyregistry.SnapshotStateRecord{
+			keyregistry.SnapshotStateRecordFromSnapshot(active),
+			keyregistry.SnapshotStateRecordFromSnapshot(pending),
+			keyregistry.SnapshotStateRecordFromSnapshot(rejected),
+		},
+		1,
+		"",
+	)
+	if err != nil {
+		t.Fatalf("new state file: %v", err)
+	}
+	registry, err := state.Registry()
+	if err != nil {
+		t.Fatalf("registry from state: %v", err)
+	}
+
+	if _, err := registry.Lookup(active.KubernetesKeyID); err != nil {
+		t.Fatalf("lookup active key ID: %v", err)
+	}
+	for _, keyID := range []string{pending.KubernetesKeyID, rejected.KubernetesKeyID} {
+		_, err := registry.Lookup(keyID)
+		if !errors.Is(err, keyregistry.ErrUnknownKeyID) {
+			t.Fatalf("expected non-decryptable key ID to be excluded, got %v", err)
+		}
+	}
+}
+
 func TestMissingStateFileCanBeRebuiltFromMetadata(t *testing.T) {
 	active := loadGoldenFixture(t).Snapshot.keySnapshot()
 	historical := historicalSnapshot(active)
@@ -322,6 +418,48 @@ func TestStateFileFromRecordsRejectsInvalidRotationObservationState(t *testing.T
 	)
 	if !errors.Is(err, keyregistry.ErrStateCorrupt) {
 		t.Fatalf("expected corrupt observation metadata error, got %v", err)
+	}
+}
+
+func TestStateFileFromRecordsRejectsStrippedStateSurfaces(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	normalized, err := active.Normalize()
+	if err != nil {
+		t.Fatalf("normalize active: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*keyregistry.SnapshotStateRecord)
+	}{
+		{
+			name: "disaster recovery state",
+			mutate: func(record *keyregistry.SnapshotStateRecord) {
+				record.State = "disaster_recovery"
+			},
+		},
+		{
+			name: "AAD disabled mode",
+			mutate: func(record *keyregistry.SnapshotStateRecord) {
+				record.AADMode = "aad.disabled"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			record := keyregistry.SnapshotStateRecordFromSnapshot(normalized)
+			tt.mutate(&record)
+			_, err := keyregistry.NewStateFileFromRecords(
+				normalized.KubernetesKeyID,
+				[]keyregistry.SnapshotStateRecord{record},
+				7,
+				"",
+			)
+			if err == nil {
+				t.Fatal("expected stripped state surface to be rejected")
+			}
+		})
 	}
 }
 
@@ -400,6 +538,44 @@ func TestStateReplayAndRollbackDetection(t *testing.T) {
 	}
 }
 
+func TestStateCheckpointRejectsRollbackAndSameGenerationHashMismatch(t *testing.T) {
+	active := loadGoldenFixture(t).Snapshot.keySnapshot()
+	previous, err := keyregistry.NewStateFile(active, nil, 1, "")
+	if err != nil {
+		t.Fatalf("new previous state: %v", err)
+	}
+	nextActive := active
+	nextActive.TransitVersion++
+	nextActive.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(time.Hour)
+	nextActive.KubernetesKeyID = ""
+	nextActive.State = keyregistry.StateActive
+	next, err := keyregistry.PromoteState(previous, nextActive, []keyregistry.KeySnapshot{historicalSnapshot(nextActive)})
+	if err != nil {
+		t.Fatalf("promote state: %v", err)
+	}
+	checkpoint, err := keyregistry.NewStateCheckpoint(next)
+	if err != nil {
+		t.Fatalf("new checkpoint: %v", err)
+	}
+
+	if err := checkpoint.ValidateState(previous); !errors.Is(err, keyregistry.ErrStateRollback) {
+		t.Fatalf("expected checkpoint to reject older generation, got %v", err)
+	}
+
+	alternateActive := active
+	alternateActive.TransitVersion += 2
+	alternateActive.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(2 * time.Hour)
+	alternateActive.KubernetesKeyID = ""
+	alternateActive.State = keyregistry.StateActive
+	alternate, err := keyregistry.NewStateFile(alternateActive, nil, next.Generation, next.PreviousHash)
+	if err != nil {
+		t.Fatalf("new alternate state: %v", err)
+	}
+	if err := checkpoint.ValidateState(alternate); !errors.Is(err, keyregistry.ErrStateRollback) {
+		t.Fatalf("expected checkpoint to reject same-generation hash mismatch, got %v", err)
+	}
+}
+
 func FuzzParseKeyID(f *testing.F) {
 	fixture := loadGoldenFixture(f)
 	f.Add(fixture.ExpectedKeyID)
@@ -467,11 +643,11 @@ func (s snapshotFixture) keySnapshot() keyregistry.KeySnapshot {
 		ProviderName:            s.ProviderName,
 		ClusterID:               s.ClusterID,
 		OpenBaoInstanceID:       s.OpenBaoInstanceID,
+		OpenBaoNamespace:        s.OpenBaoNamespace,
 		TransitMountID:          s.TransitMountID,
 		TransitKeyLineageID:     s.TransitKeyLineageID,
 		TransitVersion:          s.TransitVersion,
 		TransitVersionCreatedAt: time.Unix(s.TransitVersionCreatedAtUnix, 0).UTC(),
-		KeyEpoch:                s.KeyEpoch,
 		State:                   keyregistry.SnapshotState(s.State),
 		AADMode:                 keyregistry.AADMode(s.AADMode),
 	}

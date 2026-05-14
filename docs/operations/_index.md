@@ -13,12 +13,14 @@ browse:
 
 These pages answer task-based operator questions. Use them when you already know where you are in the lifecycle and need the next safe step.
 
+The runbooks assume `bao-kms-provider` is already installed on each control-plane node, OpenBao Transit is provisioned, and the Kubernetes API server uses a matching `EncryptionConfiguration`. Before changing rotation, recovery, or upgrade state, run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml`.
+
 ## Workflows
 
-1. [Rotation](/operations/rotation/) to rotate the Transit key version on the OpenBao side and observe the provider switch over without downtime.
-2. [Disaster Recovery](/operations/disaster-recovery/) to handle OpenBao loss, Transit key loss, etcd restore, and emergency recovery paths.
-3. [Upgrade](/operations/upgrade/) to upgrade the provider binary or container image with a documented rollback step.
-4. [Troubleshooting](/operations/troubleshooting/) for common failure modes and the fastest safe recovery path.
+1. [Rotation](/operations/rotation/) to rotate the OpenBao Transit key version, observe provider promotion, migrate Kubernetes resources, and keep old versions decryptable until migration and backup-retention records allow retirement.
+2. [Disaster Recovery](/operations/disaster-recovery/) to restore OpenBao, etcd, provider state, auth material, and control-plane nodes as compatible sets.
+3. [Upgrade](/operations/upgrade/) to upgrade the provider binary or container image one control-plane node at a time with a documented rollback step.
+4. [Troubleshooting](/operations/troubleshooting/) for symptom-driven checks and the fastest safe recovery path.
 
 ## Use Another Section If
 

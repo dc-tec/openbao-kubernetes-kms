@@ -1,64 +1,75 @@
 ---
 title: "Support Policy"
-description: "v0.1 support posture for bao-kms-provider: engineering preview status, validation scope, support terms, security fix policy, and operator expectations."
+description: "Current preview support scope, tested versions, security fix expectations, and operator responsibilities for bao-kms-provider."
 weight: 90
 ---
 
 # Support Policy
 
-This page defines the support posture for `bao-kms-provider`.
+This page explains which configurations are currently tested and what operators
+should expect from the preview release line.
 
 ## Current Status
 
-No version is supported yet because no implementation has shipped.
+The current public release line is preview. Use it for labs, staging, and
+evaluation of the deployment model. Do not use preview releases for production
+control planes.
 
-## v0.1 Support Posture
+Preview support is best effort. There is no long-term support window, no
+production service-level objective, and no guarantee that adjacent Kubernetes,
+OpenBao, operating-system, auth, or deployment variants will work unless they
+are listed as tested.
 
-v0.1 is planned as an engineering preview.
-
-Support expectations:
-
-- issue triage is best effort,
-- production use is not recommended,
-- compatibility claims are limited to tested release gates,
-- operators must validate in their own staging environment,
-- no long-term support window is promised.
-
-## Initial Validation Scope
+## Tested Preview Scope
 
 | Component | Version |
 |---|---|
 | OpenBao | `2.5.3` |
-| Kubernetes | `1.34` release line, exact patch pinned in CI |
+| Kubernetes | `1.34` and `1.35` release lines, exact Kind node-image pins in CI |
 | KMS API | v2 |
 | OS | Linux |
 | Deployment modes | systemd and static pod |
 
-Future Kubernetes release lines are not supported by virtue of being newer. They become supported only after exact-pinned CI and release-gate coverage exists. See [Reference: Compatibility](/reference/compatibility/).
+Kubernetes `1.36` is the intended next validation line once a digest-pinned
+Kind node image is available. Kubernetes `1.29+` KMS v2 clusters may work, but
+unlisted versions are not part of the tested preview scope. See
+[Reference: Compatibility](/reference/compatibility/) for the detailed matrix.
 
-## Support Terms
+## What Preview Covers
 
-The following terms are used consistently across documentation:
+A preview tag covers the versions, artifacts, and deployment models listed in
+that release's notes and compatibility table. In the default path, this means:
 
-- `Validated`: explicitly exercised in CI or a release gate.
-- `Candidate`: planned for future validation; not a support claim.
-- `Engineering preview`: suitable for lab and design validation; not production.
-- `Production-ready`: all production-readiness gates passed.
+- KMS v2 behavior against the tested Kubernetes and OpenBao versions.
+- OpenBao Transit with `aes256-gcm96`.
+- JWT auth in the default build.
+- systemd and static-pod deployment samples.
+- Release artifacts with checksums, SBOMs, signatures, and provenance
+  attestations.
+
+Optional PKCS#11 certificate-auth artifacts are covered only when a release
+publishes those artifacts and marks the PKCS#11 path as tested.
+
+Preview releases do not cover production readiness, unlisted Kubernetes or
+OpenBao versions, unlisted OpenBao HA topologies, SPIFFE/SPIRE user
+configuration, performance SLOs, or long-term maintenance windows.
 
 ## Security Fixes
 
-Before a stable release line exists, security fixes apply to the latest released preview only.
+Before a stable release line exists, security fixes apply to the latest released
+preview line only.
 
-Once stable releases exist, the security-fix policy is revisited and documented before any production-ready claim.
+Once stable releases exist, this page will document the stable-line security
+fix and backport policy.
 
 ## Operator Expectations
 
-Operators using v0.1 should:
+Operators using preview releases should:
 
 - pin exact plugin versions,
 - pin OpenBao and Kubernetes versions,
 - keep etcd and OpenBao backups paired,
 - validate upgrades in staging,
 - run `bao-kms-provider doctor` on every control-plane node,
-- avoid edge, nightly, and prerelease channels in production,
+- avoid main, nightly, release candidate, and preview channels in production,
 - avoid changing identity-bearing configuration fields after encryption begins; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).

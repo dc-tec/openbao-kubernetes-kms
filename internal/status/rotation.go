@@ -12,6 +12,7 @@ import (
 const (
 	scopeValidationVersion       = 1
 	scopeValidationCreatedAtUnix = 1
+	initialTransitVersion        = 1
 )
 
 // SnapshotScope contains the identity-bearing inputs used for key_id derivation.
@@ -19,9 +20,9 @@ type SnapshotScope struct {
 	ProviderName        string
 	ClusterID           string
 	OpenBaoInstanceID   string
+	OpenBaoNamespace    string
 	TransitMountID      string
 	TransitKeyLineageID string
-	KeyEpoch            string
 	AADMode             keyregistry.AADMode
 }
 
@@ -69,16 +70,49 @@ func (o *Observer) RebuildState(profile openbao.KeyProfile, now time.Time) (keyr
 	if err := validateProfile(profile); err != nil {
 		return keyregistry.StateFile{}, err
 	}
-	active, err := o.snapshotForProfile(profile, profile.LatestVersion, keyregistry.StateActive)
+	versions, err := validatedVersionCreationTimes(profile)
 	if err != nil {
 		return keyregistry.StateFile{}, err
 	}
-	if err := validateProfileForActive(profile, active); err != nil {
-		return keyregistry.StateFile{}, err
+
+	firstVersion := profile.MinAvailableVersion
+	if firstVersion == 0 {
+		firstVersion = 1
+	}
+	records := make([]keyregistry.SnapshotStateRecord, 0, profile.LatestVersion-firstVersion+1)
+	activeKeyID := ""
+	for version := firstVersion; version <= profile.LatestVersion; version++ {
+		createdAt, ok := versions[version]
+		if !ok {
+			return keyregistry.StateFile{}, fmt.Errorf(
+				"%w: Transit version creation time not found",
+				ErrTransitMetadataInvalid,
+			)
+		}
+		state := keyregistry.StateRetired
+		promotedAt := time.Time{}
+		if version == profile.LatestVersion {
+			state = keyregistry.StateActive
+			promotedAt = now
+		}
+		snapshot, snapshotErr := o.scope.snapshot(version, createdAt, state)
+		if snapshotErr != nil {
+			return keyregistry.StateFile{}, snapshotErr
+		}
+		if state == keyregistry.StateActive {
+			activeKeyID = snapshot.KubernetesKeyID
+		}
+		records = append(records, recordFromSnapshot(snapshot, now, time.Time{}, 0, promotedAt))
 	}
 
-	record := recordFromSnapshot(active, now, time.Time{}, 0, now)
-	return keyregistry.NewStateFileFromRecords(active.KubernetesKeyID, []keyregistry.SnapshotStateRecord{record}, 1, "")
+	state, err := keyregistry.NewStateFileFromRecords(activeKeyID, orderedRecords(activeKeyID, records), 1, "")
+	if err != nil {
+		return keyregistry.StateFile{}, err
+	}
+	if err := validateProfileForState(profile, state); err != nil {
+		return keyregistry.StateFile{}, err
+	}
+	return state, nil
 }
 
 // Observe advances rotation state for one successful metadata observation.
@@ -93,16 +127,15 @@ func (o *Observer) Observe(
 	if err := validateProfile(profile); err != nil {
 		return ObservationResult{}, err
 	}
+	if err := o.validateStateScope(state); err != nil {
+		return ObservationResult{}, err
+	}
 	active, err := state.ActiveSnapshot()
 	if err != nil {
 		return ObservationResult{}, err
 	}
-	if err := validateProfileForActive(profile, active); err != nil {
-		return ObservationResult{}, err
-	}
 
-	switch {
-	case profile.LatestVersion < active.TransitVersion:
+	if profile.LatestVersion < active.TransitVersion {
 		if o.policy.RejectVersionRollback {
 			return ObservationResult{}, fmt.Errorf(
 				"%w: observed Transit version is behind active version",
@@ -110,15 +143,19 @@ func (o *Observer) Observe(
 			)
 		}
 		return ObservationResult{State: state}, nil
-	case profile.LatestVersion == active.TransitVersion:
+	}
+	if err := validateProfileForState(profile, state); err != nil {
+		return ObservationResult{}, err
+	}
+
+	if profile.LatestVersion == active.TransitVersion {
 		cleared, changed, clearErr := clearPendingRecords(state)
 		if clearErr != nil {
 			return ObservationResult{}, clearErr
 		}
 		return ObservationResult{State: cleared, Changed: changed}, nil
-	default:
-		return o.observeNewerVersion(state, profile, now)
 	}
+	return o.observeNewerVersion(state, profile, now)
 }
 
 func (o *Observer) observeNewerVersion(
@@ -126,6 +163,14 @@ func (o *Observer) observeNewerVersion(
 	profile openbao.KeyProfile,
 	now time.Time,
 ) (ObservationResult, error) {
+	active, err := state.ActiveSnapshot()
+	if err != nil {
+		return ObservationResult{}, err
+	}
+	intermediateRecords, err := o.intermediateHistoricalRecords(state, profile, active.TransitVersion, now)
+	if err != nil {
+		return ObservationResult{}, err
+	}
 	candidate, err := o.snapshotForProfile(profile, profile.LatestVersion, keyregistry.StatePending)
 	if err != nil {
 		return ObservationResult{}, err
@@ -135,20 +180,27 @@ func (o *Observer) observeNewerVersion(
 		recordFromSnapshot(candidate, now, time.Time{}, 1, time.Time{}),
 		o.policy.RequireStableObservationCount,
 		now,
+		intermediateRecords,
 	)
 	if err != nil {
 		return ObservationResult{}, err
 	}
 	if pendingReady(pendingRecord, o.policy.ActivationDelay, now) {
-		promoted, promoteErr := promotePendingRecord(state, pendingRecord, now)
+		promoted, promoteErr := promotePendingRecord(state, records, pendingRecord, now)
 		if promoteErr != nil {
 			return ObservationResult{}, promoteErr
+		}
+		if err := validateProfileForState(profile, promoted); err != nil {
+			return ObservationResult{}, err
 		}
 		return ObservationResult{State: promoted, Changed: true, Promoted: true}, nil
 	}
 
 	next, err := nextStateFromRecords(state, state.ActiveKeyID, records)
 	if err != nil {
+		return ObservationResult{}, err
+	}
+	if err := validateProfileForState(profile, next); err != nil {
 		return ObservationResult{}, err
 	}
 	return ObservationResult{State: next, Changed: true, Pending: true}, nil
@@ -163,11 +215,11 @@ func (s SnapshotScope) snapshot(
 		ProviderName:            s.ProviderName,
 		ClusterID:               s.ClusterID,
 		OpenBaoInstanceID:       s.OpenBaoInstanceID,
+		OpenBaoNamespace:        s.OpenBaoNamespace,
 		TransitMountID:          s.TransitMountID,
 		TransitKeyLineageID:     s.TransitKeyLineageID,
 		TransitVersion:          version,
 		TransitVersionCreatedAt: createdAt.UTC(),
-		KeyEpoch:                s.KeyEpoch,
 		State:                   state,
 		AADMode:                 s.AADMode,
 	}
@@ -186,9 +238,84 @@ func (o *Observer) snapshotForProfile(
 	return o.scope.snapshot(version, createdAt, state)
 }
 
+func (o *Observer) intermediateHistoricalRecords(
+	state keyregistry.StateFile,
+	profile openbao.KeyProfile,
+	activeVersion int,
+	now time.Time,
+) ([]keyregistry.SnapshotStateRecord, error) {
+	if profile.LatestVersion <= activeVersion+1 {
+		return nil, nil
+	}
+	versions, err := validatedVersionCreationTimes(profile)
+	if err != nil {
+		return nil, err
+	}
+	retainedVersions := make(map[int]struct{}, len(state.Snapshots))
+	for _, record := range state.Snapshots {
+		snapshot, snapshotErr := record.Snapshot()
+		if snapshotErr != nil {
+			return nil, snapshotErr
+		}
+		switch snapshot.State {
+		case keyregistry.StateActive, keyregistry.StateRetired:
+			retainedVersions[snapshot.TransitVersion] = struct{}{}
+		case keyregistry.StatePending, keyregistry.StateRejected:
+		default:
+			return nil, fmt.Errorf("%w: unsupported snapshot state", ErrTransitMetadataInvalid)
+		}
+	}
+
+	records := make([]keyregistry.SnapshotStateRecord, 0, profile.LatestVersion-activeVersion-1)
+	for version := activeVersion + 1; version < profile.LatestVersion; version++ {
+		createdAt, ok := versions[version]
+		if !ok {
+			return nil, fmt.Errorf("%w: intermediate Transit version creation time not found", ErrTransitMetadataInvalid)
+		}
+		if _, retained := retainedVersions[version]; retained {
+			continue
+		}
+		snapshot, snapshotErr := o.scope.snapshot(version, createdAt, keyregistry.StateRetired)
+		if snapshotErr != nil {
+			return nil, snapshotErr
+		}
+		records = append(records, recordFromSnapshot(snapshot, now, time.Time{}, 0, time.Time{}))
+	}
+	return records, nil
+}
+
+func (o *Observer) validateStateScope(state keyregistry.StateFile) error {
+	for _, record := range state.Snapshots {
+		snapshot, err := record.Snapshot()
+		if err != nil {
+			return err
+		}
+		switch {
+		case snapshot.ProviderName != o.scope.ProviderName:
+			return fmt.Errorf("%w: persisted state provider name differs from current configuration", ErrConfigInvalid)
+		case snapshot.ClusterID != o.scope.ClusterID:
+			return fmt.Errorf("%w: persisted state cluster ID differs from current configuration", ErrConfigInvalid)
+		case snapshot.OpenBaoInstanceID != o.scope.OpenBaoInstanceID:
+			return fmt.Errorf("%w: persisted state OpenBao instance ID differs from current configuration", ErrConfigInvalid)
+		case snapshot.OpenBaoNamespace != o.scope.OpenBaoNamespace:
+			return fmt.Errorf("%w: persisted state OpenBao namespace differs from current configuration", ErrConfigInvalid)
+		case snapshot.TransitMountID != o.scope.TransitMountID:
+			return fmt.Errorf("%w: persisted state Transit mount ID differs from current configuration", ErrConfigInvalid)
+		case snapshot.TransitKeyLineageID != o.scope.TransitKeyLineageID:
+			return fmt.Errorf("%w: persisted state Transit key lineage ID differs from current configuration", ErrConfigInvalid)
+		case snapshot.AADMode != o.scope.AADMode:
+			return fmt.Errorf("%w: persisted state AAD mode differs from current configuration", ErrConfigInvalid)
+		}
+	}
+	return nil
+}
+
 func validateProfile(profile openbao.KeyProfile) error {
 	if profile.LatestVersion <= 0 {
 		return fmt.Errorf("%w: latest Transit version must be positive", ErrTransitMetadataInvalid)
+	}
+	if profile.MinAvailableVersion < 0 {
+		return fmt.Errorf("%w: minimum available version must not be negative", ErrTransitMetadataInvalid)
 	}
 	if profile.SoftDeleted {
 		return fmt.Errorf("%w: Transit key is soft-deleted", ErrTransitKeyUnusable)
@@ -196,38 +323,123 @@ func validateProfile(profile openbao.KeyProfile) error {
 	if profile.MinAvailableVersion > profile.LatestVersion {
 		return fmt.Errorf("%w: minimum available version exceeds latest version", ErrTransitKeyUnusable)
 	}
-	if len(openbao.AssessKeyProfile(profile)) > 0 {
-		return fmt.Errorf("%w: Transit key profile has unsafe settings", ErrTransitKeyUnusable)
+	findings := openbao.BlockingKeyProfileFindings(openbao.AssessKeyProfile(profile))
+	if len(findings) > 0 {
+		return fmt.Errorf(
+			"%w: Transit key profile has blocking settings: %s",
+			ErrTransitKeyUnusable,
+			openbao.FormatKeyProfileFindings(findings),
+		)
 	}
-	if _, err := versionCreatedAt(profile, profile.LatestVersion); err != nil {
+	versions, err := validatedVersionCreationTimes(profile)
+	if err != nil {
+		return err
+	}
+	if _, ok := versions[profile.LatestVersion]; !ok {
+		return fmt.Errorf("%w: Transit version creation time not found", ErrTransitMetadataInvalid)
+	}
+	return nil
+}
+
+func validateProfileForState(profile openbao.KeyProfile, state keyregistry.StateFile) error {
+	for _, record := range state.Snapshots {
+		snapshot, err := record.Snapshot()
+		if err != nil {
+			return err
+		}
+		switch snapshot.State {
+		case keyregistry.StateActive:
+			if err := validateActiveSnapshot(profile, snapshot); err != nil {
+				return err
+			}
+		case keyregistry.StateRetired:
+			if err := validateHistoricalSnapshot(profile, snapshot); err != nil {
+				return err
+			}
+		case keyregistry.StatePending, keyregistry.StateRejected:
+		default:
+			return fmt.Errorf("%w: unsupported snapshot state", ErrTransitMetadataInvalid)
+		}
+	}
+	return nil
+}
+
+func validateActiveSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot) error {
+	if profile.MinEncryptionVersion > snapshot.TransitVersion {
+		return fmt.Errorf("%w: active Transit version cannot encrypt", ErrTransitKeyUnusable)
+	}
+	if err := validateDecryptableSnapshot(profile, snapshot, "active"); err != nil {
 		return err
 	}
 	return nil
 }
 
-func validateProfileForActive(profile openbao.KeyProfile, active keyregistry.KeySnapshot) error {
-	if profile.MinAvailableVersion > active.TransitVersion {
-		return fmt.Errorf("%w: active Transit version is unavailable", ErrTransitKeyUnusable)
+func validateHistoricalSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot) error {
+	return validateDecryptableSnapshot(profile, snapshot, "historical")
+}
+
+func validateDecryptableSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot, label string) error {
+	if profile.MinAvailableVersion > snapshot.TransitVersion {
+		return fmt.Errorf("%w: %s Transit version is unavailable", ErrTransitKeyUnusable, label)
 	}
-	if profile.MinEncryptionVersion > active.TransitVersion {
-		return fmt.Errorf("%w: active Transit version cannot encrypt", ErrTransitKeyUnusable)
+	if profile.MinDecryptionVersion > snapshot.TransitVersion {
+		return fmt.Errorf("%w: %s Transit version cannot decrypt", ErrTransitKeyUnusable, label)
 	}
-	if profile.MinDecryptionVersion > active.TransitVersion {
-		return fmt.Errorf("%w: active Transit version cannot decrypt", ErrTransitKeyUnusable)
+	createdAt, err := versionCreatedAt(profile, snapshot.TransitVersion)
+	if err != nil {
+		return err
+	}
+	persistedCreatedAt, err := keyregistry.NormalizeTransitVersionCreatedAt(snapshot.TransitVersionCreatedAt)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: %s persisted Transit version creation time is invalid: %w",
+			ErrTransitMetadataInvalid,
+			label,
+			err,
+		)
+	}
+	if !createdAt.Equal(persistedCreatedAt) {
+		return fmt.Errorf(
+			"%w: %s Transit version creation time changed (persisted_unix=%d observed_unix=%d)",
+			ErrTransitMetadataInvalid,
+			label,
+			persistedCreatedAt.Unix(),
+			createdAt.Unix(),
+		)
 	}
 	return nil
 }
 
 func versionCreatedAt(profile openbao.KeyProfile, version int) (time.Time, error) {
-	for _, candidate := range profile.VersionCreationTimes {
-		if candidate.Version == version {
-			if candidate.CreatedAt.IsZero() {
-				return time.Time{}, fmt.Errorf("%w: Transit version creation time is missing", ErrTransitMetadataInvalid)
-			}
-			return candidate.CreatedAt.UTC(), nil
-		}
+	versions, err := validatedVersionCreationTimes(profile)
+	if err != nil {
+		return time.Time{}, err
 	}
-	return time.Time{}, fmt.Errorf("%w: Transit version creation time not found", ErrTransitMetadataInvalid)
+	createdAt, ok := versions[version]
+	if !ok {
+		return time.Time{}, fmt.Errorf("%w: Transit version creation time not found", ErrTransitMetadataInvalid)
+	}
+	return createdAt, nil
+}
+
+func validatedVersionCreationTimes(profile openbao.KeyProfile) (map[int]time.Time, error) {
+	versions := make(map[int]time.Time, len(profile.VersionCreationTimes))
+	for _, candidate := range profile.VersionCreationTimes {
+		createdAt, createdAtErr := keyregistry.NormalizeTransitVersionCreatedAt(candidate.CreatedAt)
+		switch {
+		case candidate.Version <= 0:
+			return nil, fmt.Errorf("%w: Transit version must be positive", ErrTransitMetadataInvalid)
+		case candidate.Version > profile.LatestVersion:
+			return nil, fmt.Errorf("%w: Transit version exceeds latest version", ErrTransitMetadataInvalid)
+		case createdAtErr != nil:
+			return nil, fmt.Errorf("%w: Transit version creation time is invalid: %w", ErrTransitMetadataInvalid, createdAtErr)
+		}
+		if _, ok := versions[candidate.Version]; ok {
+			return nil, fmt.Errorf("%w: duplicate Transit version metadata", ErrTransitMetadataInvalid)
+		}
+		versions[candidate.Version] = createdAt
+	}
+	return versions, nil
 }
 
 func upsertPendingRecord(
@@ -235,8 +447,10 @@ func upsertPendingRecord(
 	candidate keyregistry.SnapshotStateRecord,
 	stableThreshold int,
 	now time.Time,
+	additionalRetired []keyregistry.SnapshotStateRecord,
 ) ([]keyregistry.SnapshotStateRecord, keyregistry.SnapshotStateRecord, error) {
 	records := make([]keyregistry.SnapshotStateRecord, 0, len(state.Snapshots)+1)
+	seen := make(map[string]struct{}, len(state.Snapshots)+len(additionalRetired)+1)
 	pending := candidate
 	found := false
 	for _, record := range state.Snapshots {
@@ -252,6 +466,18 @@ func upsertPendingRecord(
 			continue
 		}
 		records = append(records, record)
+		seen[snapshot.KubernetesKeyID] = struct{}{}
+	}
+	for _, record := range additionalRetired {
+		snapshot, err := record.Snapshot()
+		if err != nil {
+			return nil, keyregistry.SnapshotStateRecord{}, err
+		}
+		if _, ok := seen[snapshot.KubernetesKeyID]; ok {
+			continue
+		}
+		records = append(records, record)
+		seen[snapshot.KubernetesKeyID] = struct{}{}
 	}
 
 	if found {
@@ -279,6 +505,7 @@ func pendingReady(record keyregistry.SnapshotStateRecord, activationDelay time.D
 
 func promotePendingRecord(
 	state keyregistry.StateFile,
+	records []keyregistry.SnapshotStateRecord,
 	pending keyregistry.SnapshotStateRecord,
 	now time.Time,
 ) (keyregistry.StateFile, error) {
@@ -292,9 +519,9 @@ func promotePendingRecord(
 		return keyregistry.StateFile{}, err
 	}
 
-	records := make([]keyregistry.SnapshotStateRecord, 0, len(state.Snapshots)+1)
+	promotedRecords := make([]keyregistry.SnapshotStateRecord, 0, len(records)+1)
 	activeRetired := false
-	for _, record := range state.Snapshots {
+	for _, record := range records {
 		snapshot, snapshotErr := record.Snapshot()
 		if snapshotErr != nil {
 			return keyregistry.StateFile{}, snapshotErr
@@ -317,7 +544,7 @@ func promotePendingRecord(
 			)
 			activeRetired = true
 		}
-		records = append(records, record)
+		promotedRecords = append(promotedRecords, record)
 	}
 	if !activeRetired {
 		return keyregistry.StateFile{}, fmt.Errorf("%w: active state record missing", ErrStateUnavailable)
@@ -330,11 +557,11 @@ func promotePendingRecord(
 		pending.StableObservationCount,
 		now,
 	)
-	records = append(records, activeRecord)
+	promotedRecords = append(promotedRecords, activeRecord)
 	return nextStateFromRecords(
 		state,
 		promotedActive.KubernetesKeyID,
-		orderedRecords(promotedActive.KubernetesKeyID, records),
+		orderedRecords(promotedActive.KubernetesKeyID, promotedRecords),
 	)
 }
 
@@ -446,7 +673,7 @@ func recordSortKey(activeKeyID string, record keyregistry.SnapshotStateRecord) r
 		switch keyregistry.SnapshotState(record.State) {
 		case keyregistry.StatePending:
 			priority = 1
-		case keyregistry.StateRetired, keyregistry.StateDisasterRecovery:
+		case keyregistry.StateRetired:
 			priority = 2
 		case keyregistry.StateRejected:
 			priority = 3

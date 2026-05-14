@@ -24,8 +24,6 @@ import (
 )
 
 const (
-	transitKeyTypeAESGCM = "aes256-gcm96"
-
 	reportNameDoctor    = "doctor"
 	reportNameVerifyKey = "verify-key"
 
@@ -33,6 +31,10 @@ const (
 	checkConfigValidate         = "config.validate"
 	checkSocketGroup            = "socket.group"
 	checkJWTLocal               = "jwt.local"
+	checkCertLocal              = "auth.cert.local"
+	checkCertSigner             = "auth.cert.signer"
+	checkCertPKCS11             = "auth.cert.pkcs11"
+	checkCertSPIFFE             = "auth.cert.spiffe"
 	checkEncryptionConfig       = "kubernetes.encryption_config"
 	checkOpenBaoTLS             = "openbao.tls"
 	checkOpenBaoAuth            = "openbao.auth"
@@ -79,6 +81,7 @@ type transitDiagnostics struct {
 
 func newDoctorCommand(runtimeConfig *config.Runtime, configPath *string, info version.Info) *cobra.Command {
 	var encryptionConfigPath string
+	var output string
 
 	cmd := &cobra.Command{
 		Use:   "doctor",
@@ -86,7 +89,9 @@ func newDoctorCommand(runtimeConfig *config.Runtime, configPath *string, info ve
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			report, err := runDoctor(commandContext(cmd), runtimeConfig, *configPath, encryptionConfigPath, info)
-			cli.PrintText(cmd.OutOrStdout(), report)
+			if printErr := printCLIReport(cmd.OutOrStdout(), report, output); printErr != nil {
+				return printErr
+			}
 			if err != nil {
 				return err
 			}
@@ -99,23 +104,29 @@ func newDoctorCommand(runtimeConfig *config.Runtime, configPath *string, info ve
 		"",
 		"Path to Kubernetes EncryptionConfiguration for provider validation",
 	)
+	addOutputFlag(cmd, &output)
 	return cmd
 }
 
 func newVerifyKeyCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.Command {
-	return &cobra.Command{
+	var output string
+	cmd := &cobra.Command{
 		Use:   "verify-key",
 		Short: "Verify Transit key suitability",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			report, err := runVerifyKey(commandContext(cmd), runtimeConfig, *configPath)
-			cli.PrintText(cmd.OutOrStdout(), report)
+			if printErr := printCLIReport(cmd.OutOrStdout(), report, output); printErr != nil {
+				return printErr
+			}
 			if err != nil {
 				return err
 			}
 			return reportError(report, messageVerifyKeyChecksFailed)
 		},
 	}
+	addOutputFlag(cmd, &output)
+	return cmd
 }
 
 func runDoctor(
@@ -138,7 +149,7 @@ func runDoctor(
 		CheckFilesystem: true,
 	}); err != nil {
 		report.Fail(checkConfigValidate, "Config validation", safeMessage(err))
-		report.Skip(checkOpenBaoAuth, "OpenBao JWT login", messageConfigValidationFailed)
+		report.Skip(checkOpenBaoAuth, openBaoAuthCheckName(cfg), messageConfigValidationFailed)
 		return report, cli.WithExitCode(cli.ExitConfig, errors.New("doctor config validation failed"))
 	}
 	report.Pass(checkConfigValidate, "Config validation", "local configuration is syntactically safe")
@@ -149,16 +160,13 @@ func runDoctor(
 		report.Pass(checkSocketGroup, "Socket group", "configured group resolves locally")
 	}
 
-	if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWTFile, auth.JWTValidationOptions{
-		MinRemainingTTL: cfg.Auth.MinJWTRemainingTTL,
-		ClockSkewLeeway: cfg.Auth.ClockSkewLeeway,
-	}); err != nil {
-		report.Fail(checkJWTLocal, "JWT file", safeMessage(err))
-	} else {
-		report.Pass(checkJWTLocal, "JWT file", "readable and locally valid")
-	}
+	authLocalValid := checkLocalAuthForDoctor(ctx, &report, cfg)
 
 	checkEncryptionConfiguration(&report, cfg, encryptionConfigPath)
+	if !authLocalValid {
+		report.Skip(checkOpenBaoAuth, openBaoAuthCheckName(cfg), "local auth validation failed")
+		return report, nil
+	}
 
 	clients, ok := authenticateForDiagnostics(ctx, &report, cfg)
 	if !ok {
@@ -169,6 +177,33 @@ func runDoctor(
 		checkStatusEncryptConsistency(ctx, &report, diag.state, info)
 	}
 	return report, nil
+}
+
+func jwtValidationOptions(cfg config.Config) auth.JWTValidationOptions {
+	return auth.JWTValidationOptions{
+		MinRemainingTTL:  cfg.Auth.JWT.MinRemainingTTL,
+		ClockSkewLeeway:  cfg.Auth.JWT.ClockSkewLeeway,
+		ExpectedIssuer:   cfg.Auth.JWT.ExpectedIssuer,
+		ExpectedAudience: cfg.Auth.JWT.ExpectedAudience,
+		ExpectedSubject:  cfg.Auth.JWT.ExpectedSubject,
+	}
+}
+
+func checkLocalAuthForDoctor(ctx context.Context, report *cli.Report, cfg config.Config) bool {
+	switch cfg.Auth.Method {
+	case authMethodJWT:
+		if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWT.JWTFile, jwtValidationOptions(cfg)); err != nil {
+			report.Fail(checkJWTLocal, "JWT file", safeMessage(err))
+			return false
+		}
+		report.Pass(checkJWTLocal, "JWT file", "readable and locally valid")
+		return true
+	case authMethodCert:
+		return checkLocalCertificateAuthForDoctor(ctx, report, cfg)
+	default:
+		report.Skip(checkCertLocal, "Certificate identity", "unsupported auth method")
+		return false
+	}
 }
 
 func runVerifyKey(
@@ -206,32 +241,25 @@ func authenticateForDiagnostics(
 	report *cli.Report,
 	cfg config.Config,
 ) (diagnosticClients, bool) {
-	authClient, err := openbao.NewAuthClient(openbao.AuthClientConfig{
-		Address:       cfg.OpenBao.Address,
-		Namespace:     cfg.OpenBao.Namespace,
-		CACertFile:    cfg.OpenBao.CACertFile,
-		TLSServerName: cfg.OpenBao.TLSServerName,
-		Timeout:       authLoginTimeout(cfg),
-	})
-	if err != nil {
+	if _, err := openbao.NewTLSConfig(cfg.OpenBao.CACertFile, cfg.OpenBao.TLSServerName); err != nil {
 		report.Fail(checkOpenBaoTLS, "OpenBao TLS config", safeMessage(err))
-		report.Skip(checkOpenBaoAuth, "OpenBao JWT login", "TLS configuration failed")
+		report.Skip(checkOpenBaoAuth, openBaoAuthCheckName(cfg), "TLS configuration failed")
 		return diagnosticClients{}, false
 	}
 	report.Pass(checkOpenBaoTLS, "OpenBao TLS config", "CA bundle and server name are usable")
 
-	manager, err := auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{RenewalEnabled: true})
+	manager, err := buildAuthManager(ctx, cfg, nil)
 	if err != nil {
-		report.Fail(checkOpenBaoAuth, "OpenBao JWT login", safeMessage(err))
+		report.Fail(checkOpenBaoAuth, openBaoAuthCheckName(cfg), safeMessage(err))
 		return diagnosticClients{}, false
 	}
 	loginCtx, cancel := withTimeout(ctx, authLoginTimeout(cfg))
 	defer cancel()
 	if err := manager.Refresh(loginCtx); err != nil {
-		report.Fail(checkOpenBaoAuth, "OpenBao JWT login", safeMessage(err))
+		report.Fail(checkOpenBaoAuth, openBaoAuthCheckName(cfg), safeMessage(err))
 		return diagnosticClients{}, false
 	}
-	report.Pass(checkOpenBaoAuth, "OpenBao JWT login", "authenticated with configured JWT role")
+	report.Pass(checkOpenBaoAuth, openBaoAuthCheckName(cfg), openBaoAuthPassMessage(cfg))
 
 	transitClient, err := openbao.NewClient(openbao.ClientConfig{
 		Address:       cfg.OpenBao.Address,
@@ -242,10 +270,46 @@ func authenticateForDiagnostics(
 		TokenSource:   manager,
 	})
 	if err != nil {
-		report.Fail(checkOpenBaoTLS, "OpenBao client", safeMessage(err))
+		report.Fail(checkOpenBaoTLS, "OpenBao TLS config", safeMessage(err))
 		return diagnosticClients{}, false
 	}
 	return diagnosticClients{transitClient: transitClient}, true
+}
+
+func openBaoAuthCheckName(cfg config.Config) string {
+	if cfg.Auth.Method == authMethodCert {
+		return "OpenBao cert login"
+	}
+	return "OpenBao JWT login"
+}
+
+func openBaoAuthPassMessage(cfg config.Config) string {
+	if cfg.Auth.Method == authMethodCert {
+		return "authenticated with configured certificate role"
+	}
+	return "authenticated with configured JWT role"
+}
+
+func certificateSourceCheckID(cfg config.Config) string {
+	switch cfg.Auth.Cert.Source {
+	case certSourcePKCS11:
+		return checkCertPKCS11
+	case certSourceSPIFFE:
+		return checkCertSPIFFE
+	default:
+		return checkCertLocal
+	}
+}
+
+func certificateSourceCheckTitle(cfg config.Config) string {
+	switch cfg.Auth.Cert.Source {
+	case certSourcePKCS11:
+		return "PKCS#11 certificate source"
+	case certSourceSPIFFE:
+		return "SPIFFE certificate source"
+	default:
+		return "Certificate source"
+	}
 }
 
 func runTransitDiagnostics(
@@ -286,7 +350,7 @@ func runTransitDiagnostics(
 	}
 
 	if includeProbe && profileSafe {
-		if err := client.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
+		if _, err := client.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
 			MountPath:      cfg.Transit.MountPath,
 			KeyName:        cfg.Transit.KeyName,
 			KeyVersion:     profile.LatestVersion,
@@ -413,22 +477,32 @@ func hasAnyCapability(caps openbao.CapabilitiesResult, capabilityPath string, ca
 
 func keyProfileFindings(profile openbao.KeyProfile) []string {
 	findings := make([]string, 0)
-	if profile.Type != transitKeyTypeAESGCM {
-		findings = append(findings, "key type is not aes256-gcm96")
-	}
 	if profile.LatestVersion <= 0 {
-		findings = append(findings, "latest version is not positive")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"latest version is not positive",
+		))
 	}
 	if profile.SoftDeleted {
-		findings = append(findings, "key is soft-deleted")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"key is soft-deleted",
+		))
 	}
 	if profile.MinAvailableVersion > profile.LatestVersion {
-		findings = append(findings, "minimum available version exceeds latest version")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"minimum available version exceeds latest version",
+		))
 	}
 	for _, finding := range openbao.AssessKeyProfile(profile) {
-		findings = append(findings, finding.Message)
+		findings = append(findings, openbao.FormatKeyProfileFindings([]openbao.KeyProfileFinding{finding}))
 	}
 	return findings
+}
+
+func keyProfileFindingMessage(impact openbao.KeyProfileFindingImpact, message string) string {
+	return fmt.Sprintf("%s/%s: %s", openbao.KeyProfileFindingSeverityBlocking, impact, message)
 }
 
 func checkKeyIDDeterminism(
@@ -492,7 +566,7 @@ func checkStatusEncryptConsistency(
 	server, err := kmsv2.NewServer(kmsv2.Options{
 		StatusCache:   store,
 		Registry:      store,
-		Transit:       diagnosticTransit{},
+		Transit:       &diagnosticTransit{},
 		PluginVersion: diagnosticPluginVersion(info),
 	})
 	if err != nil {
@@ -524,9 +598,18 @@ func diagnosticPluginVersion(info version.Info) string {
 }
 
 func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, profile openbao.KeyProfile) {
-	state, _, err := keyregistry.LoadStateFile(cfg.State.Path, keyregistry.StateLoadOptions{})
+	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
 	if errors.Is(err, keyregistry.ErrStateNotFound) {
-		report.Warn(checkRegistryState, "Registry state", "state file is absent; checked latest Transit metadata only")
+		assessment := status.AssessAutoBootstrapState(profile)
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			fmt.Sprintf(
+				"state file is absent; auto-bootstrap eligible=%t: %s",
+				assessment.Allowed,
+				assessment.Reason,
+			),
+		)
 		checkLatestVersionRestrictions(report, profile)
 		return
 	}
@@ -534,7 +617,23 @@ func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, pro
 		report.Fail(checkRegistryState, "Registry state", safeMessage(err))
 		return
 	}
-	report.Pass(checkRegistryState, "Registry state", "loaded local key registry state")
+	switch loaded.CheckpointStatus {
+	case stateCheckpointStatusMissing:
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			"state file loaded but replay checkpoint is absent; rollback detection is not anchored",
+		)
+	case stateCheckpointStatusBehind:
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			"state file loaded but replay checkpoint lags the accepted state generation",
+		)
+	default:
+		report.Pass(checkRegistryState, "Registry state", "loaded local key registry state and checkpoint")
+	}
+	state := loaded.State
 	failures := make([]string, 0)
 	for _, record := range state.Snapshots {
 		snapshot, snapshotErr := record.Snapshot()
@@ -543,7 +642,7 @@ func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, pro
 			continue
 		}
 		switch snapshot.State {
-		case keyregistry.StateActive, keyregistry.StateRetired, keyregistry.StateDisasterRecovery:
+		case keyregistry.StateActive, keyregistry.StateRetired:
 			if profile.MinAvailableVersion > snapshot.TransitVersion {
 				failures = append(failures, "minimum available version blocks required historical version")
 			}
@@ -586,6 +685,7 @@ func snapshotScope(cfg config.Config) status.SnapshotScope {
 		ProviderName:        cfg.Transit.KeyIDScope.ProviderName,
 		ClusterID:           cfg.Transit.KeyIDScope.ClusterID,
 		OpenBaoInstanceID:   cfg.OpenBao.InstanceID,
+		OpenBaoNamespace:    cfg.OpenBao.Namespace,
 		TransitMountID:      cfg.Transit.KeyIDScope.TransitMountID,
 		TransitKeyLineageID: cfg.Transit.KeyIDScope.KeyLineageID,
 		AADMode:             keyregistry.AADModeRequired,

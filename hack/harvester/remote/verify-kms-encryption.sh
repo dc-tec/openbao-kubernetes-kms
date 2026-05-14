@@ -2,17 +2,13 @@
 set -eu
 
 SECRET_NAME="${SECRET_NAME:?SECRET_NAME is required}"
+SECRET_NAMESPACE="${SECRET_NAMESPACE:-default}"
 SECRET_VALUE="${SECRET_VALUE:-}"
 SECRET_VALUE_FILE="${SECRET_VALUE_FILE:-}"
 
 if [ -n "$SECRET_VALUE_FILE" ]; then
 	SECRET_VALUE="$(cat "$SECRET_VALUE_FILE")"
 fi
-if [ -z "$SECRET_VALUE" ]; then
-	printf '%s\n' "SECRET_VALUE or SECRET_VALUE_FILE is required" >&2
-	exit 1
-fi
-
 crictl_cmd() {
 	crictl --config /dev/null \
 		--runtime-endpoint unix:///run/containerd/containerd.sock \
@@ -20,11 +16,15 @@ crictl_cmd() {
 }
 
 export KUBECONFIG=/etc/kubernetes/admin.conf
-encoded="$(kubectl get secret "$SECRET_NAME" -n default -o jsonpath='{.data.value}')"
-decoded="$(printf '%s' "$encoded" | base64 -d)"
-if [ "$decoded" != "$SECRET_VALUE" ]; then
-	printf '%s\n' "Kubernetes Secret value did not round-trip" >&2
-	exit 1
+if [ -n "$SECRET_VALUE" ]; then
+	encoded="$(kubectl get secret "$SECRET_NAME" -n "$SECRET_NAMESPACE" -o jsonpath='{.data.value}')"
+	decoded="$(printf '%s' "$encoded" | base64 -d)"
+	if [ "$decoded" != "$SECRET_VALUE" ]; then
+		printf '%s\n' "Kubernetes Secret value did not round-trip" >&2
+		exit 1
+	fi
+else
+	kubectl get secret "$SECRET_NAME" -n "$SECRET_NAMESPACE" >/dev/null
 fi
 
 cid="$(crictl_cmd ps --name etcd -q | head -n1)"
@@ -39,9 +39,9 @@ raw="$(crictl_cmd exec "$cid" etcdctl \
 	--cacert=/etc/kubernetes/pki/etcd/ca.crt \
 	--cert=/etc/kubernetes/pki/etcd/server.crt \
 	--key=/etc/kubernetes/pki/etcd/server.key \
-	get "/registry/secrets/default/${SECRET_NAME}")"
+	get "/registry/secrets/${SECRET_NAMESPACE}/${SECRET_NAME}")"
 
-if printf '%s' "$raw" | grep -Fq "$SECRET_VALUE"; then
+if [ -n "$SECRET_VALUE" ] && printf '%s' "$raw" | grep -Fq "$SECRET_VALUE"; then
 	printf '%s\n' "etcd stored the Kubernetes Secret plaintext" >&2
 	exit 1
 fi

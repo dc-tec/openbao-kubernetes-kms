@@ -24,7 +24,6 @@ kind: EncryptionConfiguration
 resources:
   - resources:
       - secrets
-      - configmaps
     providers:
       - kms:
           apiVersion: v2
@@ -40,7 +39,7 @@ Required values:
 
 | Field | Constraint |
 |---|---|
-| `apiVersion` | Always `v2`. KMS v1 is not implemented. |
+| `providers[].kms.apiVersion` | Always `v2`. KMS v1 is not implemented. |
 | `name` | Identity-bearing. Must match `transit.keyIdScope.providerName` in the provider configuration. Do not change after encryption begins. |
 | `endpoint` | Must use the `unix://` scheme and match `server.socketPath` in the provider configuration. |
 | `timeout` | Start with `3s`. Tightening this value should follow benchmark and failure-mode testing; see [Reference: EncryptionConfiguration](/reference/encryption-config/). |

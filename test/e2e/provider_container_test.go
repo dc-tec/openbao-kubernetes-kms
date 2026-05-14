@@ -26,6 +26,20 @@ const (
 	containerJWTPath    = "/bao/tls/identity.jwt"
 	containerSocketPath = "/run/openbao-kms/kms.sock"
 	containerStatePath  = "/var/lib/openbao-kms/state/key-registry.json"
+
+	containerCertChainPath           = "/bao/tls/client-chain.pem"
+	containerPKCS11PINPath           = "/bao/tls/pkcs11-pin"
+	containerPKCS11ModulePath        = "/usr/lib/softhsm/libsofthsm2.so"
+	containerSoftHSMConfigPath       = "/hsm/softhsm2.conf"
+	containerSPIFFEWorkloadAPISocket = "unix:///run/spire/sockets/agent.sock"
+	providerCertAuthPKCS11TokenLabel = "openbao-kms-e2e"
+	providerCertAuthPKCS11KeyLabel   = "openbao-kms-client"
+	providerCertAuthMinRemainingTTL  = "2m"
+	providerCertAuthClockSkewLeeway  = "30s"
+	providerAuthMethodJWT            = "jwt"
+	providerAuthMethodCert           = "cert"
+	providerCertAuthSourcePKCS11     = "pkcs11"
+	providerCertAuthSourceSPIFFE     = "spiffe"
 )
 
 func TestProviderContainerFullStackE2E(t *testing.T) {
@@ -85,6 +99,7 @@ func TestProviderContainerFullStackE2E(t *testing.T) {
 
 	environment, err = framework.StartOpenBaoEnvironment(ctx, framework.OpenBaoEnvironmentConfig{
 		NetworkName: networkName,
+		Namespace:   "admin",
 	})
 	if errors.Is(err, framework.ErrDockerUnavailable) {
 		t.Skip(err.Error())
@@ -126,10 +141,18 @@ type providerVolumes struct {
 	tls    string
 	run    string
 	state  string
+	hsm    string
 }
 
 func (v providerVolumes) names() []string {
-	return []string{v.config, v.tls, v.run, v.state}
+	candidates := []string{v.config, v.tls, v.run, v.state, v.hsm}
+	names := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate != "" {
+			names = append(names, candidate)
+		}
+	}
+	return names
 }
 
 func writeProviderContainerConfig(t *testing.T, path string, environment *framework.OpenBaoEnvironment) {
@@ -141,11 +164,41 @@ type providerContainerConfigOptions struct {
 	OpenBaoTimeout         string
 	OpenBaoAddress         string
 	TransitKeyName         string
+	AuthMethod             string
+	ExpectedIssuer         string
+	ExpectedAudience       string
+	ExpectedSubject        string
 	ProbeInterval          string
 	DeepProbeInterval      string
 	StatusMaxStaleness     string
 	MinJWTRemainingTTL     string
 	LoginBeforeTokenExpiry string
+	Cert                   providerCertAuthConfigOptions
+}
+
+type providerCertAuthConfigOptions struct {
+	MountPath       string
+	Name            string
+	Source          string
+	MinRemainingTTL string
+	ClockSkewLeeway string
+	PKCS11          providerPKCS11AuthConfigOptions
+	SPIFFE          providerSPIFFEAuthConfigOptions
+}
+
+type providerPKCS11AuthConfigOptions struct {
+	CertificateFile string
+	ModulePath      string
+	TokenLabel      string
+	KeyLabel        string
+	PINFile         string
+	MaxSessions     int
+}
+
+type providerSPIFFEAuthConfigOptions struct {
+	WorkloadAPISocket string
+	SPIFFEID          string
+	TrustDomain       string
 }
 
 func writeProviderContainerConfigWithOptions(
@@ -180,11 +233,22 @@ func writeProviderContainerConfigWithOptions(
 	if opts.LoginBeforeTokenExpiry == "" {
 		opts.LoginBeforeTokenExpiry = "30s"
 	}
-	expectedClaims := fmt.Sprintf(`  expectedIssuer: %q
-  expectedAudience:
-    - %q
-  expectedSubject: %q
-`, environment.JWTIssuer(), environment.JWTAudience(), environment.JWTSubject())
+	if opts.AuthMethod == "" {
+		opts.AuthMethod = providerAuthMethodJWT
+	}
+	if opts.ExpectedIssuer == "" {
+		opts.ExpectedIssuer = environment.JWTIssuer()
+	}
+	if opts.ExpectedAudience == "" {
+		opts.ExpectedAudience = environment.JWTAudience()
+	}
+	if opts.ExpectedSubject == "" {
+		opts.ExpectedSubject = environment.JWTSubject()
+	}
+	authConfig := providerJWTAuthConfig(environment, opts)
+	if opts.AuthMethod == providerAuthMethodCert {
+		authConfig = providerCertAuthConfig(environment, opts)
+	}
 
 	raw := fmt.Sprintf(`configVersion: v1alpha1
 server:
@@ -195,21 +259,11 @@ server:
   healthAddress: ""
 openbao:
   address: %q
+  namespace: %q
   caCertFile: %q
   tlsServerName: %q
   timeout: %s
   instanceId: openbao-ci-a
-auth:
-  method: jwt
-  mountPath: %q
-  role: %q
-  jwtFile: %q
-  minJwtRemainingTtl: %s
-  clockSkewLeeway: 30s
-  loginBeforeTokenExpiry: %s
-  tokenRenewalIncrement: 1h
-  loginTimeout: 0s
-  tokenStorage: memory
 %s
 transit:
   mountPath: %q
@@ -219,7 +273,6 @@ transit:
     clusterId: workload-a
     transitMountId: transit-ci-primary
     keyLineageId: 01HXEXAMPLEKEYLINEAGEID
-  useAssociatedData: true
 bootstrap:
   graceTimeout: 60s
   retryInterval: 5s
@@ -234,30 +287,20 @@ rotation:
   activationDelay: 1s
   requireStableObservationCount: 1
   rejectVersionRollback: true
-performance:
-  decryptMicroBatching:
-    enabled: false
-    maxBatchSize: 32
-    maxWait: 2ms
 logging:
   level: info
   format: json
-  redactOpenBaoPaths: true
   logOpenBaoRequestIDs: true
   debugCorrelation:
     enabled: false
     ttl: 15m
 `, containerSocketPath,
 		opts.OpenBaoAddress,
+		environment.Namespace,
 		containerCAPath,
 		environment.TLSServerName,
 		opts.OpenBaoTimeout,
-		environment.AuthMount,
-		environment.AuthRole,
-		containerJWTPath,
-		opts.MinJWTRemainingTTL,
-		opts.LoginBeforeTokenExpiry,
-		expectedClaims,
+		authConfig,
 		environment.TransitMount,
 		opts.TransitKeyName,
 		opts.ProbeInterval,
@@ -268,6 +311,138 @@ logging:
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write provider container config: %v", err)
 	}
+}
+
+func providerJWTAuthConfig(environment *framework.OpenBaoEnvironment, opts providerContainerConfigOptions) string {
+	return fmt.Sprintf(`auth:
+  method: jwt
+  loginBeforeTokenExpiry: %s
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  jwt:
+    mountPath: %q
+    role: %q
+    jwtFile: %q
+    minRemainingTtl: %s
+    clockSkewLeeway: 30s
+    expectedIssuer: %q
+    expectedAudience:
+      - %q
+    expectedSubject: %q`,
+		opts.LoginBeforeTokenExpiry,
+		environment.AuthMount,
+		environment.AuthRole,
+		containerJWTPath,
+		opts.MinJWTRemainingTTL,
+		opts.ExpectedIssuer,
+		opts.ExpectedAudience,
+		opts.ExpectedSubject,
+	)
+}
+
+func providerCertAuthConfig(environment *framework.OpenBaoEnvironment, opts providerContainerConfigOptions) string {
+	cert := opts.Cert
+	if cert.MountPath == "" {
+		cert.MountPath = environment.CertAuthMount
+	}
+	if cert.Name == "" {
+		cert.Name = environment.CertAuthRole
+	}
+	if cert.MinRemainingTTL == "" {
+		cert.MinRemainingTTL = providerCertAuthMinRemainingTTL
+	}
+	if cert.ClockSkewLeeway == "" {
+		cert.ClockSkewLeeway = providerCertAuthClockSkewLeeway
+	}
+	sourceConfig := ""
+	switch cert.Source {
+	case providerCertAuthSourcePKCS11:
+		sourceConfig = providerPKCS11AuthConfig(cert.PKCS11)
+	case providerCertAuthSourceSPIFFE:
+		sourceConfig = providerSPIFFEAuthConfig(environment, cert.SPIFFE)
+	default:
+		sourceConfig = fmt.Sprintf("    source: %q", cert.Source)
+	}
+	return fmt.Sprintf(`auth:
+  method: cert
+  loginBeforeTokenExpiry: %s
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  cert:
+    mountPath: %q
+    name: %q
+    minRemainingTtl: %s
+    clockSkewLeeway: %s
+%s`,
+		opts.LoginBeforeTokenExpiry,
+		cert.MountPath,
+		cert.Name,
+		cert.MinRemainingTTL,
+		cert.ClockSkewLeeway,
+		sourceConfig,
+	)
+}
+
+func providerPKCS11AuthConfig(pkcs11 providerPKCS11AuthConfigOptions) string {
+	if pkcs11.CertificateFile == "" {
+		pkcs11.CertificateFile = containerCertChainPath
+	}
+	if pkcs11.ModulePath == "" {
+		pkcs11.ModulePath = containerPKCS11ModulePath
+	}
+	if pkcs11.TokenLabel == "" {
+		pkcs11.TokenLabel = providerCertAuthPKCS11TokenLabel
+	}
+	if pkcs11.KeyLabel == "" {
+		pkcs11.KeyLabel = providerCertAuthPKCS11KeyLabel
+	}
+	if pkcs11.PINFile == "" {
+		pkcs11.PINFile = containerPKCS11PINPath
+	}
+	if pkcs11.MaxSessions == 0 {
+		pkcs11.MaxSessions = 4
+	}
+	return fmt.Sprintf(`    source: pkcs11
+    pkcs11:
+      certificateFile: %q
+      modulePath: %q
+      tokenLabel: %q
+      keyLabel: %q
+      pinFile: %q
+      maxSessions: %d`,
+		pkcs11.CertificateFile,
+		pkcs11.ModulePath,
+		pkcs11.TokenLabel,
+		pkcs11.KeyLabel,
+		pkcs11.PINFile,
+		pkcs11.MaxSessions,
+	)
+}
+
+func providerSPIFFEAuthConfig(environment *framework.OpenBaoEnvironment, spiffe providerSPIFFEAuthConfigOptions) string {
+	if spiffe.WorkloadAPISocket == "" {
+		spiffe.WorkloadAPISocket = containerSPIFFEWorkloadAPISocket
+	}
+	if spiffe.SPIFFEID == "" {
+		spiffe.SPIFFEID = environment.CertSPIFFEID
+	}
+	if spiffe.TrustDomain == "" {
+		spiffe.TrustDomain = "example.org"
+	}
+	return fmt.Sprintf(`    source: spiffe
+    spiffe:
+      workloadAPISocket: %q
+      spiffeID: %q
+      trustDomain: %q`,
+		spiffe.WorkloadAPISocket,
+		spiffe.SPIFFEID,
+		spiffe.TrustDomain,
+	)
+}
+
+type providerContainerStartOptions struct {
+	Env     []string
+	Volumes []string
 }
 
 func populateProviderVolumes(
@@ -336,18 +511,42 @@ func startProviderContainer(
 ) {
 	t.Helper()
 
-	runDocker(t, ctx, dockerPath,
+	startProviderContainerWithOptions(t, ctx, dockerPath, name, networkName, image, volumes, providerContainerStartOptions{})
+}
+
+func startProviderContainerWithOptions(
+	t *testing.T,
+	ctx context.Context,
+	dockerPath string,
+	name string,
+	networkName string,
+	image string,
+	volumes providerVolumes,
+	opts providerContainerStartOptions,
+) {
+	t.Helper()
+
+	args := []string{
 		"run", "--detach",
 		"--name", name,
 		"--network", networkName,
 		"--read-only",
-		"--volume", volumes.config+":/config:ro",
-		"--volume", volumes.tls+":/bao/tls:ro",
-		"--volume", volumes.run+":/run/openbao-kms",
-		"--volume", volumes.state+":/var/lib/openbao-kms/state",
+		"--volume", volumes.config + ":/config:ro",
+		"--volume", volumes.tls + ":/bao/tls:ro",
+		"--volume", volumes.run + ":/run/openbao-kms",
+		"--volume", volumes.state + ":/var/lib/openbao-kms/state",
+	}
+	for _, value := range opts.Env {
+		args = append(args, "--env", value)
+	}
+	for _, value := range opts.Volumes {
+		args = append(args, "--volume", value)
+	}
+	args = append(args,
 		image,
 		"serve", "--config", containerConfigPath,
 	)
+	runDocker(t, ctx, dockerPath, args...)
 }
 
 func copyFile(t *testing.T, source string, target string, mode os.FileMode) {

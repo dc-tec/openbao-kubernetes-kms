@@ -4,6 +4,7 @@ package framework
 
 const (
 	LabelCI          = "ci"
+	LabelCertAuth    = "certauth"
 	LabelConvergence = "convergence"
 	LabelDR          = "dr"
 	LabelFailure     = "failure"

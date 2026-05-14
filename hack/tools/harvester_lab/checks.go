@@ -3,13 +3,17 @@ package main
 import (
 	"context"
 	crand "crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +27,11 @@ type kubeadmCheck struct {
 const (
 	providerModeSystemd   = "systemd"
 	providerModeStaticPod = "static-pod"
+
+	decryptWarmupNamespace      = "openbao-kms-decrypt-warmup"
+	decryptWarmupCaseLabelKey   = "openbao-kms.dev/lab-case"
+	decryptWarmupCaseLabelValue = "decrypt-warmup"
+	decryptWarmupClusterLabel   = "openbao-kms.dev/lab-cluster"
 )
 
 func kubeadmChecks(cfg *labConfig) []kubeadmCheck {
@@ -142,17 +151,35 @@ func verifyRemoteSecretEnvelope(
 	secretName string,
 	valuePath string,
 ) error {
+	return verifyRemoteSecretEnvelopeInNamespace(ctx, cfg, host, "default", secretName, valuePath)
+}
+
+func verifyRemoteSecretEnvelopeInNamespace(
+	ctx context.Context,
+	cfg *labConfig,
+	host string,
+	namespace string,
+	secretName string,
+	valuePath string,
+) error {
 	remoteScript := filepath.Join(cfg.root, "hack", "harvester", "remote", "verify-kms-encryption.sh")
 	if err := scpLab(ctx, cfg, remoteScript, host+":/tmp/verify-kms-encryption.sh"); err != nil {
 		return err
 	}
-	if err := scpLab(ctx, cfg, valuePath, host+":"+remoteValuePath); err != nil {
-		return err
-	}
-	command := joinEnvForSudo(
+	envArgs := []string{
 		"SECRET_NAME", secretName,
-		"SECRET_VALUE_FILE", remoteValuePath,
-	) + " sh /tmp/verify-kms-encryption.sh; sudo rm -f " + remoteValuePath
+		"SECRET_NAMESPACE", namespace,
+	}
+	cleanup := ""
+	if valuePath != "" {
+		if err := scpLab(ctx, cfg, valuePath, host+":"+remoteValuePath); err != nil {
+			return err
+		}
+		envArgs = append(envArgs, "SECRET_VALUE_FILE", remoteValuePath)
+		cleanup = "; sudo rm -f " + remoteValuePath
+	}
+	command := joinEnvForSudo(envArgs...) +
+		" sh /tmp/verify-kms-encryption.sh; status=$?" + cleanup + "; exit $status"
 	return sshLab(ctx, cfg, host, command)
 }
 
@@ -846,6 +873,1035 @@ func verifyLoadOne(ctx context.Context, cfg *labConfig, check kubeadmCheck, coun
 	}
 	fmt.Printf("created and read %d KMS-encrypted Secrets on %s\n", count, check.suffix)
 	return nil
+}
+
+func labVerifyDecryptWarmup(ctx context.Context, cfg *labConfig, _ []string) error {
+	if cfg.multiControlPlaneEnabled {
+		checks, err := requireMultiControlPlaneChecks(cfg)
+		if err != nil {
+			return err
+		}
+		return verifyDecryptWarmupCluster(ctx, cfg, "mcp", checks)
+	}
+	for _, check := range kubeadmChecks(cfg) {
+		if err := verifyDecryptWarmupCluster(ctx, cfg, check.suffix, []kubeadmCheck{check}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func verifyDecryptWarmupCluster(
+	ctx context.Context,
+	cfg *labConfig,
+	clusterName string,
+	checks []kubeadmCheck,
+) error {
+	if cfg.decryptWarmupDuration <= 0 {
+		return errors.New("HARVESTER_DECRYPT_WARMUP_DURATION must be positive")
+	}
+	corpus, cleanup, err := prepareDecryptWarmupCorpus(ctx, cfg, clusterName, checks)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	if err := verifyDecryptWarmupSamples(ctx, cfg, checks, corpus.samples); err != nil {
+		return err
+	}
+	if cfg.decryptWarmupRestartAPIServers {
+		if err := restartDecryptWarmupAPIServers(ctx, cfg, checks); err != nil {
+			return err
+		}
+	}
+	return runDecryptWarmupSoak(ctx, cfg, clusterName, checks, corpus.selector, corpus.secretCount)
+}
+
+func labVerifyDecryptColdStart(ctx context.Context, cfg *labConfig, _ []string) error {
+	if cfg.multiControlPlaneEnabled {
+		checks, err := requireMultiControlPlaneChecks(cfg)
+		if err != nil {
+			return err
+		}
+		return verifyDecryptColdStartCluster(ctx, cfg, "mcp", checks)
+	}
+	for _, check := range kubeadmChecks(cfg) {
+		if err := verifyDecryptColdStartCluster(ctx, cfg, check.suffix, []kubeadmCheck{check}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func verifyDecryptColdStartCluster(
+	ctx context.Context,
+	cfg *labConfig,
+	clusterName string,
+	checks []kubeadmCheck,
+) error {
+	if cfg.decryptColdStartTimeout <= 0 {
+		return errors.New("HARVESTER_DECRYPT_COLD_START_TIMEOUT must be positive")
+	}
+	corpus, cleanup, err := prepareDecryptWarmupCorpus(ctx, cfg, clusterName, checks)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	if err := verifyDecryptWarmupSamples(ctx, cfg, checks, corpus.samples); err != nil {
+		return err
+	}
+	before, err := readProviderMetricsForChecks(ctx, cfg, checks)
+	if err != nil {
+		return err
+	}
+	if err := restartDecryptWarmupAPIServers(ctx, cfg, checks); err != nil {
+		return err
+	}
+	results := runDecryptColdStartLists(ctx, cfg, checks, corpus.selector)
+	after, err := readProviderMetricsForChecks(ctx, cfg, checks)
+	if err != nil {
+		return err
+	}
+	stats := collectDecryptWarmupStatsFromSlice(results)
+	p95 := percentileWarmupDuration(stats.durations, 95)
+	maxDuration := maxWarmupDuration(stats.durations)
+	successfulLists := stats.count - stats.errorCount
+	if successfulLists < 0 {
+		successfulLists = 0
+	}
+	secretObjectsRead := successfulLists * corpus.secretCount
+	delta := after.subtract(before)
+	fmt.Printf(
+		"harvester_decrypt_cold_start cluster=%s secrets=%d endpoints=%d lists=%d "+
+			"secret_objects_read=%d errors=%d list_p95=%s list_max=%s "+
+			"provider_decrypt_delta=%d provider_decrypt_errors_delta=%d "+
+			"transit_decrypt_delta=%d transit_decrypt_errors_delta=%d\n",
+		clusterName,
+		corpus.secretCount,
+		len(checks),
+		stats.count,
+		secretObjectsRead,
+		stats.errorCount,
+		p95.Round(time.Millisecond),
+		maxDuration.Round(time.Millisecond),
+		delta.grpcDecryptOK,
+		delta.grpcDecryptError,
+		delta.transitDecryptOK,
+		delta.transitDecryptError,
+	)
+	if stats.errorCount > 0 {
+		return fmt.Errorf("decrypt cold start recorded %d errors; first=%s", stats.errorCount, stats.firstError)
+	}
+	if p95 > cfg.decryptColdStartMaxP95 {
+		return fmt.Errorf("decrypt cold start list p95 = %s, max %s", p95, cfg.decryptColdStartMaxP95)
+	}
+	if delta.grpcDecryptError > 0 || delta.transitDecryptError > 0 {
+		return fmt.Errorf(
+			"decrypt cold start provider errors: grpc=%d transit=%d",
+			delta.grpcDecryptError,
+			delta.transitDecryptError,
+		)
+	}
+	return nil
+}
+
+type decryptWarmupSample struct {
+	name      string
+	valuePath string
+	cleanup   func()
+}
+
+type decryptWarmupCorpus struct {
+	clusterName  string
+	clusterLabel string
+	selector     string
+	secretCount  int
+	samples      []decryptWarmupSample
+	reused       bool
+}
+
+func prepareDecryptWarmupCorpus(
+	ctx context.Context,
+	cfg *labConfig,
+	clusterName string,
+	checks []kubeadmCheck,
+) (decryptWarmupCorpus, func(), error) {
+	if len(checks) == 0 {
+		return decryptWarmupCorpus{}, func() {}, errors.New("decrypt warmup requires at least one kubeadm check")
+	}
+	if cfg.decryptWarmupSecretCount <= 0 {
+		return decryptWarmupCorpus{}, func() {}, errors.New("HARVESTER_DECRYPT_WARMUP_SECRET_COUNT must be positive")
+	}
+	if cfg.decryptWarmupSeedBatchSize <= 0 {
+		return decryptWarmupCorpus{}, func() {}, errors.New("HARVESTER_DECRYPT_WARMUP_SEED_BATCH_SIZE must be positive")
+	}
+	if cfg.decryptWarmupSeedWorkers <= 0 {
+		return decryptWarmupCorpus{}, func() {}, errors.New("HARVESTER_DECRYPT_WARMUP_SEED_WORKERS must be positive")
+	}
+	clusterLabel := labelSafeValue(clusterName)
+	selector := decryptWarmupSelector(clusterLabel)
+	primary := checks[0]
+	corpus := decryptWarmupCorpus{
+		clusterName:  clusterName,
+		clusterLabel: clusterLabel,
+		selector:     selector,
+		secretCount:  cfg.decryptWarmupSecretCount,
+	}
+	fmt.Printf(
+		"preparing decrypt warmup corpus cluster=%s secrets=%d namespace=%s\n",
+		clusterName,
+		cfg.decryptWarmupSecretCount,
+		decryptWarmupNamespace,
+	)
+	if err := ensureDecryptWarmupNamespace(ctx, cfg, primary.kubeconfig); err != nil {
+		return decryptWarmupCorpus{}, func() {}, err
+	}
+	existing, err := countDecryptWarmupSecrets(ctx, cfg, primary.kubeconfig, selector)
+	if err != nil {
+		return decryptWarmupCorpus{}, func() {}, err
+	}
+	if cfg.decryptWarmupReuseCorpus && existing == cfg.decryptWarmupSecretCount {
+		corpus.reused = true
+		corpus.samples = decryptWarmupSamplesForExisting(clusterName, cfg.decryptWarmupSecretCount)
+		fmt.Printf(
+			"reusing decrypt warmup corpus cluster=%s secrets=%d\n",
+			clusterName,
+			cfg.decryptWarmupSecretCount,
+		)
+		return corpus, func() {}, nil
+	}
+	if existing > 0 {
+		fmt.Printf(
+			"deleting decrypt warmup corpus cluster=%s existing=%d target=%d\n",
+			clusterName,
+			existing,
+			cfg.decryptWarmupSecretCount,
+		)
+	}
+	if err := deleteDecryptWarmupSecrets(ctx, cfg, primary.kubeconfig, clusterName, selector); err != nil {
+		return decryptWarmupCorpus{}, func() {}, err
+	}
+	samples, cleanup, err := seedDecryptWarmupCorpus(ctx, cfg, primary.kubeconfig, clusterName, clusterLabel)
+	if err != nil {
+		cleanup()
+		return decryptWarmupCorpus{}, func() {}, err
+	}
+	created, err := countDecryptWarmupSecrets(ctx, cfg, primary.kubeconfig, selector)
+	if err != nil {
+		cleanup()
+		return decryptWarmupCorpus{}, func() {}, err
+	}
+	if created != cfg.decryptWarmupSecretCount {
+		cleanup()
+		return decryptWarmupCorpus{}, func() {}, fmt.Errorf(
+			"decrypt warmup corpus size = %d, want %d",
+			created,
+			cfg.decryptWarmupSecretCount,
+		)
+	}
+	corpus.samples = samples
+	return corpus, cleanup, nil
+}
+
+func ensureDecryptWarmupNamespace(ctx context.Context, cfg *labConfig, kubeconfig string) error {
+	env := []string{"KUBECONFIG=" + kubeconfig}
+	if err := quietKubectl(ctx, cfg, env, "get", "namespace", decryptWarmupNamespace); err == nil {
+		return nil
+	}
+	return runCmdEnv(
+		ctx,
+		cfg,
+		env,
+		"kubectl",
+		"create",
+		"namespace",
+		decryptWarmupNamespace,
+	)
+}
+
+func deleteDecryptWarmupSecrets(
+	ctx context.Context,
+	cfg *labConfig,
+	kubeconfig string,
+	clusterName string,
+	selector string,
+) error {
+	env := []string{"KUBECONFIG=" + kubeconfig}
+	if err := runCmdEnvDiscardOutput(
+		ctx,
+		cfg,
+		env,
+		"kubectl",
+		"delete",
+		"secret",
+		"-n",
+		decryptWarmupNamespace,
+		"-l",
+		selector,
+		"--ignore-not-found=true",
+		"--wait=false",
+	); err != nil {
+		return err
+	}
+	return waitDecryptWarmupSecretsDeleted(ctx, cfg, kubeconfig, clusterName, selector)
+}
+
+func waitDecryptWarmupSecretsDeleted(
+	ctx context.Context,
+	cfg *labConfig,
+	kubeconfig string,
+	clusterName string,
+	selector string,
+) error {
+	deadline := time.Now().Add(cfg.waitTimeout)
+	lastRemaining := -1
+	for {
+		remaining, err := countDecryptWarmupSecrets(ctx, cfg, kubeconfig, selector)
+		if err != nil {
+			return err
+		}
+		if remaining == 0 {
+			return nil
+		}
+		if remaining != lastRemaining {
+			fmt.Printf("deleting decrypt warmup corpus cluster=%s remaining=%d\n", clusterName, remaining)
+			lastRemaining = remaining
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out deleting decrypt warmup corpus cluster=%s remaining=%d", clusterName, remaining)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
+func verifyDecryptWarmupSamples(
+	ctx context.Context,
+	cfg *labConfig,
+	checks []kubeadmCheck,
+	samples []decryptWarmupSample,
+) error {
+	for _, check := range checks {
+		for _, sample := range samples {
+			if err := verifyRemoteSecretEnvelopeInNamespace(
+				ctx,
+				cfg,
+				check.host,
+				decryptWarmupNamespace,
+				sample.name,
+				sample.valuePath,
+			); err != nil {
+				return fmt.Errorf("verify decrypt warmup envelope on %s: %w", check.host, err)
+			}
+		}
+	}
+	return nil
+}
+
+func seedDecryptWarmupCorpus(
+	ctx context.Context,
+	cfg *labConfig,
+	kubeconfig string,
+	clusterName string,
+	clusterLabel string,
+) ([]decryptWarmupSample, func(), error) {
+	secretCount := cfg.decryptWarmupSecretCount
+	chunks := decryptWarmupSeedChunks(secretCount, cfg.decryptWarmupSeedBatchSize)
+	if cfg.decryptWarmupSeedWorkers <= 1 || len(chunks) == 1 {
+		return seedDecryptWarmupCorpusSerial(ctx, cfg, kubeconfig, clusterName, clusterLabel, chunks, secretCount)
+	}
+	return seedDecryptWarmupCorpusParallel(ctx, cfg, kubeconfig, clusterName, clusterLabel, chunks, secretCount)
+}
+
+type decryptWarmupSeedChunk struct {
+	start int
+	end   int
+}
+
+type decryptWarmupSeedResult struct {
+	chunk   decryptWarmupSeedChunk
+	samples []decryptWarmupSample
+	cleanup func()
+	err     error
+}
+
+func decryptWarmupSeedChunks(secretCount int, batchSize int) []decryptWarmupSeedChunk {
+	chunks := make([]decryptWarmupSeedChunk, 0, (secretCount+batchSize-1)/batchSize)
+	for start := 0; start < secretCount; start += batchSize {
+		end := start + batchSize
+		if end > secretCount {
+			end = secretCount
+		}
+		chunks = append(chunks, decryptWarmupSeedChunk{start: start, end: end})
+	}
+	return chunks
+}
+
+func seedDecryptWarmupCorpusSerial(
+	ctx context.Context,
+	cfg *labConfig,
+	kubeconfig string,
+	clusterName string,
+	clusterLabel string,
+	chunks []decryptWarmupSeedChunk,
+	secretCount int,
+) ([]decryptWarmupSample, func(), error) {
+	cleanups := make([]func(), 0, len(chunks))
+	cleanupAll := func() {
+		for index := len(cleanups) - 1; index >= 0; index-- {
+			cleanups[index]()
+		}
+	}
+	samples := make([]decryptWarmupSample, 0, 3)
+	for _, chunk := range chunks {
+		result := seedDecryptWarmupChunk(
+			ctx,
+			cfg,
+			kubeconfig,
+			clusterName,
+			clusterLabel,
+			secretCount,
+			chunk,
+		)
+		if result.cleanup != nil {
+			cleanups = append(cleanups, result.cleanup)
+		}
+		if result.err != nil {
+			cleanupAll()
+			return nil, func() {}, result.err
+		}
+		samples = append(samples, result.samples...)
+		fmt.Printf(
+			"seeded decrypt warmup corpus cluster=%s progress=%d/%d\n",
+			clusterName,
+			chunk.end,
+			secretCount,
+		)
+	}
+	return samples, cleanupAll, nil
+}
+
+func seedDecryptWarmupCorpusParallel(
+	ctx context.Context,
+	cfg *labConfig,
+	kubeconfig string,
+	clusterName string,
+	clusterLabel string,
+	chunks []decryptWarmupSeedChunk,
+	secretCount int,
+) ([]decryptWarmupSample, func(), error) {
+	seedCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	workerCount := cfg.decryptWarmupSeedWorkers
+	if workerCount > len(chunks) {
+		workerCount = len(chunks)
+	}
+	jobs := make(chan decryptWarmupSeedChunk)
+	results := make(chan decryptWarmupSeedResult, len(chunks))
+	var wg sync.WaitGroup
+	for workerID := 0; workerID < workerCount; workerID++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for chunk := range jobs {
+				result := seedDecryptWarmupChunk(
+					seedCtx,
+					cfg,
+					kubeconfig,
+					clusterName,
+					clusterLabel,
+					secretCount,
+					chunk,
+				)
+				if result.err != nil {
+					cancel()
+				}
+				results <- result
+			}
+		}()
+	}
+	go func() {
+		defer close(jobs)
+		for _, chunk := range chunks {
+			select {
+			case <-seedCtx.Done():
+				return
+			case jobs <- chunk:
+			}
+		}
+	}()
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	cleanups := make([]func(), 0, len(chunks))
+	cleanupAll := func() {
+		for index := len(cleanups) - 1; index >= 0; index-- {
+			cleanups[index]()
+		}
+	}
+	samples := make([]decryptWarmupSample, 0, 3)
+	completed := 0
+	var firstErr error
+	for result := range results {
+		if result.cleanup != nil {
+			cleanups = append(cleanups, result.cleanup)
+		}
+		if result.err != nil {
+			firstErr = errors.Join(firstErr, result.err)
+			continue
+		}
+		samples = append(samples, result.samples...)
+		completed += result.chunk.end - result.chunk.start
+		fmt.Printf(
+			"seeded decrypt warmup corpus cluster=%s progress=%d/%d workers=%d\n",
+			clusterName,
+			completed,
+			secretCount,
+			workerCount,
+		)
+	}
+	if firstErr != nil {
+		cleanupAll()
+		return nil, func() {}, firstErr
+	}
+	return samples, cleanupAll, nil
+}
+
+func seedDecryptWarmupChunk(
+	ctx context.Context,
+	cfg *labConfig,
+	kubeconfig string,
+	clusterName string,
+	clusterLabel string,
+	secretCount int,
+	chunk decryptWarmupSeedChunk,
+) decryptWarmupSeedResult {
+	manifestPath, samples, cleanup, err := writeDecryptWarmupManifestChunk(
+		clusterName,
+		clusterLabel,
+		secretCount,
+		chunk.start,
+		chunk.end,
+	)
+	if err != nil {
+		return decryptWarmupSeedResult{chunk: chunk, cleanup: cleanup, err: err}
+	}
+	if err := applyDecryptWarmupManifest(ctx, cfg, kubeconfig, manifestPath); err != nil {
+		return decryptWarmupSeedResult{chunk: chunk, cleanup: cleanup, err: err}
+	}
+	return decryptWarmupSeedResult{chunk: chunk, samples: samples, cleanup: cleanup}
+}
+
+func writeDecryptWarmupManifestChunk(
+	clusterName string,
+	clusterLabel string,
+	count int,
+	start int,
+	end int,
+) (string, []decryptWarmupSample, func(), error) {
+	file, err := os.CreateTemp("", "openbao-kms-decrypt-warmup-*.yaml")
+	if err != nil {
+		return "", nil, func() {}, fmt.Errorf("create decrypt warmup manifest: %w", err)
+	}
+	cleanupFile := func() {
+		_ = os.Remove(file.Name())
+	}
+	cleanupAll := cleanupFile
+	sampleIndexes := decryptWarmupSampleIndexes(count)
+	samples := make([]decryptWarmupSample, 0, len(sampleIndexes))
+	var manifest strings.Builder
+	namePrefix := "openbao-kms-warmup-" + labelSafeValue(clusterName)
+	for index := start; index < end; index++ {
+		secretName := fmt.Sprintf("%s-%05d", namePrefix, index)
+		secretValue, valueErr := randomSecretHex()
+		if valueErr != nil {
+			cleanupAll()
+			return "", nil, func() {}, valueErr
+		}
+		if sampleIndexes[index] {
+			valuePath, sampleCleanup, sampleErr := writeTempSecretValue(secretValue)
+			if sampleErr != nil {
+				cleanupAll()
+				return "", nil, func() {}, sampleErr
+			}
+			previousCleanup := cleanupAll
+			cleanupAll = func() {
+				previousCleanup()
+				sampleCleanup()
+			}
+			samples = append(samples, decryptWarmupSample{
+				name:      secretName,
+				valuePath: valuePath,
+				cleanup:   sampleCleanup,
+			})
+		}
+		encoded := base64.StdEncoding.EncodeToString([]byte(secretValue))
+		manifest.WriteString("---\n")
+		manifest.WriteString("apiVersion: v1\n")
+		manifest.WriteString("kind: Secret\n")
+		manifest.WriteString("metadata:\n")
+		manifest.WriteString("  name: " + secretName + "\n")
+		manifest.WriteString("  namespace: " + decryptWarmupNamespace + "\n")
+		manifest.WriteString("  labels:\n")
+		manifest.WriteString("    " + decryptWarmupCaseLabelKey + ": " + decryptWarmupCaseLabelValue + "\n")
+		manifest.WriteString("    " + decryptWarmupClusterLabel + ": " + clusterLabel + "\n")
+		manifest.WriteString("type: Opaque\n")
+		manifest.WriteString("data:\n")
+		manifest.WriteString("  value: " + encoded + "\n")
+	}
+	if _, err := file.WriteString(manifest.String()); err != nil {
+		_ = file.Close()
+		cleanupAll()
+		return "", nil, func() {}, fmt.Errorf("write decrypt warmup manifest: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		cleanupAll()
+		return "", nil, func() {}, fmt.Errorf("close decrypt warmup manifest: %w", err)
+	}
+	return file.Name(), samples, cleanupAll, nil
+}
+
+func decryptWarmupSamplesForExisting(clusterName string, count int) []decryptWarmupSample {
+	namePrefix := "openbao-kms-warmup-" + labelSafeValue(clusterName)
+	indexes := decryptWarmupSampleIndexes(count)
+	samples := make([]decryptWarmupSample, 0, len(indexes))
+	keys := make([]int, 0, len(indexes))
+	for index := range indexes {
+		keys = append(keys, index)
+	}
+	sort.Ints(keys)
+	for _, index := range keys {
+		samples = append(samples, decryptWarmupSample{
+			name: fmt.Sprintf("%s-%05d", namePrefix, index),
+		})
+	}
+	return samples
+}
+
+func decryptWarmupSampleIndexes(count int) map[int]bool {
+	indexes := map[int]bool{
+		0:         true,
+		count - 1: true,
+	}
+	if count > 2 {
+		indexes[count/2] = true
+	}
+	return indexes
+}
+
+func applyDecryptWarmupManifest(ctx context.Context, cfg *labConfig, kubeconfig string, manifestPath string) error {
+	return runCmdEnvDiscardOutput(
+		ctx,
+		cfg,
+		[]string{"KUBECONFIG=" + kubeconfig},
+		"kubectl",
+		"create",
+		"-f",
+		manifestPath,
+	)
+}
+
+func countDecryptWarmupSecrets(ctx context.Context, cfg *labConfig, kubeconfig string, selector string) (int, error) {
+	output, err := outputCmdEnv(
+		ctx,
+		cfg,
+		[]string{"KUBECONFIG=" + kubeconfig},
+		"kubectl",
+		"get",
+		"secret",
+		"-n",
+		decryptWarmupNamespace,
+		"-l",
+		selector,
+		"-o",
+		"name",
+	)
+	if err != nil {
+		return 0, err
+	}
+	if strings.TrimSpace(string(output)) == "" {
+		return 0, nil
+	}
+	return len(strings.Fields(string(output))), nil
+}
+
+func restartDecryptWarmupAPIServers(ctx context.Context, cfg *labConfig, checks []kubeadmCheck) error {
+	if !cfg.decryptWarmupRestartParallel || len(checks) < 2 {
+		for _, check := range checks {
+			fmt.Printf("restarting kube-apiserver before decrypt warmup on %s\n", check.host)
+			if err := restartAPIServer(ctx, cfg, check); err != nil {
+				return fmt.Errorf("restart kube-apiserver on %s: %w", check.host, err)
+			}
+		}
+		return nil
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, len(checks))
+	for _, check := range checks {
+		wg.Add(1)
+		go func(check kubeadmCheck) {
+			defer wg.Done()
+			fmt.Printf("restarting kube-apiserver before decrypt warmup on %s\n", check.host)
+			if err := restartAPIServer(ctx, cfg, check); err != nil {
+				errs <- fmt.Errorf("restart kube-apiserver on %s: %w", check.host, err)
+			}
+		}(check)
+	}
+	wg.Wait()
+	close(errs)
+	var joined error
+	for err := range errs {
+		joined = errors.Join(joined, err)
+	}
+	return joined
+}
+
+type decryptWarmupResult struct {
+	check    string
+	duration time.Duration
+	err      error
+}
+
+type decryptWarmupStats struct {
+	count      int
+	errorCount int
+	firstError string
+	durations  []time.Duration
+}
+
+func runDecryptWarmupSoak(
+	ctx context.Context,
+	cfg *labConfig,
+	clusterName string,
+	checks []kubeadmCheck,
+	selector string,
+	secretCount int,
+) error {
+	workers := cfg.decryptWarmupWorkers
+	if workers <= 0 {
+		workers = len(checks)
+	}
+	results := make(chan decryptWarmupResult, workers)
+	soakCtx, cancel := context.WithTimeout(ctx, cfg.decryptWarmupDuration)
+	defer cancel()
+	var wg sync.WaitGroup
+	startedAt := time.Now()
+	for workerID := 0; workerID < workers; workerID++ {
+		check := checks[workerID%len(checks)]
+		wg.Add(1)
+		go func(check kubeadmCheck) {
+			defer wg.Done()
+			runDecryptWarmupWorker(soakCtx, cfg, check, selector, results)
+		}(check)
+	}
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+	stats := collectDecryptWarmupStats(results)
+	elapsed := time.Since(startedAt)
+	p95 := percentileWarmupDuration(stats.durations, 95)
+	maxDuration := maxWarmupDuration(stats.durations)
+	successfulLists := stats.count - stats.errorCount
+	if successfulLists < 0 {
+		successfulLists = 0
+	}
+	secretObjectsRead := successfulLists * secretCount
+	fmt.Printf(
+		"harvester_decrypt_warmup cluster=%s secrets=%d workers=%d duration=%s lists=%d "+
+			"secret_objects_read=%d errors=%d list_p95=%s list_max=%s\n",
+		clusterName,
+		secretCount,
+		workers,
+		elapsed.Round(time.Second),
+		stats.count,
+		secretObjectsRead,
+		stats.errorCount,
+		p95.Round(time.Millisecond),
+		maxDuration.Round(time.Millisecond),
+	)
+	if stats.errorCount > 0 {
+		return fmt.Errorf("decrypt warmup recorded %d errors; first=%s", stats.errorCount, stats.firstError)
+	}
+	if stats.count < cfg.decryptWarmupMinLists {
+		return fmt.Errorf("decrypt warmup lists = %d, want at least %d", stats.count, cfg.decryptWarmupMinLists)
+	}
+	if p95 > cfg.decryptWarmupMaxP95 {
+		return fmt.Errorf("decrypt warmup list p95 = %s, max %s", p95, cfg.decryptWarmupMaxP95)
+	}
+	return nil
+}
+
+func runDecryptColdStartLists(
+	ctx context.Context,
+	cfg *labConfig,
+	checks []kubeadmCheck,
+	selector string,
+) []decryptWarmupResult {
+	listCtx, cancel := context.WithTimeout(ctx, cfg.decryptColdStartTimeout)
+	defer cancel()
+	results := make([]decryptWarmupResult, len(checks))
+	var wg sync.WaitGroup
+	for index, check := range checks {
+		wg.Add(1)
+		go func(index int, check kubeadmCheck) {
+			defer wg.Done()
+			fmt.Printf("listing decrypt cold-start corpus through %s\n", check.host)
+			results[index] = runDecryptWarmupList(listCtx, cfg, check, selector)
+		}(index, check)
+	}
+	wg.Wait()
+	return results
+}
+
+func runDecryptWarmupWorker(
+	ctx context.Context,
+	cfg *labConfig,
+	check kubeadmCheck,
+	selector string,
+	results chan<- decryptWarmupResult,
+) {
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		result := runDecryptWarmupList(ctx, cfg, check, selector)
+		if ctx.Err() != nil {
+			return
+		}
+		results <- result
+		if result.err != nil {
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
+func runDecryptWarmupList(
+	ctx context.Context,
+	cfg *labConfig,
+	check kubeadmCheck,
+	selector string,
+) decryptWarmupResult {
+	env := []string{"KUBECONFIG=" + check.kubeconfig}
+	startedAt := time.Now()
+	err := runCmdEnvDiscardOutput(
+		ctx,
+		cfg,
+		env,
+		"kubectl",
+		"get",
+		"secret",
+		"-n",
+		decryptWarmupNamespace,
+		"-l",
+		selector,
+		"-o",
+		"json",
+	)
+	return decryptWarmupResult{
+		check:    check.suffix,
+		duration: time.Since(startedAt),
+		err:      err,
+	}
+}
+
+func collectDecryptWarmupStats(results <-chan decryptWarmupResult) decryptWarmupStats {
+	var stats decryptWarmupStats
+	for result := range results {
+		if result.duration > 0 {
+			stats.count++
+			stats.durations = append(stats.durations, result.duration)
+		}
+		if result.err != nil {
+			stats.errorCount++
+			if stats.firstError == "" {
+				stats.firstError = result.check + ": " + result.err.Error()
+			}
+		}
+	}
+	return stats
+}
+
+func collectDecryptWarmupStatsFromSlice(results []decryptWarmupResult) decryptWarmupStats {
+	var stats decryptWarmupStats
+	for _, result := range results {
+		if result.duration > 0 {
+			stats.count++
+			stats.durations = append(stats.durations, result.duration)
+		}
+		if result.err != nil {
+			stats.errorCount++
+			if stats.firstError == "" {
+				stats.firstError = result.check + ": " + result.err.Error()
+			}
+		}
+	}
+	return stats
+}
+
+type providerMetrics struct {
+	grpcDecryptOK       int
+	grpcDecryptError    int
+	transitDecryptOK    int
+	transitDecryptError int
+}
+
+func (m providerMetrics) subtract(previous providerMetrics) providerMetrics {
+	return providerMetrics{
+		grpcDecryptOK:       m.grpcDecryptOK - previous.grpcDecryptOK,
+		grpcDecryptError:    m.grpcDecryptError - previous.grpcDecryptError,
+		transitDecryptOK:    m.transitDecryptOK - previous.transitDecryptOK,
+		transitDecryptError: m.transitDecryptError - previous.transitDecryptError,
+	}
+}
+
+func (m providerMetrics) add(other providerMetrics) providerMetrics {
+	return providerMetrics{
+		grpcDecryptOK:       m.grpcDecryptOK + other.grpcDecryptOK,
+		grpcDecryptError:    m.grpcDecryptError + other.grpcDecryptError,
+		transitDecryptOK:    m.transitDecryptOK + other.transitDecryptOK,
+		transitDecryptError: m.transitDecryptError + other.transitDecryptError,
+	}
+}
+
+func readProviderMetricsForChecks(
+	ctx context.Context,
+	cfg *labConfig,
+	checks []kubeadmCheck,
+) (providerMetrics, error) {
+	var total providerMetrics
+	for _, check := range checks {
+		metrics, err := readProviderMetrics(ctx, cfg, check.host)
+		if err != nil {
+			return providerMetrics{}, err
+		}
+		total = total.add(metrics)
+	}
+	return total, nil
+}
+
+func readProviderMetrics(ctx context.Context, cfg *labConfig, host string) (providerMetrics, error) {
+	output, err := sshLabOutput(ctx, cfg, host, "curl -fsS http://127.0.0.1:8081/metrics")
+	if err != nil {
+		return providerMetrics{}, err
+	}
+	metrics := string(output)
+	return providerMetrics{
+		grpcDecryptOK: prometheusCounterValue(
+			metrics,
+			"openbao_kms_grpc_requests_total",
+			[]string{`method="decrypt"`, `status="ok"`},
+		),
+		grpcDecryptError: prometheusCounterValue(
+			metrics,
+			"openbao_kms_grpc_requests_total",
+			[]string{`method="decrypt"`, `status="error"`},
+		),
+		transitDecryptOK: prometheusCounterValue(
+			metrics,
+			"openbao_kms_openbao_requests_total",
+			[]string{`operation="transit_decrypt"`, `status="ok"`},
+		),
+		transitDecryptError: prometheusCounterValue(
+			metrics,
+			"openbao_kms_openbao_requests_total",
+			[]string{`operation="transit_decrypt"`, `status="error"`},
+		),
+	}, nil
+}
+
+func prometheusCounterValue(metrics string, name string, requiredLabels []string) int {
+	for _, line := range strings.Split(metrics, "\n") {
+		if !strings.HasPrefix(line, name+"{") {
+			continue
+		}
+		matches := true
+		for _, label := range requiredLabels {
+			if !strings.Contains(line, label) {
+				matches = false
+				break
+			}
+		}
+		if !matches {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			return 0
+		}
+		value, err := strconv.ParseFloat(fields[1], 64)
+		if err != nil {
+			return 0
+		}
+		return int(value)
+	}
+	return 0
+}
+
+func percentileWarmupDuration(durations []time.Duration, percentile int) time.Duration {
+	if len(durations) == 0 {
+		return 0
+	}
+	sorted := append([]time.Duration(nil), durations...)
+	sort.Slice(sorted, func(i int, j int) bool {
+		return sorted[i] < sorted[j]
+	})
+	index := ((percentile * len(sorted)) + 99) / 100
+	if index <= 0 {
+		index = 1
+	}
+	if index > len(sorted) {
+		index = len(sorted)
+	}
+	return sorted[index-1]
+}
+
+func maxWarmupDuration(durations []time.Duration) time.Duration {
+	var maxDuration time.Duration
+	for _, duration := range durations {
+		if duration > maxDuration {
+			maxDuration = duration
+		}
+	}
+	return maxDuration
+}
+
+func decryptWarmupSelector(clusterLabel string) string {
+	return decryptWarmupCaseLabelKey + "=" + decryptWarmupCaseLabelValue + "," +
+		decryptWarmupClusterLabel + "=" + clusterLabel
+}
+
+func labelSafeValue(value string) string {
+	lower := strings.ToLower(value)
+	var builder strings.Builder
+	previousDash := false
+	for _, char := range lower {
+		valid := (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9')
+		if valid {
+			builder.WriteRune(char)
+			previousDash = false
+			continue
+		}
+		if !previousDash {
+			builder.WriteByte('-')
+			previousDash = true
+		}
+	}
+	cleaned := strings.Trim(builder.String(), "-")
+	if cleaned == "" {
+		return "cluster"
+	}
+	if len(cleaned) > 24 {
+		cleaned = strings.Trim(cleaned[:24], "-")
+	}
+	if cleaned == "" {
+		return "cluster"
+	}
+	return cleaned
 }
 
 func labVerifyUpgradeRollback(ctx context.Context, cfg *labConfig, _ []string) error {

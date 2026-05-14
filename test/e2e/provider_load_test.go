@@ -12,10 +12,15 @@ import (
 )
 
 const (
-	kmsLoadSoakDurationEnv = "KMS_LOAD_SOAK_DURATION"
-	kmsLoadSoakWorkersEnv  = "KMS_LOAD_SOAK_WORKERS"
-	kmsLoadSoakMaxP95Env   = "KMS_LOAD_SOAK_MAX_P95"
-	kmsLoadSoakMinOpsEnv   = "KMS_LOAD_SOAK_MIN_OPS"
+	kmsLoadSoakDurationEnv    = "KMS_LOAD_SOAK_DURATION"
+	kmsLoadSoakWorkersEnv     = "KMS_LOAD_SOAK_WORKERS"
+	kmsLoadSoakMaxP95Env      = "KMS_LOAD_SOAK_MAX_P95"
+	kmsLoadSoakMinOpsEnv      = "KMS_LOAD_SOAK_MIN_OPS"
+	kmsDecryptSoakDurationEnv = "KMS_DECRYPT_SOAK_DURATION"
+	kmsDecryptSoakWorkersEnv  = "KMS_DECRYPT_SOAK_WORKERS"
+	kmsDecryptSoakMaxP95Env   = "KMS_DECRYPT_SOAK_MAX_P95"
+	kmsDecryptSoakMinOpsEnv   = "KMS_DECRYPT_SOAK_MIN_OPS"
+	kmsDecryptSoakSamplesEnv  = "KMS_DECRYPT_SOAK_SAMPLES"
 
 	loadSoakMemoryGrowthLimit = uint64(128 * 1024 * 1024)
 	loadSoakPIDGrowthLimit    = 16
@@ -45,6 +50,31 @@ func TestProviderLoadSoakE2E(t *testing.T) {
 		kmsLoadSoakWorkersEnv + "=4",
 		kmsLoadSoakMaxP95Env + "=2s",
 		kmsLoadSoakMinOpsEnv + "=60",
+	})
+	time.Sleep(2 * time.Second)
+	after := readProviderResourceSnapshot(t, ctx, stack.dockerPath, stack.providerName)
+	assertProviderResourceGrowth(t, before, after)
+}
+
+func TestProviderDecryptSoakE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
+	defer cancel()
+
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-decrypt-soak", providerFailureStackOptions{
+		Config: providerContainerConfigOptions{
+			ProbeInterval:      "1s",
+			DeepProbeInterval:  "5s",
+			StatusMaxStaleness: "15s",
+		},
+	})
+	before := readProviderResourceSnapshot(t, ctx, stack.dockerPath, stack.providerName)
+
+	stack.runClientWithEnv(ctx, "decrypt-soak-client", kmsClientModeDecryptSoak, sampleNotMounted, []string{
+		kmsDecryptSoakDurationEnv + "=30s",
+		kmsDecryptSoakWorkersEnv + "=8",
+		kmsDecryptSoakMaxP95Env + "=2s",
+		kmsDecryptSoakMinOpsEnv + "=500",
+		kmsDecryptSoakSamplesEnv + "=128",
 	})
 	time.Sleep(2 * time.Second)
 	after := readProviderResourceSnapshot(t, ctx, stack.dockerPath, stack.providerName)

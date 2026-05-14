@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"slices"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/aad"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -37,15 +37,19 @@ const (
 	messageKeyIDMalformed              = "key_id malformed"
 	messageKeyIDUnknown                = "key_id unknown"
 	messagePlaintextRequired           = "plaintext is required"
+	messageRequestLimitExceeded        = "kms request exceeds protocol limits"
 	messageRequestCanceled             = "request canceled"
 	messageRequestTimedOut             = "request timed out"
+	messageResponseLimitExceeded       = "kms response exceeds protocol limits"
 	messageStatusKeyIDMismatch         = "status key_id mismatch"
 	messageStatusUnavailable           = "status unavailable"
 	messageStatusUnhealthy             = "status unhealthy"
 	messageTransitAuthenticationFailed = "transit authentication failed"
+	messageTransitDecryptFailed        = "transit decrypt failed"
 	messageTransitKeyNotFound          = "transit key not found"
 	messageTransitOperationFailed      = "transit operation failed"
 	messageTransitPermissionDenied     = "transit permission denied"
+	messageTransitRateLimited          = "transit rate limited"
 	messageTransitUnavailable          = "transit unavailable"
 
 	messageConfigPluginVersionRequired     = "plugin version is required"
@@ -72,6 +76,12 @@ var (
 	ErrCiphertextRequired = errors.New("ciphertext required")
 	// ErrTransitInvalidResponse identifies a malformed Transit response.
 	ErrTransitInvalidResponse = errors.New("transit response invalid")
+	// ErrRequestLimitExceeded identifies KMS request fields outside Kubernetes KMS v2 bounds.
+	ErrRequestLimitExceeded = errors.New("kms request exceeds protocol limits")
+	// ErrResponseLimitExceeded identifies KMS response fields outside Kubernetes KMS v2 bounds.
+	ErrResponseLimitExceeded = errors.New("kms response exceeds protocol limits")
+	// ErrPanicRecovered identifies a recovered panic inside a KMS v2 request handler.
+	ErrPanicRecovered = errors.New("kms panic recovered")
 )
 
 // StatusCache exposes the cached Status view maintained by the status workstream.
@@ -184,9 +194,12 @@ func (s *Server) Status(ctx context.Context, _ *kmsapi.StatusRequest) (response 
 		}
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
-	cached, err := s.statusCache.Current(ctx)
+	requestCtx, cancel := s.requestContext(ctx)
+	defer cancel()
+
+	cached, err := s.statusCache.Current(requestCtx)
 	if err != nil {
 		if contextError(err) {
 			return nil, rpcError(err)
@@ -213,7 +226,7 @@ func (s *Server) Encrypt(
 	defer func() {
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
 	if request == nil || len(request.GetPlaintext()) == 0 {
 		return nil, rpcError(ErrPlaintextRequired)
@@ -247,7 +260,7 @@ func (s *Server) Encrypt(
 		KeyVersion:     active.TransitVersion,
 	})
 	if err != nil {
-		observation.ErrorClass = errorClass(transitRPCError(err))
+		observation.ErrorClass = transitErrorClass(err)
 		return nil, transitRPCError(err)
 	}
 	if len(encrypted.Ciphertext) == 0 {
@@ -259,11 +272,16 @@ func (s *Server) Encrypt(
 		return nil, rpcError(ErrTransitInvalidResponse)
 	}
 
-	return &kmsapi.EncryptResponse{
+	response = &kmsapi.EncryptResponse{
 		Ciphertext:  slices.Clone(encrypted.Ciphertext),
 		KeyId:       keyID,
 		Annotations: annotationsToProto(annotations),
-	}, nil
+	}
+	if err := validateEncryptResponseLimits(response); err != nil {
+		observation.ErrorClass = errorClass(err)
+		return nil, rpcError(err)
+	}
+	return response, nil
 }
 
 // Decrypt validates key_id and annotations before calling Transit decrypt.
@@ -284,10 +302,14 @@ func (s *Server) Decrypt(
 	defer func() {
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
 	if request == nil || len(request.GetCiphertext()) == 0 {
 		return nil, rpcError(ErrCiphertextRequired)
+	}
+	if err := validateDecryptRequestLimits(request); err != nil {
+		observation.ErrorClass = errorClass(err)
+		return nil, rpcError(err)
 	}
 
 	requestCtx, cancel := s.requestContext(ctx)
@@ -313,7 +335,7 @@ func (s *Server) Decrypt(
 		AssociatedData: prepared.Canonical,
 	})
 	if err != nil {
-		observation.ErrorClass = errorClass(transitRPCError(err))
+		observation.ErrorClass = transitErrorClass(err)
 		return nil, transitRPCError(err)
 	}
 
@@ -387,18 +409,23 @@ func annotationsToProto(annotations map[string]string) map[string][]byte {
 }
 
 func annotationsFromProto(annotations map[string][]byte) (map[string]string, error) {
+	if err := validateAnnotationsProtoLimits(annotations, ErrRequestLimitExceeded); err != nil {
+		return nil, err
+	}
 	decoded := make(map[string]string, len(annotations))
 	for key, value := range annotations {
-		if !utf8.ValidString(key) || !utf8.Valid(value) {
-			return nil, fmt.Errorf("%w: %s", aad.ErrInvalidAnnotations, messageAnnotationEncodingInvalid)
-		}
 		decoded[key] = string(value)
 	}
 	return decoded, nil
 }
 
-func recoverRPC(err *error) {
+func recoverRPC(err *error, observation *RequestObservation) {
 	if recovered := recover(); recovered != nil {
+		if observation != nil {
+			observation.ErrorClass = errorClass(ErrPanicRecovered)
+			observation.PanicRecovered = true
+			observation.PanicType = fmt.Sprintf("%T", recovered)
+		}
 		*err = grpcstatus.Error(codes.Internal, messageKMSRequestFailed)
 	}
 }
@@ -413,10 +440,13 @@ func rpcError(err error) error {
 	switch {
 	case errors.Is(err, ErrPlaintextRequired),
 		errors.Is(err, ErrCiphertextRequired),
+		errors.Is(err, ErrRequestLimitExceeded),
 		errors.Is(err, keyregistry.ErrMalformedKeyID),
 		errors.Is(err, aad.ErrInvalidAnnotations),
 		errors.Is(err, aad.ErrAnnotationMismatch):
 		return grpcstatus.Error(codes.InvalidArgument, safeMessage(err))
+	case errors.Is(err, ErrResponseLimitExceeded):
+		return grpcstatus.Error(codes.Internal, safeMessage(err))
 	case errors.Is(err, keyregistry.ErrUnknownKeyID):
 		return grpcstatus.Error(codes.NotFound, safeMessage(err))
 	case errors.Is(err, ErrStatusUnavailable),
@@ -441,7 +471,75 @@ func transitRPCError(err error) error {
 	if code != codes.Unknown {
 		return grpcstatus.Error(code, safeCodeMessage(code))
 	}
+	var openBaoErr *openbao.Error
+	if errors.As(err, &openBaoErr) {
+		code = openBaoRPCCode(openBaoErr.Class)
+		return grpcstatus.Error(code, safeCodeMessage(code))
+	}
 	return grpcstatus.Error(codes.Unavailable, messageTransitOperationFailed)
+}
+
+func transitErrorClass(err error) string {
+	if err == nil {
+		return ""
+	}
+	if class := contextErrorClass(err); class != "" {
+		return class
+	}
+	var openBaoErr *openbao.Error
+	if errors.As(err, &openBaoErr) {
+		return openBaoKMSClass(openBaoErr.Class)
+	}
+	code := grpcstatus.Code(err)
+	if code == codes.Unknown {
+		return errorClassOpenBaoUnavailable
+	}
+	if class, ok := grpcErrorClasses[code]; ok {
+		return class
+	}
+	return errorClassUnknown
+}
+
+func openBaoRPCCode(class openbao.ErrorClass) codes.Code {
+	switch class {
+	case openbao.ErrorClassUnauthenticated:
+		return codes.Unauthenticated
+	case openbao.ErrorClassPermissionDenied:
+		return codes.PermissionDenied
+	case openbao.ErrorClassNotFound:
+		return codes.NotFound
+	case openbao.ErrorClassDecryptFailed,
+		openbao.ErrorClassInvalidRequest:
+		return codes.InvalidArgument
+	case openbao.ErrorClassRateLimited:
+		return codes.ResourceExhausted
+	case openbao.ErrorClassSealed,
+		openbao.ErrorClassUnavailable:
+		return codes.Unavailable
+	default:
+		return codes.Unavailable
+	}
+}
+
+func openBaoKMSClass(class openbao.ErrorClass) string {
+	switch class {
+	case openbao.ErrorClassUnauthenticated:
+		return errorClassAuthFailed
+	case openbao.ErrorClassPermissionDenied:
+		return errorClassTransitPolicyDenied
+	case openbao.ErrorClassNotFound:
+		return errorClassTransitKeyMissing
+	case openbao.ErrorClassDecryptFailed:
+		return errorClassAADMismatched
+	case openbao.ErrorClassRateLimited:
+		return errorClassOpenBaoRateLimited
+	case openbao.ErrorClassSealed:
+		return errorClassOpenBaoSealed
+	case openbao.ErrorClassUnavailable:
+		return errorClassOpenBaoUnavailable
+	default:
+		return errorClassUnknown
+	}
 }
 
 func contextError(err error) bool {
@@ -461,6 +559,10 @@ func safeMessage(err error) string {
 		return messagePlaintextRequired
 	case errors.Is(err, ErrCiphertextRequired):
 		return messageCiphertextRequired
+	case errors.Is(err, ErrRequestLimitExceeded):
+		return messageRequestLimitExceeded
+	case errors.Is(err, ErrResponseLimitExceeded):
+		return messageResponseLimitExceeded
 	case errors.Is(err, keyregistry.ErrMalformedKeyID):
 		return messageKeyIDMalformed
 	case errors.Is(err, keyregistry.ErrUnknownKeyID):
@@ -471,6 +573,8 @@ func safeMessage(err error) string {
 		return messageAnnotationsMismatch
 	case errors.Is(err, aad.ErrAADRequired):
 		return messageAADRequired
+	case errors.Is(err, ErrPanicRecovered):
+		return messageKMSRequestFailed
 	case errors.Is(err, ErrStatusUnavailable):
 		return messageStatusUnavailable
 	case errors.Is(err, ErrStatusUnhealthy):
@@ -496,6 +600,10 @@ func safeCodeMessage(code codes.Code) string {
 		return messageTransitAuthenticationFailed
 	case codes.NotFound:
 		return messageTransitKeyNotFound
+	case codes.InvalidArgument:
+		return messageTransitDecryptFailed
+	case codes.ResourceExhausted:
+		return messageTransitRateLimited
 	case codes.Unavailable:
 		return messageTransitUnavailable
 	default:

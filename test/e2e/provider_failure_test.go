@@ -27,13 +27,14 @@ const (
 	kmsClientModeReadSample              = "read-sample"
 	kmsClientModeExpectOutage            = "expect-outage"
 	kmsClientModeExpectUnhealthy         = "expect-unhealthy"
-	kmsClientModeExpectTransitFailure    = "expect-transit-failure"
+	kmsClientModeExpectPolicyDenied      = "expect-policy-denied"
 	kmsClientModeExpectSocketUnavailable = "expect-socket-unavailable"
 	kmsClientModeExpectStatusStaleness   = "expect-status-staleness"
 	kmsClientModeExpectJWTRefresh        = "expect-jwt-refresh"
 	kmsClientModeExpectRotationPromotion = "expect-rotation-promotion"
 	kmsClientModeExpectRotationRollback  = "expect-rotation-rollback"
 	kmsClientModeDecryptStorm            = "decrypt-storm"
+	kmsClientModeDecryptSoak             = "decrypt-soak"
 	kmsClientModeLoadSoak                = "load-soak"
 	kmsClientSampleMount                 = "/kms-sample"
 	missingTransitKeyName                = "missing-kms-e2e-key"
@@ -74,14 +75,18 @@ func TestProviderBadPolicyFailsClosedE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
 	defer cancel()
 
-	stack := startProviderFailureStack(t, ctx, "obk-e2e-policy", providerFailureStackOptions{})
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-policy", providerFailureStackOptions{
+		Config: providerContainerConfigOptions{
+			DeepProbeInterval: "10m",
+		},
+	})
 	stack.runClient(ctx, "write-client", kmsClientModeWriteSample, sampleReadWrite)
 
 	if err := stack.environment.InstallProviderPolicy(ctx, stack.environment.MetadataOnlyProviderPolicy()); err != nil {
 		t.Fatalf("install reduced OpenBao provider policy: %v", err)
 	}
 
-	stack.runClient(ctx, "policy-client", kmsClientModeExpectTransitFailure, sampleReadOnly)
+	stack.runClient(ctx, "policy-client", kmsClientModeExpectPolicyDenied, sampleReadOnly)
 }
 
 func TestProviderExpiredJWTFailsClosedE2E(t *testing.T) {
@@ -98,6 +103,25 @@ func TestProviderExpiredJWTFailsClosedE2E(t *testing.T) {
 	})
 
 	stack.runClient(ctx, "expired-jwt-client", kmsClientModeExpectSocketUnavailable, sampleNotMounted)
+}
+
+func TestProviderJWTExpectedClaimDriftFailsClosedE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
+	defer cancel()
+
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-jwt-claim-drift", providerFailureStackOptions{
+		Config: providerContainerConfigOptions{
+			ExpectedSubject: "system:serviceaccount:unexpected:provider",
+		},
+	})
+
+	stack.runClient(ctx, "jwt-claim-drift-client", kmsClientModeExpectSocketUnavailable, sampleNotMounted)
+	stack.assertProviderLogsDoNotContain(
+		ctx,
+		stack.environment.JWTIssuer(),
+		stack.environment.JWTAudience(),
+		stack.environment.JWTSubject(),
+	)
 }
 
 func TestProviderJWTFileRotationE2E(t *testing.T) {
@@ -217,6 +241,8 @@ type providerFailureStackOptions struct {
 	ProviderImage       string
 	Config              providerContainerConfigOptions
 	Environment         framework.OpenBaoEnvironmentConfig
+	MountSoftHSM        bool
+	ProviderStart       providerContainerStartOptions
 	BeforePopulate      func(t *testing.T, environment *framework.OpenBaoEnvironment, stagingDir string)
 	BeforeProviderStart func(t *testing.T, ctx context.Context, stack *providerFailureStack)
 }
@@ -232,6 +258,7 @@ type providerFailureStack struct {
 	sampleVolume  string
 	volumes       providerVolumes
 	environment   *framework.OpenBaoEnvironment
+	providerStart providerContainerStartOptions
 }
 
 type sampleMountMode string
@@ -266,6 +293,12 @@ func startProviderFailureStack(
 		run:    prefix + "-run",
 		state:  prefix + "-state",
 	}
+	providerStart := opts.ProviderStart
+	if opts.MountSoftHSM {
+		volumes.hsm = prefix + "-hsm"
+		providerStart.Env = append(providerStart.Env, "SOFTHSM2_CONF="+containerSoftHSMConfigPath)
+		providerStart.Volumes = append(providerStart.Volumes, volumes.hsm+":/hsm")
+	}
 	stack := &providerFailureStack{
 		t:             t,
 		dockerPath:    dockerPath,
@@ -275,6 +308,7 @@ func startProviderFailureStack(
 		providerName:  providerName,
 		sampleVolume:  sampleVolume,
 		volumes:       volumes,
+		providerStart: providerStart,
 	}
 	var providerStarted bool
 	t.Cleanup(func() {
@@ -327,7 +361,7 @@ func startProviderFailureStack(
 		opts.BeforeProviderStart(t, ctx, stack)
 	}
 
-	startProviderContainer(t, ctx, dockerPath, providerName, networkName, providerImage, volumes)
+	startProviderContainerWithOptions(t, ctx, dockerPath, providerName, networkName, providerImage, volumes, stack.providerStart)
 	providerStarted = true
 	return stack
 }
@@ -405,8 +439,64 @@ func (s *providerFailureStack) restartProvider(ctx context.Context, image string
 		s.t.Fatal("provider restart image is empty")
 	}
 	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
-	startProviderContainer(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes)
+	startProviderContainerWithOptions(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes, s.providerStart)
 	s.providerImage = image
+}
+
+func (s *providerFailureStack) restartProviderWithEmptyState(ctx context.Context, image string) {
+	s.t.Helper()
+	if image == "" {
+		s.t.Fatal("provider restart image is empty")
+	}
+	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
+	s.clearProviderState(ctx)
+	startProviderContainerWithOptions(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes, s.providerStart)
+	s.providerImage = image
+}
+
+func (s *providerFailureStack) clearProviderState(ctx context.Context) {
+	s.t.Helper()
+
+	script := `set -eu
+rm -f /var/lib/openbao-kms/state/*
+chown -R 65532:65532 /var/lib/openbao-kms/state
+chmod 0700 /var/lib/openbao-kms/state
+`
+	runDocker(s.t, ctx, s.dockerPath,
+		"run", "--rm",
+		"--entrypoint", "/bin/sh",
+		"--volume", s.volumes.state+":/var/lib/openbao-kms/state",
+		s.openBaoImage,
+		"-c", script,
+	)
+}
+
+func (s *providerFailureStack) removeProviderStateFile(ctx context.Context) {
+	s.t.Helper()
+
+	script := `set -eu
+rm -f /var/lib/openbao-kms/state/key-registry.json
+chown -R 65532:65532 /var/lib/openbao-kms/state
+chmod 0700 /var/lib/openbao-kms/state
+`
+	runDocker(s.t, ctx, s.dockerPath,
+		"run", "--rm",
+		"--entrypoint", "/bin/sh",
+		"--volume", s.volumes.state+":/var/lib/openbao-kms/state",
+		s.openBaoImage,
+		"-c", script,
+	)
+}
+
+func (s *providerFailureStack) assertProviderLogsDoNotContain(ctx context.Context, values ...string) {
+	s.t.Helper()
+
+	logs := dockerLogs(ctx, s.dockerPath, s.providerName)
+	for _, value := range values {
+		if value != "" && strings.Contains(logs, value) {
+			s.t.Fatalf("provider logs contain sensitive JWT claim value %q:\n%s", value, logs)
+		}
+	}
 }
 
 func (s *providerFailureStack) runClientWithEnv(
@@ -504,5 +594,8 @@ func runKMSClientContainer(
 	if err != nil {
 		logs := dockerLogs(context.Background(), dockerPath, providerName)
 		t.Fatalf("run KMS client container %s: %v: %s\nprovider logs:\n%s", clientName, err, strings.TrimSpace(output), logs)
+	}
+	if trimmed := strings.TrimSpace(output); trimmed != "" {
+		t.Logf("KMS client container %s output: %s", clientName, trimmed)
 	}
 }

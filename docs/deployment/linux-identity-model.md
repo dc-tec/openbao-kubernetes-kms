@@ -6,14 +6,14 @@ weight: 40
 
 # Linux Identity Model
 
-This page captures the user, group, and file ownership model that both supported deployment styles use. The model is shared between systemd and static-pod deployments because the API server must be able to connect to the socket without being able to read the provider JWT.
+This page captures the user, group, file ownership, and runtime directory model shared by systemd and static-pod deployments. The API server must be able to connect to the provider socket. It must not gain access to provider auth material or writable provider state through that socket access path.
 
 ## Goals
 
 - Run the provider as a non-root user.
-- Let the provider read its configuration and JWT.
+- Let the provider read its configuration and selected auth material.
 - Let `kube-apiserver` connect to the Unix socket.
-- Avoid giving `kube-apiserver` access to the provider JWT.
+- Avoid giving `kube-apiserver` access to provider auth material.
 - Avoid making the provider primary group equal to the `kube-apiserver` group.
 - Keep the model workable for kubeadm static-pod API servers and host-service API servers.
 
@@ -25,6 +25,8 @@ group:        openbao-kms
 socket group: openbao-kms-socket
 ```
 
+Package installs create these identities through `sysusers.d` where available. Host images without `sysusers.d` support should create equivalent system users and groups during image build or configuration management.
+
 Permissions:
 
 ```text
@@ -32,10 +34,21 @@ Permissions:
 /etc/openbao-kms/tls/ca.crt         root:root                       0644
 /var/lib/openbao-kms                openbao-kms:openbao-kms         0750
 /var/lib/openbao-kms/identity.jwt   root:openbao-kms                0640
+/etc/openbao-kms/client/client-chain.pem root:openbao-kms           0640
+/etc/openbao-kms/pkcs11/pin         root:openbao-kms                0640
 /var/lib/openbao-kms/state          openbao-kms:openbao-kms         0750
 /run/openbao-kms                    openbao-kms:openbao-kms-socket  2750
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
 ```
+
+Access matrix:
+
+| Actor | Required access | Must not have |
+|---|---|---|
+| `bao-kms-provider` process | read config, CA, selected auth material; write local registry state; create and own `kms.sock` | broad host write access or Linux capabilities |
+| `kube-apiserver` process | connect to `/run/openbao-kms/kms.sock` | read access to provider auth material |
+| OpenBao administrator | manage Transit key, policy, and provider auth | access to Kubernetes etcd plaintext through this model |
+| package manager or host automation | create users, groups, directories, unit files, and examples | runtime access to provider token material after rollout |
 
 systemd service:
 
@@ -54,6 +67,14 @@ Static pod mode uses the numeric host GID for `openbao-kms-socket` in both:
 
 This avoids depending on host group names being present inside the distroless non-root image.
 
+For static pods, use the numeric GID from the host:
+
+```sh
+getent group openbao-kms-socket
+```
+
+The third field in the output is the value used in both the pod manifest and static-pod provider configuration.
+
 ## Runtime Directory Creation
 
 `RuntimeDirectory=` alone may create `/run/openbao-kms` with the service primary group rather than the socket access group. Packaging should prefer one of:
@@ -64,13 +85,23 @@ This avoids depending on host group names being present inside the distroless no
 
 The provider validates the directory at startup and fails closed if it is unsafe.
 
+The mode `2750` is intentional:
+
+- owner `openbao-kms` can create and remove the socket,
+- group `openbao-kms-socket` can traverse the directory,
+- the setgid bit keeps the socket group stable,
+- the group cannot replace arbitrary files in the directory because group write is absent,
+- world access is absent.
+
+The socket itself is `0660`, so members of `openbao-kms-socket` can connect to the provider without receiving access to auth material or registry state.
+
 ## Tradeoffs
 
 ### Separate Socket Group
 
 Pros:
 
-- `kube-apiserver` gets socket access without JWT access,
+- `kube-apiserver` gets socket access without auth-material access,
 - `kube-apiserver` can connect without being able to replace the socket path,
 - the provider keeps a private primary group,
 - the model works with non-root `kube-apiserver` services,
@@ -110,4 +141,4 @@ Cons:
 
 ## Decision
 
-The separate socket group is the default packaging model. Distribution packaging may choose different names, but it must preserve the same privilege split: provider JWT access is separate from `kube-apiserver` socket access.
+The separate socket group is the default packaging model. Distribution packaging may choose different names, but it must preserve the same privilege split: provider auth-material access is separate from `kube-apiserver` socket access.

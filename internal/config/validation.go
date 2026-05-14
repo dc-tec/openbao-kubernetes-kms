@@ -20,10 +20,18 @@ const (
 
 	configFileDisallowedMode = os.FileMode(0o037)
 	jwtFileDisallowedMode    = os.FileMode(0o037)
+	certFileDisallowedMode   = os.FileMode(0o037)
+	pinFileDisallowedMode    = os.FileMode(0o037)
 	caFileDisallowedMode     = os.FileMode(0o022)
 	socketDisallowedMode     = os.FileMode(0o117)
 	maxDebugCorrelationTTL   = time.Hour
 	maxIncidentIDLength      = 64
+
+	authMethodJWT  = "jwt"
+	authMethodCert = "cert"
+
+	certSourcePKCS11 = "pkcs11"
+	certSourceSPIFFE = "spiffe"
 )
 
 var (
@@ -108,6 +116,7 @@ func IdentityFingerprint(cfg Config) (string, error) {
 		ProviderName:      cfg.Transit.KeyIDScope.ProviderName,
 		ClusterID:         cfg.Transit.KeyIDScope.ClusterID,
 		OpenBaoInstanceID: cfg.OpenBao.InstanceID,
+		OpenBaoNamespace:  cfg.OpenBao.Namespace,
 		TransitMountID:    cfg.Transit.KeyIDScope.TransitMountID,
 		KeyLineageID:      cfg.Transit.KeyIDScope.KeyLineageID,
 		TransitMountPath:  cfg.Transit.MountPath,
@@ -139,6 +148,7 @@ type configIdentityMaterial struct {
 	ProviderName      string `json:"provider_name"`
 	ClusterID         string `json:"cluster_id"`
 	OpenBaoInstanceID string `json:"openbao_instance_id"`
+	OpenBaoNamespace  string `json:"openbao_namespace,omitempty"`
 	TransitMountID    string `json:"transit_mount_id"`
 	KeyLineageID      string `json:"key_lineage_id"`
 	TransitMountPath  string `json:"transit_mount_path"`
@@ -155,9 +165,7 @@ func validateRequired(cfg Config) []ValidationProblem {
 	appendRequired(&problems, "openbao.tlsServerName", cfg.OpenBao.TLSServerName)
 	appendRequired(&problems, "openbao.instanceId", cfg.OpenBao.InstanceID)
 	appendRequired(&problems, "auth.method", cfg.Auth.Method)
-	appendRequired(&problems, "auth.mountPath", cfg.Auth.MountPath)
-	appendRequired(&problems, "auth.role", cfg.Auth.Role)
-	appendRequired(&problems, "auth.jwtFile", cfg.Auth.JWTFile)
+	appendAuthRequired(&problems, cfg.Auth)
 	appendRequired(&problems, "transit.mountPath", cfg.Transit.MountPath)
 	appendRequired(&problems, "transit.keyName", cfg.Transit.KeyName)
 	appendRequired(&problems, "transit.keyIdScope.providerName", cfg.Transit.KeyIDScope.ProviderName)
@@ -167,6 +175,35 @@ func validateRequired(cfg Config) []ValidationProblem {
 	return problems
 }
 
+func appendAuthRequired(problems *[]ValidationProblem, auth AuthConfig) {
+	switch auth.Method {
+	case authMethodJWT:
+		appendRequired(problems, "auth.jwt.mountPath", auth.JWT.MountPath)
+		appendRequired(problems, "auth.jwt.role", auth.JWT.Role)
+		appendRequired(problems, "auth.jwt.jwtFile", auth.JWT.JWTFile)
+	case authMethodCert:
+		appendRequired(problems, "auth.cert.mountPath", auth.Cert.MountPath)
+		appendRequired(problems, "auth.cert.source", auth.Cert.Source)
+		appendCertSourceRequired(problems, auth.Cert)
+	}
+}
+
+func appendCertSourceRequired(problems *[]ValidationProblem, cert CertAuthConfig) {
+	switch cert.Source {
+	case certSourcePKCS11:
+		appendRequired(problems, "auth.cert.pkcs11.certificateFile", cert.PKCS11.CertificateFile)
+		appendRequired(problems, "auth.cert.pkcs11.modulePath", cert.PKCS11.ModulePath)
+		appendRequired(problems, "auth.cert.pkcs11.tokenLabel", cert.PKCS11.TokenLabel)
+		appendRequired(problems, "auth.cert.pkcs11.keyLabel", cert.PKCS11.KeyLabel)
+		appendRequired(problems, "auth.cert.pkcs11.pinFile", cert.PKCS11.PINFile)
+	case certSourceSPIFFE:
+		if unsupportedSPIFFECertAuthAllowed {
+			appendRequired(problems, "auth.cert.spiffe.workloadAPISocket", cert.SPIFFE.WorkloadAPISocket)
+			appendRequired(problems, "auth.cert.spiffe.spiffeID", cert.SPIFFE.SPIFFEID)
+		}
+	}
+}
+
 func validateValues(cfg Config) []ValidationProblem {
 	var problems []ValidationProblem
 
@@ -174,45 +211,22 @@ func validateValues(cfg Config) []ValidationProblem {
 		appendProblem(&problems, "configVersion", "must be v1alpha1")
 	}
 	validateOpenBaoAddress(&problems, cfg.OpenBao.Address)
+	validateOpenBaoNamespace(&problems, cfg.OpenBao.Namespace)
 	validateAddress(&problems, "server.metricsAddress", cfg.Server.MetricsAddress)
 	validateAddress(&problems, "server.healthAddress", cfg.Server.HealthAddress)
-	if cfg.Server.AdminAddress != "" {
-		validateAddress(&problems, "server.adminAddress", cfg.Server.AdminAddress)
-	}
-	validateMountPath(&problems, "auth.mountPath", cfg.Auth.MountPath)
-	validateIdentifier(&problems, "auth.role", cfg.Auth.Role)
-	validateClaimExpectation(&problems, "auth.expectedIssuer", cfg.Auth.ExpectedIssuer)
-	validateClaimExpectation(&problems, "auth.expectedSubject", cfg.Auth.ExpectedSubject)
-	for _, audience := range cfg.Auth.ExpectedAudience {
-		if audience == "" {
-			appendProblem(&problems, "auth.expectedAudience", "must not contain empty values")
-			continue
-		}
-		validateClaimExpectation(&problems, "auth.expectedAudience", audience)
-	}
+	validateAuthValues(&problems, cfg.Auth)
 	validateMountPath(&problems, "transit.mountPath", cfg.Transit.MountPath)
-	validateIdentifier(&problems, "transit.keyName", cfg.Transit.KeyName)
+	validateTransitKeyName(&problems, cfg.Transit.KeyName)
 	validateIdentifier(&problems, "transit.keyIdScope.providerName", cfg.Transit.KeyIDScope.ProviderName)
 	validateIdentifier(&problems, "transit.keyIdScope.clusterId", cfg.Transit.KeyIDScope.ClusterID)
 	validateIdentifier(&problems, "transit.keyIdScope.transitMountId", cfg.Transit.KeyIDScope.TransitMountID)
 	validateIdentifier(&problems, "transit.keyIdScope.keyLineageId", cfg.Transit.KeyIDScope.KeyLineageID)
 	validateIdentifier(&problems, "openbao.instanceId", cfg.OpenBao.InstanceID)
 
-	if cfg.Auth.Method != defaultAuthMethod {
-		appendProblem(&problems, "auth.method", "only jwt is supported")
-	}
-	if cfg.Auth.TokenStorage != defaultTokenStorage {
-		appendProblem(&problems, "auth.tokenStorage", "only memory is supported")
-	}
-	if !cfg.Transit.UseAssociatedData {
-		appendProblem(&problems, "transit.useAssociatedData", "AAD is required for v0.1")
-	}
 	if cfg.Rotation.Mode != defaultRotationMode {
 		appendProblem(&problems, "rotation.mode", "only observed is supported")
 	}
 	validatePositiveDuration(&problems, "openbao.timeout", cfg.OpenBao.Timeout)
-	validatePositiveDuration(&problems, "auth.minJwtRemainingTtl", cfg.Auth.MinJWTRemainingTTL)
-	validateNonNegativeDuration(&problems, "auth.clockSkewLeeway", cfg.Auth.ClockSkewLeeway)
 	validatePositiveDuration(&problems, "auth.loginBeforeTokenExpiry", cfg.Auth.LoginBeforeTokenExpiry)
 	validatePositiveDuration(&problems, "auth.tokenRenewalIncrement", cfg.Auth.TokenRenewalIncrement)
 	validateNonNegativeDuration(&problems, "auth.loginTimeout", cfg.Auth.LoginTimeout)
@@ -223,16 +237,8 @@ func validateValues(cfg Config) []ValidationProblem {
 	validatePositiveDuration(&problems, "status.statusMaxStaleness", cfg.Status.StatusMaxStaleness)
 	validateAbsolutePath(&problems, "state.path", cfg.State.Path)
 	validatePositiveDuration(&problems, "rotation.activationDelay", cfg.Rotation.ActivationDelay)
-	validatePositiveDuration(
-		&problems,
-		"performance.decryptMicroBatching.maxWait",
-		cfg.Performance.DecryptMicroBatching.MaxWait,
-	)
 	if cfg.Rotation.RequireStableObservationCount <= 0 {
 		appendProblem(&problems, "rotation.requireStableObservationCount", "must be positive")
-	}
-	if cfg.Performance.DecryptMicroBatching.MaxBatchSize <= 0 {
-		appendProblem(&problems, "performance.decryptMicroBatching.maxBatchSize", "must be positive")
 	}
 	switch cfg.Logging.Level {
 	case "debug", "info", "warn", "error":
@@ -245,6 +251,81 @@ func validateValues(cfg Config) []ValidationProblem {
 	validateDebugCorrelation(&problems, cfg.Logging)
 
 	return problems
+}
+
+func validateAuthValues(problems *[]ValidationProblem, auth AuthConfig) {
+	switch auth.Method {
+	case authMethodJWT:
+		validateJWTAuthValues(problems, auth.JWT)
+	case authMethodCert:
+		validateCertAuthValues(problems, auth.Cert)
+	default:
+		if auth.Method != "" {
+			appendProblem(problems, "auth.method", "must be one of jwt or cert")
+		}
+	}
+}
+
+func validateJWTAuthValues(problems *[]ValidationProblem, jwt JWTAuthConfig) {
+	validateMountPath(problems, "auth.jwt.mountPath", jwt.MountPath)
+	validateIdentifier(problems, "auth.jwt.role", jwt.Role)
+	validateClaimExpectation(problems, "auth.jwt.expectedIssuer", jwt.ExpectedIssuer)
+	validateClaimExpectation(problems, "auth.jwt.expectedSubject", jwt.ExpectedSubject)
+	for _, audience := range jwt.ExpectedAudience {
+		if audience == "" {
+			appendProblem(problems, "auth.jwt.expectedAudience", "must not contain empty values")
+			continue
+		}
+		validateClaimExpectation(problems, "auth.jwt.expectedAudience", audience)
+	}
+	validatePositiveDuration(problems, "auth.jwt.minRemainingTtl", jwt.MinRemainingTTL)
+	validateNonNegativeDuration(problems, "auth.jwt.clockSkewLeeway", jwt.ClockSkewLeeway)
+}
+
+func validateCertAuthValues(problems *[]ValidationProblem, cert CertAuthConfig) {
+	validateMountPath(problems, "auth.cert.mountPath", cert.MountPath)
+	validateIdentifier(problems, "auth.cert.name", cert.Name)
+	validatePositiveDuration(problems, "auth.cert.minRemainingTtl", cert.MinRemainingTTL)
+	validateNonNegativeDuration(problems, "auth.cert.clockSkewLeeway", cert.ClockSkewLeeway)
+	switch cert.Source {
+	case certSourcePKCS11:
+		validatePKCS11AuthValues(problems, cert.PKCS11)
+	case certSourceSPIFFE:
+		if !unsupportedSPIFFECertAuthAllowed {
+			appendProblem(
+				problems,
+				"auth.cert.source",
+				"spiffe is unavailable until the supported OpenBao version can derive certificate identity aliases from URI SANs",
+			)
+			return
+		}
+		validateSPIFFEAuthValues(problems, cert.SPIFFE)
+	default:
+		if cert.Source != "" {
+			if unsupportedSPIFFECertAuthAllowed {
+				appendProblem(problems, "auth.cert.source", "must be one of pkcs11 or spiffe")
+			} else {
+				appendProblem(problems, "auth.cert.source", "must be pkcs11")
+			}
+		}
+	}
+}
+
+func validatePKCS11AuthValues(problems *[]ValidationProblem, pkcs11 PKCS11CertAuthConfig) {
+	validateAbsolutePath(problems, "auth.cert.pkcs11.certificateFile", pkcs11.CertificateFile)
+	validateAbsolutePath(problems, "auth.cert.pkcs11.modulePath", pkcs11.ModulePath)
+	validateIdentifier(problems, "auth.cert.pkcs11.tokenLabel", pkcs11.TokenLabel)
+	validateIdentifier(problems, "auth.cert.pkcs11.keyLabel", pkcs11.KeyLabel)
+	validateAbsolutePath(problems, "auth.cert.pkcs11.pinFile", pkcs11.PINFile)
+	if pkcs11.MaxSessions < 2 {
+		appendProblem(problems, "auth.cert.pkcs11.maxSessions", "must be at least 2")
+	}
+}
+
+func validateSPIFFEAuthValues(problems *[]ValidationProblem, spiffe SPIFFECertAuthConfig) {
+	validateWorkloadAPISocket(problems, spiffe.WorkloadAPISocket)
+	validateSPIFFEID(problems, spiffe.SPIFFEID, spiffe.TrustDomain)
+	validateTrustDomain(problems, spiffe.TrustDomain)
 }
 
 func validateDebugCorrelation(problems *[]ValidationProblem, logging LoggingConfig) {
@@ -317,7 +398,25 @@ func validateFilesystem(cfg Config, opts ValidationOptions) []ValidationProblem 
 		validateRegularFile(&problems, "config", opts.ConfigFilePath, configFileDisallowedMode)
 	}
 	validateRegularFile(&problems, "openbao.caCertFile", cfg.OpenBao.CACertFile, caFileDisallowedMode)
-	validateRegularFile(&problems, "auth.jwtFile", cfg.Auth.JWTFile, jwtFileDisallowedMode)
+	switch cfg.Auth.Method {
+	case authMethodJWT:
+		validateRegularFile(&problems, "auth.jwt.jwtFile", cfg.Auth.JWT.JWTFile, jwtFileDisallowedMode)
+	case authMethodCert:
+		if cfg.Auth.Cert.Source == certSourcePKCS11 {
+			validateRegularFile(
+				&problems,
+				"auth.cert.pkcs11.certificateFile",
+				cfg.Auth.Cert.PKCS11.CertificateFile,
+				certFileDisallowedMode,
+			)
+			validateRegularFile(
+				&problems,
+				"auth.cert.pkcs11.pinFile",
+				cfg.Auth.Cert.PKCS11.PINFile,
+				pinFileDisallowedMode,
+			)
+		}
+	}
 	validateSocketParent(&problems, cfg.Server.SocketPath)
 	validateSocketTarget(&problems, cfg.Server.SocketPath)
 	return problems
@@ -374,6 +473,26 @@ func validateMountPath(problems *[]ValidationProblem, field string, value string
 	}
 }
 
+func validateOpenBaoNamespace(problems *[]ValidationProblem, value string) {
+	if value == "" {
+		return
+	}
+	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t") {
+		appendProblem(problems, "openbao.namespace", "must not contain control characters or surrounding whitespace")
+		return
+	}
+	if strings.HasPrefix(value, "/") || strings.Contains(value, "//") || strings.Contains(value, "%") {
+		appendProblem(problems, "openbao.namespace", "must be a relative OpenBao namespace path without percent encoding")
+		return
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "." || segment == ".." || segment == "" {
+			appendProblem(problems, "openbao.namespace", "must not contain empty, dot, or dot-dot path segments")
+			return
+		}
+	}
+}
+
 func validateIdentifier(problems *[]ValidationProblem, field string, value string) {
 	if value == "" {
 		return
@@ -383,12 +502,71 @@ func validateIdentifier(problems *[]ValidationProblem, field string, value strin
 	}
 }
 
+func validateTransitKeyName(problems *[]ValidationProblem, value string) {
+	validateIdentifier(problems, "transit.keyName", value)
+	if value == "" {
+		return
+	}
+	if strings.ContainsAny(value, "/%") {
+		appendProblem(problems, "transit.keyName", "must be a single OpenBao path segment without / or %")
+	}
+}
+
 func validateClaimExpectation(problems *[]ValidationProblem, field string, value string) {
 	if value == "" {
 		return
 	}
 	if strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n\t") {
 		appendProblem(problems, field, "must not contain control characters or surrounding whitespace")
+	}
+}
+
+func validateWorkloadAPISocket(problems *[]ValidationProblem, value string) {
+	if value == "" {
+		return
+	}
+	parsed, err := url.Parse(value)
+	if err != nil ||
+		parsed.Scheme != "unix" ||
+		parsed.Host != "" ||
+		parsed.RawQuery != "" ||
+		parsed.Fragment != "" ||
+		!filepath.IsAbs(parsed.Path) {
+		appendProblem(problems, "auth.cert.spiffe.workloadAPISocket", "must be a unix:// URI with an absolute socket path")
+	}
+}
+
+func validateSPIFFEID(problems *[]ValidationProblem, value string, trustDomain string) {
+	if value == "" {
+		return
+	}
+	parsed, err := url.Parse(value)
+	if err != nil ||
+		parsed.Scheme != certSourceSPIFFE ||
+		parsed.Host == "" ||
+		parsed.RawQuery != "" ||
+		parsed.Fragment != "" ||
+		parsed.User != nil ||
+		parsed.Path == "" {
+		appendProblem(problems, "auth.cert.spiffe.spiffeID", "must be a spiffe:// URI with a trust domain and path")
+		return
+	}
+	if trustDomain != "" && parsed.Host != trustDomain {
+		appendProblem(problems, "auth.cert.spiffe.trustDomain", "must match auth.cert.spiffe.spiffeID trust domain")
+	}
+}
+
+func validateTrustDomain(problems *[]ValidationProblem, value string) {
+	if value == "" {
+		return
+	}
+	if strings.TrimSpace(value) != value ||
+		strings.ContainsAny(value, "\x00\r\n\t /:%") {
+		appendProblem(
+			problems,
+			"auth.cert.spiffe.trustDomain",
+			"must be a DNS-style trust domain without whitespace, slash, colon, or percent encoding",
+		)
 	}
 }
 

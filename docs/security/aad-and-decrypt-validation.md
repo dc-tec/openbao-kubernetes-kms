@@ -36,23 +36,20 @@ For the exact field-by-field validation steps see [Reference: Key ID And AAD](/r
 
 ## Compatibility Modes
 
-AAD compatibility modes exist to support migrations across deployments. They are explicit configuration choices with bounded blast radius.
-
 | Mode | Behavior | Acceptable use |
 |---|---|---|
-| `aad.required` | Encrypt and decrypt require valid AAD metadata. | The required v0.1 mode for new deployments. |
-| `aad.optional-read` | Encrypt with AAD; decrypt configured pre-AAD epochs without AAD. | Migration from pre-AAD deployments only. Bounded by explicit key epoch list. |
-| `aad.disabled` | Send no associated data. | Compatibility testing only. Not a v0.1 supported deployment mode. |
+| `aad.required` | Encrypt and decrypt require valid AAD metadata. | The required mode for new deployments. |
 
-For v0.1 production deployments, `aad.required` is the only supported mode. The other modes exist to reserve the compatibility surface for future migrations and are not active in v0.1.
+`aad.required` is the only supported mode. The provider does not expose a config
+switch to disable AAD, and state validation rejects non-required AAD modes.
 
 ## Compatibility-Mode Misuse
 
 Disabling AAD globally as an incident response is unsafe. Specifically:
 
-- Setting `transit.useAssociatedData: false` does not "fix" decrypt failures. It exposes the decrypt path to ciphertext that was not bound to the current cluster, key lineage, or provider name.
-- Switching to `aad.disabled` re-enables the cross-cluster replay class of threats that AAD prevents.
-- Enabling `aad.optional-read` without an explicit allowed-epoch list expands the trust boundary to all historical objects, including ones that may never have existed in this cluster.
+- bypassing AAD would expose the decrypt path to ciphertext that was not bound to the current cluster, key lineage, or provider name,
+- accepting an AAD-disabled state re-enables the cross-cluster replay class of threats that AAD prevents,
+- future compatibility read modes must require explicit retained historical state before they are introduced.
 
 If decrypt is failing during an incident, follow [Operations: Troubleshooting: AAD Mismatch](/operations/troubleshooting/#aad-mismatch) instead of disabling AAD.
 

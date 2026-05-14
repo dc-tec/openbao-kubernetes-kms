@@ -8,9 +8,14 @@ import (
 )
 
 const (
-	rotationStateActive  = "active"
-	rotationStatePending = "pending"
-	rotationStateUnknown = "unknown"
+	rotationStateActive     = "active"
+	rotationStatePending    = "pending"
+	rotationStateUnknown    = "unknown"
+	authMethodJWT           = "jwt"
+	authMethodCert          = "cert"
+	certificateSourceNone   = "none"
+	certificateSourcePKCS11 = "pkcs11"
+	certificateSourceSPIFFE = "spiffe"
 )
 
 type diagnosticsCollector struct {
@@ -108,15 +113,37 @@ func (c *diagnosticsCollector) Collect(ch chan<- prometheus.Metric) {
 
 type authCollector struct {
 	provider AuthProvider
+	method   *prometheus.Desc
+	source   *prometheus.Desc
 	tokenTTL *prometheus.Desc
+	certTTL  *prometheus.Desc
 }
 
 func newAuthCollector(provider AuthProvider) *authCollector {
 	return &authCollector{
 		provider: provider,
+		method: prometheus.NewDesc(
+			"openbao_kms_auth_method_info",
+			"Configured bounded OpenBao auth method.",
+			[]string{labelMethod},
+			nil,
+		),
+		source: prometheus.NewDesc(
+			"openbao_kms_certificate_source_info",
+			"Configured bounded certificate auth source.",
+			[]string{labelSource},
+			nil,
+		),
 		tokenTTL: prometheus.NewDesc(
 			"openbao_kms_token_ttl_seconds",
 			"Remaining in-memory OpenBao token TTL.",
+			nil,
+			nil,
+		),
+		certTTL: prometheus.NewDesc(
+			"openbao_kms_certificate_ttl_seconds",
+			"Remaining cert-auth client certificate TTL. "+
+				"Zero when certificate auth is not in use or no certificate has been observed.",
 			nil,
 			nil,
 		),
@@ -124,15 +151,35 @@ func newAuthCollector(provider AuthProvider) *authCollector {
 }
 
 func (c *authCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.method
+	ch <- c.source
 	ch <- c.tokenTTL
+	ch <- c.certTTL
 }
 
 func (c *authCollector) Collect(ch chan<- prometheus.Metric) {
 	state := c.provider.State()
 	ch <- prometheus.MustNewConstMetric(
+		c.method,
+		prometheus.GaugeValue,
+		1,
+		authMethodLabel(state.AuthMethod),
+	)
+	ch <- prometheus.MustNewConstMetric(
+		c.source,
+		prometheus.GaugeValue,
+		1,
+		certificateSourceLabel(state.CertificateSource),
+	)
+	ch <- prometheus.MustNewConstMetric(
 		c.tokenTTL,
 		prometheus.GaugeValue,
 		nonNegativeSeconds(state.TokenTTL),
+	)
+	ch <- prometheus.MustNewConstMetric(
+		c.certTTL,
+		prometheus.GaugeValue,
+		nonNegativeSeconds(state.CertTTL),
 	)
 }
 
@@ -141,6 +188,32 @@ func nonNegativeSeconds(value time.Duration) float64 {
 		return 0
 	}
 	return value.Seconds()
+}
+
+func authMethodLabel(value string) string {
+	switch normalize(value) {
+	case authMethodJWT:
+		return authMethodJWT
+	case authMethodCert:
+		return authMethodCert
+	default:
+		return statusUnknown
+	}
+}
+
+func certificateSourceLabel(value string) string {
+	switch normalize(value) {
+	case "":
+		return certificateSourceNone
+	case certificateSourcePKCS11:
+		return certificateSourcePKCS11
+	case certificateSourceSPIFFE:
+		return certificateSourceSPIFFE
+	case statusUnknown:
+		return certificateSourceNone
+	default:
+		return statusUnknown
+	}
 }
 
 func circuitBreakerValue(state status.CircuitBreakerState) float64 {

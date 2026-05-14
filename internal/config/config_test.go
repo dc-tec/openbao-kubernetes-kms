@@ -27,9 +27,6 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Auth.Method != "jwt" {
 		t.Fatalf("unexpected auth method: %q", cfg.Auth.Method)
 	}
-	if !cfg.Transit.UseAssociatedData {
-		t.Fatal("associated data should default to enabled")
-	}
 	if cfg.Status.ProbeInterval != 30*time.Second {
 		t.Fatalf("unexpected probe interval: %s", cfg.Status.ProbeInterval)
 	}
@@ -39,8 +36,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.State.Path != "/var/lib/openbao-kms/state/key-registry.json" {
 		t.Fatalf("unexpected state path: %q", cfg.State.Path)
 	}
-	if cfg.Auth.ClockSkewLeeway != 30*time.Second {
-		t.Fatalf("unexpected auth clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
+	if cfg.Auth.JWT.ClockSkewLeeway != 30*time.Second {
+		t.Fatalf("unexpected auth clock skew leeway: %s", cfg.Auth.JWT.ClockSkewLeeway)
 	}
 	if cfg.Auth.TokenRenewalIncrement != time.Hour {
 		t.Fatalf("unexpected token renewal increment: %s", cfg.Auth.TokenRenewalIncrement)
@@ -62,28 +59,31 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadConfigFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`
+configVersion: v1alpha1
 server:
   socketPath: /tmp/bao-kms-provider.sock
   socketGroup: kube-apiserver
   metricsAddress: "127.0.0.1:18081"
 openbao:
   address: https://bao.example.internal:8200
+  namespace: admin/workload-a
   caCertFile: /etc/openbao-kms/tls/ca.crt
   tlsServerName: bao.example.internal
   timeout: 3s
   instanceId: bao-prod-a
 auth:
   method: jwt
-  mountPath: auth/k8s-workload-a-jwt
-  role: openbao-kms-control-plane
-  jwtFile: /var/lib/openbao-kms/identity.jwt
-  clockSkewLeeway: 45s
   tokenRenewalIncrement: 2h
   loginTimeout: 9s
-  expectedIssuer: https://issuer.example.internal
-  expectedAudience:
-    - openbao
-  expectedSubject: system:serviceaccount:kube-system:bao-kms-provider
+  jwt:
+    mountPath: auth/k8s-workload-a-jwt
+    role: openbao-kms-control-plane
+    jwtFile: /var/lib/openbao-kms/identity.jwt
+    clockSkewLeeway: 45s
+    expectedIssuer: https://issuer.example.internal
+    expectedAudience:
+      - openbao
+    expectedSubject: system:serviceaccount:kube-system:bao-kms-provider
 transit:
   mountPath: transit
   keyName: k8s-workload-a-etcd
@@ -92,7 +92,6 @@ transit:
     clusterId: workload-a
     transitMountId: transit-prod-primary
     keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
-  useAssociatedData: true
 status:
   probeInterval: 45s
 bootstrap:
@@ -113,6 +112,38 @@ state:
 	assertLoadedConfigFile(t, cfg)
 }
 
+func TestLoadEnvironmentOverridesAreAllowlisted(t *testing.T) {
+	t.Setenv(envLogLevel, testDebugLogLevel)
+	t.Setenv(envServerMetricsAddress, "127.0.0.1:19081")
+	t.Setenv(envServerHealthAddress, "127.0.0.1:19082")
+	t.Setenv("BAO_KMS_PROVIDER_AUTH_JWT_EXPECTEDISSUER", "https://evil.example.internal")
+	t.Setenv("BAO_KMS_PROVIDER_OPENBAO_NAMESPACE", "evil-namespace")
+	t.Setenv("BAO_KMS_PROVIDER_TRANSIT_KEYIDSCOPE_CLUSTERID", "evil-cluster")
+
+	cfg, err := Load(NewRuntime(), LoadOptions{Path: "../../test/testdata/config/valid.yaml"})
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Logging.Level != testDebugLogLevel {
+		t.Fatalf("expected log level env override, got %q", cfg.Logging.Level)
+	}
+	if cfg.Server.MetricsAddress != "127.0.0.1:19081" {
+		t.Fatalf("expected metrics env override, got %q", cfg.Server.MetricsAddress)
+	}
+	if cfg.Server.HealthAddress != "127.0.0.1:19082" {
+		t.Fatalf("expected health env override, got %q", cfg.Server.HealthAddress)
+	}
+	if cfg.Auth.JWT.ExpectedIssuer == "https://evil.example.internal" {
+		t.Fatal("identity-bearing auth issuer was overridden from the environment")
+	}
+	if cfg.OpenBao.Namespace != "" {
+		t.Fatalf("identity-bearing OpenBao namespace was overridden: %q", cfg.OpenBao.Namespace)
+	}
+	if cfg.Transit.KeyIDScope.ClusterID != "workload-a" {
+		t.Fatalf("identity-bearing cluster ID was overridden: %q", cfg.Transit.KeyIDScope.ClusterID)
+	}
+}
+
 func assertLoadedConfigFile(t *testing.T, cfg Config) {
 	t.Helper()
 
@@ -125,14 +156,17 @@ func assertLoadedConfigFile(t *testing.T, cfg Config) {
 	if cfg.OpenBao.Timeout != 3*time.Second {
 		t.Fatalf("unexpected OpenBao timeout: %s", cfg.OpenBao.Timeout)
 	}
+	if cfg.OpenBao.Namespace != "admin/workload-a" {
+		t.Fatalf("unexpected OpenBao namespace: %q", cfg.OpenBao.Namespace)
+	}
 	if cfg.Status.ProbeInterval != 45*time.Second {
 		t.Fatalf("unexpected probe interval: %s", cfg.Status.ProbeInterval)
 	}
 	if cfg.State.Path != "/var/lib/openbao-kms/state/custom-key-registry.json" {
 		t.Fatalf("unexpected state path: %q", cfg.State.Path)
 	}
-	if cfg.Auth.ClockSkewLeeway != 45*time.Second {
-		t.Fatalf("unexpected clock skew leeway: %s", cfg.Auth.ClockSkewLeeway)
+	if cfg.Auth.JWT.ClockSkewLeeway != 45*time.Second {
+		t.Fatalf("unexpected clock skew leeway: %s", cfg.Auth.JWT.ClockSkewLeeway)
 	}
 	assertLoadedConfigFileAuth(t, cfg.Auth)
 	if cfg.Bootstrap.GraceTimeout != 30*time.Second || cfg.Bootstrap.RetryInterval != 3*time.Second {
@@ -149,20 +183,21 @@ func assertLoadedConfigFileAuth(t *testing.T, cfg AuthConfig) {
 	if cfg.LoginTimeout != 9*time.Second {
 		t.Fatalf("unexpected login timeout: %s", cfg.LoginTimeout)
 	}
-	if cfg.ExpectedIssuer != "https://issuer.example.internal" {
-		t.Fatalf("unexpected expected issuer: %q", cfg.ExpectedIssuer)
+	if cfg.JWT.ExpectedIssuer != "https://issuer.example.internal" {
+		t.Fatalf("unexpected expected issuer: %q", cfg.JWT.ExpectedIssuer)
 	}
-	if len(cfg.ExpectedAudience) != 1 || cfg.ExpectedAudience[0] != "openbao" {
-		t.Fatalf("unexpected expected audience: %#v", cfg.ExpectedAudience)
+	if len(cfg.JWT.ExpectedAudience) != 1 || cfg.JWT.ExpectedAudience[0] != "openbao" {
+		t.Fatalf("unexpected expected audience: %#v", cfg.JWT.ExpectedAudience)
 	}
-	if cfg.ExpectedSubject != "system:serviceaccount:kube-system:bao-kms-provider" {
-		t.Fatalf("unexpected expected subject: %q", cfg.ExpectedSubject)
+	if cfg.JWT.ExpectedSubject != "system:serviceaccount:kube-system:bao-kms-provider" {
+		t.Fatalf("unexpected expected subject: %q", cfg.JWT.ExpectedSubject)
 	}
 }
 
 func TestLoadRejectsUnknownConfigField(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	content := []byte(`
+configVersion: v1alpha1
 server:
   socketPath: /run/openbao-kms/kms.sock
   unexpected: true
@@ -187,6 +222,27 @@ func TestLoadMissingConfigFile(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsMissingConfigVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`
+server:
+  socketPath: /run/openbao-kms/kms.sock
+  socketMode: "0660"
+  socketGroup: kube-apiserver
+`)
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	_, err := Load(NewRuntime(), LoadOptions{Path: path})
+	if err == nil {
+		t.Fatal("expected missing configVersion to fail")
+	}
+	if !strings.Contains(err.Error(), "configVersion") {
+		t.Fatalf("unexpected missing configVersion error: %v", err)
+	}
+}
+
 func TestValidateCompleteConfig(t *testing.T) {
 	cfg := loadValidConfig(t)
 
@@ -195,16 +251,107 @@ func TestValidateCompleteConfig(t *testing.T) {
 	}
 }
 
-func TestLoadLegacyConfigWithoutVersion(t *testing.T) {
-	cfg, err := Load(NewRuntime(), LoadOptions{Path: "../../test/testdata/config/legacy-no-version.yaml"})
-	if err != nil {
-		t.Fatalf("load legacy config: %v", err)
+func TestValidateCertificateAuthConfig(t *testing.T) {
+	cfg := loadValidConfig(t)
+	cfg.Auth.Method = authMethodCert
+	cfg.Auth.Cert = CertAuthConfig{
+		MountPath:       "auth/k8s-workload-a-cert",
+		Name:            "openbao-kms-control-plane",
+		MinRemainingTTL: 24 * time.Hour,
+		ClockSkewLeeway: 30 * time.Second,
+		Source:          certSourcePKCS11,
+		// #nosec G101 -- test fixture path, not PIN material.
+		PKCS11: PKCS11CertAuthConfig{
+			CertificateFile: "/etc/openbao-kms/tls/client.crt",
+			ModulePath:      "/usr/lib/softhsm/libsofthsm2.so",
+			TokenLabel:      "openbao-kms",
+			KeyLabel:        "openbao-kms-control-plane",
+			PINFile:         "/etc/openbao-kms/pkcs11.pin",
+			MaxSessions:     4,
+		},
 	}
-	if cfg.ConfigVersion != "v1alpha1" {
-		t.Fatalf("unexpected default config version: %s", cfg.ConfigVersion)
-	}
+
 	if err := Validate(cfg, ValidationOptions{}); err != nil {
-		t.Fatalf("validate legacy config: %v", err)
+		t.Fatalf("validate cert auth config: %v", err)
+	}
+}
+
+func TestValidateRejectsCertificateAuthSourceConfig(t *testing.T) {
+	tests := []struct {
+		name                   string
+		field                  string
+		fieldWhenSPIFFEAllowed string
+		mutate                 func(*Config)
+	}{
+		{
+			name:  "unknown source",
+			field: "auth.cert.source",
+			mutate: func(cfg *Config) {
+				cfg.Auth.Method = authMethodCert
+				cfg.Auth.Cert.MountPath = "auth/k8s-workload-a-cert"
+				cfg.Auth.Cert.MinRemainingTTL = 24 * time.Hour
+				cfg.Auth.Cert.Source = "pem"
+			},
+		},
+		{
+			name:  "relative pkcs11 module",
+			field: "auth.cert.pkcs11.modulePath",
+			mutate: func(cfg *Config) {
+				cfg.Auth.Method = authMethodCert
+				cfg.Auth.Cert = CertAuthConfig{
+					MountPath:       "auth/k8s-workload-a-cert",
+					MinRemainingTTL: 24 * time.Hour,
+					ClockSkewLeeway: 30 * time.Second,
+					Source:          certSourcePKCS11,
+					// #nosec G101 -- test fixture path, not PIN material.
+					PKCS11: PKCS11CertAuthConfig{
+						CertificateFile: "/etc/openbao-kms/tls/client.crt",
+						ModulePath:      "libsofthsm2.so",
+						TokenLabel:      "openbao-kms",
+						KeyLabel:        "openbao-kms-control-plane",
+						PINFile:         "/etc/openbao-kms/pkcs11.pin",
+						MaxSessions:     4,
+					},
+				}
+			},
+		},
+		{
+			name:                   "spiffe source unavailable",
+			field:                  "auth.cert.source",
+			fieldWhenSPIFFEAllowed: "auth.cert.spiffe.trustDomain",
+			mutate: func(cfg *Config) {
+				cfg.Auth.Method = authMethodCert
+				cfg.Auth.Cert = CertAuthConfig{
+					MountPath:       "auth/k8s-workload-a-cert",
+					MinRemainingTTL: 24 * time.Hour,
+					ClockSkewLeeway: 30 * time.Second,
+					Source:          certSourceSPIFFE,
+					SPIFFE: SPIFFECertAuthConfig{
+						WorkloadAPISocket: "unix:///run/spire/sockets/agent.sock",
+						SPIFFEID:          "spiffe://example.org/openbao-kms/workload-a",
+						TrustDomain:       "other.example.org",
+					},
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := loadValidConfig(t)
+			tt.mutate(&cfg)
+
+			err := Validate(cfg, ValidationOptions{})
+			if !errors.Is(err, ErrInvalidConfig) {
+				t.Fatalf("expected invalid config error, got %v", err)
+			}
+			field := tt.field
+			if unsupportedSPIFFECertAuthAllowed && tt.fieldWhenSPIFFEAllowed != "" {
+				field = tt.fieldWhenSPIFFEAllowed
+			}
+			if !strings.Contains(err.Error(), field) {
+				t.Fatalf("expected %s problem, got %v", field, err)
+			}
+		})
 	}
 }
 
@@ -253,9 +400,9 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 		},
 		{
 			name:  "negative auth clock skew leeway",
-			field: "auth.clockSkewLeeway",
+			field: "auth.jwt.clockSkewLeeway",
 			mutate: func(cfg *Config) {
-				cfg.Auth.ClockSkewLeeway = -time.Second
+				cfg.Auth.JWT.ClockSkewLeeway = -time.Second
 			},
 		},
 		{
@@ -288,30 +435,65 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 		},
 		{
 			name:  "expected issuer with whitespace",
-			field: "auth.expectedIssuer",
+			field: "auth.jwt.expectedIssuer",
 			mutate: func(cfg *Config) {
-				cfg.Auth.ExpectedIssuer = " https://issuer.example.internal"
+				cfg.Auth.JWT.ExpectedIssuer = " https://issuer.example.internal"
 			},
 		},
 		{
 			name:  "empty expected audience",
-			field: "auth.expectedAudience",
+			field: "auth.jwt.expectedAudience",
 			mutate: func(cfg *Config) {
-				cfg.Auth.ExpectedAudience = []string{""}
+				cfg.Auth.JWT.ExpectedAudience = []string{""}
 			},
 		},
 		{
 			name:  "auth role with surrounding whitespace",
-			field: "auth.role",
+			field: "auth.jwt.role",
 			mutate: func(cfg *Config) {
-				cfg.Auth.Role = " openbao-kms-control-plane"
+				cfg.Auth.JWT.Role = " openbao-kms-control-plane"
 			},
 		},
 		{
 			name:  "auth mount with surrounding whitespace",
-			field: "auth.mountPath",
+			field: "auth.jwt.mountPath",
 			mutate: func(cfg *Config) {
-				cfg.Auth.MountPath = " auth/k8s-workload-a-jwt"
+				cfg.Auth.JWT.MountPath = " auth/k8s-workload-a-jwt"
+			},
+		},
+		{
+			name:  "transit key name with slash",
+			field: "transit.keyName",
+			mutate: func(cfg *Config) {
+				cfg.Transit.KeyName = "team-a/k8s"
+			},
+		},
+		{
+			name:  "transit key name with percent",
+			field: "transit.keyName",
+			mutate: func(cfg *Config) {
+				cfg.Transit.KeyName = "team-a%2Fk8s"
+			},
+		},
+		{
+			name:  "OpenBao namespace with leading slash",
+			field: "openbao.namespace",
+			mutate: func(cfg *Config) {
+				cfg.OpenBao.Namespace = "/admin"
+			},
+		},
+		{
+			name:  "OpenBao namespace with dot segment",
+			field: "openbao.namespace",
+			mutate: func(cfg *Config) {
+				cfg.OpenBao.Namespace = "admin/../workload-a"
+			},
+		},
+		{
+			name:  "OpenBao namespace with percent encoding",
+			field: "openbao.namespace",
+			mutate: func(cfg *Config) {
+				cfg.OpenBao.Namespace = "admin%2Fworkload-a"
 			},
 		},
 		{
@@ -326,13 +508,6 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			field: "server.socketMode",
 			mutate: func(cfg *Config) {
 				cfg.Server.SocketMode = "0666"
-			},
-		},
-		{
-			name:  "AAD disabled",
-			field: "transit.useAssociatedData",
-			mutate: func(cfg *Config) {
-				cfg.Transit.UseAssociatedData = false
 			},
 		},
 		{
@@ -452,11 +627,11 @@ func TestValidateRejectsUnsafeLocalFiles(t *testing.T) {
 	cfg := loadValidConfig(t)
 	cfg.Server.SocketPath = filepath.Join(tempDir, "kms.sock")
 	cfg.OpenBao.CACertFile = filepath.Join(tempDir, "ca.crt")
-	cfg.Auth.JWTFile = filepath.Join(tempDir, "identity.jwt")
+	cfg.Auth.JWT.JWTFile = filepath.Join(tempDir, "identity.jwt")
 	configPath := filepath.Join(tempDir, "config.yaml")
 
 	writeFile(t, cfg.OpenBao.CACertFile, 0o644, "ca")
-	writeFile(t, cfg.Auth.JWTFile, 0o644, "jwt")
+	writeFile(t, cfg.Auth.JWT.JWTFile, 0o644, "jwt")
 	writeFile(t, configPath, 0o644, "config")
 
 	err := Validate(cfg, ValidationOptions{
@@ -467,7 +642,7 @@ func TestValidateRejectsUnsafeLocalFiles(t *testing.T) {
 	if !errors.Is(err, ErrInvalidConfig) {
 		t.Fatalf("expected invalid config error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "auth.jwtFile") {
+	if !strings.Contains(err.Error(), "auth.jwt.jwtFile") {
 		t.Fatalf("expected JWT permission problem, got %v", err)
 	}
 	if !strings.Contains(err.Error(), "config") {
@@ -484,10 +659,10 @@ func TestValidateRejectsGroupWritableSocketParent(t *testing.T) {
 	cfg := loadValidConfig(t)
 	cfg.Server.SocketPath = filepath.Join(tempDir, "kms.sock")
 	cfg.OpenBao.CACertFile = filepath.Join(tempDir, "ca.crt")
-	cfg.Auth.JWTFile = filepath.Join(tempDir, "identity.jwt")
+	cfg.Auth.JWT.JWTFile = filepath.Join(tempDir, "identity.jwt")
 
 	writeFile(t, cfg.OpenBao.CACertFile, 0o644, "ca")
-	writeFile(t, cfg.Auth.JWTFile, 0o640, "jwt")
+	writeFile(t, cfg.Auth.JWT.JWTFile, 0o640, "jwt")
 
 	err := Validate(cfg, ValidationOptions{
 		CheckFilesystem:         true,
@@ -506,11 +681,11 @@ func TestValidateAcceptsSafeLocalFiles(t *testing.T) {
 	cfg := loadValidConfig(t)
 	cfg.Server.SocketPath = filepath.Join(tempDir, "kms.sock")
 	cfg.OpenBao.CACertFile = filepath.Join(tempDir, "ca.crt")
-	cfg.Auth.JWTFile = filepath.Join(tempDir, "identity.jwt")
+	cfg.Auth.JWT.JWTFile = filepath.Join(tempDir, "identity.jwt")
 	configPath := filepath.Join(tempDir, "config.yaml")
 
 	writeFile(t, cfg.OpenBao.CACertFile, 0o644, "ca")
-	writeFile(t, cfg.Auth.JWTFile, 0o640, "jwt")
+	writeFile(t, cfg.Auth.JWT.JWTFile, 0o640, "jwt")
 	writeFile(t, configPath, 0o640, "config")
 
 	err := Validate(cfg, ValidationOptions{
@@ -545,6 +720,16 @@ func TestIdentityFingerprintIsStableAndSensitiveToIdentity(t *testing.T) {
 	}
 	if changed == first {
 		t.Fatal("fingerprint did not change after identity-bearing field changed")
+	}
+
+	cfg = loadValidConfig(t)
+	cfg.OpenBao.Namespace = "admin/workload-a"
+	namespaced, err := IdentityFingerprint(cfg)
+	if err != nil {
+		t.Fatalf("fingerprint namespaced config: %v", err)
+	}
+	if namespaced == first {
+		t.Fatal("fingerprint did not change after OpenBao namespace changed")
 	}
 }
 

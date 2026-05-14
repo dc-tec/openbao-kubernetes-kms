@@ -336,6 +336,99 @@ func TestDefaultLabValuesWithMultiControlPlane(t *testing.T) {
 	}
 }
 
+func TestDecryptWarmupSampleIndexes(t *testing.T) {
+	got := decryptWarmupSampleIndexes(5)
+	for _, index := range []int{0, 2, 4} {
+		if !got[index] {
+			t.Fatalf("sample index %d missing from %#v", index, got)
+		}
+	}
+	if got[1] || got[3] {
+		t.Fatalf("unexpected sample indexes: %#v", got)
+	}
+}
+
+func TestDecryptWarmupSamplesForExisting(t *testing.T) {
+	got := decryptWarmupSamplesForExisting("MCP.Cluster", 5)
+	want := []decryptWarmupSample{
+		{name: "openbao-kms-warmup-mcp-cluster-00000"},
+		{name: "openbao-kms-warmup-mcp-cluster-00002"},
+		{name: "openbao-kms-warmup-mcp-cluster-00004"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("decryptWarmupSamplesForExisting() = %#v, want %#v", got, want)
+	}
+}
+
+func TestDecryptWarmupSeedChunks(t *testing.T) {
+	got := decryptWarmupSeedChunks(2500, 1000)
+	want := []decryptWarmupSeedChunk{
+		{start: 0, end: 1000},
+		{start: 1000, end: 2000},
+		{start: 2000, end: 2500},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("decryptWarmupSeedChunks() = %#v, want %#v", got, want)
+	}
+}
+
+func TestLabelSafeValue(t *testing.T) {
+	tests := map[string]string{
+		"MCP":                            "mcp",
+		"static_pod.example":             "static-pod-example",
+		"---":                            "cluster",
+		"012345678901234567890123456789": "012345678901234567890123",
+	}
+	for input, want := range tests {
+		if got := labelSafeValue(input); got != want {
+			t.Fatalf("labelSafeValue(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestPrometheusCounterValue(t *testing.T) {
+	metrics := `# HELP openbao_kms_grpc_requests_total Total gRPC requests.
+# TYPE openbao_kms_grpc_requests_total counter
+openbao_kms_grpc_requests_total{method="decrypt",status="ok"} 42
+openbao_kms_grpc_requests_total{method="decrypt",status="error"} 3
+openbao_kms_grpc_requests_total{method="encrypt",status="ok"} 7
+openbao_kms_openbao_requests_total{operation="transit_decrypt",status="ok"} 11
+`
+
+	if got := prometheusCounterValue(
+		metrics,
+		"openbao_kms_grpc_requests_total",
+		[]string{`method="decrypt"`, `status="ok"`},
+	); got != 42 {
+		t.Fatalf("decrypt ok counter = %d, want 42", got)
+	}
+	if got := prometheusCounterValue(
+		metrics,
+		"openbao_kms_openbao_requests_total",
+		[]string{`operation="transit_decrypt"`, `status="ok"`},
+	); got != 11 {
+		t.Fatalf("transit decrypt ok counter = %d, want 11", got)
+	}
+	if got := prometheusCounterValue(
+		metrics,
+		"openbao_kms_grpc_requests_total",
+		[]string{`method="status"`, `status="ok"`},
+	); got != 0 {
+		t.Fatalf("missing counter = %d, want 0", got)
+	}
+}
+
+func TestEnvDurationParsesUnitsBeforeSecondsFallback(t *testing.T) {
+	t.Setenv("LAB_TEST_DURATION", "1m")
+	if got := envDuration("LAB_TEST_DURATION", time.Second); got != time.Minute {
+		t.Fatalf("duration = %s, want 1m", got)
+	}
+	t.Setenv("LAB_TEST_DURATION", "30")
+	if got := envDuration("LAB_TEST_DURATION", time.Second); got != 30*time.Second {
+		t.Fatalf("duration = %s, want 30s", got)
+	}
+}
+
 func TestRewriteKubeconfigServer(t *testing.T) {
 	input := []byte(`apiVersion: v1
 kind: Config

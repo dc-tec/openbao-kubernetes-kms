@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
 
@@ -46,7 +47,7 @@ type AuthRefresher interface {
 // TransitProbeClient is the Transit metadata and deep-probe surface needed by Status.
 type TransitProbeClient interface {
 	ReadKeyProfile(context.Context, string, string) (openbao.KeyProfile, error)
-	ProbeEncryptDecrypt(context.Context, openbao.ProbeRequest) error
+	ProbeEncryptDecrypt(context.Context, openbao.ProbeRequest) (openbao.ProbeResult, error)
 }
 
 // ProbeObservation is one redacted background status probe observation.
@@ -166,6 +167,15 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	if hasState {
 		result, err = c.observer.Observe(state, profile, now)
 	} else {
+		assessment := AssessAutoBootstrapState(profile)
+		if !assessment.Allowed {
+			c.store.PublishUnhealthy(now)
+			return fmt.Errorf(
+				"%w: local registry state is absent and cannot be auto-bootstrapped: %s",
+				ErrStateUnavailable,
+				assessment.Reason,
+			)
+		}
 		rebuilt, rebuildErr := c.observer.RebuildState(profile, now)
 		err = rebuildErr
 		result = ObservationResult{State: rebuilt, Changed: true}
@@ -214,15 +224,34 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 		c.store.PublishUnhealthy(now)
 		return ErrStateUnavailable
 	}
-	if err := c.transit.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
+	result, err := c.transit.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
 		MountPath:      c.mountPath,
 		KeyName:        c.keyName,
 		KeyVersion:     active.TransitVersion,
 		AssociatedData: []byte(probeAssociatedDataValue),
-	}); err != nil {
+	})
+	if err != nil {
 		c.store.PublishUnhealthy(now)
 		c.recordProbeFailure(now)
 		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageDeepProbeFailed, err)
+	}
+	if len(result.Ciphertext) >= kmsv2.MaxKMSCiphertextBytes {
+		c.store.PublishUnhealthy(now)
+		c.recordProbeFailure(now)
+		return fmt.Errorf(
+			"%w: %s: Transit ciphertext exceeds Kubernetes KMS v2 response limit",
+			ErrProbeFailed,
+			messageDeepProbeFailed,
+		)
+	}
+	if result.KeyVersion != 0 && result.KeyVersion != active.TransitVersion {
+		c.store.PublishUnhealthy(now)
+		c.recordProbeFailure(now)
+		return fmt.Errorf(
+			"%w: %s: Transit returned unexpected key version",
+			ErrProbeFailed,
+			messageDeepProbeFailed,
+		)
 	}
 	c.recordProbeSuccess()
 	return nil

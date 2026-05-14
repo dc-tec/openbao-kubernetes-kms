@@ -1,12 +1,16 @@
 ---
 title: "CLI"
-description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, config, policy openbao, exit codes."
+description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, config, policy openbao, completion, exit codes."
 weight: 10
 ---
 
 # CLI
 
-This page documents every command and flag supported by `bao-kms-provider` in v0.1. Commands print stable text output and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
+This page documents the provider-owned operational commands, the Cobra-generated
+shell completion entry point, and the provider flags supported by
+`bao-kms-provider`. Commands print stable text or JSON output where documented
+and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or
+full ciphertext.
 
 ## serve
 
@@ -36,7 +40,8 @@ Run preflight checks before promoting the binary or before changing the API serv
 ```sh
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
-  --encryption-config /etc/kubernetes/encryption-config.yaml
+  --encryption-config /etc/kubernetes/encryption-config.yaml \
+  --output json
 ```
 
 Checks:
@@ -45,15 +50,13 @@ Checks:
 |---|---|
 | OpenBao reachable | HTTPS connection succeeds with configured CA and SNI. |
 | TLS valid | Certificate chain and server name validate. |
-| JWT file readable | File exists, permissions are safe, content parses. |
-| JWT expiry | Not expired and not within `auth.minJwtRemainingTtl`. |
-| JWT claims | Issuer, audience, subject, and configured claims match expectations where locally checkable. |
-| JWT login | OpenBao JWT login succeeds. |
+| Local auth material | For JWT auth, the JWT file exists, permissions are safe, content parses, expiry is acceptable, and configured claims match. For cert auth, the configured certificate source must be reachable, the current certificate must be locally valid, and the signer must match the certificate and accept a non-secret probe. |
+| OpenBao auth login | The configured OpenBao auth method login succeeds. |
 | Token policy | Token can read Transit metadata and perform encrypt and decrypt. |
 | Transit key exists | Metadata read succeeds. |
 | Key type | Matches allowed key types. |
-| Key export | `exportable=false` unless explicitly allowed. |
-| Plaintext backup | `allow_plaintext_backup=false` unless explicitly allowed. |
+| Key export | `exportable=false`. |
+| Plaintext backup | `allow_plaintext_backup=false`. |
 | Key deletion | `deletion_allowed=false`. |
 | Upsert | Transit mount has `disable_upsert=true` where configured. |
 | Encryption/decryption | Test encrypt and decrypt of random non-secret probe data succeed. |
@@ -63,7 +66,14 @@ Checks:
 | EncryptionConfiguration | Points to the socket, uses KMS v2, and the provider name matches. |
 | Fallback | Warns if `identity` fallback remains enabled after migration. |
 
-`doctor` prints a text report with stable check IDs and exits non-zero when any check fails.
+`doctor` prints a report with stable check IDs and exits non-zero when any
+check fails. Use `--output text` for the default human-readable report or
+`--output json` for automation.
+
+Transit profile failures include an impact prefix. `cryptographic_safety`
+findings protect the validated encryption and AAD contract. `api_server_availability`
+findings identify settings that can make Kubernetes reads or writes fail even
+though they may not weaken ciphertext confidentiality directly.
 
 ## verify-key
 
@@ -71,7 +81,8 @@ Verify Transit key suitability against the recommended profile.
 
 ```sh
 bao-kms-provider verify-key \
-  --config /etc/openbao-kms/config.yaml
+  --config /etc/openbao-kms/config.yaml \
+  --output json
 ```
 
 Checks:
@@ -102,7 +113,7 @@ Measures:
 - Transit decrypt latency,
 - non-secret Transit round-trip smoke behavior.
 
-Benchmark output redacts sensitive data. Expanded local KMS gRPC, decrypt storm, token lifecycle, and micro-batching comparisons are release-gate work.
+Benchmark output redacts sensitive data. Expanded local KMS gRPC, decrypt storm, token lifecycle, and micro-batching comparisons are release-validation work.
 
 ## rotation-plan
 
@@ -110,38 +121,56 @@ Report rotation state without performing rotation.
 
 ```sh
 bao-kms-provider rotation-plan \
-  --config /etc/openbao-kms/config.yaml
+  --config /etc/openbao-kms/config.yaml \
+  --output json
 ```
 
 Reports:
 
+- whether local registry state was loaded,
+- registry generation and state hash when available,
+- registry checkpoint status, generation, and hash when available,
+- state bootstrap eligibility and reason when local registry state is absent,
 - current active Transit version,
 - current Kubernetes `key_id` hash,
 - latest observed Transit version,
 - pending promotion status,
-- estimated promotion time,
-- current `min_encryption_version`,
-- current `min_decryption_version`,
-- storage migration reminder,
-- backup warnings.
+- estimated promotion time when a pending version has become stable.
+
+Checkpoint status values:
+
+- `current`: checkpoint exists and matches the loaded state generation/hash,
+- `behind`: checkpoint exists and accepts a newer state generation,
+- `missing`: state exists but the checkpoint is absent,
+- `absent`: neither state nor checkpoint exists.
+
+If local registry state is missing, `rotation-plan` only synthesizes initial
+bootstrap state from initial Transit metadata. It fails instead of reporting an
+active key hash from live Transit metadata after rotation. If a checkpoint is
+present but the state file is missing or rolled back, the command fails closed.
+When local state is absent and OpenBao metadata is readable, the command reports
+or returns the exact auto-bootstrap reason, such as an advanced
+`latest_version`, `min_available_version`, or `min_decryption_version`.
 
 ## verify-rotation
 
-Verify whether rotation migration has rewritten enough resources to proceed safely.
+Report local rotation preflight state.
 
 ```sh
 bao-kms-provider verify-rotation \
-  --config /etc/openbao-kms/config.yaml
+  --config /etc/openbao-kms/config.yaml \
+  --output json
 ```
 
-Strategies the command may use:
+The command reports the same local registry and Transit metadata view as
+`rotation-plan`, plus `confidence: limited` and a `limitations` field. It does
+not scan Kubernetes resources, inspect etcd, prove that every encrypted resource
+or retained backup has been rewritten, or recommend raising OpenBao
+`min_decryption_version`.
 
-- inspect API server encryption migration status if available,
-- scan Kubernetes resources through the API server where possible,
-- inspect etcd only in controlled administrative environments,
-- compare observed KMS key ID hashes from plugin metrics and logs.
-
-This command cannot prove absence of old ciphertext if it cannot inspect every encrypted resource and backup. It reports the confidence level and the inspection coverage achieved.
+Treat it as a local preflight signal. The operator still owns independent
+migration records, backup-retention records, and any change to
+`min_decryption_version`.
 
 ## config
 
@@ -163,6 +192,35 @@ bao-kms-provider config schema
 ```
 
 The schema rejects unknown top-level and nested fields and reserves `configVersion: v1alpha1`.
+
+## version
+
+Print build metadata for the running binary.
+
+```sh
+bao-kms-provider version
+```
+
+Output fields:
+
+- `version`
+- `commit`
+- `buildDate`
+- `dirty`
+
+Use this command when comparing control-plane nodes during upgrades, rollback checks, and incident response.
+
+## completion
+
+Generate shell completion scripts through Cobra's standard completion command:
+
+```sh
+bao-kms-provider completion zsh
+```
+
+Supported shells are `bash`, `fish`, `powershell`, and `zsh`. Use
+`bao-kms-provider completion <shell> --help` for shell-specific installation
+text. Cobra also provides the standard `help` command for local command help.
 
 ## policy openbao
 
@@ -188,7 +246,14 @@ Common flags supported across commands:
 
 `--config` selects the provider configuration file. The other common flags override the corresponding configuration values for the current invocation.
 
-Stable JSON output is not implemented yet. It remains tracked as a follow-up for automation consumers; text output is the supported CLI surface today.
+Report-style commands also support:
+
+```text
+--output text|json
+```
+
+`doctor`, `verify-key`, `rotation-plan`, and `verify-rotation` support stable
+JSON reports for automation consumers. `text` remains the default.
 
 ## Exit Codes
 

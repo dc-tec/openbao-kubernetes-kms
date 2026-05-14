@@ -11,7 +11,7 @@ const configSchemaJSON = `{
   "title": "bao-kms-provider configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["server", "openbao", "auth", "transit"],
+  "required": ["configVersion", "server", "openbao", "auth", "transit"],
   "properties": {
     "configVersion": {"type": "string", "const": "v1alpha1"},
     "server": {
@@ -23,9 +23,7 @@ const configSchemaJSON = `{
         "socketMode": {"type": "string", "pattern": "^0[0-7]{3}$"},
         "socketGroup": {"type": "string", "minLength": 1},
         "metricsAddress": {"type": "string"},
-        "healthAddress": {"type": "string"},
-        "adminAddress": {"type": "string"},
-        "unsafeDebugEndpoints": {"type": "boolean"}
+        "healthAddress": {"type": "string"}
       }
     },
     "openbao": {
@@ -34,7 +32,7 @@ const configSchemaJSON = `{
       "required": ["address", "caCertFile", "tlsServerName", "instanceId"],
       "properties": {
         "address": {"type": "string", "format": "uri"},
-        "namespace": {"type": "string"},
+        "namespace": {"type": "string", "pattern": "^$|^[^/%\\s]+(?:/[^/%\\s]+)*$"},
         "caCertFile": {"type": "string"},
         "tlsServerName": {"type": "string", "minLength": 1},
         "timeout": {"type": "string"},
@@ -44,24 +42,52 @@ const configSchemaJSON = `{
     "auth": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["method", "mountPath", "role", "jwtFile"],
+      "required": ["method"],
       "properties": {
-        "method": {"type": "string", "const": "jwt"},
-        "mountPath": {"type": "string", "minLength": 1},
-        "role": {"type": "string", "minLength": 1},
-        "jwtFile": {"type": "string", "minLength": 1},
-	        "minJwtRemainingTtl": {"type": "string"},
-	        "clockSkewLeeway": {"type": "string"},
-	        "loginBeforeTokenExpiry": {"type": "string"},
-	        "tokenRenewalIncrement": {"type": "string"},
-	        "loginTimeout": {"type": "string"},
-	        "expectedIssuer": {"type": "string"},
-	        "expectedAudience": {
-	          "type": "array",
-	          "items": {"type": "string", "minLength": 1}
-	        },
-	        "expectedSubject": {"type": "string"},
-	        "tokenStorage": {"type": "string", "const": "memory"}
+        "method": {"type": "string", "enum": ["jwt", "cert"]},
+        "loginBeforeTokenExpiry": {"type": "string"},
+        "tokenRenewalIncrement": {"type": "string"},
+        "loginTimeout": {"type": "string"},
+        "jwt": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mountPath": {"type": "string", "minLength": 1},
+            "role": {"type": "string", "minLength": 1},
+            "jwtFile": {"type": "string", "minLength": 1},
+            "minRemainingTtl": {"type": "string"},
+            "clockSkewLeeway": {"type": "string"},
+            "expectedIssuer": {"type": "string"},
+            "expectedAudience": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "expectedSubject": {"type": "string"}
+          }
+        },
+        "cert": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mountPath": {"type": "string", "minLength": 1},
+            "name": {"type": "string"},
+            "minRemainingTtl": {"type": "string"},
+            "clockSkewLeeway": {"type": "string"},
+            "source": {"type": "string", "enum": ["pkcs11"]},
+            "pkcs11": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "certificateFile": {"type": "string", "minLength": 1},
+                "modulePath": {"type": "string", "minLength": 1},
+                "tokenLabel": {"type": "string", "minLength": 1},
+                "keyLabel": {"type": "string", "minLength": 1},
+                "pinFile": {"type": "string", "minLength": 1},
+                "maxSessions": {"type": "integer", "minimum": 2}
+              }
+            }
+          }
+        }
 	      }
 	    },
     "transit": {
@@ -70,7 +96,7 @@ const configSchemaJSON = `{
       "required": ["mountPath", "keyName", "keyIdScope"],
       "properties": {
         "mountPath": {"type": "string", "minLength": 1},
-        "keyName": {"type": "string", "minLength": 1},
+        "keyName": {"type": "string", "minLength": 1, "pattern": "^[^/%]+$"},
         "keyIdScope": {
           "type": "object",
           "additionalProperties": false,
@@ -81,9 +107,8 @@ const configSchemaJSON = `{
             "transitMountId": {"type": "string", "minLength": 1},
             "keyLineageId": {"type": "string", "minLength": 1}
           }
-        },
-	        "useAssociatedData": {"type": "boolean", "const": true}
-	      }
+        }
+      }
 	    },
 	    "bootstrap": {
 	      "type": "object",
@@ -119,28 +144,12 @@ const configSchemaJSON = `{
         "rejectVersionRollback": {"type": "boolean"}
       }
     },
-    "performance": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "decryptMicroBatching": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": {"type": "boolean"},
-            "maxBatchSize": {"type": "integer", "minimum": 1},
-            "maxWait": {"type": "string"}
-          }
-        }
-      }
-    },
     "logging": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "level": {"type": "string", "enum": ["debug", "info", "warn", "error"]},
         "format": {"type": "string", "enum": ["json", "text"]},
-        "redactOpenBaoPaths": {"type": "boolean"},
         "logOpenBaoRequestIDs": {"type": "boolean"},
         "debugCorrelation": {
           "type": "object",

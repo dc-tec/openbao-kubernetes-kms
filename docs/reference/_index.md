@@ -31,7 +31,7 @@ These pages answer behavior-specific questions. Use them when the workflow guida
 - [Metrics](/reference/metrics/) for the metric-by-metric and log-field reference.
 - [Compatibility](/reference/compatibility/) for the supported Kubernetes and OpenBao version envelope.
 - [Support Policy](/reference/support-policy/) for the supported configurations and version-pinning expectations.
-- [Release Policy](/reference/release-policy/) for the release cadence and deprecation window.
+- [Release Policy](/reference/release-policy/) for release channels, artifact policy, and verification materials.
 - [Transit Policy Examples](/reference/transit-policy-examples/) for least-privilege OpenBao policies for the provider hot path.
 
 ## Use Another Section If

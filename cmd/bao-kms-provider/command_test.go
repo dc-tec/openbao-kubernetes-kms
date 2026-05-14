@@ -69,6 +69,18 @@ func TestPolicyOpenBaoCommand(t *testing.T) {
 	}
 }
 
+func TestConfigCommandUsesConfigPathEnvironment(t *testing.T) {
+	t.Setenv(envConfigPath, "../../test/testdata/config/valid.yaml")
+
+	output, err := executeCommand(t, "policy", "openbao")
+	if err != nil {
+		t.Fatalf("expected command to use env config path: %v", err)
+	}
+	if !strings.Contains(output, `path "transit/keys/k8s-workload-a-etcd"`) {
+		t.Fatalf("policy output did not use env config path:\n%s", output)
+	}
+}
+
 func TestLookupGroupIDAcceptsNumericGID(t *testing.T) {
 	gid, err := lookupGroupID("1234")
 	if err != nil {
@@ -144,5 +156,32 @@ func TestDoctorPrintsReportForInvalidConfig(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("doctor output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestDoctorPrintsJSONReportForInvalidConfig(t *testing.T) {
+	output, err := executeCommand(t, "doctor", "--output", "json")
+	if err == nil {
+		t.Fatalf("expected doctor without config to fail, output:\n%s", output)
+	}
+	if got := cli.ProcessExitCode(err); got != int(cli.ExitConfig) {
+		t.Fatalf("unexpected doctor exit code: %d", got)
+	}
+
+	var report cli.Report
+	if jsonErr := json.Unmarshal([]byte(output), &report); jsonErr != nil {
+		t.Fatalf("doctor JSON output is not a report: %v\n%s", jsonErr, output)
+	}
+	if report.Name != reportNameDoctor {
+		t.Fatalf("unexpected report name: %q", report.Name)
+	}
+	if len(report.Checks) < 2 {
+		t.Fatalf("expected config checks in report: %#v", report.Checks)
+	}
+	if report.Checks[0].ID != checkConfigLoad || report.Checks[0].Status != cli.CheckPass {
+		t.Fatalf("unexpected first check: %#v", report.Checks[0])
+	}
+	if report.Checks[1].ID != checkConfigValidate || report.Checks[1].Status != cli.CheckFail {
+		t.Fatalf("unexpected second check: %#v", report.Checks[1])
 	}
 }

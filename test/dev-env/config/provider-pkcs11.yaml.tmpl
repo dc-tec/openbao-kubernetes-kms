@@ -1,0 +1,62 @@
+configVersion: v1alpha1
+server:
+  socketPath: /run/openbao-kms/kms.sock
+  socketMode: "0660"
+  socketGroup: "1234"
+  metricsAddress: "0.0.0.0:8081"
+  healthAddress: "0.0.0.0:8082"
+openbao:
+  address: https://openbao:8200
+  namespace: ""
+  caCertFile: /etc/openbao-kms/tls/openbao-ca.pem
+  tlsServerName: localhost
+  timeout: 5s
+  instanceId: openbao-dev-env
+auth:
+  method: cert
+  loginBeforeTokenExpiry: 5m
+  tokenRenewalIncrement: 1h
+  loginTimeout: 0s
+  cert:
+    mountPath: auth/kind-dev-cert
+    name: openbao-kms-control-plane
+    minRemainingTtl: 10m
+    clockSkewLeeway: 30s
+    source: pkcs11
+    pkcs11:
+      certificateFile: /etc/openbao-kms/pkcs11/client-chain.pem
+      modulePath: "{{PKCS11_MODULE_PATH}}"
+      tokenLabel: "{{PKCS11_TOKEN_LABEL}}"
+      keyLabel: "{{PKCS11_KEY_LABEL}}"
+      pinFile: /etc/openbao-kms/pkcs11/pin
+      maxSessions: 4
+transit:
+  mountPath: transit
+  keyName: k8s-kind-dev-etcd
+  keyIdScope:
+    providerName: openbao-kms-dev-env
+    clusterId: kind-dev-env
+    transitMountId: transit-kind-dev
+    keyLineageId: "{{KEY_LINEAGE_ID}}"
+bootstrap:
+  graceTimeout: 60s
+  retryInterval: 5s
+status:
+  probeInterval: 5s
+  deepProbeInterval: 1m
+  statusMaxStaleness: 2m
+state:
+  path: /var/lib/openbao-kms/state/key-registry.json
+rotation:
+  mode: observed
+  activationDelay: 10s
+  requireStableObservationCount: 1
+  rejectVersionRollback: true
+logging:
+  level: info
+  format: json
+  logOpenBaoRequestIDs: true
+  debugCorrelation:
+    enabled: false
+    ttl: 15m
+    incidentId: ""

@@ -231,7 +231,7 @@ func profileForLatest(latest int, base time.Time) openbao.KeyProfile {
 	}
 	return openbao.KeyProfile{
 		Name:                 "k8s-workload-a-etcd",
-		Type:                 "aes256-gcm96",
+		Type:                 openbao.TransitKeyTypeAES256GCM96,
 		LatestVersion:        latest,
 		VersionCreationTimes: versions,
 		SupportsEncryption:   true,

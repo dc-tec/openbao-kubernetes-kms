@@ -15,7 +15,7 @@ This page is the authoritative reference for the Kubernetes `key_id` format, KMS
 - Ensure `key_id` values are stable across plugin restart.
 - Ensure `key_id` changes when the active Transit key version changes.
 - Keep old `key_id` values decryptable while old Transit versions are allowed.
-- Bind ciphertext to provider, cluster, key lineage, and key version through AAD.
+- Bind ciphertext to provider, cluster, OpenBao namespace, key lineage, and key version through AAD.
 
 ## Kubernetes `key_id` Properties
 
@@ -25,7 +25,7 @@ This page is the authoritative reference for the Kubernetes `key_id` format, KMS
 - deterministic from stable non-secret inputs,
 - safe to log,
 - stable across plugin restarts,
-- unique across provider, cluster, OpenBao, Transit mount, key lineage, and key version scope,
+- unique across provider, cluster, OpenBao namespace, Transit mount, key lineage, and key version scope,
 - never reused,
 - changed when the active Transit key version changes,
 - not a raw Transit key name,
@@ -51,11 +51,11 @@ sha256(
   provider_name || 0x00 ||
   cluster_id || 0x00 ||
   openbao_instance_id || 0x00 ||
+  openbao_namespace || 0x00 || # only when configured
   transit_mount_id || 0x00 ||
   transit_key_lineage_id || 0x00 ||
   transit_key_version || 0x00 ||
-  transit_version_created_at_unix || 0x00 ||
-  key_epoch
+  transit_version_created_at_unix
 )
 ```
 
@@ -66,11 +66,39 @@ Inputs:
 | `provider_name` | Plugin configuration and Kubernetes `EncryptionConfiguration` | Immutable after use. |
 | `cluster_id` | Plugin configuration | Stable cluster or trust-domain ID. |
 | `openbao_instance_id` | Plugin configuration | Stable OpenBao trust-domain ID. |
+| `openbao_namespace` | Optional plugin configuration | Stable namespace routing scope. Empty for the root namespace. |
 | `transit_mount_id` | Plugin configuration | Stable opaque mount ID, not the raw path. |
 | `transit_key_lineage_id` | Plugin configuration or platform metadata | Changes when the key is deleted and recreated. |
 | `transit_key_version` | Transit metadata | Active version used for encryption. |
-| `transit_version_created_at_unix` | Transit metadata | Distinguishes historical versions and restored lineages. |
-| `key_epoch` | Optional configuration | Manual emergency discriminator. |
+| `transit_version_created_at_unix` | Transit metadata | Canonical Unix-second creation time for the Transit version. |
+
+## Transit Version Creation Time
+
+Transit version creation time is part of the long-lived `key_id` contract. The
+provider normalizes this value to Unix seconds before deriving `key_id` values,
+persisting local state, or comparing live OpenBao metadata with retained
+snapshots.
+
+This normalization tolerates representation changes that keep the same Unix
+second, such as a future metadata reader exposing sub-second precision. It does
+not treat a different Unix second as equivalent. If OpenBao restore, import, or
+manual metadata changes report a different creation second for an active or
+retained historical Transit version, the provider fails closed because old
+Kubernetes `key_id` values may no longer describe the same decryptable key
+epoch.
+
+Backup and restore procedures must preserve:
+
+- OpenBao Transit key material,
+- Transit version numbers,
+- Transit version creation timestamps at Unix-second precision,
+- the configured Transit key lineage ID,
+- the provider local registry state file and checkpoint.
+
+If any of these are lost or changed after rotation, do not synthesize a
+replacement state file by hand. Restore the matching OpenBao backup and
+provider state, or keep the provider stopped until a supported recovery
+workflow is available for the release line.
 
 ## Mount Accessor Vs Configured Mount ID
 
@@ -103,7 +131,8 @@ key-id-hash.kms.openbao.org: "<base64url-sha256-key-id>"
 transit-key-version.kms.openbao.org: "2"
 transit-mount-hash.kms.openbao.org: "<base64url-sha256-mount-id>"
 transit-key-hash.kms.openbao.org: "<base64url-sha256-key-lineage-id>"
-plugin-version.kms.openbao.org: "v0.1.0"
+openbao-namespace-hash.kms.openbao.org: "<base64url-sha256-namespace>" # only when configured
+plugin-version.kms.openbao.org: "0.1.0"
 aad-version.kms.openbao.org: "v1"
 ```
 
@@ -140,6 +169,7 @@ Canonical AAD payload before base64 encoding:
   "provider_name": "openbao-kms-workload-a",
   "cluster_id_hash": "base64url-sha256(cluster-id)",
   "openbao_instance_hash": "base64url-sha256(openbao-instance-id)",
+  "openbao_namespace_hash": "base64url-sha256(openbao-namespace)",
   "transit_mount_hash": "base64url-sha256(transit-mount-id)",
   "transit_key_hash": "base64url-sha256(transit-key-lineage-id)",
   "key_id_hash": "base64url-sha256(kubernetes-key-id)",
@@ -153,23 +183,18 @@ Serialization rules:
 - do not include secrets,
 - do not include raw OpenBao paths,
 - do not include raw key names,
+- include only a namespace hash when `openbao.namespace` is configured,
 - include enough annotation data to reconstruct the same bytes during decrypt,
 - treat missing required fields as decrypt failure.
 
-## Compatibility Modes
+## AAD Mode
 
 | Mode | Behavior | Intended use |
 |---|---|---|
-| `aad.required` | Encrypt and decrypt require valid AAD metadata. | Required v0.1 mode. |
-| `aad.optional-read` | Encrypt with AAD; decrypt configured pre-AAD epochs without AAD. | Future migration mode only. |
-| `aad.disabled` | Send no Transit associated data. | Compatibility testing only; not a v0.1 supported mode. |
+| `aad.required` | Encrypt and decrypt require valid AAD metadata. | Required mode. |
 
-Compatibility modes:
-
-- are explicit in configuration,
-- are visible in metrics and logs,
-- are limited to known key epochs,
-- are removed after migration.
+The current release only recognizes `aad.required`. There is no configuration
+switch to disable AAD or select compatibility read modes.
 
 ## Decrypt Validation Order
 
@@ -184,7 +209,8 @@ Unknown `key_id` values fail before step 6.
 
 The implementation exposes a decrypt preflight helper that returns the resolved snapshot, parsed annotations, canonical AAD bytes, and Transit `associated_data` only after steps 1 through 5 have passed.
 
-For v0.1, snapshots use `aad.required`. `aad.optional-read` and `aad.disabled` are modeled as future compatibility modes; encrypt and decrypt preparation reject them in v0.1.
+Snapshots use `aad.required`. Any other AAD mode in local state is rejected
+during state validation.
 
 ## Local Registry State
 
@@ -196,7 +222,16 @@ The local registry is a non-secret JSON file that records:
 - active Kubernetes `key_id`,
 - observed and promoted key snapshots.
 
-The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. It does not contain key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths.
+The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. A small adjacent checkpoint file records the last accepted generation and hash so a replayed older state file is rejected when the checkpoint survives. Neither file contains key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths. When `openbao.namespace` is configured, the namespace is persisted as non-secret identity scope so namespace drift fails closed during state validation.
+
+The state hash and checkpoint are local integrity and replay guards, not
+hardware-backed tamper protection. They detect corruption, unsafe restore, missing
+state with a surviving checkpoint, older generations, and same-generation hash
+mismatches. They do not stop a privileged host-level attacker who can replace
+both the state file and checkpoint with a self-consistent pair. Environments
+that need stronger rollback resistance must add host controls such as protected
+state directories, immutable backups, measured boot, TPM-sealed anchors, or an
+external write-protected generation record.
 
 State-file invariants enforced at load:
 
@@ -205,10 +240,30 @@ State-file invariants enforced at load:
 - the parent directory must not be group or world writable,
 - JSON is decoded with unknown-field rejection,
 - the current hash must match the typed state body,
-- generation and hash expectations can reject replayed state,
-- the active Transit version must not move backwards during normal promotion.
+- malformed previous or current hashes are rejected,
+- duplicate persisted `key_id` records are rejected,
+- pending and rejected snapshots are retained in state but excluded from decrypt lookup,
+- the checkpoint rejects older generations and same-generation hash mismatches,
+- the active Transit version must not move backwards during normal promotion,
+- when live Transit `latest_version` jumps over intermediate versions, the
+  provider requires their creation metadata and retains them as decrypt-only
+  historical snapshots; missing intermediate creation metadata fails closed,
+- loaded state must match the current provider, cluster, OpenBao instance, OpenBao namespace, Transit mount, lineage, key name, and AAD mode,
+- active and retained historical Transit version creation times must match current Transit metadata after Unix-second normalization,
+- `min_available_version` and `min_decryption_version` must not block active or retained historical versions,
+- `min_encryption_version` must not block the active version.
 
-If the state file is missing, it can be rebuilt from trusted configuration plus current and historical Transit metadata when the caller can prove the metadata set is complete enough for the recovery operation.
+If both the state file and checkpoint are missing, normal startup auto-bootstraps
+only from initial Transit metadata: `latest_version` must be `1`,
+`min_available_version` must not exclude version `1`, and
+`min_decryption_version` must not exclude version `1`. This allows first install
+without a preexisting state file but fails closed for brownfield import,
+replacement, or recovery after Transit rotation. Recovery after rotation must
+restore the state/checkpoint pair from backup or a known-good peer with matching
+identity scope. A controlled `recover-state` command is deferred for the preview
+line; operators must not synthesize replacement state by hand. If the checkpoint
+exists but the state file is missing or older than the checkpoint, startup fails
+closed.
 
 ## Golden Fixtures
 
@@ -217,7 +272,6 @@ The implementation maintains golden fixtures for:
 - key snapshot to `key_id` derivation,
 - annotations to AAD reconstruction,
 - historical key snapshots after rotation,
-- pre-AAD compatibility objects,
 - malformed annotation rejection.
 
 Changing `key_id` or AAD derivation is a wire-format compatibility change. See [Reference: Compatibility: Breaking Changes](/reference/compatibility/#breaking-changes).
