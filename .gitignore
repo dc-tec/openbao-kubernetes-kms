@@ -8,6 +8,10 @@ artifacts/
 /public/
 /resources/_gen/
 /website/static/vendor/
+!/website/static/vendor/
+!/website/static/vendor/mermaid/
+!/website/static/vendor/mermaid/README.md
+!/website/static/vendor/mermaid/mermaid.min.js
 kubeconfig.yaml
 hack/harvester/env.local
 hack/harvester/*.local.yaml
