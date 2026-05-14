@@ -196,8 +196,10 @@ a:focus-visible {
   text-decoration: none;
 }
 
-.site-header__nav a[aria-current="page"] {
+.site-header__nav a[aria-current="page"],
+.site-header__search[aria-current="page"] {
   color: var(--ds-link);
+  font-weight: 700;
 }
 
 .site-header__search,
@@ -548,6 +550,11 @@ a:focus-visible {
 .docs-nav__item.is-current > .docs-nav__link,
 .docs-nav__item.is-ancestor > .docs-nav__link {
   color: var(--ds-link);
+}
+
+.docs-nav__root-item.is-current > .docs-nav__link--section,
+.docs-nav__item.is-current > .docs-nav__link {
+  font-weight: 700;
 }
 
 .page-toc nav ul {

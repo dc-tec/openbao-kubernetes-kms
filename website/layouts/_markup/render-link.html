@@ -30,6 +30,11 @@
     {{- if $fragment -}}
       {{- $href = printf "%s#%s" $href $fragment -}}
     {{- end -}}
+  {{- else if hasPrefix $pathPart "/" -}}
+    {{- $href = relURL (strings.TrimPrefix "/" $pathPart) -}}
+    {{- if $fragment -}}
+      {{- $href = printf "%s#%s" $href $fragment -}}
+    {{- end -}}
   {{- else if or (hasPrefix $pathPart "./") (hasPrefix $pathPart "../") -}}
     {{- $repoBaseDir := "" -}}
     {{- if and .Page .Page.File -}}

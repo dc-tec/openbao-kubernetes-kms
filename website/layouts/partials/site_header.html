@@ -14,14 +14,15 @@
         {{- $isCurrent := or (eq $.RelPermalink .RelPermalink) (and (ne .RelPermalink site.Home.RelPermalink) (hasPrefix $.RelPermalink .RelPermalink)) -}}
         <a
           href="{{ .RelPermalink }}"
-          {{ if $isCurrent }}aria-current="page"{{ end }}
+          {{ if $isCurrent }}class="is-current" aria-current="page"{{ end }}
         >
           {{ partial "page_title.html" . }}
         </a>
       {{ end }}
     </nav>
 
-    <a class="site-header__search" href="{{ relURL "search/" }}">Search</a>
+    {{- $isSearch := eq .RelPermalink (relURL "search/") -}}
+    <a class="site-header__search{{ if $isSearch }} is-current{{ end }}" href="{{ relURL "search/" }}"{{ if $isSearch }} aria-current="page"{{ end }}>Search</a>
 
     {{ with site.Params.repoURL }}
       <a class="site-header__repo" href="{{ . }}">{{ site.Params.repoLabel | default "Repository" }}</a>
