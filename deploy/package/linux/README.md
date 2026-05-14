@@ -21,16 +21,32 @@ Recommended install paths:
 /run/openbao-kms/kms.sock
 ```
 
-The JWT, client certificate, and PKCS#11 PIN paths are deployment-specific auth material. Only mount or create the paths used by the selected provider auth method.
+The JWT, client certificate, and PKCS#11 PIN paths are deployment-specific auth
+material. Only mount or create the paths used by the selected provider auth
+method.
+
+Files under `/etc/openbao-kms/` are operator-owned. The package creates the
+directory layout and installs examples under `/usr/share/doc/bao-kms-provider`;
+it does not install, replace, or migrate the live provider configuration, CA
+bundle, JWT, certificate chain, or PKCS#11 PIN files during upgrade.
 
 Install package metadata:
 
 - `sysusers.d/openbao-kms.conf` creates `openbao-kms` and `openbao-kms-socket`.
 - `tmpfiles.d/openbao-kms.conf` creates the runtime, config, and state directories.
-- `scripts/postinstall.sh` runs `systemd-sysusers`, `systemd-tmpfiles --create`, and `systemctl daemon-reload` when those tools are available.
+- `scripts/postinstall.sh` runs `systemd-sysusers`, `systemd-tmpfiles --create`,
+  and `systemctl daemon-reload` when those tools are available.
 - `../../systemd/bao-kms-provider.service` runs the provider as `openbao-kms`.
 
 The package does not enable or start the service. Starting the provider changes
 the control-plane boot path and remains an explicit operator action.
 
-The socket group is separate from the provider primary group so kube-apiserver can connect to the socket without receiving access to provider auth material.
+Removing the package does not stop a running provider process and does not delete
+state or configuration. Stop the service explicitly during a maintenance window
+before removing the package.
+
+The socket group is separate from the provider primary group so kube-apiserver
+can connect to the socket without receiving access to provider auth material. If
+kube-apiserver runs as a non-root user, that user must be a member of
+`openbao-kms-socket`; kubeadm static-pod API servers usually run as root and do
+not need this group membership.

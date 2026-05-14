@@ -9,6 +9,7 @@ GOVULNCHECK ?= $(if $(wildcard $(GOBIN)/govulncheck),$(GOBIN)/govulncheck,govuln
 GOLANGCI_LINT ?= $(if $(wildcard $(GOBIN)/golangci-lint),$(GOBIN)/golangci-lint,golangci-lint)
 GO_LICENSES ?= $(if $(wildcard $(GOBIN)/go-licenses),$(GOBIN)/go-licenses,go-licenses)
 NFPM ?= $(if $(wildcard $(GOBIN)/nfpm),$(GOBIN)/nfpm,nfpm)
+NFPM_RUN ?= env -u GOFLAGS "$(GO)" run github.com/goreleaser/nfpm/v2/cmd/nfpm@$(NFPM_VERSION)
 TRIVY ?= trivy
 GINKGO ?= $(if $(wildcard $(GOBIN)/ginkgo),$(GOBIN)/ginkgo,ginkgo)
 SEMGREP_CONFIG_FLAGS ?= --config .semgrep/rules

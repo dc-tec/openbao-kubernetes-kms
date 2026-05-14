@@ -364,6 +364,8 @@ func TestSystemdAndPackageSamplesUseResolvedIdentity(t *testing.T) {
 	for _, want := range []string{
 		"name: bao-kms-provider",
 		"arch: ${NFPM_ARCH}",
+		"recommends:",
+		"- systemd",
 		"dst: /usr/bin/bao-kms-provider",
 		"dst: /usr/lib/systemd/system/bao-kms-provider.service",
 		"postinstall: deploy/package/linux/scripts/postinstall.sh",
