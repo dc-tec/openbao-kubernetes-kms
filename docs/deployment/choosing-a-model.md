@@ -6,7 +6,10 @@ weight: 10
 
 # Choosing A Model
 
-The preview release evidence targets two deployment models: a hardened systemd unit on the control-plane host, and a static pod managed by the kubelet. The choice depends on the control-plane lifecycle model, bootstrap dependencies, host hardening, upgrade process, and operator familiarity.
+The tested preview deployment models are a hardened systemd unit on the
+control-plane host and a static pod managed by the kubelet. The choice depends
+on the control-plane lifecycle model, bootstrap dependencies, host hardening,
+upgrade process, and operator familiarity.
 
 Default to systemd when you control the host operating-system lifecycle. Use static pods when the control plane is already kubeadm-style, every control-plane node can preload the provider image by digest, and hostPath preparation is part of the node lifecycle.
 

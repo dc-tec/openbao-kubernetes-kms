@@ -25,7 +25,7 @@ make test-e2e-cert-auth-openbao-ci
 That target runs real OpenBao with a TLS listener that requests client
 certificates. It configures the OpenBao cert auth method with a URI SAN-bound
 role, logs in through cert auth, and verifies Transit access with the issued
-token. It does not replace provider E2E coverage for PKCS#11 or SPIFFE source
+token. It does not replace provider E2E coverage for PKCS#11 source
 availability.
 
 Run the provider certificate-source lanes with:
@@ -34,15 +34,22 @@ Run the provider certificate-source lanes with:
 make test-e2e-provider-certauth-sources-openbao-ci
 ```
 
-That target runs two source-specific provider checks. The PKCS#11 lane builds an
-E2E image with SoftHSM, creates a real PKCS#11 key pair and client certificate,
-configures OpenBao cert auth with the generated CA, and runs the KMS v2 socket
-client through the provider. The SPIFFE lane starts real SPIRE server and agent
-containers, registers the provider UID selector, fetches a real X.509 SVID from
-the Workload API, and validates it through the provider SPIFFE certificate
-source code. The SPIFFE lane is source-level coverage only; full OpenBao cert
-login for stock SPIRE SVIDs is not claimed until the OpenBao cert-auth identity
-alias behavior is compatible with URI-SAN-only SVIDs.
+That target runs the supported source-specific provider check. The PKCS#11 lane
+builds an E2E image with SoftHSM, creates a real PKCS#11 key pair and client
+certificate, configures OpenBao cert auth with the generated CA, and runs the
+KMS v2 socket client through the provider.
+
+Run the SPIFFE source implementation check explicitly with:
+
+```sh
+make test-e2e-provider-certauth-spiffe-openbao-ci
+```
+
+That lane starts real SPIRE server and agent containers, registers the provider
+UID selector, fetches a real X.509 SVID from the Workload API, and validates it
+through the provider SPIFFE certificate source code. It is not wired into CI or
+the preview release gate, and it is not a support claim until the OpenBao
+cert-auth identity alias behavior is compatible with URI-SAN-only SVIDs.
 
 Run only the provider CLI slice with:
 

@@ -169,7 +169,7 @@ func TestOpenBaoTransitIntegration(t *testing.T) {
 		t.Fatalf("unexpected batch decrypt result: %#v", batch)
 	}
 
-	if err := client.ProbeEncryptDecrypt(ctx, ProbeRequest{
+	if _, err := client.ProbeEncryptDecrypt(ctx, ProbeRequest{
 		MountPath:      testMountPath,
 		KeyName:        testKeyName,
 		KeyVersion:     profile.LatestVersion,

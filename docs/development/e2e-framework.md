@@ -24,9 +24,9 @@ behavior.
 | Preview release Kind gate | `make test-e2e-release-preview-kind` | Runs the manifest-defined Kind release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime, Kind, kubectl |
 | OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.5.3` behavior. | Docker-compatible runtime |
 | OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao TLS cert auth method, listener client-certificate request, URI SAN role binding, cert login, and Transit access with the issued token. | Docker-compatible runtime |
-| Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Real SPIRE server and agent, Workload API socket, X.509 SVID selection, and provider local SPIFFE certificate validation. This is implementation evidence, not a public preview support claim. | Docker-compatible runtime |
+| Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Explicit implementation check for real SPIRE server and agent, Workload API socket, X.509 SVID selection, and provider local SPIFFE certificate validation. This lane is not wired into CI or the preview release gate. | Docker-compatible runtime |
 | Provider PKCS#11 SoftHSM certificate source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | Real SoftHSM token, PKCS#11 signer, provider image, OpenBao cert login, KMS v2 socket client, and Transit access. | Docker-compatible runtime |
-| Provider certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | Runs the SPIRE source and PKCS#11 SoftHSM source lanes. | Docker-compatible runtime |
+| Provider certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | Runs the supported PKCS#11 SoftHSM source lane. SPIRE remains explicit local implementation coverage only. | Docker-compatible runtime |
 | Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and provider auth. | Docker-compatible runtime |
 | Provider CLI | `make test-e2e-provider-cli-openbao-ci` | Provider image CLI commands against real OpenBao/config/state, including diagnostics and hardening failures. | Docker-compatible runtime |
 | Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted auth material, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
@@ -77,10 +77,10 @@ make test-e2e E2E_LABEL_FILTER='openbao && transit && ci'
 
 ## Suite Manifest
 
-`test/e2e/suites.yaml` describes E2E lanes and the preview release gate groups.
-It does not own concrete OpenBao or Kubernetes versions. Those remain in
-`.ci/versions.yaml`, and lanes reference the relevant fields through
-`versionRefs`.
+`test/e2e/suites.yaml` describes E2E lanes, run selectors, timeouts, required
+environment, reports, and the preview release gate groups. It does not own
+concrete OpenBao or Kubernetes versions. Those remain in `.ci/versions.yaml`,
+and lanes reference the relevant fields through `versionRefs`.
 
 The release workflow calls only the aggregate preview gate targets:
 
@@ -89,9 +89,13 @@ make test-e2e-release-preview-openbao
 make test-e2e-release-preview-kind
 ```
 
-Those targets read `releaseGate.preview.groups` from the suite manifest and run
-the listed lane `makeTarget` values in order. Release evidence must not drift
-from the manifest-defined groups.
+Those targets prepare the required local images once, then the release-gate
+runner reads `releaseGate.preview.groups` from the suite manifest and executes
+the listed lanes directly. The per-lane `makeTarget` values remain supported
+operator/developer entrypoints, but release evidence must come from the
+manifest-defined groups, run selectors, timeouts, and environment. Ginkgo
+label lanes constrain Go's test entrypoint to `TestE2E`; plain `testing` lanes
+must be selected explicitly with manifest `runRegex`.
 
 The Kind aggregate also reads `validation.kubernetes.previewMatrix` from
 `.ci/versions.yaml`. By default it runs the Kind lane group once for every
@@ -100,13 +104,22 @@ matrix entry with `releaseGate: true`. Set `E2E_KUBERNETES_LINE=1.34` or
 `1.36` is tracked as the intended next validation line until a digest-pinned
 Kind node image is available.
 
+For focused release-gate diagnosis after the required images are available, run
+a single lane through the same runner:
+
+```sh
+E2E_PROVIDER_IMAGE=ghcr.io/dc-tec/bao-kms-provider:e2e-local \
+  go run ./hack/tools/e2e_release_gate -group openbao -lane openbao-ha-ci
+```
+
 Soak lanes are release evidence for the pinned CI environment only. They are not
 an SLO, capacity, or production performance claim.
 
-The SPIRE certificate-source lane may be part of the OpenBao preview gate as
-implementation evidence. It does not make `auth.cert.source: spiffe` a supported
-user configuration until the supported OpenBao version can derive cert-auth
-identity aliases from URI SANs and release evidence covers that login path.
+The SPIRE certificate-source lane is not part of the CI or preview release gate.
+It remains an explicit implementation check only. It does not make
+`auth.cert.source: spiffe` a supported user configuration until the supported
+OpenBao version can derive cert-auth identity aliases from URI SANs and release
+evidence covers that login path.
 
 Current lane IDs:
 
@@ -115,7 +128,7 @@ Current lane IDs:
 | `openbao-ci` | active |
 | `openbao-provider-openbao-ci` | active |
 | `openbao-cert-auth-ci` | active |
-| `openbao-provider-certauth-spiffe-source-ci` | active |
+| `openbao-provider-certauth-spiffe-source-ci` | planned |
 | `openbao-provider-certauth-pkcs11-source-ci` | active |
 | `openbao-failure-ci` | active |
 | `openbao-provider-cli-ci` | active |
@@ -183,7 +196,7 @@ broad harness abstractions wait until multiple specs need them.
 | Variable | Default | Purpose |
 |---|---|---|
 | `E2E_OPENBAO_CI` | set by `make test-e2e-openbao-ci` | Enables the PR-capable OpenBao CI spec. |
-| `E2E_OPENBAO_IMAGE` | `validation.openbao.image` from `.ci/versions.yaml` | OpenBao image used by CI E2E environments. |
+| `E2E_OPENBAO_IMAGE` | `validation.openbao.image` from `.ci/versions.yaml` | Digest-pinned OpenBao image used by CI E2E environments. |
 | `E2E_KUBERNETES_LINE` | unset | Optional release-gate selector for one Kubernetes preview matrix line. |
 | `E2E_KIND_NODE_IMAGE` | `validation.kubernetes.kindNodeImage` from `.ci/versions.yaml` | Kind node image used by individual Kubernetes lanes. The Kind release gate overrides this from `validation.kubernetes.previewMatrix`. |
 | `E2E_PROVIDER_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-<commit>` | Provider image loaded into Kind or run in Docker full-stack tests. |
@@ -200,6 +213,15 @@ are reused across the release gate. Use `E2E_PROVIDER_BUILD=false` directly only
 when the referenced images are already built and available to the selected
 runtime.
 
+CI builds the default provider image and PKCS#11 validation image once in the
+`e2e-provider-images` job, uploads Docker archives, and has the image scan,
+OpenBao E2E, and Kind E2E jobs load those exact images with
+`E2E_PROVIDER_BUILD=false`. The release workflow pulls the digest produced by
+the release build job, tags it locally as `E2E_PROVIDER_IMAGE`, and runs the
+preview gate against that immutable build output. OpenBao release validation
+still builds local PKCS#11 and upgrade/rollback images because those are
+validation-only variants, not public release images.
+
 ## Reports And Artifacts
 
 | Variable | Default |
@@ -209,6 +231,14 @@ runtime.
 | `E2E_JSON_REPORT` | `artifacts/e2e/ginkgo.json` |
 | `E2E_TIMEOUT` | `30m` |
 | `E2E_PARALLEL_NODES` | `1` |
+
+Preview release gates write per-lane artifacts under
+`artifacts/e2e/<group>/<lane-id>/` for OpenBao lanes and
+`artifacts/e2e/kind/<kubernetes-line>/<lane-id>/` for Kind lanes. Every lane
+writes `console.log`. Ginkgo-spec lanes also write `junit.xml` and
+`ginkgo.json`; plain `testing` lanes are selected through manifest `runRegex`
+and keep their evidence in `console.log`. The shared `E2E_JUNIT_REPORT` and
+`E2E_JSON_REPORT` variables apply to the generic `make test-e2e` entrypoint.
 
 E2E logs are redacted. The framework never writes OpenBao tokens, JWTs,
 plaintext, or full ciphertext to artifacts.

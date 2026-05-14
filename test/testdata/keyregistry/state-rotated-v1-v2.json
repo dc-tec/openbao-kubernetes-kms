@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "keyregistry.openbao-kms/v1alpha1",
+  "generation": 2,
+  "previousHash": "krs1.DqMdjGGzCtdXlX6PD1Z5bcj4EyeiEzFav7vchElfAMo",
+  "currentHash": "krs1.evEbhkz0ZC9-duP2_n0HgzZ3szBdAPtktM6iSYw1On4",
+  "activeKeyId": "obk2.ImmpIXr3v4Fw4Im7457LAJiZdLOqK2dL6Nm3DEk-KEY",
+  "snapshots": [
+    {
+      "providerName": "openbao-kms-workload-a",
+      "clusterId": "workload-a",
+      "openbaoInstanceId": "bao-prod-a",
+      "transitMountId": "transit-prod-primary",
+      "transitKeyLineageId": "01HXEXAMPLEKEYLINEAGEID",
+      "transitVersion": 2,
+      "transitVersionCreatedAtUnix": 1700000120,
+      "kubernetesKeyId": "obk2.ImmpIXr3v4Fw4Im7457LAJiZdLOqK2dL6Nm3DEk-KEY",
+      "state": "active",
+      "aadMode": "aad.required",
+      "observedAtUnix": 1700000060,
+      "stableObservationCount": 1,
+      "stableAtUnix": 1700000060,
+      "promotedAtUnix": 1700000060
+    },
+    {
+      "providerName": "openbao-kms-workload-a",
+      "clusterId": "workload-a",
+      "openbaoInstanceId": "bao-prod-a",
+      "transitMountId": "transit-prod-primary",
+      "transitKeyLineageId": "01HXEXAMPLEKEYLINEAGEID",
+      "transitVersion": 1,
+      "transitVersionCreatedAtUnix": 1700000060,
+      "kubernetesKeyId": "obk2.SU0bKFnl1E6uEttJ3yhQy_uGBWZ6MUOJrNH4VJwtz0k",
+      "state": "retired",
+      "aadMode": "aad.required",
+      "observedAtUnix": 1700000000,
+      "promotedAtUnix": 1700000000
+    }
+  ]
+}

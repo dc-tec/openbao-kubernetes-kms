@@ -1,14 +1,16 @@
 ---
 title: "CLI"
-description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, config, policy openbao, exit codes."
+description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, config, policy openbao, completion, exit codes."
 weight: 10
 ---
 
 # CLI
 
-This page documents every command and flag supported by `bao-kms-provider`.
-Commands print stable text or JSON output where documented and use stable exit
-codes. They never print plaintext, JWTs, OpenBao tokens, or full ciphertext.
+This page documents the provider-owned operational commands, the Cobra-generated
+shell completion entry point, and the provider flags supported by
+`bao-kms-provider`. Commands print stable text or JSON output where documented
+and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or
+full ciphertext.
 
 ## serve
 
@@ -53,8 +55,8 @@ Checks:
 | Token policy | Token can read Transit metadata and perform encrypt and decrypt. |
 | Transit key exists | Metadata read succeeds. |
 | Key type | Matches allowed key types. |
-| Key export | `exportable=false` unless explicitly allowed. |
-| Plaintext backup | `allow_plaintext_backup=false` unless explicitly allowed. |
+| Key export | `exportable=false`. |
+| Plaintext backup | `allow_plaintext_backup=false`. |
 | Key deletion | `deletion_allowed=false`. |
 | Upsert | Transit mount has `disable_upsert=true` where configured. |
 | Encryption/decryption | Test encrypt and decrypt of random non-secret probe data succeed. |
@@ -67,6 +69,11 @@ Checks:
 `doctor` prints a report with stable check IDs and exits non-zero when any
 check fails. Use `--output text` for the default human-readable report or
 `--output json` for automation.
+
+Transit profile failures include an impact prefix. `cryptographic_safety`
+findings protect the validated encryption and AAD contract. `api_server_availability`
+findings identify settings that can make Kubernetes reads or writes fail even
+though they may not weaken ciphertext confidentiality directly.
 
 ## verify-key
 
@@ -122,15 +129,28 @@ Reports:
 
 - whether local registry state was loaded,
 - registry generation and state hash when available,
+- registry checkpoint status, generation, and hash when available,
+- state bootstrap eligibility and reason when local registry state is absent,
 - current active Transit version,
 - current Kubernetes `key_id` hash,
 - latest observed Transit version,
 - pending promotion status,
 - estimated promotion time when a pending version has become stable.
 
+Checkpoint status values:
+
+- `current`: checkpoint exists and matches the loaded state generation/hash,
+- `behind`: checkpoint exists and accepts a newer state generation,
+- `missing`: state exists but the checkpoint is absent,
+- `absent`: neither state nor checkpoint exists.
+
 If local registry state is missing, `rotation-plan` only synthesizes initial
 bootstrap state from initial Transit metadata. It fails instead of reporting an
-active key hash from live Transit metadata after rotation.
+active key hash from live Transit metadata after rotation. If a checkpoint is
+present but the state file is missing or rolled back, the command fails closed.
+When local state is absent and OpenBao metadata is readable, the command reports
+or returns the exact auto-bootstrap reason, such as an advanced
+`latest_version`, `min_available_version`, or `min_decryption_version`.
 
 ## verify-rotation
 
@@ -149,7 +169,7 @@ or retained backup has been rewritten, or recommend raising OpenBao
 `min_decryption_version`.
 
 Treat it as a local preflight signal. The operator still owns independent
-migration evidence, backup-retention evidence, and any change to
+migration records, backup-retention records, and any change to
 `min_decryption_version`.
 
 ## config
@@ -189,6 +209,18 @@ Output fields:
 - `dirty`
 
 Use this command when comparing control-plane nodes during upgrades, rollback checks, and incident response.
+
+## completion
+
+Generate shell completion scripts through Cobra's standard completion command:
+
+```sh
+bao-kms-provider completion zsh
+```
+
+Supported shells are `bash`, `fish`, `powershell`, and `zsh`. Use
+`bao-kms-provider completion <shell> --help` for shell-specific installation
+text. Cobra also provides the standard `help` command for local command help.
 
 ## policy openbao
 

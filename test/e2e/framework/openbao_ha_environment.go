@@ -21,7 +21,9 @@ import (
 const (
 	defaultOpenBaoHANodeCount          = 3
 	defaultOpenBaoHAProviderNodeIndex  = 1
+	defaultOpenBaoHAStartupWaitTimeout = 90 * time.Second
 	defaultOpenBaoHAClusterWaitTimeout = 75 * time.Second
+	defaultOpenBaoHADiagnosticTimeout  = 10 * time.Second
 )
 
 type OpenBaoHAEnvironmentConfig struct {
@@ -66,11 +68,15 @@ type raftPeer struct {
 }
 
 func StartOpenBaoHAEnvironment(ctx context.Context, cfg OpenBaoHAEnvironmentConfig) (*OpenBaoHAEnvironment, error) {
+	startupWait := cfg.StartupWait
+	if startupWait <= 0 {
+		startupWait = defaultOpenBaoHAStartupWaitTimeout
+	}
 	baseCfg := defaultOpenBaoEnvironmentConfig(OpenBaoEnvironmentConfig{
 		Image:        cfg.Image,
 		TransitMount: cfg.TransitMount,
 		TransitKey:   cfg.TransitKey,
-		StartupWait:  cfg.StartupWait,
+		StartupWait:  startupWait,
 		DockerBinary: cfg.DockerBinary,
 		NetworkName:  cfg.NetworkName,
 		JWTTTL:       cfg.JWTTTL,
@@ -116,6 +122,10 @@ func StartOpenBaoHAEnvironment(ctx context.Context, cfg OpenBaoHAEnvironmentConf
 	certDir, err := os.MkdirTemp(artifactDir, "openbao-ha-tls-")
 	if err != nil {
 		return nil, fmt.Errorf("create OpenBao HA TLS directory: %w", err)
+	}
+	if err := os.Chmod(certDir, 0o777); err != nil {
+		_ = os.RemoveAll(certDir)
+		return nil, fmt.Errorf("make OpenBao HA TLS directory container-readable: %w", err)
 	}
 	suffix, err := randomHex(6)
 	if err != nil {
@@ -227,7 +237,7 @@ func (h *OpenBaoHAEnvironment) start(ctx context.Context, startupWait time.Durat
 		}
 		return h.configureAutopilot(ctx)
 	}); err != nil {
-		return err
+		return h.nodeStartupError(ctx, 0, err)
 	}
 	for index := 1; index < len(h.nodes); index++ {
 		if err := h.startNode(ctx, index); err != nil {
@@ -243,7 +253,7 @@ func (h *OpenBaoHAEnvironment) start(ctx context.Context, startupWait time.Durat
 			}
 			return h.unseal(ctx, httpClient)
 		}); err != nil {
-			return err
+			return h.nodeStartupError(ctx, index, err)
 		}
 	}
 	for index := 1; index < len(h.nodes); index++ {
@@ -297,7 +307,6 @@ func (h *OpenBaoHAEnvironment) startNode(ctx context.Context, index int) error {
 	configPath := "/bao/tls/" + node.name + ".hcl"
 	args := []string{
 		"run",
-		"--rm",
 		"--detach",
 		"--name", node.name,
 		"--network", h.networkName,
@@ -483,6 +492,54 @@ func (h *OpenBaoHAEnvironment) survivorDiagnostics(ctx context.Context) string {
 	return out.String()
 }
 
+func (h *OpenBaoHAEnvironment) nodeStartupError(ctx context.Context, index int, err error) error {
+	nodeName := "unknown"
+	if index >= 0 && index < len(h.nodes) {
+		nodeName = h.nodes[index].name
+	}
+	return fmt.Errorf("start OpenBao HA node %s: %w\n%s", nodeName, err, h.nodeDiagnostics(ctx, index))
+}
+
+func (h *OpenBaoHAEnvironment) nodeDiagnostics(ctx context.Context, index int) string {
+	if index < 0 || index >= len(h.nodes) {
+		return "OpenBao HA diagnostics unavailable: node index out of range\n"
+	}
+	diagCtx, cancel := context.WithTimeout(ctx, defaultOpenBaoHADiagnosticTimeout)
+	defer cancel()
+
+	node := h.nodes[index]
+	var out strings.Builder
+	_, _ = fmt.Fprintf(&out, "== %s container ==\n", node.name)
+	h.appendDockerDiagnostic(
+		diagCtx,
+		&out,
+		"ps",
+		"ps", "-a", "--filter", "name="+node.name, "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}",
+	)
+	_, _ = fmt.Fprintf(&out, "== %s port ==\n", node.name)
+	h.appendDockerDiagnostic(diagCtx, &out, "port", "port", node.name, "8200/tcp")
+	_, _ = fmt.Fprintf(&out, "== %s logs ==\n", node.name)
+	h.appendDockerDiagnostic(diagCtx, &out, "logs", "logs", "--tail", "80", node.name)
+	return out.String()
+}
+
+func (h *OpenBaoHAEnvironment) appendDockerDiagnostic(
+	ctx context.Context,
+	out *strings.Builder,
+	label string,
+	args ...string,
+) {
+	cmd := exec.CommandContext(ctx, h.dockerBinary, args...)
+	output, err := cmd.CombinedOutput()
+	if len(bytes.TrimSpace(output)) > 0 {
+		_, _ = out.Write(bytes.TrimSpace(output))
+		_, _ = out.WriteString("\n")
+	}
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "%s failed: %v\n", label, err)
+	}
+}
+
 func (h *OpenBaoHAEnvironment) probeHealthStandbyOK(ctx context.Context) error {
 	httpClient, err := openbao.NewHTTPClient(h.CACertFile, openBaoTLSServerName, 2*time.Second)
 	if err != nil {
@@ -546,7 +603,8 @@ func writeOpenBaoHARaftStorageConfig(dir string, nodeName string, retryJoinNodes
   }
 `, retryJoinNode, openBaoTLSServerName)
 	}
-	raw := fmt.Sprintf(`api_addr = "https://%s:8200"
+	raw := fmt.Sprintf(`disable_mlock = true
+api_addr = "https://%s:8200"
 cluster_addr = "https://%s:8201"
 
 storage "raft" {

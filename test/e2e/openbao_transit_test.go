@@ -230,7 +230,7 @@ func validateOpenBaoTransit(ctx SpecContext, client *openbao.Client, mountPath s
 	Expect(string(batch.Results[0].Plaintext)).To(Equal("ws03-e2e-plaintext"))
 
 	By("running a non-secret encrypt/decrypt probe")
-	err = client.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
+	_, err = client.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
 		MountPath:      mountPath,
 		KeyName:        keyName,
 		KeyVersion:     profile.LatestVersion,

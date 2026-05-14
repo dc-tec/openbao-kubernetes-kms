@@ -93,6 +93,6 @@ func (f *fakeBenchmarkTransitClient) Capabilities(
 func (f *fakeBenchmarkTransitClient) ProbeEncryptDecrypt(
 	context.Context,
 	openbao.ProbeRequest,
-) error {
-	return nil
+) (openbao.ProbeResult, error) {
+	return openbao.ProbeResult{Ciphertext: []byte("vault:v1:test"), KeyVersion: 1}, nil
 }

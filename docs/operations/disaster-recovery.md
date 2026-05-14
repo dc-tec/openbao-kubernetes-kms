@@ -32,6 +32,14 @@ The recovery posture is conservative:
 - use `doctor` and `verify-key` to check the KMS path before restarting API servers,
 - restore OpenBao and etcd from a compatible backup pair when key versions or ciphertext epochs no longer line up.
 
+Brownfield adoption of an existing Transit key at version `2` or later is not a
+runtime bootstrap path in the preview line. Use `doctor`, `verify-key`,
+`rotation-plan`, or `verify-rotation` to inspect the auto-bootstrap decision.
+They report whether missing state is eligible and why it is denied. A denied
+decision is expected when `latest_version`, `min_available_version`, or
+`min_decryption_version` proves the provider cannot safely infer a complete
+first-use registry state.
+
 ## Recovery Decision Flow
 
 ```mermaid
@@ -89,6 +97,34 @@ Record with every backup set:
 
 Preserve historical Transit versions for at least as long as any retained etcd backup can reference them. Do not raise OpenBao `min_decryption_version` for versions that may still be needed by retained etcd backups.
 
+OpenBao backups must preserve Transit version creation timestamps for every
+version the provider state can reference. This includes intermediate versions
+that a control-plane node may have skipped over during back-to-back rotations;
+the provider treats missing or changed creation metadata as unsafe identity
+drift.
+
+## State Rollback Boundary
+
+The local registry state file and adjacent checkpoint help detect operational
+rollback mistakes. If the checkpoint survives, the provider rejects a missing
+state file, an older generation, and a same-generation state hash mismatch.
+`doctor`, `verify-key`, `rotation-plan`, and `verify-rotation` also report the
+checkpoint status so operators can spot an unanchored or lagging checkpoint.
+
+This is not a tamper-proof anti-rollback system. A privileged host-level
+attacker who can replace both the registry state file and checkpoint can still
+construct a self-consistent rollback. Treat the state directory as
+security-relevant host data:
+
+- keep the parent directory non-group-writable and non-world-writable,
+- back up the state file and checkpoint together,
+- compare state generation and `key_id` hash across control-plane nodes,
+- alert on missing state with checkpoint present, state rollback, or checkpoint
+  corruption,
+- use stronger host controls such as immutable backups, measured boot,
+  TPM-sealed anchors, or external generation records where the environment
+  requires tamper-resistant rollback protection.
+
 ## Restore OpenBao
 
 1. Restore OpenBao to a point that contains the required Transit key and all required historical versions.
@@ -116,7 +152,8 @@ Preferred procedure when both stores must be restored:
 
 1. Select an etcd backup and an OpenBao backup from a compatible time window.
 2. Restore OpenBao first.
-3. Verify the Transit key versions required by the etcd snapshot exist and are decryptable.
+3. Verify the Transit key versions required by the etcd snapshot exist, are
+   decryptable, and still have their original Unix-second creation timestamps.
 4. Restore etcd.
 5. Start the plugin.
 6. Start the API server.
@@ -168,7 +205,7 @@ Changing provider name, cluster ID, OpenBao instance ID, OpenBao namespace, Tran
 If both registry files are missing after Transit rotation, do not synthesize a
 replacement state file by hand. Current preview releases have no supported
 `recover-state` command, so normal runtime fails closed until complete
-state/checkpoint evidence is restored.
+state and checkpoint files are restored.
 
 ## Auth Issuer Loss
 

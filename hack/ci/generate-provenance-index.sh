@@ -16,6 +16,8 @@ SBOM_GLOB="${SBOM_GLOB:-dist/sbom-*.spdx.json}"
 BINARY_NAME="${BINARY_NAME:-bao-kms-provider}"
 RELEASE_SOURCE_REF="${RELEASE_SOURCE_REF:-refs/tags/${VERSION}}"
 RELEASE_WORKFLOW="${RELEASE_WORKFLOW:-${REPO}/.github/workflows/release.yml}"
+ATTESTATIONS_AVAILABLE="${ATTESTATIONS_AVAILABLE:-true}"
+ATTESTATIONS_UNAVAILABLE_REASON="${ATTESTATIONS_UNAVAILABLE_REASON:-}"
 
 GOFLAGS="${GOFLAGS:--mod=vendor}" go run ./hack/tools/provenance_index \
   -index-path "${INDEX_PATH}" \
@@ -31,4 +33,6 @@ GOFLAGS="${GOFLAGS:--mod=vendor}" go run ./hack/tools/provenance_index \
   -release-workflow "${RELEASE_WORKFLOW}" \
   -checksums-path "${CHECKSUMS_PATH}" \
   -checksums-bundle-path "${CHECKSUMS_BUNDLE_PATH}" \
-  -sbom-glob "${SBOM_GLOB}"
+  -sbom-glob "${SBOM_GLOB}" \
+  -attestations-available="${ATTESTATIONS_AVAILABLE}" \
+  -attestations-unavailable-reason="${ATTESTATIONS_UNAVAILABLE_REASON}"

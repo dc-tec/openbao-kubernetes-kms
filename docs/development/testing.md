@@ -102,3 +102,20 @@ intended next validation line until a digest-pinned Kind node image exists.
 Additional Kubernetes or OpenBao versions remain candidates until exact-pinned
 lanes and release evidence exist. See [Reference: Compatibility](/reference/compatibility/)
 for the support boundary.
+
+## Local Fuzz Campaigns
+
+`make ci-core` runs short fuzz smoke campaigns with `FUZZTIME=10s` by default.
+To spend more time on the curated parser and preflight targets without changing
+CI defaults, run:
+
+```sh
+FUZZTIME=1m make fuzz
+```
+
+For a single target, use Go's native fuzz command, for example:
+
+```sh
+go test ./internal/keyregistry -run '^$' -fuzz '^FuzzStateFileDecode$' -fuzztime=5m
+go test ./internal/aad -run '^$' -fuzz '^FuzzPrepareDecrypt$' -fuzztime=5m
+```

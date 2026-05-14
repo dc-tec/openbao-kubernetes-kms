@@ -24,6 +24,8 @@ const (
 	errorClassOpenBaoRateLimited  = "openbao_rate_limited"
 	errorClassOpenBaoSealed       = "openbao_sealed"
 	errorClassOpenBaoUnavailable  = "openbao_unavailable"
+	errorClassPanic               = "panic"
+	errorClassProtocolLimit       = "protocol_limit"
 	errorClassStatusStale         = "status_stale"
 	errorClassTimeout             = "timeout"
 	errorClassTransitKeyMissing   = "transit_key_missing"
@@ -72,6 +74,8 @@ type RequestObservation struct {
 	RequestUIDHash    string
 	ErrorClass        string
 	Healthz           string
+	PanicRecovered    bool
+	PanicType         string
 }
 
 // Observer receives redacted KMS v2 request and validation observations.
@@ -118,12 +122,12 @@ func (s *Server) observeValidationError(err error) {
 
 func statusLabel(err error) string {
 	if err == nil {
-		return "ok"
+		return grpcStatusLabels[codes.OK]
 	}
 	if label, ok := grpcStatusLabels[grpcstatus.Code(err)]; ok {
 		return label
 	}
-	return "unknown"
+	return grpcStatusLabels[codes.Unknown]
 }
 
 func errorClass(err error) string {
@@ -164,6 +168,11 @@ func validationErrorClass(err error) string {
 		return errorClassAnnotationInvalid
 	case errors.Is(err, aad.ErrAnnotationMismatch):
 		return errorClassAADMismatched
+	case errors.Is(err, ErrPanicRecovered):
+		return errorClassPanic
+	case errors.Is(err, ErrRequestLimitExceeded),
+		errors.Is(err, ErrResponseLimitExceeded):
+		return errorClassProtocolLimit
 	case errors.Is(err, ErrStatusUnavailable),
 		errors.Is(err, ErrStatusUnhealthy),
 		errors.Is(err, ErrActiveKeyUnavailable),

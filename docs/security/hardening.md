@@ -6,8 +6,8 @@ weight: 20
 
 # Hardening
 
-This page lists hardening requirements for deployments. It is hardening guidance,
-not a production support claim for preview releases. For the threat coverage see
+This page lists hardening requirements for deployments. Preview releases still
+need staging validation before production use. For the threat coverage see
 [Threat Model](/security/threat-model/). For the file ownership and group model
 the host-side requirements rely on, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 

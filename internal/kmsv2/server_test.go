@@ -98,6 +98,37 @@ func TestEncryptReturnsStatusKeyIDAndExplicitTransitVersion(t *testing.T) {
 	}
 }
 
+func TestEncryptResponseStaysWithinKMSProtocolLimits(t *testing.T) {
+	server, _, _, _ := newTestServer(t)
+
+	response, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	if len(response.GetCiphertext()) >= kmsv2.MaxKMSCiphertextBytes {
+		t.Fatalf("ciphertext length %d exceeds KMS v2 limit", len(response.GetCiphertext()))
+	}
+	if len(response.GetKeyId()) >= kmsv2.MaxKMSKeyIDBytes {
+		t.Fatalf("key_id length %d exceeds KMS v2 limit", len(response.GetKeyId()))
+	}
+	if got := protoAnnotationBytes(response.GetAnnotations()); got >= kmsv2.MaxKMSAnnotationBytes {
+		t.Fatalf("annotation bytes %d exceed KMS v2 limit", got)
+	}
+}
+
+func TestEncryptRejectsOversizedTransitCiphertext(t *testing.T) {
+	server, _, _, _ := newTestServerWithOptions(t, kmsv2.Options{
+		Transit: fixedEncryptTransit{
+			response: kmsv2.TransitEncryptResponse{
+				Ciphertext: bytes.Repeat([]byte("x"), kmsv2.MaxKMSCiphertextBytes),
+			},
+		},
+	})
+
+	_, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
+	assertCode(t, err, codes.Internal)
+}
+
 func TestDecryptAcceptsEncryptOutput(t *testing.T) {
 	server, _, _, _ := newTestServer(t)
 	plaintext := []byte(testPlaintext)
@@ -116,6 +147,65 @@ func TestDecryptAcceptsEncryptOutput(t *testing.T) {
 	}
 	if !bytes.Equal(decrypted.GetPlaintext(), plaintext) {
 		t.Fatalf("decrypt plaintext mismatch:\nwant %q\ngot  %q", plaintext, decrypted.GetPlaintext())
+	}
+}
+
+func TestDecryptRejectsOversizedCiphertextBeforeTransit(t *testing.T) {
+	server, _, transit, _ := newTestServer(t)
+	encrypted, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+
+	before := transit.DecryptCalls()
+	_, err = server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
+		Ciphertext:  bytes.Repeat([]byte("c"), kmsv2.MaxKMSCiphertextBytes),
+		KeyId:       encrypted.GetKeyId(),
+		Annotations: encrypted.GetAnnotations(),
+	})
+	assertCode(t, err, codes.InvalidArgument)
+	if transit.DecryptCalls() != before {
+		t.Fatalf("oversized ciphertext reached transit")
+	}
+}
+
+func TestDecryptRejectsOversizedKeyIDBeforeTransit(t *testing.T) {
+	server, _, transit, _ := newTestServer(t)
+	encrypted, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+
+	before := transit.DecryptCalls()
+	_, err = server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
+		Ciphertext:  encrypted.GetCiphertext(),
+		KeyId:       strings.Repeat("k", kmsv2.MaxKMSKeyIDBytes),
+		Annotations: encrypted.GetAnnotations(),
+	})
+	assertCode(t, err, codes.InvalidArgument)
+	if transit.DecryptCalls() != before {
+		t.Fatalf("oversized key_id reached transit")
+	}
+}
+
+func TestDecryptRejectsOversizedAnnotationsBeforeTransit(t *testing.T) {
+	server, _, transit, _ := newTestServer(t)
+	encrypted, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	annotations := cloneProtoAnnotations(encrypted.GetAnnotations())
+	annotations["oversized.kms.openbao.org"] = bytes.Repeat([]byte("a"), kmsv2.MaxKMSAnnotationBytes)
+
+	before := transit.DecryptCalls()
+	_, err = server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
+		Ciphertext:  encrypted.GetCiphertext(),
+		KeyId:       encrypted.GetKeyId(),
+		Annotations: annotations,
+	})
+	assertCode(t, err, codes.InvalidArgument)
+	if transit.DecryptCalls() != before {
+		t.Fatalf("oversized annotations reached transit")
 	}
 }
 
@@ -397,14 +487,25 @@ func TestTransitOpenBaoErrorsPreserveKMSBoundaryClasses(t *testing.T) {
 	}
 }
 
-func TestPanicRecoveryReturnsRedactedInternalError(t *testing.T) {
-	server, _, transit, _ := newTestServer(t)
+func TestPanicRecoveryReturnsRedactedInternalErrorAndObservation(t *testing.T) {
+	observer := &fakeObserver{}
+	server, _, transit, _ := newTestServerWithOptions(t, kmsv2.Options{Observer: observer})
 	transit.SetPanicEncrypt(true)
 
 	_, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{Plaintext: []byte(testPlaintext)})
 	assertCode(t, err, codes.Internal)
 	if err == nil || bytes.Contains([]byte(err.Error()), []byte(testPlaintext)) {
 		t.Fatalf("panic recovery leaked sensitive detail: %v", err)
+	}
+	if strings.Contains(err.Error(), "fake transit") {
+		t.Fatalf("panic recovery leaked panic value: %v", err)
+	}
+	if len(observer.requests) != 1 {
+		t.Fatalf("expected one request observation, got %d", len(observer.requests))
+	}
+	request := observer.requests[0]
+	if request.ErrorClass != "panic" || !request.PanicRecovered || request.PanicType != "string" {
+		t.Fatalf("unexpected panic observation: %#v", request)
 	}
 }
 
@@ -541,6 +642,14 @@ func protoAnnotations(annotations map[string]string) map[string][]byte {
 	return encoded
 }
 
+func protoAnnotationBytes(annotations map[string][]byte) int {
+	total := 0
+	for key, value := range annotations {
+		total += len(key) + len(value)
+	}
+	return total
+}
+
 type blockingStatusCache struct{}
 
 func (blockingStatusCache) Current(ctx context.Context) (kmsv2.CachedStatus, error) {
@@ -565,6 +674,24 @@ func (f failingTransit) Decrypt(
 	kmsv2.TransitDecryptRequest,
 ) (kmsv2.TransitDecryptResponse, error) {
 	return kmsv2.TransitDecryptResponse{}, f.decryptErr
+}
+
+type fixedEncryptTransit struct {
+	response kmsv2.TransitEncryptResponse
+}
+
+func (f fixedEncryptTransit) Encrypt(
+	context.Context,
+	kmsv2.TransitEncryptRequest,
+) (kmsv2.TransitEncryptResponse, error) {
+	return f.response, nil
+}
+
+func (f fixedEncryptTransit) Decrypt(
+	context.Context,
+	kmsv2.TransitDecryptRequest,
+) (kmsv2.TransitDecryptResponse, error) {
+	return kmsv2.TransitDecryptResponse{}, errors.New("unexpected decrypt")
 }
 
 type fakeObserver struct {

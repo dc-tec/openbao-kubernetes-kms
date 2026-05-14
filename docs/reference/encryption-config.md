@@ -16,7 +16,6 @@ kind: EncryptionConfiguration
 resources:
   - resources:
       - secrets
-      - configmaps
     providers:
       - kms:
           apiVersion: v2
@@ -30,7 +29,11 @@ A maintained sample lives at `deploy/kubernetes/encryption-config.yaml` in the r
 
 ## Field Reference
 
-### `apiVersion`
+### Top-Level `apiVersion`
+
+Always `apiserver.config.k8s.io/v1`; this is the Kubernetes API server configuration object version.
+
+### `providers[].kms.apiVersion`
 
 Always `v2`. KMS v1 is not implemented in this provider; configuring `v1` results in a Kubernetes API server error.
 

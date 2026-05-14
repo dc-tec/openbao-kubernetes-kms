@@ -65,6 +65,16 @@ func TestReadKeyProfileParsesMetadataAndFindings(t *testing.T) {
 			t.Fatalf("expected finding %q in %#v", want, findings)
 		}
 	}
+	byCode := findingsByCode(AssessKeyProfile(profile))
+	if byCode[findingCodeExportable].Impact != KeyProfileFindingImpactCryptographicSafety {
+		t.Fatalf("unexpected exportable finding impact: %#v", byCode[findingCodeExportable])
+	}
+	if byCode[findingCodeDeletionAllowed].Impact != KeyProfileFindingImpactAvailability {
+		t.Fatalf("unexpected deletion finding impact: %#v", byCode[findingCodeDeletionAllowed])
+	}
+	if got := openBaoFindingSeverity(byCode[findingCodeDeletionAllowed]); got != KeyProfileFindingSeverityBlocking {
+		t.Fatalf("unexpected deletion finding severity: %s", got)
+	}
 }
 
 func TestAssessKeyProfileFlagsUnsupportedKeyType(t *testing.T) {
@@ -76,6 +86,24 @@ func TestAssessKeyProfileFlagsUnsupportedKeyType(t *testing.T) {
 	}))
 	if !slices.Contains(findings, findingCodeUnsupportedType) {
 		t.Fatalf("expected unsupported key type finding in %#v", findings)
+	}
+}
+
+func TestBlockingKeyProfileFindingsIgnoresWarnings(t *testing.T) {
+	findings := BlockingKeyProfileFindings([]KeyProfileFinding{
+		{
+			Code:     "future_warning",
+			Message:  "future warning",
+			Severity: KeyProfileFindingSeverityWarning,
+		},
+		{
+			Code:     "blocking",
+			Message:  "blocking",
+			Severity: KeyProfileFindingSeverityBlocking,
+		},
+	})
+	if len(findings) != 1 || findings[0].Code != "blocking" {
+		t.Fatalf("unexpected blocking findings: %#v", findings)
 	}
 }
 
@@ -301,13 +329,17 @@ func TestProbeEncryptDecrypt(t *testing.T) {
 		}
 	}))
 	client := newTestClient(t, server)
-	if err := client.ProbeEncryptDecrypt(context.Background(), ProbeRequest{
+	result, err := client.ProbeEncryptDecrypt(context.Background(), ProbeRequest{
 		MountPath:      testMountPath,
 		KeyName:        testKeyName,
 		KeyVersion:     1,
 		AssociatedData: []byte("probe-aad"),
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("probe encrypt/decrypt: %v", err)
+	}
+	if string(result.Ciphertext) != ciphertext || result.KeyVersion != 1 {
+		t.Fatalf("unexpected probe result: %#v", result)
 	}
 }
 
@@ -359,4 +391,19 @@ func findingCodes(findings []KeyProfileFinding) []string {
 		codes = append(codes, finding.Code)
 	}
 	return codes
+}
+
+func findingsByCode(findings []KeyProfileFinding) map[string]KeyProfileFinding {
+	byCode := make(map[string]KeyProfileFinding, len(findings))
+	for _, finding := range findings {
+		byCode[finding.Code] = finding
+	}
+	return byCode
+}
+
+func openBaoFindingSeverity(finding KeyProfileFinding) KeyProfileFindingSeverity {
+	if finding.Severity == "" {
+		return KeyProfileFindingSeverityBlocking
+	}
+	return finding.Severity
 }

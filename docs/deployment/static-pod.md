@@ -24,7 +24,7 @@ The plugin static pod mounts everything it needs from the host:
 
 ## Example Manifest
 
-The maintained sample manifest lives at `deploy/static-pod/bao-kms-provider.yaml` in the repository. Replace the image digest and the supplemental group GID before deploying.
+The maintained sample manifest lives at `deploy/static-pod/bao-kms-provider.yaml` in the repository. Replace the placeholder image digest with the verified digest from the selected release, and replace the supplemental group GID before deploying. Do not deploy a tag-only image reference.
 
 ```yaml
 apiVersion: v1
@@ -118,7 +118,9 @@ spec:
         type: Directory
 ```
 
-The final manifest depends on the host socket group GID and the released image digest. The sample uses UID and GID `65532:65532`, matching the distroless non-root image user.
+The final manifest depends on the host socket group GID and the released image
+digest recorded for the selected release. The sample uses UID and GID `65532:65532`,
+matching the distroless non-root image user.
 
 ## Pod Hardening
 
@@ -139,7 +141,7 @@ The final manifest depends on the host socket group GID and the released image d
 
 For air-gapped or bootstrap-sensitive control planes, preload the image on every control-plane node:
 
-- use immutable image digests,
+- use immutable image digests from the selected release,
 - avoid `Always` pulls in recovery-sensitive deployments,
 - keep the previous image available for rollback,
 - document image import steps for node replacement.

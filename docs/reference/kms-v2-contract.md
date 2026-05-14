@@ -119,6 +119,26 @@ Required behavior:
 The provider requires valid AAD annotations. There is no supported mode that
 decrypts without AAD. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
 
+## Protocol Limits
+
+The provider enforces the Kubernetes KMS v2 field limits at the gRPC boundary:
+
+- `ciphertext` is non-empty and less than 1024 bytes.
+- `key_id` is non-empty and less than 1024 bytes.
+- annotation keys plus values are less than 32768 bytes in total.
+- annotation keys and values must be valid UTF-8.
+- annotation keys must be fully qualified domain names.
+
+Decrypt requests that exceed these limits are rejected before Transit decrypt is called. Encrypt fails closed if Transit returns a ciphertext or response metadata that would exceed the KMS v2 response limits.
+
+The gRPC server also caps inbound and outbound protobuf messages at 65536 bytes. This keeps the transport envelope bounded while leaving room for protobuf overhead around the KMS v2 field limits.
+
+The deep status probe also checks that a real non-secret Transit encrypt/decrypt
+round trip returns the expected Transit key version and ciphertext within the
+KMS v2 ciphertext limit. This turns backend response-shape drift into a
+readiness failure before Kubernetes depends on that response shape for new
+writes.
+
 ## Annotations
 
 KMS v2 annotations are plaintext metadata stored with encrypted data. They are non-secret and use fully qualified domain-name keys.
@@ -151,9 +171,8 @@ For the full annotation schema and AAD envelope shape see [Reference: Key ID And
 
 OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider
 does not implement KMS decrypt micro-batching in this release line because the
-production-grade KMS coalescer is not part of the release boundary. Sustained
-direct decrypt soak is the release evidence used to decide whether this remains
-deferred.
+current direct decrypt path is simpler and has been sufficient in validation so
+far.
 
 Micro-batching adds request queueing, per-request deadlines, cancellation
 behavior, order preservation, fairness, and failure fan-out concerns. Do not add
@@ -171,6 +190,7 @@ Errors map to stable classes in logs and metrics:
 - `openbao_rate_limited`
 - `openbao_sealed`
 - `openbao_unavailable`
+- `panic`
 - `transit_key_missing`
 - `transit_policy_denied`
 - `key_id_unknown`
@@ -178,6 +198,7 @@ Errors map to stable classes in logs and metrics:
 - `aad_missing`
 - `aad_mismatch`
 - `annotation_invalid`
+- `protocol_limit`
 - `status_stale`
 - `timeout`
 - `canceled`
@@ -201,9 +222,9 @@ decrypt:
   p99: 50ms
 ```
 
-These thresholds are not production SLOs. They must be validated against the
+These thresholds are not production SLOs. Validate alert thresholds against the
 operator's OpenBao deployment, network path, and Kubernetes API server behavior
-before they are used for paging or production-readiness claims.
+before using them for paging.
 
 ## Conformance Tests
 
@@ -214,7 +235,10 @@ Blocking cases:
 - healthy Status returns a non-empty `key_id`,
 - repeated Status calls do not call OpenBao,
 - encrypt returns the Status `key_id`,
+- encrypt output stays within KMS v2 ciphertext, `key_id`, and annotation limits,
 - decrypt accepts encrypt output,
+- decrypt rejects oversized ciphertext, `key_id`, and annotations before Transit,
+- oversized gRPC messages are rejected over the Unix socket before Transit,
 - decrypt rejects unknown `key_id` before the Transit call,
 - decrypt rejects malformed annotations,
 - decrypt rejects AAD mismatch,

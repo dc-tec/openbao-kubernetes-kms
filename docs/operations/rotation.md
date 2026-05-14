@@ -1,6 +1,6 @@
 ---
 title: "Rotation"
-description: "Rotate the OpenBao Transit key version, observe the provider's promotion state machine, migrate existing API resources, and collect bounded validation evidence."
+description: "Rotate the OpenBao Transit key version, observe provider promotion, migrate existing API resources, and preserve recovery records."
 weight: 10
 ---
 
@@ -85,14 +85,20 @@ Expected state:
 - every control-plane node converges to the same `key_id` hash,
 - no node flips back to the old `key_id`.
 
+If `latest_version` jumps over one or more Transit versions, the provider
+requires OpenBao to report creation metadata for every skipped version. Complete
+metadata lets the provider retain skipped versions as decrypt-only historical
+snapshots. Missing intermediate metadata fails closed because another
+control-plane node may have already encrypted data under a skipped version.
+
 The rotation metric is intentionally bounded to `state="active"`, `state="pending"`, and `state="unknown"`. Use `rotation-plan` for the detailed promotion reason and timing.
 
 ## Migrate Kubernetes Data
 
 Rewrite targeted resources after Status exposes the new `key_id`. Define the
 complete resource list from the API server `EncryptionConfiguration` before
-starting migration, and keep the command output, timestamps, and resource list as
-operator evidence.
+starting migration, and keep the command output, timestamps, and resource list
+for recovery records.
 
 For Secrets:
 
@@ -112,7 +118,7 @@ This command confirms the provider's local registry and Transit metadata view.
 When it succeeds, it still reports limited confidence because it does not scan
 Kubernetes resources, inspect etcd, or evaluate retained backups.
 
-Then collect independent evidence:
+Then collect independent verification:
 
 - run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml`,
 - restart one API server and verify reads succeed,
@@ -163,8 +169,10 @@ Abort rotation and consult [Operations: Troubleshooting](/operations/troubleshoo
 
 - nodes report different active `key_id` hashes,
 - Status flips old to new to old,
+- a back-to-back Transit rotation occurs before every node converges,
 - unknown `key_id` decrypt errors appear in metrics or logs,
 - AAD mismatch errors appear,
-- OpenBao metadata reads are inconsistent,
+- OpenBao metadata reads are inconsistent or missing intermediate Transit
+  version creation metadata,
 - `min_decryption_version` was changed unexpectedly,
 - any control-plane API server cannot restart cleanly.

@@ -350,7 +350,7 @@ func runTransitDiagnostics(
 	}
 
 	if includeProbe && profileSafe {
-		if err := client.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
+		if _, err := client.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
 			MountPath:      cfg.Transit.MountPath,
 			KeyName:        cfg.Transit.KeyName,
 			KeyVersion:     profile.LatestVersion,
@@ -478,18 +478,31 @@ func hasAnyCapability(caps openbao.CapabilitiesResult, capabilityPath string, ca
 func keyProfileFindings(profile openbao.KeyProfile) []string {
 	findings := make([]string, 0)
 	if profile.LatestVersion <= 0 {
-		findings = append(findings, "latest version is not positive")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"latest version is not positive",
+		))
 	}
 	if profile.SoftDeleted {
-		findings = append(findings, "key is soft-deleted")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"key is soft-deleted",
+		))
 	}
 	if profile.MinAvailableVersion > profile.LatestVersion {
-		findings = append(findings, "minimum available version exceeds latest version")
+		findings = append(findings, keyProfileFindingMessage(
+			openbao.KeyProfileFindingImpactAvailability,
+			"minimum available version exceeds latest version",
+		))
 	}
 	for _, finding := range openbao.AssessKeyProfile(profile) {
-		findings = append(findings, finding.Message)
+		findings = append(findings, openbao.FormatKeyProfileFindings([]openbao.KeyProfileFinding{finding}))
 	}
 	return findings
+}
+
+func keyProfileFindingMessage(impact openbao.KeyProfileFindingImpact, message string) string {
+	return fmt.Sprintf("%s/%s: %s", openbao.KeyProfileFindingSeverityBlocking, impact, message)
 }
 
 func checkKeyIDDeterminism(
@@ -585,9 +598,18 @@ func diagnosticPluginVersion(info version.Info) string {
 }
 
 func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, profile openbao.KeyProfile) {
-	state, _, err := keyregistry.LoadStateFile(cfg.State.Path, keyregistry.StateLoadOptions{})
+	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
 	if errors.Is(err, keyregistry.ErrStateNotFound) {
-		report.Warn(checkRegistryState, "Registry state", "state file is absent; checked latest Transit metadata only")
+		assessment := status.AssessAutoBootstrapState(profile)
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			fmt.Sprintf(
+				"state file is absent; auto-bootstrap eligible=%t: %s",
+				assessment.Allowed,
+				assessment.Reason,
+			),
+		)
 		checkLatestVersionRestrictions(report, profile)
 		return
 	}
@@ -595,7 +617,23 @@ func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, pro
 		report.Fail(checkRegistryState, "Registry state", safeMessage(err))
 		return
 	}
-	report.Pass(checkRegistryState, "Registry state", "loaded local key registry state")
+	switch loaded.CheckpointStatus {
+	case stateCheckpointStatusMissing:
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			"state file loaded but replay checkpoint is absent; rollback detection is not anchored",
+		)
+	case stateCheckpointStatusBehind:
+		report.Warn(
+			checkRegistryState,
+			"Registry state",
+			"state file loaded but replay checkpoint lags the accepted state generation",
+		)
+	default:
+		report.Pass(checkRegistryState, "Registry state", "loaded local key registry state and checkpoint")
+	}
+	state := loaded.State
 	failures := make([]string, 0)
 	for _, record := range state.Snapshots {
 		snapshot, snapshotErr := record.Snapshot()

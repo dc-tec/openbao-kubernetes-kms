@@ -39,7 +39,7 @@ const (
 	EnvDockerBinary = "DOCKER"
 	EnvSkipCleanup  = "E2E_SKIP_CLEANUP"
 
-	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.5.3"
+	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.5.3@sha256:fdc6da21ca6963560c32336fd7feb9cf2d5e52668f1a1647205a4b41171f0806"
 
 	openBaoListenAddress  = "0.0.0.0:8200"
 	openBaoTLSServerName  = "localhost"
@@ -56,6 +56,7 @@ const (
 	openBaoJWTTokenMaxTTL      = "30m"
 	openBaoJWTClockSkewLeeway  = "30s"
 	openBaoJWTExpirationLeeway = "30s"
+	openBaoEndpointProbeWait   = 5 * time.Second
 
 	openBaoCertAuthMount       = "auth/k8s-workload-a-cert"
 	openBaoCertAuthRole        = "openbao-kms-control-plane"
@@ -257,6 +258,13 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 	certDir, err := os.MkdirTemp(artifactDir, "openbao-ci-tls-")
 	if err != nil {
 		return nil, fmt.Errorf("create OpenBao environment TLS directory: %w", err)
+	}
+	// OpenBao dev TLS material is generated inside Docker; rootless or userns-remapped
+	// runners need write access to this host-mounted test directory.
+	// #nosec G302 -- e2e Docker container needs write access to generated dev TLS files.
+	if err := os.Chmod(certDir, 0o777); err != nil {
+		_ = os.RemoveAll(certDir)
+		return nil, fmt.Errorf("prepare OpenBao environment TLS directory permissions: %w", err)
 	}
 	token, err := randomHex(24)
 	if err != nil {
@@ -864,7 +872,8 @@ func writeOpenBaoRaftStorageConfig(dir string, requestClientCerts bool) error {
 		clientCertConfig = `  tls_disable_client_certs = false
 `
 	}
-	raw := fmt.Sprintf(`api_addr = "https://localhost:8200"
+	raw := fmt.Sprintf(`disable_mlock = true
+api_addr = "https://localhost:8200"
 cluster_addr = "https://localhost:8201"
 
 storage "raft" {
@@ -1049,6 +1058,7 @@ func (f *OpenBaoEnvironment) waitUntilEndpoint(ctx context.Context, timeout time
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	var lastErr error
 	for {
 		if err := f.refreshEndpoint(waitCtx); err == nil {
 			httpClient, clientErr := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 2*time.Second)
@@ -1061,13 +1071,24 @@ func (f *OpenBaoEnvironment) waitUntilEndpoint(ctx context.Context, timeout time
 						_ = response.Body.Close()
 						return nil
 					}
+					lastErr = responseErr
+				} else {
+					lastErr = requestErr
 				}
+			} else {
+				lastErr = clientErr
 			}
+		} else {
+			lastErr = err
 		}
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("OpenBao environment endpoint did not become reachable: %w", waitCtx.Err())
+			return openBaoReadinessTimeoutError(
+				"OpenBao environment endpoint did not become reachable",
+				waitCtx.Err(),
+				lastErr,
+			)
 		case <-ticker.C:
 		}
 	}
@@ -1278,23 +1299,35 @@ func (f *OpenBaoEnvironment) waitUntilReady(ctx context.Context, timeout time.Du
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	var lastErr error
 	for {
 		if err := f.refreshEndpoint(waitCtx); err == nil {
 			if err := f.probeHealth(waitCtx); err == nil {
 				return nil
+			} else {
+				lastErr = err
 			}
+		} else {
+			lastErr = err
 		}
 
 		select {
 		case <-waitCtx.Done():
-			return fmt.Errorf("OpenBao environment did not become ready: %w", waitCtx.Err())
+			return openBaoReadinessTimeoutError(
+				"OpenBao environment did not become ready",
+				waitCtx.Err(),
+				lastErr,
+			)
 		case <-ticker.C:
 		}
 	}
 }
 
 func (f *OpenBaoEnvironment) refreshEndpoint(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, f.dockerBinary, "port", f.containerName, "8200/tcp")
+	probeCtx, cancel := context.WithTimeout(ctx, openBaoEndpointProbeWait)
+	defer cancel()
+
+	cmd := exec.CommandContext(probeCtx, f.dockerBinary, "port", f.containerName, "8200/tcp")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("resolve OpenBao environment port: %w", err)
@@ -1312,9 +1345,16 @@ func (f *OpenBaoEnvironment) refreshEndpoint(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	f.Address = "https://localhost:" + port
+	f.Address = "https://" + net.JoinHostPort("127.0.0.1", port)
 	f.CACertFile = caFile
 	return nil
+}
+
+func openBaoReadinessTimeoutError(message string, timeoutErr error, lastErr error) error {
+	if lastErr == nil {
+		return fmt.Errorf("%s: %w", message, timeoutErr)
+	}
+	return fmt.Errorf("%s: %w (last readiness error: %v)", message, timeoutErr, lastErr)
 }
 
 func (f *OpenBaoEnvironment) probeHealth(ctx context.Context) error {

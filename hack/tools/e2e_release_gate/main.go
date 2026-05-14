@@ -6,14 +6,21 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-const defaultManifestPath = "test/e2e/suites.yaml"
+const (
+	defaultManifestPath = "test/e2e/suites.yaml"
+	defaultGinkgoBinary = "ginkgo"
+	ginkgoSuiteRunRegex = "^TestE2E$"
+)
 
 type suitesManifest struct {
 	Version       int           `yaml:"version"`
@@ -46,21 +53,23 @@ type releaseGateDefinition struct {
 }
 
 type lane struct {
-	ID            string   `yaml:"id"`
-	Name          string   `yaml:"name"`
-	MakeTarget    string   `yaml:"makeTarget"`
-	Package       string   `yaml:"package"`
-	LabelFilter   string   `yaml:"labelFilter"`
-	PRScope       string   `yaml:"prScope"`
-	Environment   string   `yaml:"environment"`
-	Isolation     string   `yaml:"isolation"`
-	Timeout       string   `yaml:"timeout"`
-	ParallelNodes int      `yaml:"parallelNodes"`
-	RequiredEnv   []string `yaml:"requiredEnv"`
-	EnableEnv     string   `yaml:"enableEnv"`
-	VersionRefs   []string `yaml:"versionRefs"`
-	Status        string   `yaml:"status"`
-	Reports       bool     `yaml:"reports"`
+	ID               string   `yaml:"id"`
+	Name             string   `yaml:"name"`
+	MakeTarget       string   `yaml:"makeTarget"`
+	Package          string   `yaml:"package"`
+	LabelFilter      string   `yaml:"labelFilter"`
+	RunRegex         string   `yaml:"runRegex"`
+	PRScope          string   `yaml:"prScope"`
+	Environment      string   `yaml:"environment"`
+	Isolation        string   `yaml:"isolation"`
+	Timeout          string   `yaml:"timeout"`
+	ParallelNodes    int      `yaml:"parallelNodes"`
+	RequiredEnv      []string `yaml:"requiredEnv"`
+	EnableEnv        string   `yaml:"enableEnv"`
+	ProviderImageEnv string   `yaml:"providerImageEnv"`
+	VersionRefs      []string `yaml:"versionRefs"`
+	Status           string   `yaml:"status"`
+	Reports          bool     `yaml:"reports"`
 }
 
 type versionsConfig struct {
@@ -99,8 +108,14 @@ func run(args []string) error {
 	manifestPath := flags.String("manifest", defaultManifestPath, "Path to E2E suite manifest")
 	versionsPath := flags.String("versions", "", "Path to version policy file")
 	group := flags.String("group", "", "Release gate group to run")
-	kubernetesLine := flags.String("kubernetes-line", os.Getenv("E2E_KUBERNETES_LINE"), "Kubernetes release line to run for Kind release gates")
-	makeCommand := flags.String("make", "make", "Make command to execute")
+	kubernetesLine := flags.String(
+		"kubernetes-line",
+		os.Getenv("E2E_KUBERNETES_LINE"),
+		"Kubernetes release line to run for Kind release gates",
+	)
+	ginkgoBinary := flags.String("ginkgo", envDefault("GINKGO", defaultGinkgoBinary), "Ginkgo binary to execute")
+	artifactDir := flags.String("artifact-dir", "", "Directory for release gate E2E reports")
+	laneID := flags.String("lane", "", "Optional release gate lane ID to run from the selected group")
 	matrix := flags.Bool("matrix", false, "Print GitHub Actions JSON matrix for the selected release gate group")
 	dryRun := flags.Bool("dry-run", false, "Print selected targets without running them")
 	if err := flags.Parse(args); err != nil {
@@ -117,9 +132,18 @@ func run(args []string) error {
 	if *versionsPath == "" {
 		*versionsPath = manifest.VersionPolicy.Source
 	}
-	targets, err := releaseGateTargets(manifest, *group)
+	lanes, err := releaseGateLanes(manifest, *group)
 	if err != nil {
 		return err
+	}
+	if *laneID != "" {
+		lanes, err = selectLane(lanes, *laneID)
+		if err != nil {
+			return err
+		}
+	}
+	if *artifactDir == "" {
+		*artifactDir = envDefault("E2E_ARTIFACT_DIR", manifest.Defaults.ArtifactDir)
 	}
 
 	if *group == "kind" {
@@ -130,30 +154,17 @@ func run(args []string) error {
 		if *matrix {
 			return printKubernetesMatrix(kubernetesEntries)
 		}
-		return runKubernetesMatrixTargets(*makeCommand, targets, kubernetesEntries, *dryRun)
+		return runKubernetesMatrixLanes(*ginkgoBinary, *artifactDir, manifest.Defaults, lanes, kubernetesEntries, *dryRun)
 	}
 	if *matrix {
 		return fmt.Errorf("-matrix is only supported for the kind release gate group")
 	}
 
-	for _, target := range targets {
-		if *dryRun {
-			fmt.Println(target)
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "==> %s %s\n", *makeCommand, target)
-		cmd := exec.Command(*makeCommand, target)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%s %s: %w", *makeCommand, target, err)
-		}
-	}
-	return nil
+	return runLanes(*ginkgoBinary, *artifactDir, manifest.Defaults, *group, lanes, nil, *dryRun)
 }
 
 func loadManifest(path string) (suitesManifest, error) {
+	// #nosec G304 -- release gate helper intentionally reads the caller-selected manifest path.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return suitesManifest{}, fmt.Errorf("read manifest: %w", err)
@@ -168,7 +179,7 @@ func loadManifest(path string) (suitesManifest, error) {
 	return manifest, nil
 }
 
-func releaseGateTargets(manifest suitesManifest, group string) ([]string, error) {
+func releaseGateLanes(manifest suitesManifest, group string) ([]lane, error) {
 	if manifest.ReleaseGate.Preview.Status != "active" {
 		return nil, fmt.Errorf("preview release gate status must be active, got %q", manifest.ReleaseGate.Preview.Status)
 	}
@@ -188,7 +199,7 @@ func releaseGateTargets(manifest suitesManifest, group string) ([]string, error)
 		}
 	}
 
-	targets := make([]string, 0, len(laneIDs))
+	selected := make([]lane, 0, len(laneIDs))
 	for _, laneID := range laneIDs {
 		entry, ok := lanes[laneID]
 		if !ok {
@@ -197,15 +208,25 @@ func releaseGateTargets(manifest suitesManifest, group string) ([]string, error)
 		if entry.Status != "active" {
 			return nil, fmt.Errorf("release gate lane %q status must be active, got %q", laneID, entry.Status)
 		}
-		if entry.MakeTarget == "" {
-			return nil, fmt.Errorf("release gate lane %q has no make target", laneID)
+		if entry.LabelFilter == "" && entry.RunRegex == "" {
+			return nil, fmt.Errorf("release gate lane %q has neither labelFilter nor runRegex", laneID)
 		}
-		targets = append(targets, entry.MakeTarget)
+		selected = append(selected, entry)
 	}
-	return targets, nil
+	return selected, nil
+}
+
+func selectLane(lanes []lane, laneID string) ([]lane, error) {
+	for _, entry := range lanes {
+		if entry.ID == laneID {
+			return []lane{entry}, nil
+		}
+	}
+	return nil, fmt.Errorf("selected lane %q is not in release gate group", laneID)
 }
 
 func loadVersions(path string) (versionsConfig, error) {
+	// #nosec G304 -- release gate helper intentionally reads the caller-selected version policy path.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return versionsConfig{}, fmt.Errorf("read versions: %w", err)
@@ -243,7 +264,7 @@ func releaseGateKubernetesMatrix(versionsPath string, selectedLine string) ([]ku
 		entries = append(entries, entry)
 	}
 	if selectedLine != "" && len(entries) == 0 {
-		return nil, fmt.Errorf("Kubernetes release gate line %q is not configured", selectedLine)
+		return nil, fmt.Errorf("kubernetes release gate line %q is not configured", selectedLine)
 	}
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("%s has no Kubernetes previewMatrix entries with releaseGate=true", versionsPath)
@@ -253,19 +274,19 @@ func releaseGateKubernetesMatrix(versionsPath string, selectedLine string) ([]ku
 
 func validateKubernetesPreviewEntry(entry kubernetesPreviewEntry) error {
 	if entry.Line == "" {
-		return errors.New("Kubernetes previewMatrix entry is missing line")
+		return errors.New("kubernetes previewMatrix entry is missing line")
 	}
 	if entry.ExactVersion == "" {
-		return fmt.Errorf("Kubernetes previewMatrix line %q is missing exactVersion", entry.Line)
+		return fmt.Errorf("kubernetes previewMatrix line %q is missing exactVersion", entry.Line)
 	}
 	if entry.KindNodeImage == "" {
-		return fmt.Errorf("Kubernetes previewMatrix line %q is missing kindNodeImage", entry.Line)
+		return fmt.Errorf("kubernetes previewMatrix line %q is missing kindNodeImage", entry.Line)
 	}
 	if entry.KindNodeImageDigest == "" {
-		return fmt.Errorf("Kubernetes previewMatrix line %q is missing kindNodeImageDigest", entry.Line)
+		return fmt.Errorf("kubernetes previewMatrix line %q is missing kindNodeImageDigest", entry.Line)
 	}
 	if !strings.Contains(entry.KindNodeImage, "@"+entry.KindNodeImageDigest) {
-		return fmt.Errorf("Kubernetes previewMatrix line %q kindNodeImage must include kindNodeImageDigest", entry.Line)
+		return fmt.Errorf("kubernetes previewMatrix line %q kindNodeImage must include kindNodeImageDigest", entry.Line)
 	}
 	return nil
 }
@@ -279,27 +300,293 @@ func printKubernetesMatrix(entries []kubernetesPreviewEntry) error {
 	return nil
 }
 
-func runKubernetesMatrixTargets(makeCommand string, targets []string, entries []kubernetesPreviewEntry, dryRun bool) error {
+func runKubernetesMatrixLanes(
+	ginkgoBinary string,
+	artifactDir string,
+	defaults suiteDefaults,
+	lanes []lane,
+	entries []kubernetesPreviewEntry,
+	dryRun bool,
+) error {
 	for _, entry := range entries {
-		for _, target := range targets {
-			if dryRun {
-				fmt.Printf("kubernetes=%s version=%s image=%s target=%s\n", entry.Line, entry.ExactVersion, entry.KindNodeImage, target)
-				continue
-			}
-			fmt.Fprintf(os.Stderr, "==> E2E_KUBERNETES_LINE=%s E2E_KIND_NODE_IMAGE=%s %s %s\n", entry.Line, entry.KindNodeImage, makeCommand, target)
-			cmd := exec.Command(makeCommand, target)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			cmd.Stdin = os.Stdin
-			cmd.Env = append(os.Environ(),
-				"E2E_KUBERNETES_LINE="+entry.Line,
-				"E2E_KUBERNETES_VERSION="+entry.ExactVersion,
-				"E2E_KIND_NODE_IMAGE="+entry.KindNodeImage,
-			)
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("%s %s for Kubernetes %s: %w", makeCommand, target, entry.Line, err)
-			}
+		if err := runLanes(ginkgoBinary, artifactDir, defaults, "kind", lanes, &entry, dryRun); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func runLanes(
+	ginkgoBinary string,
+	artifactDir string,
+	defaults suiteDefaults,
+	group string,
+	lanes []lane,
+	kubernetesEntry *kubernetesPreviewEntry,
+	dryRun bool,
+) error {
+	for _, entry := range lanes {
+		command, err := buildLaneCommand(ginkgoBinary, artifactDir, defaults, group, entry, kubernetesEntry, !dryRun)
+		if err != nil {
+			return err
+		}
+		if dryRun {
+			fmt.Println(command.String())
+			continue
+		}
+		if err := os.MkdirAll(command.ReportDir, 0o750); err != nil {
+			return fmt.Errorf("prepare report directory for lane %q: %w", entry.ID, err)
+		}
+		fmt.Fprintf(os.Stderr, "==> %s\n", command.String())
+		logFile, err := os.Create(filepath.Join(command.ReportDir, "console.log"))
+		if err != nil {
+			return fmt.Errorf("create console log for lane %q: %w", entry.ID, err)
+		}
+		// #nosec G204 -- release gate helper intentionally executes the configured Ginkgo binary.
+		cmd := exec.Command(command.Binary, command.Args...)
+		cmd.Stdout = io.MultiWriter(os.Stdout, logFile)
+		cmd.Stderr = io.MultiWriter(os.Stderr, logFile)
+		cmd.Stdin = os.Stdin
+		cmd.Env = command.Env
+		runErr := cmd.Run()
+		closeErr := logFile.Close()
+		if runErr != nil {
+			return fmt.Errorf("run release gate lane %q: %w", entry.ID, runErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close console log for lane %q: %w", entry.ID, closeErr)
+		}
+	}
+	return nil
+}
+
+type laneCommand struct {
+	Binary    string
+	Args      []string
+	Env       []string
+	ReportDir string
+}
+
+func (c laneCommand) String() string {
+	parts := make([]string, 0, 1+len(c.Args))
+	parts = append(parts, shellQuote(c.Binary))
+	for _, arg := range c.Args {
+		parts = append(parts, shellQuote(arg))
+	}
+	return strings.Join(parts, " ")
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	if !strings.ContainsAny(value, " \t\n'\"\\$`&|;<>(){}[]*?!") {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func buildLaneCommand(
+	ginkgoBinary string,
+	artifactDir string,
+	defaults suiteDefaults,
+	group string,
+	entry lane,
+	kubernetesEntry *kubernetesPreviewEntry,
+	validateEnv bool,
+) (laneCommand, error) {
+	if err := validateGinkgoBinary(ginkgoBinary, validateEnv); err != nil {
+		return laneCommand{}, err
+	}
+
+	packagePath, err := lanePackage(entry, defaults)
+	if err != nil {
+		return laneCommand{}, err
+	}
+	timeout, err := laneTimeout(entry, defaults)
+	if err != nil {
+		return laneCommand{}, err
+	}
+	parallelNodes, err := laneParallelNodes(entry, defaults)
+	if err != nil {
+		return laneCommand{}, err
+	}
+
+	reportDir := laneReportDir(artifactDir, group, entry.ID, kubernetesEntry)
+	args := buildGinkgoArgs(entry, packagePath, timeout, parallelNodes, reportDir)
+	env, err := laneEnvironment(os.Environ(), entry, kubernetesEntry, validateEnv)
+	if err != nil {
+		return laneCommand{}, err
+	}
+	return laneCommand{Binary: ginkgoBinary, Args: args, Env: env, ReportDir: reportDir}, nil
+}
+
+func validateGinkgoBinary(ginkgoBinary string, validate bool) error {
+	if ginkgoBinary == "" {
+		return errors.New("ginkgo binary is required")
+	}
+	if !validate {
+		return nil
+	}
+	if _, err := exec.LookPath(ginkgoBinary); err != nil && strings.Contains(ginkgoBinary, string(os.PathSeparator)) {
+		if _, statErr := os.Stat(ginkgoBinary); statErr != nil {
+			return fmt.Errorf("ginkgo binary %q is not available: %w", ginkgoBinary, statErr)
+		}
+	} else if err != nil {
+		return fmt.Errorf("ginkgo binary %q is not available: %w", ginkgoBinary, err)
+	}
+	return nil
+}
+
+func lanePackage(entry lane, defaults suiteDefaults) (string, error) {
+	packagePath := entry.Package
+	if packagePath == "" {
+		packagePath = defaults.Package
+	}
+	if packagePath == "" {
+		return "", fmt.Errorf("lane %q package is required", entry.ID)
+	}
+	return packagePath, nil
+}
+
+func laneTimeout(entry lane, defaults suiteDefaults) (string, error) {
+	timeout := entry.Timeout
+	if timeout == "" {
+		timeout = defaults.Timeout
+	}
+	if timeout == "" {
+		return "", fmt.Errorf("lane %q timeout is required", entry.ID)
+	}
+	return timeout, nil
+}
+
+func laneParallelNodes(entry lane, defaults suiteDefaults) (int, error) {
+	parallelNodes := entry.ParallelNodes
+	if parallelNodes == 0 {
+		parallelNodes = defaults.ParallelNodes
+	}
+	if parallelNodes < 1 {
+		return 0, fmt.Errorf("lane %q parallelNodes must be at least 1", entry.ID)
+	}
+	return parallelNodes, nil
+}
+
+func buildGinkgoArgs(
+	entry lane,
+	packagePath string,
+	timeout string,
+	parallelNodes int,
+	reportDir string,
+) []string {
+	args := []string{
+		"--tags=e2e",
+		"--timeout=" + timeout,
+	}
+	if entry.RunRegex == "" {
+		args = append(args,
+			"--output-dir="+reportDir,
+			"--junit-report=junit.xml",
+			"--json-report=ginkgo.json",
+		)
+	}
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		args = append(args, "--github-output")
+	}
+	if parallelNodes != 1 {
+		args = append(args, "--procs="+strconv.Itoa(parallelNodes))
+	}
+	if entry.RunRegex == "" && entry.LabelFilter != "" {
+		args = append(args, "--label-filter="+entry.LabelFilter)
+	}
+	args = append(args, packagePath)
+	if entry.RunRegex != "" {
+		args = append(args, "--", "-test.run="+entry.RunRegex)
+	} else {
+		args = append(args, "--", "-test.run="+ginkgoSuiteRunRegex)
+	}
+	return args
+}
+
+func laneEnvironment(
+	base []string,
+	entry lane,
+	kubernetesEntry *kubernetesPreviewEntry,
+	validateRequired bool,
+) ([]string, error) {
+	env := append([]string{}, base...)
+	if entry.EnableEnv != "" {
+		env = setEnv(env, entry.EnableEnv, "true")
+	}
+	if kubernetesEntry != nil {
+		env = setEnv(env, "E2E_KUBERNETES_LINE", kubernetesEntry.Line)
+		env = setEnv(env, "E2E_KUBERNETES_VERSION", kubernetesEntry.ExactVersion)
+		env = setEnv(env, "E2E_KIND_NODE_IMAGE", kubernetesEntry.KindNodeImage)
+		env = setEnv(env, "E2E_KIND_CI", "true")
+	}
+	if entry.ProviderImageEnv != "" {
+		value := lookupEnv(env, entry.ProviderImageEnv)
+		if value == "" {
+			if validateRequired {
+				return nil, fmt.Errorf("lane %q requires %s to set E2E_PROVIDER_IMAGE", entry.ID, entry.ProviderImageEnv)
+			}
+		} else {
+			env = setEnv(env, "E2E_PROVIDER_IMAGE", value)
+		}
+	}
+	if validateRequired {
+		for _, name := range entry.RequiredEnv {
+			if lookupEnv(env, name) == "" {
+				return nil, fmt.Errorf("lane %q requires %s", entry.ID, name)
+			}
+		}
+	}
+	return env, nil
+}
+
+func laneReportDir(artifactDir string, group string, laneID string, kubernetesEntry *kubernetesPreviewEntry) string {
+	parts := []string{artifactDir, sanitizePathComponent(group)}
+	if kubernetesEntry != nil {
+		parts = append(parts, sanitizePathComponent(kubernetesEntry.Line))
+	}
+	parts = append(parts, sanitizePathComponent(laneID))
+	return filepath.Join(parts...)
+}
+
+func sanitizePathComponent(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, "/", "_")
+	value = strings.ReplaceAll(value, "\\", "_")
+	if value == "" || value == "." || value == ".." {
+		return "unknown"
+	}
+	return value
+}
+
+func envDefault(name string, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func lookupEnv(env []string, name string) string {
+	prefix := name + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			return strings.TrimPrefix(entry, prefix)
+		}
+	}
+	return ""
+}
+
+func setEnv(env []string, name string, value string) []string {
+	prefix := name + "="
+	next := name + "=" + value
+	for index, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			env[index] = next
+			return env
+		}
+	}
+	return append(env, next)
 }

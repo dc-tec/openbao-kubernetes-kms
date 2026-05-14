@@ -22,6 +22,9 @@ path "transit/decrypt/k8s-workload-a-etcd" {
 path "transit/keys/k8s-workload-a-etcd" {
   capabilities = ["read"]
 }
+path "transit/config/keys" {
+  capabilities = ["read"]
+}
 path "sys/capabilities-self" {
   capabilities = ["update"]
 }
@@ -29,18 +32,15 @@ path "sys/capabilities-self" {
 
 `sys/capabilities-self` is required so `bao-kms-provider doctor` can verify the token's effective capabilities.
 
-If token renewal is enabled and the JWT role disables the default policy, add only the required self-token paths:
+If token renewal is enabled and the JWT role disables the default policy, add the required self-renewal path:
 
 ```hcl
-path "auth/token/lookup-self" {
-  capabilities = ["read"]
-}
 path "auth/token/renew-self" {
   capabilities = ["update"]
 }
 ```
 
-If the default mode is re-login instead of token renewal, these paths can be omitted.
+The provider runtime does not call `auth/token/lookup-self`. Grant `lookup-self` only to separate operator diagnostics that need to inspect the token. If the provider uses re-login instead of token renewal, `renew-self` can be omitted.
 
 ## Capabilities To Avoid
 
@@ -66,7 +66,7 @@ bao write auth/k8s-workload-a-jwt/role/openbao-kms-control-plane \
   role_type="jwt" \
   user_claim="sub" \
   bound_audiences='["bao-kms-provider"]' \
-  bound_subject="system:openbao-kms:workload-a:control-plane" \
+  bound_subject="system:openbao-kms:workload-a" \
   token_policies='["openbao-kms-workload-a"]' \
   token_ttl="10m" \
   token_max_ttl="30m" \

@@ -134,8 +134,16 @@ release-please:
 - does not publish GitHub Releases,
 - does not build, sign, attest, or upload artifacts.
 
+The release-tag workflow:
+
+- validates the merged release-please PR and release manifest,
+- creates a signed annotated SemVer tag at the release PR merge commit,
+- creates or refreshes a draft GitHub Release from the release-please notes,
+- does not build, sign, attest, or upload release assets.
+
 The tag release workflow:
 
+- requires the draft GitHub Release created by the release-tag workflow,
 - builds the image and release assets,
 - independently rebuilds the image for reproducibility comparison,
 - runs source, image, and the manifest-defined OpenBao and Kind preview release
@@ -148,17 +156,22 @@ The tag release workflow:
 - verifies image and file attestations against the release workflow identity,
 - verifies byte reproducibility,
 - generates `provenance-index.json`,
-- publishes the GitHub Release assets and GHCR image tag.
+- uploads byte-verified assets to the draft release,
+- publishes the GitHub Release and GHCR image tag through the
+  maintainer-controlled `release-publish` GitHub Environment.
 
-Required repository secrets for release PR automation:
-
-```text
-OPENBAO_KMS_RELEASE_PR_APP_ID
-OPENBAO_KMS_RELEASE_PR_PRIVATE_KEY
-```
+Release credentials, signing keys, and tag-ruleset bypass are maintainer
+configuration, not user-facing deployment inputs.
 
 The tag release workflow uses GitHub `GITHUB_TOKEN`, OIDC, and attestations
-permissions for publication, signing, and provenance.
+permissions for asset publication, signing, and provenance.
+
+Private repository release dry runs on user-owned repositories cannot persist
+GitHub artifact attestations because GitHub does not expose that feature there.
+In that mode the workflow skips GitHub attestation persistence and verification,
+records `attestations.available: false` in `provenance-index.json`, and still
+validates the build, E2E, reproducibility, signatures, checksums, SBOMs, and
+published assets. Public release tags must run with attestations enabled.
 
 ## Supply-Chain Gates
 
@@ -187,7 +200,8 @@ evidence, and publish by digest. Publication does not rebuild a different
 subject.
 
 ```text
-tag
+release-please PR merge
+  -> signed tag and draft GitHub Release
   -> build image and release assets
   -> rebuild image independently
   -> capture digests and checksums
@@ -195,7 +209,8 @@ tag
   -> verify byte reproducibility
   -> sign and attest
   -> verify signatures and attestations
-  -> publish release assets and provenance index
+  -> upload release assets and provenance index to the draft release
+  -> publish release
 ```
 
 ## Release Channels
@@ -231,4 +246,4 @@ Every public release publishes or retains:
 - `provenance-index.json`,
 - release notes.
 
-Install-time verification is documented in [Getting Started: Install](/getting-started/install/#verify-release-evidence/).
+Install-time verification is documented in [Getting Started: Install](/getting-started/install/#verify-release-artifacts).

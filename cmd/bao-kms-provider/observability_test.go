@@ -114,6 +114,41 @@ func TestObservabilityStopsCorrelationAfterExpiry(t *testing.T) {
 	}
 }
 
+func TestObservabilityLogsPanicRecoveryWithoutPanicValue(t *testing.T) {
+	var out bytes.Buffer
+	observer := newTestObservability(t, &out, debugCorrelation{})
+
+	observer.ObserveKMSRequest(context.Background(), kmsv2.RequestObservation{
+		Method:         "encrypt",
+		Status:         "internal",
+		Duration:       time.Millisecond,
+		ErrorClass:     "panic",
+		PanicRecovered: true,
+		PanicType:      "string",
+	})
+
+	output := out.String()
+	for _, want := range []string{
+		logging.FieldPanicRecovered,
+		logging.FieldPanicType,
+		"string",
+		`"error_class":"panic"`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("panic recovery output missing %q:\n%s", want, output)
+		}
+	}
+	for _, forbidden := range []string{
+		"secret kube payload",
+		"fake transit encrypt panic",
+		logging.RedactedValue,
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("panic recovery log exposed %q:\n%s", forbidden, output)
+		}
+	}
+}
+
 func newTestObservability(t *testing.T, out *bytes.Buffer, correlation debugCorrelation) observability {
 	t.Helper()
 

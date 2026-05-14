@@ -1,6 +1,7 @@
 package deployment_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,6 +40,124 @@ func TestProviderAndEncryptionSamplesValidate(t *testing.T) {
 	if staticPodConfig.Server.SocketGroup != "1234" {
 		t.Fatalf("static pod config should use numeric socket group, got %q", staticPodConfig.Server.SocketGroup)
 	}
+}
+
+func TestGrafanaDashboardSampleIsValid(t *testing.T) {
+	data := readSample(t, "deploy/grafana/dashboards/openbao-kms-overview.json")
+
+	var dashboard grafanaDashboard
+	if err := json.Unmarshal([]byte(data), &dashboard); err != nil {
+		t.Fatalf("decode Grafana dashboard sample: %v", err)
+	}
+	if dashboard.Title != "OpenBao Kubernetes KMS Overview" {
+		t.Fatalf("unexpected dashboard title: %q", dashboard.Title)
+	}
+	if dashboard.UID != "openbao-kms-overview" {
+		t.Fatalf("unexpected dashboard uid: %q", dashboard.UID)
+	}
+	if len(dashboard.Panels) < 12 {
+		t.Fatalf("expected a deployment dashboard with broad metric coverage, got %d panels", len(dashboard.Panels))
+	}
+
+	requiredMetrics := []string{
+		"openbao_kms_grpc_requests_total",
+		"openbao_kms_grpc_duration_seconds_bucket",
+		"openbao_kms_openbao_requests_total",
+		"openbao_kms_openbao_duration_seconds_bucket",
+		"openbao_kms_auth_login_total",
+		"openbao_kms_auth_renewal_total",
+		"openbao_kms_status_key_id_hash",
+		"openbao_kms_rotation_state",
+		"openbao_kms_aad_validation_errors_total",
+		"openbao_kms_decrypt_key_id_errors_total",
+		"openbao_kms_circuit_breaker_state",
+		"openbao_kms_socket_restarts_total",
+	}
+	for _, metric := range requiredMetrics {
+		if !dashboardContainsTarget(dashboard, metric) {
+			t.Fatalf("Grafana dashboard sample missing metric %q", metric)
+		}
+	}
+}
+
+func TestPrometheusRuleSampleIsValid(t *testing.T) {
+	data := readSample(t, "deploy/prometheus/rules/openbao-kms.rules.yaml")
+
+	var groups prometheusRuleGroups
+	if err := yaml.Unmarshal([]byte(data), &groups); err != nil {
+		t.Fatalf("decode Prometheus rule sample: %v", err)
+	}
+	if len(groups.Groups) != 1 {
+		t.Fatalf("expected one Prometheus rule group, got %d", len(groups.Groups))
+	}
+	group := groups.Groups[0]
+	if group.Name != "openbao-kubernetes-kms.rules" {
+		t.Fatalf("unexpected Prometheus rule group name: %q", group.Name)
+	}
+	if len(group.Rules) < 10 {
+		t.Fatalf("expected broad alert rule coverage, got %d rules", len(group.Rules))
+	}
+
+	requiredAlerts := []string{
+		"OpenBaoKMSStatusCacheStale",
+		"OpenBaoKMSCircuitBreakerOpen",
+		"OpenBaoKMSAuthFailures",
+		"OpenBaoKMSKeyIDHashDiverged",
+		"OpenBaoKMSAADValidationErrors",
+		"OpenBaoKMSGRPCLatencyHigh",
+	}
+	for _, alert := range requiredAlerts {
+		if !prometheusRulesContainAlert(group.Rules, alert) {
+			t.Fatalf("Prometheus rule sample missing alert %q", alert)
+		}
+	}
+}
+
+type prometheusRuleGroups struct {
+	Groups []prometheusRuleGroup `yaml:"groups"`
+}
+
+type prometheusRuleGroup struct {
+	Name  string           `yaml:"name"`
+	Rules []prometheusRule `yaml:"rules"`
+}
+
+type prometheusRule struct {
+	Alert string `yaml:"alert"`
+}
+
+func prometheusRulesContainAlert(rules []prometheusRule, alert string) bool {
+	for _, rule := range rules {
+		if rule.Alert == alert {
+			return true
+		}
+	}
+	return false
+}
+
+type grafanaDashboard struct {
+	Title  string         `json:"title"`
+	UID    string         `json:"uid"`
+	Panels []grafanaPanel `json:"panels"`
+}
+
+type grafanaPanel struct {
+	Targets []grafanaTarget `json:"targets"`
+}
+
+type grafanaTarget struct {
+	Expression string `json:"expr"`
+}
+
+func dashboardContainsTarget(dashboard grafanaDashboard, metric string) bool {
+	for _, panel := range dashboard.Panels {
+		for _, target := range panel.Targets {
+			if strings.Contains(target.Expression, metric) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func requireHardenedAuthConfig(t *testing.T, name string, cfg config.Config) {
@@ -158,6 +277,51 @@ func TestDockerfileUsesPinnedDistrolessNonRootRuntime(t *testing.T) {
 	}
 }
 
+func TestPublicDeploymentSurfacesAvoidFloatingInputs(t *testing.T) {
+	publicSurfaces := []string{
+		"README.md",
+		"docs/getting-started/install.md",
+		"docs/deployment/choosing-a-model.md",
+		"docs/deployment/static-pod.md",
+		"docs/deployment/systemd.md",
+		"deploy/README.md",
+		"deploy/package/bundles/static-pod/README.md",
+		"deploy/package/bundles/systemd/README.md",
+		"deploy/package/linux/README.md",
+		"deploy/static-pod/bao-kms-provider.yaml",
+	}
+	for _, path := range publicSurfaces {
+		content := readSample(t, path)
+		for _, forbidden := range []string{":latest", "@main", "@master", "@HEAD"} {
+			if strings.Contains(content, forbidden) {
+				t.Fatalf("%s must not contain floating input %q", path, forbidden)
+			}
+		}
+		if strings.Contains(content, "curl") &&
+			(strings.Contains(content, "| sh") || strings.Contains(content, "| bash")) {
+			t.Fatalf("%s must not contain curl-pipe-shell install guidance", path)
+		}
+	}
+}
+
+func TestProviderImageReferencesAreDigestAddressed(t *testing.T) {
+	for _, path := range []string{
+		"docs/getting-started/install.md",
+		"docs/deployment/static-pod.md",
+		"deploy/static-pod/bao-kms-provider.yaml",
+	} {
+		content := readSample(t, path)
+		for _, line := range strings.Split(content, "\n") {
+			if !strings.Contains(line, "ghcr.io/dc-tec/bao-kms-provider") {
+				continue
+			}
+			if !strings.Contains(line, "@sha256:") {
+				t.Fatalf("%s provider image reference must be digest-addressed: %s", path, strings.TrimSpace(line))
+			}
+		}
+	}
+}
+
 func TestSystemdAndPackageSamplesUseResolvedIdentity(t *testing.T) {
 	unit := readSample(t, "deploy/systemd/bao-kms-provider.service")
 	requiredUnitLines := []string{
@@ -254,7 +418,6 @@ func TestOpenTofuModuleConfiguresOpenBaoTransit(t *testing.T) {
 		`auto_rotate_period`,
 		`resource "vault_policy" "provider"`,
 		`path "sys/capabilities-self"`,
-		`path "auth/token/lookup-self"`,
 		`path "auth/token/renew-self"`,
 	}
 	for _, want := range required {

@@ -1,39 +1,43 @@
 ---
 title: "Docs Site"
-description: "How the Hugo documentation site is structured, mounted, built, and published."
+description: "How the Hugo documentation site is organized, built, checked, and published."
 weight: 80
 ---
 
 # Docs Site
 
-This page documents how the published Hugo site is structured and built. For the writing rules and IA contracts that apply to documentation changes see [Docs Style Guide](/development/docs-style-guide/).
+The published documentation is a Hugo site built from the Markdown files under
+`docs/` and the site assets under `website/`. For writing guidance, see
+[Docs Style Guide](/development/docs-style-guide/).
 
 ## Source Layout
 
-The repository keeps documentation source under `docs/` so it stays close to the code it describes. The Hugo site assembles those sources through mounts declared in `hugo.toml`:
-
 ```text
 docs/
-  getting-started/    operator first-success path
-  deployment/         systemd vs static-pod, identity model
-  operations/         day-2 runbooks
-  reference/          exhaustive lookup
-  security/           threat model, hardening, auth, AAD
-  architecture/       maintainer-facing rationale
-  development/        contributor-facing
+  getting-started/    first-success path for operators
+  deployment/         systemd, static-pod, identity, observability
+  operations/         rotation, upgrade, recovery, troubleshooting
+  reference/          CLI, config, protocol, metrics, compatibility
+  security/           threat model, hardening, auth, decrypt validation
+  architecture/       design rationale and tradeoffs
+  development/        contributor and maintainer documentation
 website/
-  content/            homepage, error pages, search
+  content/            homepage, search, and error pages
   layouts/            Hugo templates
-  assets/             CSS and JS sources
-  static/             brand assets, fonts, vendored mermaid
-hugo.toml             site config and module mounts
+  assets/             CSS and JavaScript sources
+  static/             brand assets, fonts, vendored Mermaid
+hugo.toml             site configuration and module mounts
 ```
 
-Historical planning material is not carried in the live documentation tree. Use repository history when older design notes or implementation planning context are needed.
+The live docs should describe the current project. Older plans and design notes
+remain available through repository history.
 
-## Mount Configuration
+## Hugo Mounts
 
-`hugo.toml` mounts each section directory under `content/<section>` so Hugo treats them as native sections without symlinking:
+`hugo.toml` mounts each docs section into Hugo's `content/` tree. This keeps the
+documentation source in `docs/` while letting Hugo render normal sections.
+
+Example:
 
 ```toml
 [[module.mounts]]
@@ -45,77 +49,94 @@ Historical planning material is not carried in the live documentation tree. Use 
   target = "content/getting-started"
 ```
 
-Each section has its own mount entry. Adding a new section requires:
+To add a new top-level docs section:
 
-1. creating `docs/<section>/_index.md` with `title`, `description`, `weight`, and `browse`,
-2. adding a mount entry in `hugo.toml`,
-3. linking the new section from `website/layouts/index.html` if it should appear on the homepage navigation.
+1. Create `docs/<section>/_index.md` with front matter.
+2. Add a mount entry in `hugo.toml`.
+3. Link the section from `website/layouts/index.html` if it should appear on
+   the homepage.
 
-## Building Locally
+## Local Builds
 
-Hugo runs through `go run` so a separate Hugo install is not required. The Makefile encapsulates the version pin and the standard targets:
+The Makefile runs a pinned Hugo version through `go run`, so a global Hugo
+install is not required.
 
 ```sh
 make docs-deps    # install pinned Hugo into GOBIN once
-make docs-build   # build into public/ with --cleanDestinationDir --gc --minify
+make docs-build   # build into public/
 make docs-serve   # serve locally on http://localhost:1313/
 ```
 
-The Hugo version is pinned in the Makefile via `HUGO_VERSION` and matches the version used by CI. Bump it in lockstep with any layout or shortcode changes that depend on Hugo behavior.
+The Hugo version is pinned with `HUGO_VERSION` in the Makefile. Update that pin
+when a layout, shortcode, or build behavior depends on a newer Hugo release.
 
-## Verification
+## Checks
 
-Two Make targets gate every documentation change:
+Run both docs checks before merging documentation changes:
 
 ```sh
-make docs-build
 make docs-check
+make docs-build
 ```
 
-`make docs-build` runs the full Hugo build and must complete without warnings. `make docs-check` enforces forbidden-string and em-dash gates against `docs/`. The current rules:
+`make docs-check` scans `docs/` and `README.md` for configured text and
+typography issues. `make docs-build` renders the site and should finish without
+warnings.
 
-- no object replacement character (octal `\357\277\274`) in `docs/` or `README.md`,
-- no three-em dash (`U+2E3B`) in `docs/` or `README.md`,
-- no older long-form name variants in `docs/` or `README.md` (the binary is `bao-kms-provider`; see [Docs Style Guide](/development/docs-style-guide/)),
-- no em-dash (`U+2014`) in `docs/` or `README.md`.
+## Templates
 
-For the writing rules these gates enforce see [Docs Style Guide: Voice And Prose Rules](/development/docs-style-guide/#voice-and-prose-rules).
-
-## Layout Templates
-
-`website/layouts/` holds the Hugo templates:
+`website/layouts/` contains the Hugo templates used by the site:
 
 ```text
 website/layouts/
-  index.html              homepage with hero, workflow, section cards
-  _default/baseof.html    base template for all pages
-  _default/list.html      section landing template
-  _default/single.html    leaf page template
-  _default/error.html     error page template
-  _markup/render-link.html        custom link rendering
-  _markup/render-codeblock-mermaid.html  mermaid block rendering
-  partials/site_head.html
-  partials/site_header.html
-  partials/site_nav.html
-  partials/site_nav_tree.html
-  partials/site_toc.html
-  partials/site_footer.html
-  partials/page_title.html
-  partials/page_description.html
-  partials/mermaid_script.html
+  index.html
+  _default/baseof.html
+  _default/list.html
+  _default/single.html
+  _default/error.html
+  _markup/render-link.html
+  _markup/render-codeblock-mermaid.html
+  partials/
   search/single.html
 ```
 
-The homepage template hardcodes the workflow ladder (Check Fit, Set Up OpenBao, Install And Wire, Verify End-To-End, Operate Safely). When the operator workflow changes, update `website/layouts/index.html` along with the corresponding section pages.
+The homepage workflow is defined in `website/layouts/index.html`. When the
+operator path changes, update the homepage and the matching section pages
+together.
 
 ## Mermaid
 
-Mermaid diagrams render through a custom `_markup/render-codeblock-mermaid.html` shortcode plus a small initialization script in `website/assets/js/mermaid-init.js`. Author diagrams as fenced code blocks tagged `mermaid` in markdown; no shortcode invocation is needed.
+Mermaid diagrams render from fenced markdown blocks:
 
-The mermaid library is vendored at `website/static/vendor/mermaid/mermaid.min.js` so the published site does not depend on a CDN.
+````markdown
+```mermaid
+flowchart LR
+  A["API server"] --> B["bao-kms-provider"]
+```
+````
+
+The renderer is `website/layouts/_markup/render-codeblock-mermaid.html`, with
+initialization in `website/assets/js/mermaid-init.js`. Mermaid itself is
+vendored at `website/static/vendor/mermaid/mermaid.min.js`, so the published
+site does not depend on a CDN.
 
 ## Publishing
 
-The site is published to GitHub Pages. The deploy pipeline uses the same `make docs-build` target with the `DOCS_BASE_URL` variable set to the public URL. The deploy step is intentionally separate from the build step so a faulty build never replaces the live site.
+GitHub Pages serves the generated site from the `gh-pages` branch. The
+`Docs Pages` workflow runs on pushes to `main`, builds the site with the same
+`make docs-check` and `make docs-build` targets used locally, and publishes the
+rendered `public/` directory to `gh-pages`.
 
-A rendered build of the site lives in `public/` after `make docs-build`. The directory is gitignored.
+Configure the repository Pages source as:
+
+```text
+Deploy from a branch
+Branch: gh-pages
+Folder: / (root)
+```
+
+The workflow creates `gh-pages` on first publish. Later publishes update that
+branch with normal commits.
+
+Local builds write rendered output to `public/`. That directory is generated
+and gitignored.

@@ -5,6 +5,9 @@ uses `nfpm.yaml` to turn the built Linux binaries into `.deb` and `.rpm`
 packages. The package installs the binary, systemd unit, sysusers metadata,
 tmpfiles metadata, documentation, and examples.
 
+Install release packages only after verifying the selected release's checksum,
+signature, and provenance evidence.
+
 Recommended install paths:
 
 ```text

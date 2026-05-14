@@ -7,7 +7,7 @@ test-e2e: verify-e2e-manifest ## Run Ginkgo/Gomega E2E tests; filter with E2E_LA
 		set -- --tags=e2e --timeout="$(E2E_TIMEOUT)" --junit-report="$(E2E_JUNIT_REPORT)" --json-report="$(E2E_JSON_REPORT)"; \
 		if [ "$(E2E_PARALLEL_NODES)" != "1" ]; then set -- "$$@" --procs="$(E2E_PARALLEL_NODES)"; fi; \
 		if [ -n "$(E2E_LABEL_FILTER)" ]; then set -- "$$@" --label-filter="$(E2E_LABEL_FILTER)"; fi; \
-		set -- "$$@" $(E2E_GINKGO_EXTRA_ARGS) "$(E2E_PACKAGE)"; \
+		set -- "$$@" $(E2E_GINKGO_EXTRA_ARGS) "$(E2E_PACKAGE)" -- -test.run='^TestE2E$$'; \
 		"$(GINKGO)" "$$@"; \
 	else \
 		if [ -n "$(E2E_LABEL_FILTER)" ]; then \
@@ -19,11 +19,21 @@ test-e2e: verify-e2e-manifest ## Run Ginkgo/Gomega E2E tests; filter with E2E_LA
 
 .PHONY: test-e2e-release-preview-openbao
 test-e2e-release-preview-openbao: verify-e2e-manifest test-e2e-release-preview-openbao-images ## Run manifest-defined OpenBao preview release E2E lanes.
-	@E2E_PROVIDER_BUILD=false "$(GO)" run ./hack/tools/e2e_release_gate -group openbao -make "$(MAKE)"
+	@E2E_PROVIDER_BUILD=false \
+	E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" \
+	E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" \
+	E2E_PROVIDER_OLD_IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" \
+	E2E_PROVIDER_NEW_IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" \
+	E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE="$(E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE)" \
+	"$(GO)" run ./hack/tools/e2e_release_gate -group openbao -ginkgo "$(GINKGO)"
 
 .PHONY: test-e2e-release-preview-kind
 test-e2e-release-preview-kind: verify-e2e-manifest test-e2e-release-preview-kind-images ## Run manifest-defined Kind preview release E2E lanes.
-	@E2E_PROVIDER_BUILD=false "$(GO)" run ./hack/tools/e2e_release_gate -group kind -make "$(MAKE)"
+	@E2E_PROVIDER_BUILD=false \
+	E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" \
+	E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_IMAGE)" \
+	E2E_KIND_NODE_IMAGE="$(E2E_KIND_NODE_IMAGE)" \
+	"$(GO)" run ./hack/tools/e2e_release_gate -group kind -ginkgo "$(GINKGO)"
 
 .PHONY: test-e2e-release-preview-openbao-images
 test-e2e-release-preview-openbao-images: verify-e2e-manifest ## Build provider images needed by the OpenBao preview release gate.
@@ -32,7 +42,6 @@ test-e2e-release-preview-openbao-images: verify-e2e-manifest ## Build provider i
 		$(MAKE) image IMAGE="$(E2E_PROVIDER_OLD_IMAGE)" VERSION="$(VERSION)-e2e-old" COMMIT="$(COMMIT)-old"; \
 		$(MAKE) image IMAGE="$(E2E_PROVIDER_NEW_IMAGE)" VERSION="$(VERSION)-e2e-new" COMMIT="$(COMMIT)-new"; \
 		$(MAKE) image-certauth-pkcs11-e2e; \
-		$(MAKE) image-certauth-spiffe; \
 	fi
 
 .PHONY: test-e2e-release-preview-kind-images
@@ -47,9 +56,23 @@ test-e2e-openbao: test-e2e-openbao-ci
 .PHONY: test-e2e-openbao-ci
 test-e2e-openbao-ci: verify-e2e-manifest ## Run the default OpenBao CI E2E lane.
 	@if command -v "$(GINKGO)" >/dev/null 2>&1; then \
-		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && transit && ci' E2E_TIMEOUT=6m; \
+		E2E_OPENBAO_CI=true \
+		E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" \
+		E2E_PROVIDER_IMAGE= \
+		E2E_PROVIDER_OLD_IMAGE= \
+		E2E_PROVIDER_NEW_IMAGE= \
+		E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE= \
+		E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE= \
+		"$(MAKE)" test-e2e E2E_LABEL_FILTER='openbao && transit && ci' E2E_TIMEOUT=6m; \
 	else \
-		E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1; \
+		E2E_OPENBAO_CI=true \
+		E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" \
+		E2E_PROVIDER_IMAGE= \
+		E2E_PROVIDER_OLD_IMAGE= \
+		E2E_PROVIDER_NEW_IMAGE= \
+		E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE= \
+		E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE= \
+		"$(GO)" test -v -tags=e2e ./test/e2e -run '^TestE2E$$' -count=1; \
 	fi
 
 define provider-e2e-target
@@ -62,7 +85,7 @@ endef
 $(eval $(call provider-e2e-target,test-e2e-provider-openbao-ci,^TestProviderContainerFullStackE2E$$$$,4m))
 $(eval $(call provider-e2e-target,test-e2e-provider-cli-openbao-ci,^TestProviderCLI(HappyPath|JWTClaimDriftRedacted|UnsupportedTransitKeyTypeFails|RotationMissingStateFailsClosed)E2E$$$$,12m))
 $(eval $(call provider-e2e-target,test-e2e-provider-failure-openbao-ci,^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|ExpiredJWTFailsClosed|JWTExpectedClaimDriftFailsClosed|JWTFileRotation|JWTSigningKeyRollover|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$$$$,12m))
-$(eval $(call provider-e2e-target,test-e2e-provider-ha-openbao-ci,^TestProviderOpenBaoHAFailoverE2E$$$$,7m))
+$(eval $(call provider-e2e-target,test-e2e-provider-ha-openbao-ci,^TestProviderOpenBaoHAFailoverE2E$$$$,10m))
 $(eval $(call provider-e2e-target,test-e2e-provider-decrypt-storm-openbao-ci,^TestProviderDecryptStormSmokeE2E$$$$,5m))
 $(eval $(call provider-e2e-target,test-e2e-provider-decrypt-soak-openbao-ci,^TestProviderDecryptSoakE2E$$$$,7m))
 $(eval $(call provider-e2e-target,test-e2e-provider-load-soak-openbao-ci,^TestProviderLoadSoakE2E$$$$,6m))
@@ -93,8 +116,7 @@ test-e2e-provider-certauth-pkcs11-openbao-ci: verify-e2e-manifest ## Run provide
 	@E2E_OPENBAO_CI=true E2E_OPENBAO_IMAGE="$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$(E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE)" "$(GO)" test -v -tags=e2e ./test/e2e -run '^TestProviderCertAuthPKCS11SoftHSME2E$$' -count=1 -timeout=7m
 
 .PHONY: test-e2e-provider-certauth-sources-openbao-ci
-test-e2e-provider-certauth-sources-openbao-ci: verify-e2e-manifest ## Run provider cert-auth source E2E lanes.
-	@$(MAKE) test-e2e-provider-certauth-spiffe-openbao-ci
+test-e2e-provider-certauth-sources-openbao-ci: verify-e2e-manifest ## Run supported provider cert-auth source E2E lanes.
 	@$(MAKE) test-e2e-provider-certauth-pkcs11-openbao-ci
 
 .PHONY: test-e2e-provider-upgrade-rollback-openbao-ci

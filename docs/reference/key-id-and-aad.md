@@ -70,7 +70,35 @@ Inputs:
 | `transit_mount_id` | Plugin configuration | Stable opaque mount ID, not the raw path. |
 | `transit_key_lineage_id` | Plugin configuration or platform metadata | Changes when the key is deleted and recreated. |
 | `transit_key_version` | Transit metadata | Active version used for encryption. |
-| `transit_version_created_at_unix` | Transit metadata | Distinguishes historical versions and restored lineages. |
+| `transit_version_created_at_unix` | Transit metadata | Canonical Unix-second creation time for the Transit version. |
+
+## Transit Version Creation Time
+
+Transit version creation time is part of the long-lived `key_id` contract. The
+provider normalizes this value to Unix seconds before deriving `key_id` values,
+persisting local state, or comparing live OpenBao metadata with retained
+snapshots.
+
+This normalization tolerates representation changes that keep the same Unix
+second, such as a future metadata reader exposing sub-second precision. It does
+not treat a different Unix second as equivalent. If OpenBao restore, import, or
+manual metadata changes report a different creation second for an active or
+retained historical Transit version, the provider fails closed because old
+Kubernetes `key_id` values may no longer describe the same decryptable key
+epoch.
+
+Backup and restore procedures must preserve:
+
+- OpenBao Transit key material,
+- Transit version numbers,
+- Transit version creation timestamps at Unix-second precision,
+- the configured Transit key lineage ID,
+- the provider local registry state file and checkpoint.
+
+If any of these are lost or changed after rotation, do not synthesize a
+replacement state file by hand. Restore the matching OpenBao backup and
+provider state, or keep the provider stopped until a supported recovery
+workflow is available for the release line.
 
 ## Mount Accessor Vs Configured Mount ID
 
@@ -196,6 +224,15 @@ The local registry is a non-secret JSON file that records:
 
 The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. A small adjacent checkpoint file records the last accepted generation and hash so a replayed older state file is rejected when the checkpoint survives. Neither file contains key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths. When `openbao.namespace` is configured, the namespace is persisted as non-secret identity scope so namespace drift fails closed during state validation.
 
+The state hash and checkpoint are local integrity and replay guards, not
+hardware-backed tamper protection. They detect corruption, unsafe restore, missing
+state with a surviving checkpoint, older generations, and same-generation hash
+mismatches. They do not stop a privileged host-level attacker who can replace
+both the state file and checkpoint with a self-consistent pair. Environments
+that need stronger rollback resistance must add host controls such as protected
+state directories, immutable backups, measured boot, TPM-sealed anchors, or an
+external write-protected generation record.
+
 State-file invariants enforced at load:
 
 - the file must be regular and must not be a symlink,
@@ -208,12 +245,25 @@ State-file invariants enforced at load:
 - pending and rejected snapshots are retained in state but excluded from decrypt lookup,
 - the checkpoint rejects older generations and same-generation hash mismatches,
 - the active Transit version must not move backwards during normal promotion,
+- when live Transit `latest_version` jumps over intermediate versions, the
+  provider requires their creation metadata and retains them as decrypt-only
+  historical snapshots; missing intermediate creation metadata fails closed,
 - loaded state must match the current provider, cluster, OpenBao instance, OpenBao namespace, Transit mount, lineage, key name, and AAD mode,
-- active and retained historical Transit version creation times must match current Transit metadata,
+- active and retained historical Transit version creation times must match current Transit metadata after Unix-second normalization,
 - `min_available_version` and `min_decryption_version` must not block active or retained historical versions,
 - `min_encryption_version` must not block the active version.
 
-If both the state file and checkpoint are missing, normal startup auto-bootstraps only from initial Transit metadata (`latest_version` 1) that can still decrypt version 1. This allows first install without a preexisting state file but fails closed for replacement or recovery after Transit rotation. Recovery after rotation must restore the state/checkpoint pair from backup or a known-good peer with matching identity scope. A controlled `recover-state` command is deferred for the preview line; operators must not synthesize replacement state by hand. If the checkpoint exists but the state file is missing or older than the checkpoint, startup fails closed.
+If both the state file and checkpoint are missing, normal startup auto-bootstraps
+only from initial Transit metadata: `latest_version` must be `1`,
+`min_available_version` must not exclude version `1`, and
+`min_decryption_version` must not exclude version `1`. This allows first install
+without a preexisting state file but fails closed for brownfield import,
+replacement, or recovery after Transit rotation. Recovery after rotation must
+restore the state/checkpoint pair from backup or a known-good peer with matching
+identity scope. A controlled `recover-state` command is deferred for the preview
+line; operators must not synthesize replacement state by hand. If the checkpoint
+exists but the state file is missing or older than the checkpoint, startup fails
+closed.
 
 ## Golden Fixtures
 

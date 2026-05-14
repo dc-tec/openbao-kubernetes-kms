@@ -24,14 +24,13 @@ Example log entry:
 ```json
 {
   "ts": "2026-05-08T12:00:00Z",
-  "level": "info",
+  "level": "debug",
+  "message": "kms.request",
   "operation": "kms.decrypt",
   "status": "ok",
   "duration_ms": 4.2,
   "key_id_hash": "uK...",
   "transit_key_version": 3,
-  "openbao_request_duration_ms": 3.1,
-  "openbao_request_id": "optional-redacted",
   "error_class": ""
 }
 ```
@@ -60,6 +59,7 @@ The provider tags every failed operation with one of these stable error classes.
 - `openbao_rate_limited`
 - `openbao_sealed`
 - `openbao_unavailable`
+- `panic`
 - `transit_key_missing`
 - `transit_policy_denied`
 - `key_id_unknown`
@@ -67,6 +67,7 @@ The provider tags every failed operation with one of these stable error classes.
 - `aad_missing`
 - `aad_mismatch`
 - `annotation_invalid`
+- `protocol_limit`
 - `status_stale`
 - `timeout`
 - `canceled`
@@ -102,7 +103,9 @@ Recommended alert conditions:
 - Plugin restart loop.
 - Socket restart or stale socket detection.
 
-Example Prometheus alerting rules ship at `docs/operations/prometheus-alerts.yaml` (also published as a static asset on this site). Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
+Example Prometheus alerting rules ship at `deploy/prometheus/rules/openbao-kms.rules.yaml`. Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
+
+An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Deployment: Observability](/deployment/observability/) for scrape and import guidance.
 
 ## Correlation With OpenBao
 

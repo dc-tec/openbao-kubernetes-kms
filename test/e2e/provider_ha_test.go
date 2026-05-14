@@ -25,7 +25,7 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 		t.Skip(envProviderImage + " is required")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 9*time.Minute)
 	defer cancel()
 
 	dockerPath, err := exec.LookPath(framework.EnvDefault(framework.EnvDockerBinary, "docker"))
@@ -100,6 +100,9 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 	sampleDir := filepath.Join(stagingDir, "sample")
 	if err := os.Mkdir(sampleDir, 0o700); err != nil {
 		t.Fatalf("create sample directory: %v", err)
+	}
+	if err := os.Chmod(sampleDir, 0o777); err != nil {
+		t.Fatalf("make sample directory container-writable: %v", err)
 	}
 
 	startProviderContainer(t, ctx, dockerPath, providerName, networkName, providerImage, volumes)

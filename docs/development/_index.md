@@ -25,7 +25,7 @@ These pages cover local development, CI, release process, and how the docs site 
 - [E2E Framework](/development/e2e-framework/) for runnable E2E lane commands, labels, manifest routing, and reports.
 - [Performance Evidence](/development/benchmark-results/) for captured load, cold-start, and recovery results.
 - [CI And Supply Chain](/development/ci-supply-chain/) for the CI pipeline, version pinning, and supply-chain controls.
-- [Docs Style Guide](/development/docs-style-guide/) for the writing rules, IA contracts, and verification commands enforced on the docs.
+- [Docs Style Guide](/development/docs-style-guide/) for writing, structure, linking, and docs verification guidance.
 - [Docs Site](/development/docs-site/) for how this Hugo site is structured, built, and published.
 
 ## Use Another Section If

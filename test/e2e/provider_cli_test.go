@@ -65,6 +65,8 @@ func TestProviderCLIHappyPathE2E(t *testing.T) {
 		rotationPlanOutput,
 		"rotation-plan",
 		"stateLoaded: true",
+		"stateCheckpointLoaded: true",
+		"stateCheckpointStatus: current",
 		"rotationState: active",
 		"activeKeyIdHash:",
 	)
@@ -75,6 +77,8 @@ func TestProviderCLIHappyPathE2E(t *testing.T) {
 		verifyRotationOutput,
 		"verify-rotation",
 		"stateLoaded: true",
+		"stateCheckpointLoaded: true",
+		"stateCheckpointStatus: current",
 		"confidence: limited",
 	)
 
@@ -158,14 +162,36 @@ func TestProviderCLIRotationMissingStateFailsClosedE2E(t *testing.T) {
 	stack.runClientWithEnv(ctx, "rotation-client", kmsClientModeExpectRotationPromotion, sampleReadWrite, rotationEnv)
 
 	removeContainer(t, ctx, stack.dockerPath, stack.providerName)
+	stack.removeProviderStateFile(ctx)
+
+	rotationPlanCheckpointOutput := stack.runProviderCLIExpectFailure(
+		ctx,
+		"cli-rotation-plan-missing-state-checkpoint",
+		"rotation-plan",
+		"--config",
+		containerConfigPath,
+	)
+	assertOutputContains(t, rotationPlanCheckpointOutput, "state file missing with checkpoint present")
+	assertOutputNotContains(t, rotationPlanCheckpointOutput, "activeKeyIdHash:")
+
+	verifyRotationCheckpointOutput := stack.runProviderCLIExpectFailure(
+		ctx,
+		"cli-verify-rotation-missing-state-checkpoint",
+		"verify-rotation",
+		"--config",
+		containerConfigPath,
+	)
+	assertOutputContains(t, verifyRotationCheckpointOutput, "state file missing with checkpoint present")
+	assertOutputNotContains(t, verifyRotationCheckpointOutput, "activeKeyIdHash:")
+
 	stack.clearProviderState(ctx)
 
 	rotationPlanOutput := stack.runProviderCLIExpectFailure(ctx, "cli-rotation-plan-missing-state", "rotation-plan", "--config", containerConfigPath)
-	assertOutputContains(t, rotationPlanOutput, "local registry state is absent for non-initial Transit metadata")
+	assertOutputContains(t, rotationPlanOutput, "local registry state is absent and cannot be auto-bootstrapped", "latest_version=2")
 	assertOutputNotContains(t, rotationPlanOutput, "activeKeyIdHash:")
 
 	verifyRotationOutput := stack.runProviderCLIExpectFailure(ctx, "cli-verify-rotation-missing-state", "verify-rotation", "--config", containerConfigPath)
-	assertOutputContains(t, verifyRotationOutput, "local registry state is absent for non-initial Transit metadata")
+	assertOutputContains(t, verifyRotationOutput, "local registry state is absent and cannot be auto-bootstrapped", "latest_version=2")
 	assertOutputNotContains(t, verifyRotationOutput, "activeKeyIdHash:")
 }
 
@@ -261,10 +287,12 @@ func assertCLIJSONReport(t *testing.T, output string, name string, checkID strin
 }
 
 type rotationJSONReport struct {
-	Name            string `json:"name"`
-	StateLoaded     bool   `json:"stateLoaded"`
-	RotationState   string `json:"rotationState"`
-	ActiveKeyIDHash string `json:"activeKeyIdHash"`
+	Name                  string `json:"name"`
+	StateLoaded           bool   `json:"stateLoaded"`
+	StateCheckpointLoaded bool   `json:"stateCheckpointLoaded"`
+	StateCheckpointStatus string `json:"stateCheckpointStatus"`
+	RotationState         string `json:"rotationState"`
+	ActiveKeyIDHash       string `json:"activeKeyIdHash"`
 }
 
 func assertRotationJSONReport(t *testing.T, output string, name string, state string) {
@@ -274,7 +302,12 @@ func assertRotationJSONReport(t *testing.T, output string, name string, state st
 	if err := json.Unmarshal([]byte(output), &report); err != nil {
 		t.Fatalf("invalid rotation JSON report: %v\n%s", err, output)
 	}
-	if report.Name != name || !report.StateLoaded || report.RotationState != state || report.ActiveKeyIDHash == "" {
+	if report.Name != name ||
+		!report.StateLoaded ||
+		!report.StateCheckpointLoaded ||
+		report.StateCheckpointStatus != "current" ||
+		report.RotationState != state ||
+		report.ActiveKeyIDHash == "" {
 		t.Fatalf("unexpected rotation JSON report: %#v\n%s", report, output)
 	}
 }

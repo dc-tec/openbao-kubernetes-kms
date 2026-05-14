@@ -30,6 +30,12 @@ type args struct {
 	checksumsPath      string
 	checksumsBundle    string
 	sbomGlob           string
+	attestations       attestationsArgs
+}
+
+type attestationsArgs struct {
+	available         bool
+	unavailableReason string
 }
 
 type index struct {
@@ -89,8 +95,10 @@ type sbomInfo struct {
 }
 
 type attestationInfo struct {
-	ImageAttestationSubject string `json:"image_attestation_subject"`
-	AssetSignerWorkflow     string `json:"asset_signer_workflow"`
+	Available               bool   `json:"available"`
+	UnavailableReason       string `json:"unavailable_reason,omitempty"`
+	ImageAttestationSubject string `json:"image_attestation_subject,omitempty"`
+	AssetSignerWorkflow     string `json:"asset_signer_workflow,omitempty"`
 }
 
 type reproducibility struct {
@@ -154,6 +162,18 @@ func parseArgs() (args, error) {
 		"checksums signature bundle path",
 	)
 	flag.StringVar(&cfg.sbomGlob, "sbom-glob", "dist/sbom-*.spdx.json", "SBOM glob")
+	flag.BoolVar(
+		&cfg.attestations.available,
+		"attestations-available",
+		true,
+		"whether GitHub provenance attestations are available for this release",
+	)
+	flag.StringVar(
+		&cfg.attestations.unavailableReason,
+		"attestations-unavailable-reason",
+		"",
+		"reason GitHub provenance attestations are unavailable",
+	)
 	flag.Parse()
 
 	required := map[string]string{
@@ -202,6 +222,14 @@ func buildIndex(cfg args) (index, error) {
 		return index{}, fmt.Errorf("hash checksums bundle: %w", err)
 	}
 
+	attestations := attestationInfo{Available: cfg.attestations.available}
+	if cfg.attestations.available {
+		attestations.ImageAttestationSubject = "oci://" + cfg.image + "@" + cfg.imageDigest
+		attestations.AssetSignerWorkflow = cfg.releaseWorkflow
+	} else {
+		attestations.UnavailableReason = cfg.attestations.unavailableReason
+	}
+
 	generatedAt := time.Unix(cfg.sourceDateEpoch, 0).UTC().Format(time.RFC3339)
 	return index{
 		SchemaVersion: 1,
@@ -229,12 +257,9 @@ func buildIndex(cfg args) (index, error) {
 			SignatureBundlePath:   cfg.checksumsBundle,
 			SignatureBundleDigest: bundleDigest,
 		},
-		Assets: assets,
-		SBOMs:  sboms,
-		Attestations: attestationInfo{
-			ImageAttestationSubject: "oci://" + cfg.image + "@" + cfg.imageDigest,
-			AssetSignerWorkflow:     cfg.releaseWorkflow,
-		},
+		Assets:       assets,
+		SBOMs:        sboms,
+		Attestations: attestations,
 		Reproducible: reproducibility{
 			ImageDigestMatch: cfg.imageRebuildDigest != "" && cfg.imageDigest == cfg.imageRebuildDigest,
 		},

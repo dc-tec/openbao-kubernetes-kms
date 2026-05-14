@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"slices"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/aad"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
@@ -38,8 +37,10 @@ const (
 	messageKeyIDMalformed              = "key_id malformed"
 	messageKeyIDUnknown                = "key_id unknown"
 	messagePlaintextRequired           = "plaintext is required"
+	messageRequestLimitExceeded        = "kms request exceeds protocol limits"
 	messageRequestCanceled             = "request canceled"
 	messageRequestTimedOut             = "request timed out"
+	messageResponseLimitExceeded       = "kms response exceeds protocol limits"
 	messageStatusKeyIDMismatch         = "status key_id mismatch"
 	messageStatusUnavailable           = "status unavailable"
 	messageStatusUnhealthy             = "status unhealthy"
@@ -75,6 +76,12 @@ var (
 	ErrCiphertextRequired = errors.New("ciphertext required")
 	// ErrTransitInvalidResponse identifies a malformed Transit response.
 	ErrTransitInvalidResponse = errors.New("transit response invalid")
+	// ErrRequestLimitExceeded identifies KMS request fields outside Kubernetes KMS v2 bounds.
+	ErrRequestLimitExceeded = errors.New("kms request exceeds protocol limits")
+	// ErrResponseLimitExceeded identifies KMS response fields outside Kubernetes KMS v2 bounds.
+	ErrResponseLimitExceeded = errors.New("kms response exceeds protocol limits")
+	// ErrPanicRecovered identifies a recovered panic inside a KMS v2 request handler.
+	ErrPanicRecovered = errors.New("kms panic recovered")
 )
 
 // StatusCache exposes the cached Status view maintained by the status workstream.
@@ -187,7 +194,7 @@ func (s *Server) Status(ctx context.Context, _ *kmsapi.StatusRequest) (response 
 		}
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
 	requestCtx, cancel := s.requestContext(ctx)
 	defer cancel()
@@ -219,7 +226,7 @@ func (s *Server) Encrypt(
 	defer func() {
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
 	if request == nil || len(request.GetPlaintext()) == 0 {
 		return nil, rpcError(ErrPlaintextRequired)
@@ -265,11 +272,16 @@ func (s *Server) Encrypt(
 		return nil, rpcError(ErrTransitInvalidResponse)
 	}
 
-	return &kmsapi.EncryptResponse{
+	response = &kmsapi.EncryptResponse{
 		Ciphertext:  slices.Clone(encrypted.Ciphertext),
 		KeyId:       keyID,
 		Annotations: annotationsToProto(annotations),
-	}, nil
+	}
+	if err := validateEncryptResponseLimits(response); err != nil {
+		observation.ErrorClass = errorClass(err)
+		return nil, rpcError(err)
+	}
+	return response, nil
 }
 
 // Decrypt validates key_id and annotations before calling Transit decrypt.
@@ -290,10 +302,14 @@ func (s *Server) Decrypt(
 	defer func() {
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
-	defer recoverRPC(&err)
+	defer recoverRPC(&err, &observation)
 
 	if request == nil || len(request.GetCiphertext()) == 0 {
 		return nil, rpcError(ErrCiphertextRequired)
+	}
+	if err := validateDecryptRequestLimits(request); err != nil {
+		observation.ErrorClass = errorClass(err)
+		return nil, rpcError(err)
 	}
 
 	requestCtx, cancel := s.requestContext(ctx)
@@ -393,18 +409,23 @@ func annotationsToProto(annotations map[string]string) map[string][]byte {
 }
 
 func annotationsFromProto(annotations map[string][]byte) (map[string]string, error) {
+	if err := validateAnnotationsProtoLimits(annotations, ErrRequestLimitExceeded); err != nil {
+		return nil, err
+	}
 	decoded := make(map[string]string, len(annotations))
 	for key, value := range annotations {
-		if !utf8.ValidString(key) || !utf8.Valid(value) {
-			return nil, fmt.Errorf("%w: %s", aad.ErrInvalidAnnotations, messageAnnotationEncodingInvalid)
-		}
 		decoded[key] = string(value)
 	}
 	return decoded, nil
 }
 
-func recoverRPC(err *error) {
+func recoverRPC(err *error, observation *RequestObservation) {
 	if recovered := recover(); recovered != nil {
+		if observation != nil {
+			observation.ErrorClass = errorClass(ErrPanicRecovered)
+			observation.PanicRecovered = true
+			observation.PanicType = fmt.Sprintf("%T", recovered)
+		}
 		*err = grpcstatus.Error(codes.Internal, messageKMSRequestFailed)
 	}
 }
@@ -419,10 +440,13 @@ func rpcError(err error) error {
 	switch {
 	case errors.Is(err, ErrPlaintextRequired),
 		errors.Is(err, ErrCiphertextRequired),
+		errors.Is(err, ErrRequestLimitExceeded),
 		errors.Is(err, keyregistry.ErrMalformedKeyID),
 		errors.Is(err, aad.ErrInvalidAnnotations),
 		errors.Is(err, aad.ErrAnnotationMismatch):
 		return grpcstatus.Error(codes.InvalidArgument, safeMessage(err))
+	case errors.Is(err, ErrResponseLimitExceeded):
+		return grpcstatus.Error(codes.Internal, safeMessage(err))
 	case errors.Is(err, keyregistry.ErrUnknownKeyID):
 		return grpcstatus.Error(codes.NotFound, safeMessage(err))
 	case errors.Is(err, ErrStatusUnavailable),
@@ -535,6 +559,10 @@ func safeMessage(err error) string {
 		return messagePlaintextRequired
 	case errors.Is(err, ErrCiphertextRequired):
 		return messageCiphertextRequired
+	case errors.Is(err, ErrRequestLimitExceeded):
+		return messageRequestLimitExceeded
+	case errors.Is(err, ErrResponseLimitExceeded):
+		return messageResponseLimitExceeded
 	case errors.Is(err, keyregistry.ErrMalformedKeyID):
 		return messageKeyIDMalformed
 	case errors.Is(err, keyregistry.ErrUnknownKeyID):
@@ -545,6 +573,8 @@ func safeMessage(err error) string {
 		return messageAnnotationsMismatch
 	case errors.Is(err, aad.ErrAADRequired):
 		return messageAADRequired
+	case errors.Is(err, ErrPanicRecovered):
+		return messageKMSRequestFailed
 	case errors.Is(err, ErrStatusUnavailable):
 		return messageStatusUnavailable
 	case errors.Is(err, ErrStatusUnhealthy):

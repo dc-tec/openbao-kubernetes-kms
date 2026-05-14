@@ -471,6 +471,23 @@ chmod 0700 /var/lib/openbao-kms/state
 	)
 }
 
+func (s *providerFailureStack) removeProviderStateFile(ctx context.Context) {
+	s.t.Helper()
+
+	script := `set -eu
+rm -f /var/lib/openbao-kms/state/key-registry.json
+chown -R 65532:65532 /var/lib/openbao-kms/state
+chmod 0700 /var/lib/openbao-kms/state
+`
+	runDocker(s.t, ctx, s.dockerPath,
+		"run", "--rm",
+		"--entrypoint", "/bin/sh",
+		"--volume", s.volumes.state+":/var/lib/openbao-kms/state",
+		s.openBaoImage,
+		"-c", script,
+	)
+}
+
 func (s *providerFailureStack) assertProviderLogsDoNotContain(ctx context.Context, values ...string) {
 	s.t.Helper()
 

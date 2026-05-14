@@ -133,6 +133,49 @@ func TestDeriveKeyIDChangesForIdentityFields(t *testing.T) {
 	}
 }
 
+func TestDeriveKeyIDCanonicalizesTransitCreationTimeToUnixSeconds(t *testing.T) {
+	base := loadGoldenFixture(t).Snapshot.keySnapshot()
+	withSubsecondPrecision := base
+	withSubsecondPrecision.TransitVersionCreatedAt = base.TransitVersionCreatedAt.Add(987 * time.Millisecond)
+
+	baseKeyID, err := keyregistry.DeriveKeyID(base)
+	if err != nil {
+		t.Fatalf("derive base key ID: %v", err)
+	}
+	subsecondKeyID, err := keyregistry.DeriveKeyID(withSubsecondPrecision)
+	if err != nil {
+		t.Fatalf("derive subsecond key ID: %v", err)
+	}
+	if subsecondKeyID != baseKeyID {
+		t.Fatalf("subsecond precision changed key ID: base %s subsecond %s", baseKeyID, subsecondKeyID)
+	}
+
+	normalized, err := withSubsecondPrecision.Normalize()
+	if err != nil {
+		t.Fatalf("normalize subsecond snapshot: %v", err)
+	}
+	if !normalized.TransitVersionCreatedAt.Equal(base.TransitVersionCreatedAt) {
+		t.Fatalf(
+			"creation time was not canonicalized: want %s got %s",
+			base.TransitVersionCreatedAt,
+			normalized.TransitVersionCreatedAt,
+		)
+	}
+}
+
+func TestDeriveKeyIDRejectsInvalidTransitCreationTime(t *testing.T) {
+	base := loadGoldenFixture(t).Snapshot.keySnapshot()
+	for _, createdAt := range []time.Time{{}, time.Unix(0, 0).UTC()} {
+		t.Run(createdAt.String(), func(t *testing.T) {
+			snapshot := base
+			snapshot.TransitVersionCreatedAt = createdAt
+			if _, err := keyregistry.DeriveKeyID(snapshot); err == nil {
+				t.Fatal("expected invalid Transit creation time to fail")
+			}
+		})
+	}
+}
+
 func TestParseKeyID(t *testing.T) {
 	valid := loadGoldenFixture(t).ExpectedKeyID
 

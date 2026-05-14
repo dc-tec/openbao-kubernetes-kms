@@ -16,11 +16,10 @@ OpenBao-native KMS integration without making the API server call OpenBao
 Transit directly.
 
 > [!IMPORTANT]
-> `bao-kms-provider` is an engineering preview. It is ready for controlled
-> validation, design review, and staging-style testing against the exact release
-> evidence described in the docs. Do not use preview releases for production
-> control planes, and do not treat adjacent Kubernetes, OpenBao, auth, or
-> deployment configurations as supported until release evidence covers them.
+> `bao-kms-provider` is currently a preview release. Use it for labs, staging,
+> and evaluation of the deployment model. Do not use preview releases for
+> production control planes, and treat only the versions and configurations in
+> the compatibility matrix as tested.
 
 ## Why It Exists
 
@@ -62,20 +61,20 @@ server may need the KMS plugin during startup to read encrypted resources.
 | Area | Current state |
 |---|---|
 | Kubernetes API | KMS v2 only. KMS v1 is not implemented. |
-| Kubernetes target | Exact-pinned Kind validation for Kubernetes `1.34` and `1.35` release lines. Kubernetes `1.36` is the intended next validation line once a digest-pinned Kind node image is available. Kubernetes `1.29+` KMS v2 clusters may work, but are not release-gate validated unless listed in `.ci/versions.yaml`. |
+| Kubernetes target | Tested against Kubernetes `1.34` and `1.35` Kind node images pinned by digest. Kubernetes `1.36` is the intended next test line once a pinned Kind image is available. Kubernetes `1.29+` KMS v2 clusters may work, but are covered only when listed in `.ci/versions.yaml`. |
 | OpenBao target | OpenBao `2.5.3` with Transit. JWT auth is the default preview auth path. |
 | Transit key type | `aes256-gcm96` is the supported and recommended default. |
-| Authentication | JWT auth by default. PKCS#11 certificate auth is an opt-in preview path only when the release artifacts and E2E evidence include it. SPIFFE/SPIRE wiring is implementation evidence only and is not a supported user configuration in the current preview envelope. OpenBao tokens stay in process memory. |
+| Authentication | JWT auth by default. PKCS#11 certificate auth is opt-in and covered only when a release publishes matching artifacts and marks the path as tested. SPIFFE/SPIRE is not a supported preview configuration. OpenBao tokens stay in process memory. |
 | Deployment models | Hardened systemd unit or kubelet-managed static pod. |
 | Release maturity | Preview release line; see the [Support Policy](https://dc-tec.github.io/openbao-kubernetes-kms/reference/support-policy/). |
 | Release cadence | Event-driven releases, scheduled validation. |
-| Supply chain | Vendored builds, SBOMs, scans, signed checksums, image signatures, provenance attestations, byte-reproducibility evidence, and provenance index for public releases. |
+| Supply chain | Vendored builds, SBOMs, signed checksums, image signatures, provenance attestations, vulnerability scans, and reproducibility reports for public releases. |
 
-Support claims are limited to tested release evidence. New Kubernetes,
-OpenBao, OS, key-type, auth, or deployment support is not implied by being
-newer or adjacent. See the
+Preview support is limited to the tested matrix. Newer or adjacent Kubernetes,
+OpenBao, OS, key-type, auth, or deployment combinations are not automatically
+covered. See the
 [Compatibility](https://dc-tec.github.io/openbao-kubernetes-kms/reference/compatibility/)
-matrix for the exact support envelope.
+matrix for details.
 
 ## Security Posture
 
@@ -123,7 +122,7 @@ before installing either deployment form.
 - provide a Helm chart that installs into the protected cluster,
 - support same-cluster DaemonSet deployment for the protected API server,
 - enable decrypt micro-batching in the current release line,
-- claim production-ready support for preview releases.
+- support production use while the release line remains preview.
 
 ## Start Here
 
@@ -132,11 +131,12 @@ The user documentation is published on GitHub Pages:
 1. [Overview](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/overview/)
 2. [OpenBao Setup](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/openbao-setup/)
 3. [Install](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/install/)
-4. [Kubernetes EncryptionConfiguration](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/kubernetes-encryption-config/)
-5. [First Encrypt](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/first-encrypt/)
+4. [Deployment: Choosing A Model](https://dc-tec.github.io/openbao-kubernetes-kms/deployment/choosing-a-model/)
+5. [Kubernetes EncryptionConfiguration](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/kubernetes-encryption-config/)
+6. [First Encrypt](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/first-encrypt/)
 
 Release artifact verification is documented in
-[Getting Started: Install](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/install/#verify-release-evidence/).
+[Getting Started: Install](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/install/#verify-release-artifacts).
 
 ## Build And Test
 
@@ -148,7 +148,7 @@ make build
 bin/bao-kms-provider version
 ```
 
-The default build and public release workflow produce JWT-only auth artifacts.
+Public releases produce JWT-only auth artifacts by default.
 Certificate auth variants are separate opt-in build tags:
 
 ```sh
@@ -158,11 +158,8 @@ make build-certauth-pkcs11
 PKCS#11 cert-auth artifacts are separate host CGO builds via
 `make release-artifact-certauth-pkcs11-host`.
 
-SPIFFE certificate-source wiring remains in tree for local verification and
-upstream OpenBao alignment work, but `auth.cert.source: spiffe` is not a
-supported user configuration until the supported OpenBao version can derive
-cert-auth identity aliases from URI SANs. SPIFFE build artifacts are validation
-artifacts, not public preview support artifacts.
+SPIFFE certificate-source code remains in tree for local verification, but
+`auth.cert.source: spiffe` is not a supported preview user configuration.
 
 Selected E2E entrypoints:
 
@@ -190,10 +187,10 @@ restarts API servers and validation VMs, and intentionally stops OpenBao in the
 test environment. Maintainer notes live with the harness code under
 `hack/harvester/`.
 
-## Release Evidence
+## Release Verification
 
 Tagged releases publish GitHub Release assets and a GHCR image. Public release
-evidence includes:
+verification materials include:
 
 - SHA-256 checksums,
 - keyless checksum signature bundle,
@@ -202,7 +199,7 @@ evidence includes:
 - GitHub build-provenance attestations,
 - release artifact attestation verification output,
 - vulnerability scan summary,
-- byte-reproducibility report,
+- reproducibility report,
 - `provenance-index.json`,
 - release notes.
 

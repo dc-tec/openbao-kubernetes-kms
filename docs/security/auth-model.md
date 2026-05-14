@@ -13,14 +13,13 @@ This page describes how `bao-kms-provider` authenticates to OpenBao. For the ope
 | Method | Status | Use when |
 |---|---|---|
 | `jwt` | Default build and release path | A file-backed JWT issuer can be validated by OpenBao without calling the protected Kubernetes API server. |
-| `cert` with `pkcs11` source | Opt-in preview when release artifacts and E2E evidence include it | The deployment has a hardware or software token that can hold the private key outside the filesystem. |
-| `cert` with `spiffe` source | Not user-configurable | SPIFFE source wiring remains in tree for local verification and upstream OpenBao alignment work. It is not a supported configuration until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
+| `cert` with `pkcs11` source | Opt-in preview when the selected release marks it as tested | The deployment has a hardware or software token that can hold the private key outside the filesystem. |
+| `cert` with `spiffe` source | Not user-configurable in preview | SPIFFE source wiring remains in tree for local verification, but it is not a supported preview configuration. |
 
 The default public release artifacts are JWT-only. PKCS#11 certificate auth is a
-separate opt-in artifact family, and it is inside the preview support envelope
-only when the selected release includes matching artifact evidence and E2E
-evidence. SPIFFE and combined cert-auth artifacts are validation artifacts, not
-public preview support artifacts.
+separate opt-in artifact family, and it is covered only when the selected
+release publishes the matching artifact and marks that path as tested. SPIFFE
+and combined cert-auth artifacts are not supported preview user configurations.
 
 OpenBao Kubernetes auth is intentionally not a provider auth method for this plugin. It calls Kubernetes TokenReview, which depends on the API server the KMS plugin may be required to unlock during bootstrap or disaster recovery.
 
@@ -104,7 +103,7 @@ The provider keeps the OpenBao client token in memory only. File-backed JWTs and
 | Source | Local validation | Operational notes |
 |---|---|---|
 | PKCS#11 | Certificate file safety, certificate lifetime, client-auth usage, weak signature rejection, and signer public key match. | The private key remains behind the PKCS#11 module. The certificate file must contain only PEM `CERTIFICATE` blocks. The PIN file must be local, regular, absolute, tightly permissioned, and single-line. CI exercises this path with SoftHSM, OpenBao cert auth, and Transit. |
-| SPIFFE | X.509 SVID lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | Wiring is present for local verification, and CI exercises the source with real SPIRE Workload API SVIDs. It is not a supported user configuration yet. |
+| SPIFFE | X.509 SVID lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | Wiring is present for explicit local verification, but the SPIRE lane is not part of CI or the preview release gate. It is not a supported user configuration yet. |
 
 The provider does not accept a PEM private key file as a certificate source.
 

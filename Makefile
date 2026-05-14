@@ -6,6 +6,7 @@ include mk/tools.mk
 include mk/build.mk
 include mk/checks.mk
 include mk/e2e.mk
+include mk/dev-env.mk
 include mk/security.mk
 include mk/docs.mk
 include mk/deployment.mk

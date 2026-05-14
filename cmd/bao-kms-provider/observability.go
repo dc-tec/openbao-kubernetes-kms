@@ -84,6 +84,9 @@ func (c debugCorrelation) appendFields(attrs []slog.Attr) []slog.Attr {
 
 func (o observability) ObserveKMSRequest(ctx context.Context, obs kmsv2.RequestObservation) {
 	o.metrics.RecordGRPCRequest(obs.Method, obs.Status, obs.Duration)
+	if obs.PanicRecovered {
+		o.metrics.RecordPanicRecovery(obs.Method)
+	}
 
 	attrs := []slog.Attr{
 		logging.String(logging.FieldOperation, logOperationKMSPrefix+obs.Method),
@@ -91,6 +94,10 @@ func (o observability) ObserveKMSRequest(ctx context.Context, obs kmsv2.RequestO
 		logging.DurationMilliseconds(logging.FieldDurationMS, obs.Duration),
 	}
 	attrs = appendStringAttr(attrs, logging.FieldKeyIDHash, obs.KeyIDHash)
+	if obs.PanicRecovered {
+		attrs = append(attrs, logging.Bool(logging.FieldPanicRecovered, true))
+		attrs = appendStringAttr(attrs, logging.FieldPanicType, obs.PanicType)
+	}
 	if obs.TransitKeyVersion > 0 {
 		attrs = append(attrs, logging.Int(logging.FieldTransitKeyVersion, obs.TransitKeyVersion))
 	}

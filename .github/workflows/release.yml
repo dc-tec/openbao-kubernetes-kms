@@ -17,6 +17,10 @@ jobs:
   prepare:
     name: Prepare
     runs-on: ubuntu-24.04
+    permissions:
+      # Needed to read draft release metadata via `gh release view`.
+      # `contents: read` cannot see draft releases and causes false 404 failures.
+      contents: write
     outputs:
       version: ${{ steps.vars.outputs.version }}
       build_tag: ${{ steps.vars.outputs.build_tag }}
@@ -57,6 +61,29 @@ jobs:
             echo "commit=${sha}"
             echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER}/bao-kms-provider"
           } >> "${GITHUB_OUTPUT}"
+
+      - name: Fail fast if draft GitHub Release is missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.vars.outputs.version }}"
+          for _ in $(seq 1 24); do
+            release_json="$(gh release view "${version}" --json isDraft,isPrerelease,name 2>/dev/null || true)"
+            if [[ -n "${release_json}" ]]; then
+              if [[ "$(jq -r '.isDraft' <<<"${release_json}")" != "true" ]]; then
+                echo "GitHub Release '${version}' already exists but is not a draft." >&2
+                echo "Release assets are immutable after publication; create releases through the release-tag workflow." >&2
+                exit 1
+              fi
+              echo "Found draft GitHub Release ${version}"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Draft GitHub Release '${version}' not found after waiting." >&2
+          echo "Merge the release-please PR and allow the Release Tag workflow to create the signed tag and draft release." >&2
+          exit 1
 
   build:
     name: Build Image
@@ -151,6 +178,11 @@ jobs:
       contents: read
       packages: read
     steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.ref }}
+
       - name: Login to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
@@ -178,9 +210,18 @@ jobs:
     name: Release Gate OpenBao E2E
     runs-on: ubuntu-24.04
     timeout-minutes: 75
-    needs: prepare
+    needs: [prepare, build]
+    permissions:
+      contents: read
+      packages: read
     env:
       GOFLAGS: -mod=vendor
+      E2E_PROVIDER_BUILD: "false"
+      E2E_PROVIDER_RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
+      E2E_PROVIDER_IMAGE: ${{ needs.prepare.outputs.image }}:release-e2e-${{ needs.prepare.outputs.commit }}
+      E2E_PROVIDER_OLD_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-upgrade-old-${{ needs.prepare.outputs.commit }}
+      E2E_PROVIDER_NEW_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-upgrade-new-${{ needs.prepare.outputs.commit }}
+      E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-certauth-pkcs11-${{ needs.prepare.outputs.commit }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -189,6 +230,24 @@ jobs:
 
       - name: Setup repo tools
         uses: ./.github/actions/setup-repo-tools
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull release provider image
+        run: |
+          docker pull "${E2E_PROVIDER_RELEASE_IMAGE}"
+          docker tag "${E2E_PROVIDER_RELEASE_IMAGE}" "${E2E_PROVIDER_IMAGE}"
+
+      - name: Build OpenBao validation images
+        run: |
+          make image IMAGE="${E2E_PROVIDER_OLD_IMAGE}" VERSION="${{ needs.prepare.outputs.version }}-e2e-old" COMMIT="${{ needs.prepare.outputs.commit }}-old"
+          make image IMAGE="${E2E_PROVIDER_NEW_IMAGE}" VERSION="${{ needs.prepare.outputs.version }}-e2e-new" COMMIT="${{ needs.prepare.outputs.commit }}-new"
+          make image-certauth-pkcs11-e2e
 
       - name: Run OpenBao release E2E lanes
         run: make test-e2e-release-preview-openbao
@@ -231,12 +290,18 @@ jobs:
     name: Release Gate Kind E2E (Kubernetes ${{ matrix.kubernetes_line }})
     runs-on: ubuntu-24.04
     timeout-minutes: 150
-    needs: [prepare, kind-matrix]
+    needs: [prepare, build, kind-matrix]
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.kind-matrix.outputs.matrix) }}
     env:
       GOFLAGS: -mod=vendor
+      E2E_PROVIDER_BUILD: "false"
+      E2E_PROVIDER_RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
+      E2E_PROVIDER_IMAGE: ${{ needs.prepare.outputs.image }}:release-e2e-${{ needs.prepare.outputs.commit }}
       E2E_KUBERNETES_LINE: ${{ matrix.kubernetes_line }}
     steps:
       - name: Checkout
@@ -246,6 +311,18 @@ jobs:
 
       - name: Setup repo tools
         uses: ./.github/actions/setup-repo-tools
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull release provider image
+        run: |
+          docker pull "${E2E_PROVIDER_RELEASE_IMAGE}"
+          docker tag "${E2E_PROVIDER_RELEASE_IMAGE}" "${E2E_PROVIDER_IMAGE}"
 
       - name: Install kind
         uses: ./.github/actions/install-kind
@@ -452,6 +529,8 @@ jobs:
       - e2e-openbao
       - e2e-kind
       - verify-artifacts
+    environment:
+      name: release-publish
     permissions:
       contents: write
       packages: write
@@ -520,14 +599,23 @@ jobs:
             "${IMAGE}@${IMAGE_DIGEST}" >/dev/null
 
       - name: Attest checksums provenance
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-path: dist/checksums.txt
 
       - name: Attest release asset provenance
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-checksums: dist/checksums.txt
+
+      - name: Record private dry-run attestation limitation
+        if: ${{ github.event.repository.private }}
+        run: |
+          cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
+          GitHub release asset attestations were skipped because this is a private repository dry run. Public release tags must run with attestations enabled.
+          EOF
 
       - name: Sign release checksums
         run: |
@@ -550,6 +638,7 @@ jobs:
             dist/checksums.txt >/dev/null
 
       - name: Verify image attestation
+        if: ${{ !github.event.repository.private }}
         uses: ./.github/actions/verify-image-attestations
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -559,6 +648,7 @@ jobs:
           image-refs: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
 
       - name: Verify release asset attestations
+        if: ${{ !github.event.repository.private }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -579,6 +669,8 @@ jobs:
           IMAGE: ${{ needs.prepare.outputs.image }}
           IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
           IMAGE_REBUILD_DIGEST: ${{ needs.rebuild.outputs.image_digest }}
+          ATTESTATIONS_AVAILABLE: ${{ !github.event.repository.private }}
+          ATTESTATIONS_UNAVAILABLE_REASON: private-repository-dry-run
         run: bash hack/ci/generate-provenance-index.sh
 
       - name: Publish GitHub Release
@@ -592,10 +684,57 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          if ! gh release view "${VERSION}" >/dev/null 2>&1; then
-            gh release create "${VERSION}" --title "${VERSION}" --generate-notes ${prerelease_flag}
+          release_json="$(gh release view "${VERSION}" --json isDraft,assets)"
+          if [[ "$(jq -r '.isDraft' <<<"${release_json}")" != "true" ]]; then
+            echo "::error::GitHub release ${VERSION} is not a draft. Immutable releases cannot receive or replace assets after publication."
+            exit 1
           fi
 
-          gh release upload "${VERSION}" \
-            dist/* \
-            --clobber
+          shopt -s nullglob
+          assets=(dist/*)
+          if [[ "${#assets[@]}" -eq 0 ]]; then
+            echo "::error::no release assets found in dist/"
+            exit 1
+          fi
+
+          declare -A existing_asset_sizes=()
+          while IFS=$'\t' read -r name size; do
+            if [[ -n "${name}" ]]; then
+              existing_asset_sizes["${name}"]="${size}"
+            fi
+          done < <(jq -r '.assets[]? | [.name, (.size|tostring)] | @tsv' <<<"${release_json}")
+
+          tmp_existing="$(mktemp -d)"
+          trap 'rm -rf "${tmp_existing}"' EXIT
+
+          to_upload=()
+          for file in "${assets[@]}"; do
+            name="$(basename "${file}")"
+            if [[ -n "${existing_asset_sizes[${name}]-}" ]]; then
+              local_size="$(stat -c%s "${file}")"
+              if [[ "${local_size}" != "${existing_asset_sizes[${name}]}" ]]; then
+                echo "::error::Release asset '${name}' already exists but size differs (local=${local_size}, release=${existing_asset_sizes[${name}]})."
+                exit 1
+              fi
+
+              gh release download "${VERSION}" --pattern "${name}" --dir "${tmp_existing}"
+              local_sha="$(sha256sum "${file}" | awk '{print $1}')"
+              release_sha="$(sha256sum "${tmp_existing}/${name}" | awk '{print $1}')"
+              if [[ "${local_sha}" != "${release_sha}" ]]; then
+                echo "::error::Release asset '${name}' already exists but content differs (local_sha=${local_sha}, release_sha=${release_sha})."
+                exit 1
+              fi
+              continue
+            fi
+            to_upload+=("${file}")
+          done
+
+          if (( ${#to_upload[@]} > 0 )); then
+            gh release upload "${VERSION}" "${to_upload[@]}"
+          fi
+
+          if [[ -n "${prerelease_flag}" ]]; then
+            gh release edit "${VERSION}" --title "${VERSION}" --draft=false --prerelease
+          else
+            gh release edit "${VERSION}" --title "${VERSION}" --draft=false --latest
+          fi

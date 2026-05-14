@@ -98,6 +98,37 @@ Recovery:
 4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
 5. Restart the plugin only if it does not recover on its own after OpenBao is healthy.
 
+## Transit Profile Fails Closed
+
+Symptoms:
+
+- plugin `/ready` returns non-200,
+- KMS Status is unhealthy,
+- `doctor` or `verify-key` reports `transit.profile` failure,
+- API server writes fail while existing reads may continue from cache.
+
+Check:
+
+```sh
+bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
+bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
+```
+
+Recovery:
+
+1. Read the finding impact prefix.
+2. For `cryptographic_safety`, restore the validated Transit profile before
+   routing Kubernetes writes through the provider.
+3. For `api_server_availability`, repair the setting that prevents required
+   encrypt or decrypt operations, such as key deletion, unsupported operations,
+   or version restrictions.
+4. Re-run `verify-key`.
+5. Confirm `/ready` and KMS Status return healthy before restarting or reloading
+   `kube-apiserver`.
+
+Fail-closed behavior prevents new encryption under unvalidated settings, but it
+can also make API server writes unavailable until OpenBao metadata is repaired.
+
 ## Auth Login Fails
 
 Symptoms:
@@ -172,6 +203,65 @@ replacement registry state. Restore the state/checkpoint pair from backup or a
 known-good peer with matching identity scope; otherwise the provider fails
 closed.
 
+## Transit Version Creation Time Changed
+
+Symptoms:
+
+- `/ready`, `doctor`, or `verify-key` reports that Transit version creation time changed,
+- KMS Status is unhealthy and does not publish a `key_id`,
+- OpenBao was restored, imported, or modified before the failure.
+
+The provider stores the first observed Transit version creation time in local
+state and compares it with live OpenBao metadata after Unix-second
+normalization. Sub-second precision differences are tolerated, but a different
+Unix second is treated as identity drift.
+
+Recovery:
+
+1. Confirm the OpenBao backup contains the original Transit key material and
+   metadata.
+2. Restore the matching provider state file and checkpoint.
+3. Confirm the configured Transit key lineage ID still identifies the restored
+   key lineage.
+4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
+5. Keep the provider stopped if the original metadata cannot be restored.
+
+Do not edit `key_id`, creation timestamps, or local state by hand to force a
+match. That can make Kubernetes objects reference a key epoch that cannot
+decrypt them.
+
+## Intermediate Transit Version Metadata Missing
+
+Symptoms:
+
+- `rotation-plan`, `verify-rotation`, `/ready`, or startup reports invalid
+  Transit metadata,
+- the reported Transit `latest_version` jumped over one or more versions,
+- KMS Status is unhealthy and does not publish a `key_id`.
+
+Likely causes:
+
+- multiple Transit rotations happened before every control-plane node converged,
+- OpenBao restore or import omitted an intermediate version creation timestamp,
+- Transit metadata is temporarily inconsistent during restore.
+
+Recovery:
+
+1. Stop further Transit rotations.
+2. Keep all existing Transit versions decryptable.
+3. Restore compatible OpenBao metadata that includes every intermediate version
+   creation timestamp at Unix-second precision.
+4. Restore the provider state file and checkpoint from backup or a known-good
+   peer if local state was lost.
+5. Run `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`
+   on every control-plane node.
+6. Resume only after every node reports a healthy, converged active `key_id`
+   hash.
+
+Do not synthesize intermediate snapshots by hand. If the provider cannot prove
+the skipped version identities from OpenBao metadata and local state, it fails
+closed to avoid advertising a registry that might not decrypt Kubernetes data.
+
 ## AAD Mismatch
 
 Symptoms:
@@ -233,7 +323,7 @@ Recovery:
 
 If old key material no longer exists, restore the OpenBao backup. See [Disaster Recovery: Transit Key Loss](/operations/disaster-recovery/#transit-key-loss).
 
-Do not treat `verify-rotation` as evidence that raising
+Do not treat `verify-rotation` as proof that raising
 `min_decryption_version` was safe. It reports local registry and Transit
 metadata only.
 

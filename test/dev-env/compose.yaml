@@ -1,0 +1,83 @@
+services:
+  openbao:
+    image: ${DEV_ENV_OPENBAO_IMAGE:-ghcr.io/openbao/openbao:2.5.3@sha256:fdc6da21ca6963560c32336fd7feb9cf2d5e52668f1a1647205a4b41171f0806}
+    environment:
+      BAO_ADDR: https://127.0.0.1:8200
+      BAO_CACERT: /vault/certs/ca.pem
+      VAULT_ADDR: https://127.0.0.1:8200
+      VAULT_CACERT: /vault/certs/ca.pem
+      VAULT_CONFIG_DIR: /vault/config
+    entrypoint: []
+    command:
+      - bao
+      - server
+      - -config=/vault/config/openbao.hcl
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - ./openbao/openbao.hcl:/vault/config/openbao.hcl:ro
+      - ./.state/openbao/data:/vault/data
+      - ./.state/openbao/seal/static-unseal.key:/vault/seal/static-unseal.key:ro
+      - ./.state/openbao/tls/ca.pem:/vault/certs/ca.pem:ro
+      - ./.state/openbao/tls/openbao-kms-dev-openbao-01/full-chain.pem:/vault/certs/openbao-kms-dev-openbao-01/full-chain.pem:ro
+      - ./.state/openbao/tls/openbao-kms-dev-openbao-01/private-key.pem:/vault/certs/openbao-kms-dev-openbao-01/private-key.pem:ro
+    ports:
+      - "127.0.0.1:18200:8200"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-check-certificate
+        - --no-verbose
+        - --tries=1
+        - --spider
+        - https://127.0.0.1:8200/v1/sys/health?standbyok=true&perfstandbyok=true
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    networks:
+      kind:
+        aliases:
+          - openbao
+
+  prometheus:
+    image: ${DEV_ENV_PROMETHEUS_IMAGE:-docker.io/prom/prometheus:v2.55.1}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../deploy/prometheus/rules/openbao-kms.rules.yaml:/etc/prometheus/rules/openbao-kms.rules.yaml:ro
+      - ./.state/prometheus:/prometheus
+    ports:
+      - "127.0.0.1:19090:9090"
+    networks:
+      - kind
+    depends_on:
+      - openbao
+
+  grafana:
+    image: ${DEV_ENV_GRAFANA_IMAGE:-docker.io/grafana/grafana:11.3.0}
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./.state/grafana:/var/lib/grafana
+    ports:
+      - "127.0.0.1:18300:3000"
+    networks:
+      - kind
+    depends_on:
+      - prometheus
+
+networks:
+  kind:
+    external: true
+    name: kind

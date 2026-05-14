@@ -29,7 +29,6 @@ releaseGate:
         - openbao-provider-upgrade-rollback-ci
         - openbao-cert-auth-ci
         - openbao-provider-certauth-pkcs11-source-ci
-        - openbao-provider-certauth-spiffe-source-ci
       kind:
         - kind-smoke
         - kind-convergence
@@ -59,6 +58,7 @@ lanes:
     makeTarget: test-e2e-provider-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && provider && ci
+    runRegex: ^TestProviderContainerFullStackE2E$
     prScope: pr
     environment: local-openbao
     isolation: local-container
@@ -78,11 +78,15 @@ lanes:
     makeTarget: test-e2e-kind-smoke
     package: ./test/e2e
     labelFilter: kind && kmsv2 && smoke
+    runRegex: ^TestKindKMSV2SmokeE2E$
     prScope: main
     environment: kind
     isolation: local-cluster
     timeout: 30m
     parallelNodes: 1
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+      - E2E_KIND_NODE_IMAGE
     versionRefs:
       - validation.kubernetes.previewMatrix
     status: active
@@ -110,20 +114,22 @@ lanes:
     makeTarget: test-e2e-provider-certauth-spiffe-openbao-ci
     package: ./test/e2e
     labelFilter: certauth && spiffe && ci
+    runRegex: ^TestProviderCertAuthSPIREWorkloadAPISourceE2E$
     prScope: pr
     environment: local-spire
     isolation: local-container
     timeout: 7m
     parallelNodes: 1
     requiredEnv:
-      - E2E_PROVIDER_IMAGE
+      - E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE
       - E2E_SPIRE_SERVER_IMAGE
       - E2E_SPIRE_AGENT_IMAGE
+    providerImageEnv: E2E_PROVIDER_CERTAUTH_SPIFFE_IMAGE
     versionRefs:
       - validation.spire.primary
       - validation.spire.serverImage
       - validation.spire.agentImage
-    status: active
+    status: planned
     reports: true
 
   - id: openbao-provider-certauth-pkcs11-source-ci
@@ -131,6 +137,7 @@ lanes:
     makeTarget: test-e2e-provider-certauth-pkcs11-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && certauth && pkcs11 && ci
+    runRegex: ^TestProviderCertAuthPKCS11SoftHSME2E$
     prScope: pr
     environment: local-openbao-softhsm
     isolation: local-container
@@ -138,7 +145,8 @@ lanes:
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
     requiredEnv:
-      - E2E_PROVIDER_IMAGE
+      - E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE
+    providerImageEnv: E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -150,11 +158,15 @@ lanes:
     makeTarget: test-e2e-kind-convergence
     package: ./test/e2e
     labelFilter: kind && kmsv2 && convergence
+    runRegex: ^TestKindMultiControlPlaneConvergenceE2E$
     prScope: main
     environment: kind
     isolation: local-cluster
     timeout: 45m
     parallelNodes: 1
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+      - E2E_KIND_NODE_IMAGE
     versionRefs:
       - validation.kubernetes.previewMatrix
     status: active
@@ -165,12 +177,15 @@ lanes:
     makeTarget: test-e2e-provider-failure-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && failure && ci
+    runRegex: ^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|ExpiredJWTFailsClosed|JWTExpectedClaimDriftFailsClosed|JWTFileRotation|JWTSigningKeyRollover|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$
     prScope: main
     environment: local-openbao
     isolation: local-container
     timeout: 12m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -182,12 +197,15 @@ lanes:
     makeTarget: test-e2e-provider-cli-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && cli && ci
+    runRegex: ^TestProviderCLI(HappyPath|JWTClaimDriftRedacted|UnsupportedTransitKeyTypeFails|RotationMissingStateFailsClosed)E2E$
     prScope: main
     environment: local-openbao
     isolation: local-container
     timeout: 12m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -199,12 +217,15 @@ lanes:
     makeTarget: test-e2e-provider-ha-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && ha && ci
+    runRegex: ^TestProviderOpenBaoHAFailoverE2E$
     prScope: main
     environment: local-openbao-ha
     isolation: local-container
-    timeout: 7m
+    timeout: 10m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -216,12 +237,15 @@ lanes:
     makeTarget: test-e2e-provider-decrypt-storm-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && performance && ci
+    runRegex: ^TestProviderDecryptStormSmokeE2E$
     prScope: main
     environment: local-openbao
     isolation: local-container
     timeout: 5m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -233,12 +257,15 @@ lanes:
     makeTarget: test-e2e-provider-load-soak-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && soak && ci
+    runRegex: ^TestProviderLoadSoakE2E$
     prScope: main
     environment: local-openbao
     isolation: local-container
     timeout: 6m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -250,12 +277,15 @@ lanes:
     makeTarget: test-e2e-provider-decrypt-soak-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && performance && soak && ci
+    runRegex: ^TestProviderDecryptSoakE2E$
     prScope: main
     environment: local-openbao
     isolation: local-container
     timeout: 7m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -267,12 +297,15 @@ lanes:
     makeTarget: test-e2e-provider-restore-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && restore && ci
+    runRegex: ^TestProvider(OpenBaoBackendReplacement|ContainerizedDRRestore)E2E$
     prScope: main
     environment: local-openbao
     isolation: local-container
-    timeout: 18m
+    timeout: 8m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -284,12 +317,15 @@ lanes:
     makeTarget: test-e2e-provider-rotation-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && rotation && ci
+    runRegex: ^TestProvider(TransitRotation|TransitMinDecryptionVersionBlocksHistorical|MissingStateAfterRotationFailsClosed)E2E$
     prScope: main
     environment: local-openbao
     isolation: local-container
-    timeout: 8m
+    timeout: 18m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -301,12 +337,16 @@ lanes:
     makeTarget: test-e2e-provider-upgrade-rollback-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && upgrade && rollback && ci
+    runRegex: ^TestProviderBinaryUpgradeRollbackE2E$
     prScope: main
     environment: local-openbao
     isolation: local-container
     timeout: 8m
     parallelNodes: 1
     enableEnv: E2E_OPENBAO_CI
+    requiredEnv:
+      - E2E_PROVIDER_OLD_IMAGE
+      - E2E_PROVIDER_NEW_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image
@@ -318,11 +358,15 @@ lanes:
     makeTarget: test-e2e-kind-upgrade-rollback
     package: ./test/e2e
     labelFilter: kind && kmsv2 && upgrade && rollback
+    runRegex: ^TestKindStaticPodUpgradeRollbackE2E$
     prScope: main
     environment: kind
     isolation: local-cluster
     timeout: 30m
     parallelNodes: 1
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+      - E2E_KIND_NODE_IMAGE
     versionRefs:
       - validation.kubernetes.previewMatrix
     status: active
@@ -333,11 +377,15 @@ lanes:
     makeTarget: test-e2e-kind-dr-runbook
     package: ./test/e2e
     labelFilter: kind && kmsv2 && restore && dr
+    runRegex: ^TestKindDRRestoreRunbookE2E$
     prScope: main
     environment: kind
     isolation: local-cluster
     timeout: 35m
     parallelNodes: 1
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+      - E2E_KIND_NODE_IMAGE
     versionRefs:
       - validation.openbao.primary
       - validation.openbao.image

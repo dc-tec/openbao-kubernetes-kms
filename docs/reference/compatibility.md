@@ -1,29 +1,31 @@
 ---
 title: "Compatibility"
-description: "Kubernetes, OpenBao, OS, deployment mode, Transit key type, and CI version policy supported by bao-kms-provider, plus breaking-change rules."
+description: "Tested Kubernetes, OpenBao, OS, deployment mode, Transit key type, and compatibility rules for bao-kms-provider."
 weight: 80
 ---
 
 # Compatibility
 
-This page defines the compatibility matrix for `bao-kms-provider`. Support claims do not expand beyond what CI and release tests prove.
+This page lists the versions and deployment shapes currently tested for
+`bao-kms-provider`.
 
-## Current Claim
+## Tested Preview Matrix
 
-The support envelope is intentionally narrow. A tagged release claims only the exact versions and deployment lanes recorded in that release's evidence bundle.
+The preview matrix is intentionally narrow. A tagged release covers only the
+versions, artifact families, and deployment models listed in its release notes
+and on this page.
 
-The initial public release envelope is:
+The initial preview matrix is:
 
-- Kubernetes `1.34` and `1.35` release lines, with exact Kind node-image pins
+- Kubernetes `1.34` and `1.35` release lines, with Kind node-image digests
   recorded in `.ci/versions.yaml`,
 - Kubernetes KMS v2,
 - OpenBao `2.5.3`,
 - OpenBao Transit,
 - JWT auth in default release artifacts,
 - PKCS#11 certificate auth only when the selected release includes matching
-  opt-in artifacts and E2E evidence,
-- SPIFFE/SPIRE source wiring as implementation evidence only, not as supported
-  user configuration,
+  opt-in artifacts and marks that path as tested,
+- SPIFFE/SPIRE is not a supported preview user configuration,
 - Linux control-plane nodes with filesystem Unix domain sockets.
 
 ## Kubernetes
@@ -31,11 +33,11 @@ The initial public release envelope is:
 | Version | Status |
 |---|---|
 | `< 1.29` | Not targeted. KMS v2 is the only implemented Kubernetes KMS API. |
-| `1.29.x` through `1.33.x` | May work with KMS v2, but is not validated in CI and is not part of the preview support claim. |
-| `1.34.3` | Preview release-gate Kind target pinned by node-image digest in `.ci/versions.yaml`. |
-| `1.35.0` | Preview release-gate Kind target pinned by node-image digest in `.ci/versions.yaml`. |
-| Other `1.34.x` or `1.35.x` patches | Candidate within the validated minor lines; claimed only after an exact-pinned lane exists in release evidence. |
-| `1.36.x` | Intended next validation line once a digest-pinned Kind node image is available. Not a support claim yet. |
+| `1.29.x` through `1.33.x` | May work with KMS v2, but is not part of the tested preview matrix. |
+| `1.34.3` | Tested Kind target pinned by node-image digest in `.ci/versions.yaml`. |
+| `1.35.0` | Tested Kind target pinned by node-image digest in `.ci/versions.yaml`. |
+| Other `1.34.x` or `1.35.x` patches | Candidate within the tested minor lines; covered only when listed by a release. |
+| `1.36.x` | Intended next validation line once a digest-pinned Kind node image is available. Not tested yet. |
 
 KMS v1 is not part of the primary implementation.
 
@@ -43,7 +45,7 @@ KMS v1 is not part of the primary implementation.
 
 | Version | Status |
 |---|---|
-| `2.5.3` | Initial validation target. |
+| `2.5.3` | Initial tested target. |
 | Other `2.5.x` | Future compatibility candidate; not claimed until tested. |
 | `2.4.x` | Not targeted for the current release line. |
 
@@ -99,13 +101,34 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 | Other AEAD Transit key types | Not supported. |
 | Derived or convergent keys | Not supported for the Kubernetes KMS path. |
 
+## Transit Profile Findings
+
+Transit profile findings are fail-closed. When metadata shows a blocking
+profile issue, the provider marks readiness and KMS Status unhealthy instead of
+encrypting with settings outside the validated contract.
+
+Findings are classified by impact:
+
+- `cryptographic_safety`: settings that weaken or change the validated
+  encryption and AAD contract, such as unsupported key type, exportable key
+  material, plaintext backup, derived mode, or convergent encryption.
+- `api_server_availability`: settings that can strand API server reads or
+  writes, such as key deletion, unsupported encrypt/decrypt operations, or
+  version restrictions that block active or historical versions.
+
+Fail-closed behavior protects the cryptographic contract. It does not guarantee
+API server write availability while OpenBao is misconfigured, sealed,
+unreachable, or changed to an unsafe Transit profile. Use `verify-key`,
+`doctor`, readiness, and KMS Status as preflight and monitoring signals before
+changing API server encryption settings.
+
 ## Auth Methods
 
 | Auth method | Build | Status |
 |---|---|---|
 | JWT | default release artifacts | Supported preview path. |
-| Certificate with PKCS#11 source | `certauth_pkcs11` opt-in host artifact | Opt-in preview only when the selected release includes the PKCS#11 artifact evidence and E2E result. CI exercises a real SoftHSM token, PKCS#11 signer, OpenBao cert login, and Transit access. |
-| Certificate with SPIFFE source | `certauth_spiffe` validation artifact | Wiring is present for local verification and upstream OpenBao alignment work, and CI exercises real SPIRE Workload API source validation. `auth.cert.source: spiffe` is not a supported user configuration and SPIFFE artifacts are not public preview support artifacts until the supported OpenBao version can derive cert-auth identity aliases from URI SANs. |
+| Certificate with PKCS#11 source | `certauth_pkcs11` opt-in host artifact | Opt-in preview path only when the selected release publishes the PKCS#11 artifact and marks it as tested. |
+| Certificate with SPIFFE source | `certauth_spiffe` local-only artifact | Not a supported preview user configuration. |
 | OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
 ## Compatibility Promises
@@ -113,6 +136,7 @@ See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model 
 After the first stable release, these surfaces remain backward compatible within a major version:
 
 - `key_id` derivation for existing epochs,
+- Unix-second Transit version creation-time normalization used by `key_id`,
 - annotation schema,
 - AAD canonicalization,
 - configuration field meanings for identity-bearing values,
@@ -121,7 +145,7 @@ After the first stable release, these surfaces remain backward compatible within
 
 ## CI Version Policy
 
-CI does not use floating `latest` inputs for compatibility claims.
+CI does not use floating `latest` inputs for the tested compatibility matrix.
 
 The implementation uses a central version manifest at `.ci/versions.yaml` for:
 
@@ -141,7 +165,7 @@ Breaking changes require:
 - a migration guide,
 - a release note,
 - updated test fixtures,
-- an explicit compatibility section in the release evidence.
+- an explicit compatibility section in the release notes.
 
 Examples of breaking changes:
 

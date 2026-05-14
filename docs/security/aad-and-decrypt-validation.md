@@ -49,7 +49,7 @@ Disabling AAD globally as an incident response is unsafe. Specifically:
 
 - bypassing AAD would expose the decrypt path to ciphertext that was not bound to the current cluster, key lineage, or provider name,
 - accepting an AAD-disabled state re-enables the cross-cluster replay class of threats that AAD prevents,
-- future compatibility read modes must require explicit retained historical evidence before they are introduced.
+- future compatibility read modes must require explicit retained historical state before they are introduced.
 
 If decrypt is failing during an incident, follow [Operations: Troubleshooting: AAD Mismatch](/operations/troubleshooting/#aad-mismatch) instead of disabling AAD.
 
