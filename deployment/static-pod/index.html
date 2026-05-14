@@ -17,6 +17,8 @@
 </span></span><span style=display:flex><span>    <span style=color:#f92672>app.kubernetes.io/name</span>: <span style=color:#ae81ff>bao-kms-provider</span>
 </span></span><span style=display:flex><span>    <span style=color:#f92672>app.kubernetes.io/component</span>: <span style=color:#ae81ff>kms-provider</span>
 </span></span><span style=display:flex><span><span style=color:#f92672>spec</span>:
+</span></span><span style=display:flex><span>  <span style=color:#75715e># Required during early control-plane boot because CNI may not be available</span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e># when the provider has to reach OpenBao.</span>
 </span></span><span style=display:flex><span>  <span style=color:#f92672>hostNetwork</span>: <span style=color:#66d9ef>true</span>
 </span></span><span style=display:flex><span>  <span style=color:#f92672>priorityClassName</span>: <span style=color:#ae81ff>system-node-critical</span>
 </span></span><span style=display:flex><span>  <span style=color:#f92672>automountServiceAccountToken</span>: <span style=color:#66d9ef>false</span>
@@ -25,11 +27,14 @@
 </span></span><span style=display:flex><span>    <span style=color:#f92672>runAsUser</span>: <span style=color:#ae81ff>65532</span>
 </span></span><span style=display:flex><span>    <span style=color:#f92672>runAsGroup</span>: <span style=color:#ae81ff>65532</span>
 </span></span><span style=display:flex><span>    <span style=color:#f92672>supplementalGroups</span>:
+</span></span><span style=display:flex><span>      <span style=color:#75715e># Replace with the host openbao-kms-socket GID from:</span>
+</span></span><span style=display:flex><span>      <span style=color:#75715e># getent group openbao-kms-socket</span>
 </span></span><span style=display:flex><span>      - <span style=color:#ae81ff>1234</span>
 </span></span><span style=display:flex><span>    <span style=color:#f92672>seccompProfile</span>:
 </span></span><span style=display:flex><span>      <span style=color:#f92672>type</span>: <span style=color:#ae81ff>RuntimeDefault</span>
 </span></span><span style=display:flex><span>  <span style=color:#f92672>containers</span>:
 </span></span><span style=display:flex><span>    - <span style=color:#f92672>name</span>: <span style=color:#ae81ff>bao-kms-provider</span>
+</span></span><span style=display:flex><span>      <span style=color:#75715e># Replace with the verified image digest from the selected release.</span>
 </span></span><span style=display:flex><span>      <span style=color:#f92672>image</span>: <span style=color:#ae81ff>ghcr.io/dc-tec/bao-kms-provider@sha256:0000000000000000000000000000000000000000000000000000000000000000</span>
 </span></span><span style=display:flex><span>      <span style=color:#f92672>imagePullPolicy</span>: <span style=color:#ae81ff>IfNotPresent</span>
 </span></span><span style=display:flex><span>      <span style=color:#f92672>args</span>:
