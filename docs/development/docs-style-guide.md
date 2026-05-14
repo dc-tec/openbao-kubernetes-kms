@@ -1,91 +1,120 @@
 ---
 title: "Docs Style Guide"
-description: "Voice rules, section shapes, repository contracts, and verification commands for the published Hugo docs."
+description: "Writing, structure, linking, and verification guidance for the published documentation."
 weight: 70
 ---
 
 # Docs Style Guide
 
-The published documentation should read like a coherent operator and maintainer system rather than a pile of pages. This guide collects the rules that every contributor follows when writing or rewriting a page under `docs/`.
+The documentation should help operators make safe decisions without having to
+read the source code first. Contributor and architecture pages can go deeper,
+but public workflow pages should stay practical and easy to follow.
 
-## Voice And Prose Rules
+## Audience
 
-- Keep copy direct, operational, and testable. State what the system does, what an operator does, and what success looks like.
-- Do not use em-dashes (the `U+2014` character). Use commas, parentheses, periods, or restructure the sentence.
-- Do not use the antithesis pattern that signals AI-generated prose: "not X, but Y", "isn't merely X, it's Y", "more than X, it's Y". If a sentence relies on a clever contrast, rewrite it as two plain sentences.
-- Avoid hollow openers: "However", "It is important to note", "In essence", "Simply put".
-- Avoid "simply", "just", "easily", "obviously". They mislead operators about real cost.
-- Use Title Case for headings, matching the existing reference docs.
-- Use OpenBao terminology for this project. Mention Vault only when naming related work or upstream compatibility context; do not describe this provider as a Vault provider.
-- Use the binary name `bao-kms-provider` everywhere in prose. Earlier or longer name variants must not appear in docs; the GitHub repository URL is the only allowed exception and lives in `hugo.toml` rather than in any page.
-- Match the tone of the maintained reference pages: short paragraphs, dense factual content, no marketing voice.
+Write each page for the reader who is most likely to use it:
 
-## Section Shapes
+| Section | Primary reader | Page style |
+|---|---|---|
+| `getting-started/` | First-time operator | Sequential tutorial with one recommended path. |
+| `deployment/` | Operator choosing or applying a runtime model | Model comparison, then concrete setup. |
+| `operations/` | Operator maintaining a deployed provider | Task runbooks with checks and recovery notes. |
+| `reference/` | Operator or maintainer looking up exact behavior | Precise lookup material. |
+| `security/` | Security reviewer or platform owner | Trust boundaries, controls, and limitations. |
+| `architecture/` | Maintainer or reviewer | Design rationale and tradeoffs. |
+| `development/` | Contributor or reviewer | Local workflow, CI, tests, release process, and docs maintenance. |
 
-Each top-level section enforces a different page shape. Pages must fit the shape of their section.
+If a page starts serving two different readers, split it or move part of the
+content to the section where that reader would naturally look.
 
-- `getting-started/`: tutorial. Sequential numbered steps, one happy path, explicit success criteria. No branching or alternatives.
-- `deployment/`: model choice plus applied steps. The choice page compares options; the per-model pages document the chosen model in full.
-- `operations/`: how-to. Task-focused, conditional steps allowed, assumes the reader has already deployed the provider.
-- `reference/`: lookup. Exhaustive, neutral, looked up rather than read top-to-bottom. No narrative.
-- `security/`: trust framing. Threat boundaries, authentication, hardening, decrypt validation. Not a workflow.
-- `architecture/`: explanation. Discursive, why-oriented, may go deep. Maintainer-facing.
-- `development/`: contributor reference. Local workflow, CI, release process, docs system itself.
+## Voice
 
-A page that mixes shapes belongs in two different sections. Split it.
+Prefer direct, concrete prose:
 
-## IA Map
+- Say what the provider does, what the operator does, and what success looks
+  like.
+- Use short paragraphs and explicit headings.
+- Keep warnings tied to a real operational consequence.
+- Prefer "tested matrix", "preview release", and "verified artifact" in
+  user-facing docs.
+- Keep detailed CI and release mechanics in `development/` unless operators
+  need them for installation or verification.
+- Use OpenBao terminology. Mention Vault only for related work or compatibility
+  context.
+- Use the binary name `bao-kms-provider` in prose.
 
-```mermaid
-flowchart TD
-    Home["Homepage"]
-    GS["Getting Started"]
-    DEP["Deployment"]
-    OPS["Operations"]
-    REF["Reference"]
-    SEC["Security"]
-    ARCH["Architecture"]
-    DEV["Development"]
+Avoid:
 
-    Home --> GS
-    GS --> DEP
-    DEP --> OPS
-    GS --> REF
-    OPS --> REF
-    OPS --> SEC
-    SEC --> ARCH
-    REF --> ARCH
-    DEV --> ARCH
+- marketing language,
+- filler openers such as "It is important to note",
+- words that understate operational cost, such as "simply", "just", or
+  "obviously",
+- formulaic contrast such as "not X, but Y" when two plain sentences would be
+  clearer,
+- internal shorthand such as "release gate", "support claim", or "evidence
+  bundle" in operator-facing pages.
+
+The docs check rejects em dash characters in `docs/` and `README.md`. Use a
+comma, period, parentheses, or rewrite the sentence.
+
+## Page Structure
+
+Use the shape that matches the section:
+
+- Getting-started pages should have a clear beginning, ordered steps, and a
+  visible end state.
+- Deployment pages should separate model selection from model-specific setup.
+- Operations pages can branch by symptom or condition, but should keep recovery
+  steps ordered.
+- Reference pages should be stable lookup material, not narrative.
+- Security pages should describe scope, trust, controls, and limits.
+- Architecture pages can explain why the system works the way it does.
+- Development pages can include contributor-only details and CI mechanics.
+
+## Links
+
+Link to the canonical page for a topic instead of repeating the same detail in
+several places.
+
+- Use absolute site paths such as `/operations/rotation/`.
+- Avoid `.md` links from published docs.
+- Section landing pages should help readers move to the right section if they
+  arrived in the wrong place.
+- When changing a heading that other pages link to, update the fragment links in
+  the same change.
+
+## Front Matter
+
+Every page needs:
+
+```yaml
+title: "Page Title"
+description: "Short description used by search and previews."
+weight: 10
 ```
 
-## Repository Contracts
+Section landing pages also use `browse` to define the intended order:
 
-- Every Markdown page under `docs/<section>/` must be reachable from the section's `_index.md` (either via `browse` or as a direct child page Hugo auto-discovers).
-- Public pages under `docs/<section>/` are the maintained documentation source. Update them directly when behavior, release policy, compatibility, deployment, or operations change.
-- Historical ADRs and planning notes are available through repository history. Public docs link to current reference, architecture, or development pages instead of old planning artifacts.
-- Internal links use absolute paths from the site root, for example `/operations/rotation/` rather than relative or `.md` paths.
-- Generated reference pages, when added, keep the generated-note contract at the top of the file.
-- Front matter on every page includes `title`, `description`, and `weight`. Section landings include a `browse` array listing the intended page order.
+```yaml
+browse:
+  - "/getting-started/overview"
+  - "/getting-started/openbao-setup"
+```
 
-## Linking Rules
+## Diagrams
 
-- Cross-link to the canonical home of a fact rather than restating the fact in a second page.
-- When a topic spans sections, the explanation lives in one page and the neighbor section links to it. Operations runbooks link to reference behavior; security pages link to reference for exact contracts.
-- Section landings include a "Use Another Section If" block that routes readers who landed in the wrong section.
-
-## Visual Rules
-
-- Use Mermaid where sequence, routing, or boundary matters.
-- Keep each page responsible for one job. If a page reaches three top-level sections that each address a different operator question, it should be split.
-- Use short sections and explicit headings rather than dense prose walls.
+Use Mermaid when a sequence, dependency, boundary, or decision tree is clearer
+as a diagram than as prose. Keep diagrams small enough to read on the published
+site.
 
 ## Verification
 
 Before merging a docs change, run:
 
-```bash
-make docs-build
+```sh
 make docs-check
+make docs-build
 ```
 
-`make docs-build` runs the full Hugo build and must complete without warnings. `make docs-check` enforces forbidden-string and em-dash gates against the live docs tree.
+`make docs-check` catches configured text and typography checks. `make
+docs-build` runs the Hugo build and should complete without warnings.

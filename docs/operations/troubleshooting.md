@@ -323,7 +323,7 @@ Recovery:
 
 If old key material no longer exists, restore the OpenBao backup. See [Disaster Recovery: Transit Key Loss](/operations/disaster-recovery/#transit-key-loss).
 
-Do not treat `verify-rotation` as evidence that raising
+Do not treat `verify-rotation` as proof that raising
 `min_decryption_version` was safe. It reports local registry and Transit
 metadata only.
 

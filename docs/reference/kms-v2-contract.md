@@ -171,9 +171,8 @@ For the full annotation schema and AAD envelope shape see [Reference: Key ID And
 
 OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider
 does not implement KMS decrypt micro-batching in this release line because the
-production-grade KMS coalescer is not part of the release boundary. Sustained
-direct decrypt soak is the release evidence used to decide whether this remains
-deferred.
+current direct decrypt path is simpler and has been sufficient in validation so
+far.
 
 Micro-batching adds request queueing, per-request deadlines, cancellation
 behavior, order preservation, fairness, and failure fan-out concerns. Do not add
@@ -223,9 +222,9 @@ decrypt:
   p99: 50ms
 ```
 
-These thresholds are not production SLOs. They must be validated against the
+These thresholds are not production SLOs. Validate alert thresholds against the
 operator's OpenBao deployment, network path, and Kubernetes API server behavior
-before they are used for paging or production-readiness claims.
+before using them for paging.
 
 ## Conformance Tests
 

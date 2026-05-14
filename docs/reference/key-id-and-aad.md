@@ -96,9 +96,9 @@ Backup and restore procedures must preserve:
 - the provider local registry state file and checkpoint.
 
 If any of these are lost or changed after rotation, do not synthesize a
-replacement state file by hand. Restore the matching OpenBao and provider state
-evidence, or keep the provider stopped until a controlled recovery workflow is
-available for the release line.
+replacement state file by hand. Restore the matching OpenBao backup and
+provider state, or keep the provider stopped until a supported recovery
+workflow is available for the release line.
 
 ## Mount Accessor Vs Configured Mount ID
 
@@ -225,7 +225,7 @@ The local registry is a non-secret JSON file that records:
 The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. A small adjacent checkpoint file records the last accepted generation and hash so a replayed older state file is rejected when the checkpoint survives. Neither file contains key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths. When `openbao.namespace` is configured, the namespace is persisted as non-secret identity scope so namespace drift fails closed during state validation.
 
 The state hash and checkpoint are local integrity and replay guards, not
-hardware-backed tamper evidence. They detect corruption, unsafe restore, missing
+hardware-backed tamper protection. They detect corruption, unsafe restore, missing
 state with a surviving checkpoint, older generations, and same-generation hash
 mismatches. They do not stop a privileged host-level attacker who can replace
 both the state file and checkpoint with a self-consistent pair. Environments

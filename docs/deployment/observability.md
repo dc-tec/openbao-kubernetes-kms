@@ -28,7 +28,8 @@ scrape_configs:
           - 127.0.0.1:8081
 ```
 
-Example alerting rules live at `docs/operations/prometheus-alerts.yaml`. Treat
+Example alerting rules live at
+`deploy/prometheus/rules/openbao-kms.rules.yaml`. Treat
 them as starting points; tune thresholds to the configured probe cadence, OpenBao
 latency, token TTLs, and API server restart behavior before using them for
 paging.

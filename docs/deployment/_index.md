@@ -12,7 +12,9 @@ browse:
 
 # Deployment
 
-Use this section to select a deployment model and apply the matching system identity, file paths, and runtime hardening. The preview release evidence targets systemd and static-pod deployment models; this is not a production support claim.
+Use this section to select a deployment model and apply the matching system
+identity, file paths, and runtime hardening. The tested preview deployment
+models are systemd and static pod.
 
 ## Pick A Model First
 

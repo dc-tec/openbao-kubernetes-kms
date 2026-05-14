@@ -169,7 +169,7 @@ or retained backup has been rewritten, or recommend raising OpenBao
 `min_decryption_version`.
 
 Treat it as a local preflight signal. The operator still owns independent
-migration evidence, backup-retention evidence, and any change to
+migration records, backup-retention records, and any change to
 `min_decryption_version`.
 
 ## config

@@ -80,6 +80,61 @@ func TestGrafanaDashboardSampleIsValid(t *testing.T) {
 	}
 }
 
+func TestPrometheusRuleSampleIsValid(t *testing.T) {
+	data := readSample(t, "deploy/prometheus/rules/openbao-kms.rules.yaml")
+
+	var groups prometheusRuleGroups
+	if err := yaml.Unmarshal([]byte(data), &groups); err != nil {
+		t.Fatalf("decode Prometheus rule sample: %v", err)
+	}
+	if len(groups.Groups) != 1 {
+		t.Fatalf("expected one Prometheus rule group, got %d", len(groups.Groups))
+	}
+	group := groups.Groups[0]
+	if group.Name != "openbao-kubernetes-kms.rules" {
+		t.Fatalf("unexpected Prometheus rule group name: %q", group.Name)
+	}
+	if len(group.Rules) < 10 {
+		t.Fatalf("expected broad alert rule coverage, got %d rules", len(group.Rules))
+	}
+
+	requiredAlerts := []string{
+		"OpenBaoKMSStatusCacheStale",
+		"OpenBaoKMSCircuitBreakerOpen",
+		"OpenBaoKMSAuthFailures",
+		"OpenBaoKMSKeyIDHashDiverged",
+		"OpenBaoKMSAADValidationErrors",
+		"OpenBaoKMSGRPCLatencyHigh",
+	}
+	for _, alert := range requiredAlerts {
+		if !prometheusRulesContainAlert(group.Rules, alert) {
+			t.Fatalf("Prometheus rule sample missing alert %q", alert)
+		}
+	}
+}
+
+type prometheusRuleGroups struct {
+	Groups []prometheusRuleGroup `yaml:"groups"`
+}
+
+type prometheusRuleGroup struct {
+	Name  string           `yaml:"name"`
+	Rules []prometheusRule `yaml:"rules"`
+}
+
+type prometheusRule struct {
+	Alert string `yaml:"alert"`
+}
+
+func prometheusRulesContainAlert(rules []prometheusRule, alert string) bool {
+	for _, rule := range rules {
+		if rule.Alert == alert {
+			return true
+		}
+	}
+	return false
+}
+
 type grafanaDashboard struct {
 	Title  string         `json:"title"`
 	UID    string         `json:"uid"`

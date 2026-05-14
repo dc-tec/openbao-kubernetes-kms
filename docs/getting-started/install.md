@@ -10,11 +10,11 @@ This page covers fetching a verified `bao-kms-provider` artifact, placing the ru
 
 ## Release Artifacts
 
-Every public release publishes native packages, deterministic tarballs, a
-static-pod bundle, a container image, checksums, signatures, SBOMs, provenance
-attestations, a byte-reproducibility report, and a provenance index.
+Every public release publishes native packages, tarballs, a static-pod bundle,
+a container image, and verification files such as checksums, signatures, SBOMs,
+and provenance attestations.
 
-Verify the release evidence before placing the provider on a control-plane
+Verify the release artifacts before placing the provider on a control-plane
 host, and validate the deployment in a staging environment before using it to
 protect cluster data. See [Support Policy](/reference/support-policy/) for the
 current release maturity.
@@ -41,33 +41,30 @@ PKCS#11 cert-auth artifacts are separate host CGO builds via
 `make release-artifact-certauth-pkcs11-host`.
 
 PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. PKCS#11 is
-an opt-in preview path only when the selected release includes the matching
-artifact evidence and SoftHSM provider-source E2E result. SPIFFE
-certificate-source wiring remains in tree for local verification and upstream
-OpenBao alignment work, but `auth.cert.source: spiffe` is not a supported user
-configuration until the supported OpenBao version can derive cert-auth identity
-aliases from URI SANs.
+an opt-in preview path only when the selected release publishes the matching
+artifact and marks that path as tested. `auth.cert.source: spiffe` is not a
+supported preview user configuration.
 
-Release evidence distinguishes these artifact families:
+Release artifacts distinguish these auth paths:
 
-| Artifact family | Auth support claim |
+| Artifact family | Preview support |
 |---|---|
 | Default `bao-kms-provider` artifacts | JWT auth only. |
-| `bao-kms-provider-certauth-pkcs11` host artifacts | PKCS#11 certificate auth only when matching artifact evidence and E2E evidence are present for that release. |
-| SPIFFE or combined cert-auth validation artifacts | Not public preview support artifacts. They exist for local verification and upstream OpenBao alignment work. |
+| `bao-kms-provider-certauth-pkcs11` host artifacts | PKCS#11 certificate auth only when the release marks that path as tested. |
+| SPIFFE or combined cert-auth artifacts | Not a supported preview user configuration. |
 
 The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) once the artifact is in place.
 
-## Verify Release Evidence
+## Verify Release Artifacts
 
 Verify the artifact before placing it on a control-plane host. The release
-evidence includes:
+verification files include:
 
 - a checksum file (`checksums.txt`),
 - a keyless cosign signature bundle for the checksum file (`checksums.txt.bundle`),
 - an SBOM per binary and per image,
 - GitHub build-provenance attestations generated during the release workflow,
-- a byte-reproducibility report,
+- a reproducibility report,
 - a provenance index (`provenance-index.json`).
 
 Verify in this order:
@@ -79,7 +76,7 @@ Verify in this order:
 5. For static-pod deployments, verify the image signature and image provenance for the digest referenced by the static-pod bundle.
 
 Do not replace the release image digest with a tag-only reference. The static
-pod manifest should use the image digest from the selected release evidence.
+pod manifest should use the verified image digest from the selected release.
 
 The examples below use `cosign` and the GitHub CLI.
 
@@ -126,7 +123,8 @@ gh attestation verify "oci://${IMAGE}" \
   --deny-self-hosted-runners
 ```
 
-For the full evidence catalog and supply-chain controls behind these artifacts, see [Development: CI And Supply Chain](/development/ci-supply-chain/).
+For the full supply-chain controls behind these artifacts, see
+[Development: CI And Supply Chain](/development/ci-supply-chain/).
 
 ## Install A Native Package
 
@@ -166,7 +164,7 @@ tar -xzf bao-kms-provider_<version>_static-pod.tar.gz
 
 The bundle contains the static pod manifest, provider configuration sample, Kubernetes `EncryptionConfiguration` sample, and image reference. Before placing the manifest under `/etc/kubernetes/manifests/`, replace:
 
-- the image digest with the digest from the selected release evidence,
+- the image digest with the verified digest from the selected release,
 - the numeric `supplementalGroups` entry,
 - the provider config values,
 - the OpenBao CA path,

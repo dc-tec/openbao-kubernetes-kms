@@ -48,7 +48,7 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ../../docs/operations/prometheus-alerts.yaml:/etc/prometheus/rules/openbao-kms.rules.yaml:ro
+      - ../../deploy/prometheus/rules/openbao-kms.rules.yaml:/etc/prometheus/rules/openbao-kms.rules.yaml:ro
       - ./.state/prometheus:/prometheus
     ports:
       - "127.0.0.1:19090:9090"

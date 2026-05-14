@@ -57,7 +57,9 @@ Recommended properties:
 | deletion allowed | `false` |
 | auto-rotate period | `0` (rotation is operator-driven) |
 
-For the current release line, `aes256-gcm96` is the only validated and supported key type. Other AEAD Transit key types require implementation and release evidence before they can be documented as supported.
+For the current release line, `aes256-gcm96` is the only tested and supported
+key type. Other AEAD Transit key types need implementation, compatibility
+testing, and documentation before they can be supported.
 
 Once the key exists, do not enable `exportable` or `allow_plaintext_backup`: OpenBao treats both settings as irreversible once enabled. Keep `deletion_allowed=false` as well; unlike those two flags it is a tunable deletion guard, but enabling it permits catastrophic key deletion if a token also has delete capability.
 

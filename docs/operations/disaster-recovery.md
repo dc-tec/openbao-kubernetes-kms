@@ -205,7 +205,7 @@ Changing provider name, cluster ID, OpenBao instance ID, OpenBao namespace, Tran
 If both registry files are missing after Transit rotation, do not synthesize a
 replacement state file by hand. Current preview releases have no supported
 `recover-state` command, so normal runtime fails closed until complete
-state/checkpoint evidence is restored.
+state and checkpoint files are restored.
 
 ## Auth Issuer Loss
 

@@ -146,4 +146,5 @@ When implementation changes behavior, update documentation in the same change:
 - operational changes update the relevant operations or deployment runbook,
 - support and version-envelope changes update [Reference: Compatibility](/reference/compatibility/).
 
-For the writing style, IA contracts, and verification gates that apply to documentation changes see [Development: Docs Style Guide](/development/docs-style-guide/).
+For writing style, page structure, links, and docs verification, see
+[Development: Docs Style Guide](/development/docs-style-guide/).

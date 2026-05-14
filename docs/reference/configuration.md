@@ -166,7 +166,7 @@ is treated as identity-bearing provider scope.
 preview release artifacts are JWT-only and use `jwt`. The `cert` method is
 available only in binaries built with a certificate-auth build tag, and PKCS#11
 certificate auth is a supported preview path only when the selected release
-includes matching opt-in artifacts and E2E evidence.
+publishes matching opt-in artifacts and marks that path as tested.
 
 `auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. Once the remaining OpenBao token TTL drops below this value, the provider renews or re-logs in before the next request.
 
@@ -213,9 +213,9 @@ auth:
       maxSessions: 4
 ```
 
-This is the only certificate source inside the current preview support envelope
-when the selected release includes the matching PKCS#11 artifact evidence and
-E2E result.
+This is the only certificate source covered by the current preview line when
+the selected release publishes the matching PKCS#11 artifact and marks that
+path as tested.
 
 OpenBao must be configured to request TLS client certificates on the listener used by the provider. In OpenBao listener terms, do not set `tls_disable` or `tls_disable_client_certs` to true for that listener. Role constraints should bind certificate identity, for example through `allowed_uri_sans` for URI identities. Keep cert auth binding enabled during token renewal and keep OCSP fail-open disabled when OCSP is used.
 
@@ -225,11 +225,9 @@ file; the private key must remain behind the PKCS#11 module. The PIN file must
 be an absolute, regular, tightly permissioned file containing one PIN line, with
 only an optional trailing newline.
 
-Current CI exercises PKCS#11 certificate auth end-to-end with SoftHSM and
-OpenBao. The SPIFFE lane exercises the real SPIRE Workload API provider source
-and local certificate validation, but `auth.cert.source: spiffe` is not a
-supported user configuration until the supported OpenBao version can derive
-cert-auth identity aliases from URI SANs.
+PKCS#11 certificate auth is tested with SoftHSM and OpenBao when the matching
+artifact is part of the selected release. `auth.cert.source: spiffe` is not a
+supported preview user configuration.
 
 ## Debug Correlation
 

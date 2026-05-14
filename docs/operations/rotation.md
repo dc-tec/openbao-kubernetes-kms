@@ -1,6 +1,6 @@
 ---
 title: "Rotation"
-description: "Rotate the OpenBao Transit key version, observe the provider's promotion state machine, migrate existing API resources, and collect bounded validation evidence."
+description: "Rotate the OpenBao Transit key version, observe provider promotion, migrate existing API resources, and preserve recovery records."
 weight: 10
 ---
 
@@ -97,8 +97,8 @@ The rotation metric is intentionally bounded to `state="active"`, `state="pendin
 
 Rewrite targeted resources after Status exposes the new `key_id`. Define the
 complete resource list from the API server `EncryptionConfiguration` before
-starting migration, and keep the command output, timestamps, and resource list as
-operator evidence.
+starting migration, and keep the command output, timestamps, and resource list
+for recovery records.
 
 For Secrets:
 
@@ -118,7 +118,7 @@ This command confirms the provider's local registry and Transit metadata view.
 When it succeeds, it still reports limited confidence because it does not scan
 Kubernetes resources, inspect etcd, or evaluate retained backups.
 
-Then collect independent evidence:
+Then collect independent verification:
 
 - run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml`,
 - restart one API server and verify reads succeed,

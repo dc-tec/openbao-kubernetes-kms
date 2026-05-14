@@ -1,29 +1,26 @@
 ---
 title: "Support Policy"
-description: "Support posture for bao-kms-provider: preview status, validation scope, support terms, security fix policy, and operator expectations."
+description: "Current preview support scope, tested versions, security fix expectations, and operator responsibilities for bao-kms-provider."
 weight: 90
 ---
 
 # Support Policy
 
-This page defines the support posture for `bao-kms-provider`.
+This page explains which configurations are currently tested and what operators
+should expect from the preview release line.
 
 ## Current Status
 
-The current public release line is a preview line. It is suitable for
-controlled validation and design review. It is not a production support claim.
+The current public release line is preview. Use it for labs, staging, and
+evaluation of the deployment model. Do not use preview releases for production
+control planes.
 
-## Preview Support Posture
+Preview support is best effort. There is no long-term support window, no
+production service-level objective, and no guarantee that adjacent Kubernetes,
+OpenBao, operating-system, auth, or deployment variants will work unless they
+are listed as tested.
 
-Support expectations:
-
-- issue triage is best effort,
-- production use is not recommended,
-- compatibility claims are limited to tested release evidence,
-- operators must validate in their own staging environment,
-- no long-term support window is promised.
-
-## Initial Validation Scope
+## Tested Preview Scope
 
 | Component | Version |
 |---|---|
@@ -35,47 +32,35 @@ Support expectations:
 
 Kubernetes `1.36` is the intended next validation line once a digest-pinned
 Kind node image is available. Kubernetes `1.29+` KMS v2 clusters may work, but
-unlisted versions are not validated in CI and are not part of the preview
-support claim. Future Kubernetes release lines are not supported by virtue of
-being newer; they become supported only after exact-pinned CI and release
-evidence exists. See [Reference: Compatibility](/reference/compatibility/).
+unlisted versions are not part of the tested preview scope. See
+[Reference: Compatibility](/reference/compatibility/) for the detailed matrix.
 
-## What The Preview Gate Proves
+## What Preview Covers
 
-A passing public-preview release gate proves only the lanes recorded for that
-tag's evidence bundle:
+A preview tag covers the versions, artifacts, and deployment models listed in
+that release's notes and compatibility table. In the default path, this means:
 
-- KMS v2 behavior against the pinned Kubernetes and OpenBao versions.
+- KMS v2 behavior against the tested Kubernetes and OpenBao versions.
 - OpenBao Transit with `aes256-gcm96`.
 - JWT auth in the default build.
-- PKCS#11 certificate auth only when the release includes matching opt-in
-  artifacts and E2E evidence.
-- systemd and static-pod deployment artifacts where release evidence includes
-  them.
-- OpenBao failure, HA failover, restore, rotation, upgrade/rollback, and soak
-  behavior in the tested CI and validation environments.
-- SBOM, signing, provenance, checksum, scan, and reproducibility evidence
-  produced by the release workflow.
+- systemd and static-pod deployment samples.
+- Release artifacts with checksums, SBOMs, signatures, and provenance
+  attestations.
 
-It does not prove production readiness, unsupported Kubernetes or OpenBao
-versions, OpenBao HA topologies beyond the release lanes, SPIFFE/SPIRE user
-configuration, a performance SLO, or a long-term support window.
+Optional PKCS#11 certificate-auth artifacts are covered only when a release
+publishes those artifacts and marks the PKCS#11 path as tested.
 
-## Support Terms
-
-The following terms are used consistently across documentation:
-
-- `Validated`: explicitly exercised in CI or release evidence.
-- `Candidate`: planned for future validation; not a support claim.
-- `Preview`: suitable for controlled validation and design review; not production.
-- `Production-ready`: all production-readiness gates passed.
+Preview releases do not cover production readiness, unlisted Kubernetes or
+OpenBao versions, unlisted OpenBao HA topologies, SPIFFE/SPIRE user
+configuration, performance SLOs, or long-term maintenance windows.
 
 ## Security Fixes
 
 Before a stable release line exists, security fixes apply to the latest released
 preview line only.
 
-Once stable releases exist, the security-fix policy is revisited and documented before any production-ready claim.
+Once stable releases exist, this page will document the stable-line security
+fix and backport policy.
 
 ## Operator Expectations
 

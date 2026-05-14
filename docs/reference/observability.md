@@ -103,7 +103,7 @@ Recommended alert conditions:
 - Plugin restart loop.
 - Socket restart or stale socket detection.
 
-Example Prometheus alerting rules ship at `docs/operations/prometheus-alerts.yaml` (also published as a static asset on this site). Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
+Example Prometheus alerting rules ship at `deploy/prometheus/rules/openbao-kms.rules.yaml`. Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
 
 An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Deployment: Observability](/deployment/observability/) for scrape and import guidance.
 
