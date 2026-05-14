@@ -122,8 +122,21 @@ site does not depend on a CDN.
 
 ## Publishing
 
-GitHub Pages publishes the site from the same `make docs-build` target used
-locally. The publish job sets `DOCS_BASE_URL` to the public site URL.
+GitHub Pages serves the generated site from the `gh-pages` branch. The
+`Docs Pages` workflow runs on pushes to `main`, builds the site with the same
+`make docs-check` and `make docs-build` targets used locally, and publishes the
+rendered `public/` directory to `gh-pages`.
+
+Configure the repository Pages source as:
+
+```text
+Deploy from a branch
+Branch: gh-pages
+Folder: / (root)
+```
+
+The workflow creates `gh-pages` on first publish. Later publishes update that
+branch with normal commits.
 
 Local builds write rendered output to `public/`. That directory is generated
 and gitignored.

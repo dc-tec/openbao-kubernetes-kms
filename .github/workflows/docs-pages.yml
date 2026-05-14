@@ -1,0 +1,83 @@
+name: Docs Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - README.md
+      - docs/**
+      - website/**
+      - hugo.toml
+      - Makefile
+      - mk/config.mk
+      - mk/docs.mk
+      - .go-version
+      - go.mod
+      - go.sum
+      - vendor/**
+      - .github/actions/setup-repo-tools/**
+      - .github/workflows/docs-pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Publish To gh-pages
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-repo-tools
+        with:
+          bootstrap-tools: "false"
+
+      - name: Build docs
+        env:
+          DOCS_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: |
+          make docs-check
+          make docs-build
+
+      - name: Publish branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          publish_dir="$(mktemp -d)"
+          git fetch --no-tags --depth=1 origin gh-pages || true
+
+          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git worktree add --detach "${publish_dir}" origin/gh-pages
+          else
+            git worktree add --detach "${publish_dir}" HEAD
+            git -C "${publish_dir}" checkout --orphan gh-pages
+          fi
+
+          find "${publish_dir}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+
+          cp -a public/. "${publish_dir}/"
+          touch "${publish_dir}/.nojekyll"
+          git -C "${publish_dir}" config user.name "github-actions[bot]"
+          git -C "${publish_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "${publish_dir}" add -A
+
+          if git -C "${publish_dir}" diff --cached --quiet; then
+            echo "No gh-pages changes to publish."
+            exit 0
+          fi
+
+          git -C "${publish_dir}" commit -m "docs: publish ${GITHUB_SHA}"
+          git -C "${publish_dir}" push \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:gh-pages
