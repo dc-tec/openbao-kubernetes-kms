@@ -55,6 +55,19 @@ Run focused E2E lanes when a change touches OpenBao, Kubernetes, deployment,
 rotation, failure injection, or release packaging behavior. The lane commands
 live in [Development: E2E Framework](/development/e2e-framework/).
 
+For deployment sample or package metadata changes, run the focused deployment
+checks:
+
+```sh
+make deployment-samples-check
+make package-build-check
+```
+
+`deployment-samples-check` verifies the systemd unit with the host
+`systemd-analyze` binary when it is installed. `package-build-check` uses the
+pinned nFPM version from `.ci/versions.yaml`/`mk/config.mk` through `go run` and
+builds throwaway `.deb` and `.rpm` packages from a temporary placeholder binary.
+
 ## OpenBao Integration Tests
 
 OpenBao integration tests are build-tagged and stay hermetic. They use in-process HTTPS fakes for OpenBao response shapes and do not require external OpenBao credentials:

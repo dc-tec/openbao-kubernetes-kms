@@ -36,6 +36,8 @@ metadata:
     app.kubernetes.io/name: bao-kms-provider
     app.kubernetes.io/component: kms-provider
 spec:
+  # Required during early control-plane boot because CNI may not be available
+  # when the provider has to reach OpenBao.
   hostNetwork: true
   priorityClassName: system-node-critical
   automountServiceAccountToken: false
@@ -44,11 +46,14 @@ spec:
     runAsUser: 65532
     runAsGroup: 65532
     supplementalGroups:
+      # Replace with the host openbao-kms-socket GID from:
+      # getent group openbao-kms-socket
       - 1234
     seccompProfile:
       type: RuntimeDefault
   containers:
     - name: bao-kms-provider
+      # Replace with the verified image digest from the selected release.
       image: ghcr.io/dc-tec/bao-kms-provider@sha256:0000000000000000000000000000000000000000000000000000000000000000
       imagePullPolicy: IfNotPresent
       args:

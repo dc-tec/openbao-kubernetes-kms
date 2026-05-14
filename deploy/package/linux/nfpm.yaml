@@ -13,6 +13,8 @@ description: |
 vendor: dc-tec
 homepage: https://github.com/dc-tec/openbao-kubernetes-kms
 license: Apache-2.0
+recommends:
+  - systemd
 contents:
   - src: ${PACKAGE_BINARY}
     dst: /usr/bin/bao-kms-provider
