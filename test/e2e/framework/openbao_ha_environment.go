@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,7 +23,7 @@ const (
 	defaultOpenBaoHANodeCount          = 3
 	defaultOpenBaoHAProviderNodeIndex  = 1
 	defaultOpenBaoHAStartupWaitTimeout = 90 * time.Second
-	defaultOpenBaoHAClusterWaitTimeout = 75 * time.Second
+	defaultOpenBaoHAClusterWaitTimeout = 2 * time.Minute
 	defaultOpenBaoHADiagnosticTimeout  = 10 * time.Second
 )
 
@@ -255,9 +256,13 @@ func (h *OpenBaoHAEnvironment) start(ctx context.Context, startupWait time.Durat
 		}); err != nil {
 			return h.nodeStartupError(ctx, index, err)
 		}
-	}
-	for index := 1; index < len(h.nodes); index++ {
+		if err := h.waitPeer(ctx, index, false, defaultOpenBaoHAClusterWaitTimeout); err != nil {
+			return err
+		}
 		if err := h.promoteNode(ctx, index); err != nil {
+			return err
+		}
+		if err := h.waitPeer(ctx, index, true, defaultOpenBaoHAClusterWaitTimeout); err != nil {
 			return err
 		}
 	}
@@ -336,9 +341,12 @@ func (h *OpenBaoHAEnvironment) withNode(index int, fn func() error) error {
 
 func (h *OpenBaoHAEnvironment) waitPeerCount(ctx context.Context, count int, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	var lastErr error
+	var lastPeers map[string]raftPeer
 	for {
 		peers, err := h.raftPeers(ctx)
 		if err == nil {
+			lastPeers = peers
 			missing := false
 			for _, node := range h.nodes[:count] {
 				peer, ok := peers[node.name]
@@ -350,9 +358,58 @@ func (h *OpenBaoHAEnvironment) waitPeerCount(ctx context.Context, count int, tim
 			if !missing {
 				return nil
 			}
+		} else {
+			lastErr = err
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out waiting for OpenBao HA raft peers")
+			return fmt.Errorf(
+				"timed out waiting for %d OpenBao HA raft voters\nlast raft peers: %s\nlast raft error: %s\n%s",
+				count,
+				formatRaftPeers(lastPeers),
+				formatError(lastErr),
+				h.clusterDiagnostics(ctx),
+			)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+func (h *OpenBaoHAEnvironment) waitPeer(
+	ctx context.Context,
+	index int,
+	requireVoter bool,
+	timeout time.Duration,
+) error {
+	if index <= 0 || index >= len(h.nodes) {
+		return fmt.Errorf("OpenBao HA peer index out of range: %d", index)
+	}
+	nodeName := h.nodes[index].name
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	var lastPeers map[string]raftPeer
+	for {
+		peers, err := h.raftPeers(ctx)
+		if err == nil {
+			lastPeers = peers
+			if peer, ok := peers[nodeName]; ok && (!requireVoter || peer.Voter) {
+				return nil
+			}
+		} else {
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			state := "raft peer"
+			if requireVoter {
+				state = "raft voter"
+			}
+			return fmt.Errorf(
+				"timed out waiting for OpenBao HA node %s to become a %s\nlast raft peers: %s\nlast raft error: %s\n%s",
+				nodeName,
+				state,
+				formatRaftPeers(lastPeers),
+				formatError(lastErr),
+				h.nodeDiagnostics(ctx, index),
+			)
 		}
 		time.Sleep(time.Second)
 	}
@@ -492,6 +549,14 @@ func (h *OpenBaoHAEnvironment) survivorDiagnostics(ctx context.Context) string {
 	return out.String()
 }
 
+func (h *OpenBaoHAEnvironment) clusterDiagnostics(ctx context.Context) string {
+	var out strings.Builder
+	for index := range h.nodes {
+		_, _ = out.WriteString(h.nodeDiagnostics(ctx, index))
+	}
+	return out.String()
+}
+
 func (h *OpenBaoHAEnvironment) nodeStartupError(ctx context.Context, index int, err error) error {
 	nodeName := "unknown"
 	if index >= 0 && index < len(h.nodes) {
@@ -521,6 +586,33 @@ func (h *OpenBaoHAEnvironment) nodeDiagnostics(ctx context.Context, index int) s
 	_, _ = fmt.Fprintf(&out, "== %s logs ==\n", node.name)
 	h.appendDockerDiagnostic(diagCtx, &out, "logs", "logs", "--tail", "80", node.name)
 	return out.String()
+}
+
+func formatRaftPeers(peers map[string]raftPeer) string {
+	if len(peers) == 0 {
+		return "<none>"
+	}
+	names := make([]string, 0, len(peers))
+	for name := range peers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		role := "non-voter"
+		if peers[name].Voter {
+			role = "voter"
+		}
+		parts = append(parts, name+"="+role)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatError(err error) string {
+	if err == nil {
+		return "<none>"
+	}
+	return err.Error()
 }
 
 func (h *OpenBaoHAEnvironment) appendDockerDiagnostic(
