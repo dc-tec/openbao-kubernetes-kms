@@ -259,10 +259,7 @@ func (h *OpenBaoHAEnvironment) start(ctx context.Context, startupWait time.Durat
 		if err := h.waitPeer(ctx, index, false, defaultOpenBaoHAClusterWaitTimeout); err != nil {
 			return err
 		}
-		if err := h.promoteNode(ctx, index); err != nil {
-			return err
-		}
-		if err := h.waitPeer(ctx, index, true, defaultOpenBaoHAClusterWaitTimeout); err != nil {
+		if err := h.waitPromotedPeer(ctx, index, defaultOpenBaoHAClusterWaitTimeout); err != nil {
 			return err
 		}
 	}
@@ -285,9 +282,9 @@ func (h *OpenBaoHAEnvironment) writeHAConfigs(nodeNames []string) error {
 	return nil
 }
 
-func (h *OpenBaoHAEnvironment) promoteNode(ctx context.Context, index int) error {
+func (h *OpenBaoHAEnvironment) promoteNode(ctx context.Context, index int) (string, error) {
 	if index <= 0 || index >= len(h.nodes) {
-		return fmt.Errorf("OpenBao HA promote node index out of range: %d", index)
+		return "", fmt.Errorf("OpenBao HA promote node index out of range: %d", index)
 	}
 	args := []string{
 		"exec",
@@ -298,13 +295,14 @@ func (h *OpenBaoHAEnvironment) promoteNode(ctx context.Context, index int) error
 		"bao", "operator", "raft", "promote", h.nodes[index].name,
 	}
 	cmd := exec.CommandContext(ctx, h.dockerBinary, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		trimmed := strings.TrimSpace(string(output))
+	output, err := cmd.CombinedOutput()
+	trimmed := strings.TrimSpace(string(output))
+	if err != nil {
 		if !strings.Contains(trimmed, "server is not a non-voter") {
-			return fmt.Errorf("promote OpenBao HA node %s: %w: %s", h.nodes[index].name, err, trimmed)
+			return trimmed, fmt.Errorf("promote OpenBao HA node %s: %w: %s", h.nodes[index].name, err, trimmed)
 		}
 	}
-	return nil
+	return trimmed, nil
 }
 
 func (h *OpenBaoHAEnvironment) startNode(ctx context.Context, index int) error {
@@ -409,6 +407,50 @@ func (h *OpenBaoHAEnvironment) waitPeer(
 				formatRaftPeers(lastPeers),
 				formatError(lastErr),
 				h.nodeDiagnostics(ctx, index),
+			)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+func (h *OpenBaoHAEnvironment) waitPromotedPeer(
+	ctx context.Context,
+	index int,
+	timeout time.Duration,
+) error {
+	if index <= 0 || index >= len(h.nodes) {
+		return fmt.Errorf("OpenBao HA promote peer index out of range: %d", index)
+	}
+	nodeName := h.nodes[index].name
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	var lastPeers map[string]raftPeer
+	lastPromoteResult := "<not attempted>"
+	for {
+		peers, err := h.raftPeers(ctx)
+		if err == nil {
+			lastPeers = peers
+			if peer, ok := peers[nodeName]; ok {
+				if peer.Voter {
+					return nil
+				}
+				output, promoteErr := h.promoteNode(ctx, index)
+				lastPromoteResult = formatCommandResult(output, promoteErr)
+				if promoteErr != nil {
+					lastErr = promoteErr
+				}
+			}
+		} else {
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf(
+				"timed out waiting for OpenBao HA node %s to become a raft voter\nlast raft peers: %s\nlast raft/promote error: %s\nlast promote result: %s\n%s",
+				nodeName,
+				formatRaftPeers(lastPeers),
+				formatError(lastErr),
+				lastPromoteResult,
+				h.clusterDiagnostics(ctx),
 			)
 		}
 		time.Sleep(time.Second)
@@ -613,6 +655,19 @@ func formatError(err error) string {
 		return "<none>"
 	}
 	return err.Error()
+}
+
+func formatCommandResult(output string, err error) string {
+	if output == "" && err == nil {
+		return "<success>"
+	}
+	if output == "" {
+		return formatError(err)
+	}
+	if err == nil {
+		return output
+	}
+	return output + ": " + err.Error()
 }
 
 func (h *OpenBaoHAEnvironment) appendDockerDiagnostic(
