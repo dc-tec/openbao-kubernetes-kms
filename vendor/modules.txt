@@ -8,8 +8,8 @@ github.com/Microsoft/go-winio/internal/fs
 github.com/Microsoft/go-winio/internal/socket
 github.com/Microsoft/go-winio/internal/stringbuffer
 github.com/Microsoft/go-winio/pkg/guid
-# github.com/ThalesGroup/crypto11 v1.6.0
-## explicit; go 1.25.1
+# github.com/ThalesGroup/crypto11 v1.6.1
+## explicit; go 1.25.8
 github.com/ThalesGroup/crypto11
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
@@ -51,7 +51,7 @@ github.com/google/pprof/profile
 # github.com/inconshreveable/mousetrap v1.1.0
 ## explicit; go 1.18
 github.com/inconshreveable/mousetrap
-# github.com/miekg/pkcs11 v1.1.1
+# github.com/miekg/pkcs11 v1.1.2
 ## explicit; go 1.12
 github.com/miekg/pkcs11
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
