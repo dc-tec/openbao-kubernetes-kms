@@ -1,6 +1,6 @@
 module github.com/dc-tec/openbao-kubernetes-kms
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/ThalesGroup/crypto11 v1.6.1

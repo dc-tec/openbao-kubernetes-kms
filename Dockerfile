@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.3-bookworm@sha256:e793a1af16c4c259864819c8ac9c4068df32617375a4dc025be66c76f1d141ab AS build
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.4-bookworm@sha256:5d2b868674b57c9e48cdd39e891acce4196b6926ca6d11e9c270a8f85106203d AS build
 
 WORKDIR /src
 
