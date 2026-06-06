@@ -24,7 +24,7 @@ are listed as tested.
 
 | Component | Version |
 |---|---|
-| OpenBao | `2.5.3` |
+| OpenBao | `2.5.4` |
 | Kubernetes | `1.34` and `1.35` release lines, exact Kind node-image pins in CI |
 | KMS API | v2 |
 | OS | Linux |

@@ -42,7 +42,7 @@ The policy is:
 - release container builder and runtime base images pinned by digest,
 - release artifact names and checksum filenames defined by the version policy.
 
-Initial validation uses OpenBao `2.5.3`, Kubernetes KMS v2, Linux
+Current validation uses OpenBao `2.5.4`, Kubernetes KMS v2, Linux
 control-plane nodes, and exact-pinned Kind lanes for the Kubernetes `1.34` and
 `1.35` release lines recorded in `.ci/versions.yaml`. Kubernetes `1.36` is the
 intended next validation line once a digest-pinned Kind node image is available.
@@ -99,7 +99,7 @@ Change-routed expansions add deeper checks:
 
 Main and scheduled lanes add the slower integration coverage:
 
-- OpenBao `2.5.3` CI E2E,
+- OpenBao `2.5.4` CI E2E,
 - pinned Kubernetes Kind E2E,
 - Kind multi-control-plane convergence,
 - static-pod upgrade and rollback,
