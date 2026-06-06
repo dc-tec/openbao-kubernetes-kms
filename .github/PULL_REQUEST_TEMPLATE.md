@@ -1,10 +1,5 @@
 ## Summary
 
-## Workstream
-
-- Workstream ID:
-- Milestone:
-
 ## Verification
 
 - [ ] `make ci-core`

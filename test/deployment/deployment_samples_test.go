@@ -261,7 +261,7 @@ func TestDockerfileUsesPinnedDistrolessNonRootRuntime(t *testing.T) {
 	content := readSample(t, "Dockerfile")
 	required := []string{
 		"# syntax=docker/dockerfile:1.7@sha256:",
-		"docker.io/library/golang:1.26.3-bookworm@sha256:",
+		"docker.io/library/golang:1.26.4-bookworm@sha256:",
 		"gcr.io/distroless/static-debian12:nonroot@sha256:",
 		"CGO_ENABLED=0",
 		"USER 65532:65532",
