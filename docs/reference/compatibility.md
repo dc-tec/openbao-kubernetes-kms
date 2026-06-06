@@ -20,7 +20,7 @@ The initial preview matrix is:
 - Kubernetes `1.34` and `1.35` release lines, with Kind node-image digests
   recorded in `.ci/versions.yaml`,
 - Kubernetes KMS v2,
-- OpenBao `2.5.3`,
+- OpenBao `2.5.4`,
 - OpenBao Transit,
 - JWT auth in default release artifacts,
 - PKCS#11 certificate auth only when the selected release includes matching
@@ -45,8 +45,8 @@ KMS v1 is not part of the primary implementation.
 
 | Version | Status |
 |---|---|
-| `2.5.3` | Initial tested target. |
-| Other `2.5.x` | Future compatibility candidate; not claimed until tested. |
+| `2.5.4` | Current tested target. |
+| Other `2.5.x` | Compatibility candidate; not claimed for this release until tested and pinned. |
 | `2.4.x` | Not targeted for the current release line. |
 
 The design requires OpenBao Transit features:

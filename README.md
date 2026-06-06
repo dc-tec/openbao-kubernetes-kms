@@ -62,7 +62,7 @@ server may need the KMS plugin during startup to read encrypted resources.
 |---|---|
 | Kubernetes API | KMS v2 only. KMS v1 is not implemented. |
 | Kubernetes target | Tested against Kubernetes `1.34` and `1.35` Kind node images pinned by digest. Kubernetes `1.36` is the intended next test line once a pinned Kind image is available. Kubernetes `1.29+` KMS v2 clusters may work, but are covered only when listed in `.ci/versions.yaml`. |
-| OpenBao target | OpenBao `2.5.3` with Transit. JWT auth is the default preview auth path. |
+| OpenBao target | OpenBao `2.5.4` with Transit. JWT auth is the default preview auth path. |
 | Transit key type | `aes256-gcm96` is the supported and recommended default. |
 | Authentication | JWT auth by default. PKCS#11 certificate auth is opt-in and covered only when a release publishes matching artifacts and marks the path as tested. SPIFFE/SPIRE is not a supported preview configuration. OpenBao tokens stay in process memory. |
 | Deployment models | Hardened systemd unit or kubelet-managed static pod. |
