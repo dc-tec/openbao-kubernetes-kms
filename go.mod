@@ -5,17 +5,17 @@ go 1.26.4
 require (
 	github.com/ThalesGroup/crypto11 v1.6.1
 	github.com/go-viper/mapstructure/v2 v2.5.0
-	github.com/onsi/ginkgo/v2 v2.29.0
-	github.com/onsi/gomega v1.41.0
+	github.com/onsi/ginkgo/v2 v2.31.0
+	github.com/onsi/gomega v1.42.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
-	github.com/spiffe/go-spiffe/v2 v2.6.0
-	golang.org/x/sync v0.20.0
+	github.com/spiffe/go-spiffe/v2 v2.7.0
+	golang.org/x/sync v0.21.0
 	google.golang.org/grpc v1.81.1
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/kms v0.36.1
+	k8s.io/kms v0.36.2
 )
 
 require (
