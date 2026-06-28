@@ -22,7 +22,7 @@ behavior.
 | Full enabled E2E suite | `make test-e2e` | Runs the enabled Ginkgo E2E specs selected by labels. | Depends on selected labels |
 | Preview release OpenBao gate | `make test-e2e-release-preview-openbao` | Runs the manifest-defined OpenBao release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime |
 | Preview release Kind gate | `make test-e2e-release-preview-kind` | Runs the manifest-defined Kind release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime, Kind, kubectl |
-| OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.5.4` behavior. | Docker-compatible runtime |
+| OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.5.5` behavior. | Docker-compatible runtime |
 | OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao TLS cert auth method, listener client-certificate request, URI SAN role binding, cert login, and Transit access with the issued token. | Docker-compatible runtime |
 | Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Explicit implementation check for real SPIRE server and agent, Workload API socket, X.509 SVID selection, and provider local SPIFFE certificate validation. This lane is not wired into CI or the preview release gate. | Docker-compatible runtime |
 | Provider PKCS#11 SoftHSM certificate source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | Real SoftHSM token, PKCS#11 signer, provider image, OpenBao cert login, KMS v2 socket client, and Transit access. | Docker-compatible runtime |

@@ -145,7 +145,7 @@ The OpenBao cert role should require:
 The OpenBao listener used by the provider must request TLS client certificates. In OpenBao listener terms, keep TLS enabled and do not set `tls_disable_client_certs=true`. Do not set `disable_binding=true` on the cert auth method, because renewal should remain bound to the certificate identity used at login. If OCSP is enabled for the role, keep `ocsp_fail_open=false`.
 
 Stock SPIRE X.509 SVIDs are SPIFFE URI SAN identities and do not include a Common
-Name by default. OpenBao `2.5.4` cert auth can enforce `allowed_uri_sans`, but
+Name by default. OpenBao `2.5.5` cert auth can enforce `allowed_uri_sans`, but
 it cannot derive the identity alias from a URI SAN. For that reason,
 `auth.cert.source: spiffe` is rejected by provider configuration validation
 until the supported OpenBao version includes compatible cert-auth alias

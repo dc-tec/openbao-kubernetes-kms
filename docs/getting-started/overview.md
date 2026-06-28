@@ -57,7 +57,7 @@ is available. Kubernetes `1.29+` KMS v2 clusters may work, but unlisted versions
 are not part of the tested preview matrix. KMS v2 is
 the only supported Kubernetes KMS API; KMS v1 is not implemented.
 
-The current OpenBao validation target is OpenBao `2.5.4` with the Transit secrets engine using `aes256-gcm96` keys. See [Compatibility](/reference/compatibility/) for the full supported version envelope and the upgrade discipline applied to this matrix.
+The current OpenBao validation target is OpenBao `2.5.5` with the Transit secrets engine using `aes256-gcm96` keys. See [Compatibility](/reference/compatibility/) for the full supported version envelope and the upgrade discipline applied to this matrix.
 
 ## Defaults And Boundaries
 
