@@ -67,9 +67,9 @@ policy:
 
 validation:
   openbao:
-    primary: "2.5.4"
-    image: ghcr.io/openbao/openbao:2.5.4@sha256:436eaf9778cad75507ff70ea26ace30dcbe15606e619ac3823495663d7f7c115
-    imageDigest: sha256:436eaf9778cad75507ff70ea26ace30dcbe15606e619ac3823495663d7f7c115
+    primary: "2.5.5"
+    image: ghcr.io/openbao/openbao:2.5.5@sha256:6150c4a6b62067db6141c8da7a6a6b5763f4f47c315343d0c848b40fecdfd452
+    imageDigest: sha256:6150c4a6b62067db6141c8da7a6a6b5763f4f47c315343d0c848b40fecdfd452
     digestStatus: pinned
   spire:
     primary: "1.13.2"
@@ -106,9 +106,9 @@ validation:
         upstreamPatch: "1.36.1"
         status: awaiting-pinned-kind-node-image
   releaseGateRows:
-    - name: openbao-2.5.4
+    - name: openbao-2.5.5
       component: openbao
-      version: "2.5.4"
+      version: "2.5.5"
       requiredFor: v0.1
     - name: kubernetes-1.34-kind
       component: kubernetes
