@@ -279,7 +279,7 @@ func TestReleaseWorkflowImageSecurityChecksOutTrivyIgnore(t *testing.T) {
 	imageSecurity := workflowJobSection(t, workflow, "security-image")
 	for _, want := range []string{
 		"name: Checkout",
-		"uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd",
+		"uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
 		"trivyignores: .trivyignore",
 	} {
 		requireContains(t, imageSecurity, want, "release image security job")
