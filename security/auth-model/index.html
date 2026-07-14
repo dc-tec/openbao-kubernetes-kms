@@ -66,7 +66,7 @@ is issuer-environment specific and should be validated during issuer
 integration.</p><h2 id=recommended-cert-role-constraints>Recommended Cert Role Constraints</h2><p>The OpenBao cert role should require:</p><ul><li>one dedicated certificate auth mount for the provider trust boundary,</li><li><code>allowed_uri_sans</code>, <code>allowed_common_names</code>, <code>allowed_dns_sans</code>, or
 <code>required_extensions</code> only when they are stable and meaningful for the
 issuing CA,</li><li>short OpenBao token TTL,</li><li>limited token max TTL,</li><li>no default policy,</li><li>one dedicated Transit policy.</li></ul><p>The OpenBao listener used by the provider must request TLS client certificates. In OpenBao listener terms, keep TLS enabled and do not set <code>tls_disable_client_certs=true</code>. Do not set <code>disable_binding=true</code> on the cert auth method, because renewal should remain bound to the certificate identity used at login. If OCSP is enabled for the role, keep <code>ocsp_fail_open=false</code>.</p><p>Stock SPIRE X.509 SVIDs are SPIFFE URI SAN identities and do not include a Common
-Name by default. OpenBao <code>2.5.5</code> cert auth can enforce <code>allowed_uri_sans</code>, but
+Name by default. OpenBao <code>2.6.0</code> cert auth can enforce <code>allowed_uri_sans</code>, but
 it cannot derive the identity alias from a URI SAN. For that reason,
 <code>auth.cert.source: spiffe</code> is rejected by provider configuration validation
 until the supported OpenBao version includes compatible cert-auth alias
