@@ -24,14 +24,14 @@ toolchain:
     pinStatus: pinned
   githubActions:
     anchoreSbom: e22c389904149dbc22b58101806040fa8d37a610
-    attestBuildProvenance: a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+    attestBuildProvenance: 0f67c3f4856b2e3261c31976d6725780e5e4c373
     cache: cdf6c1fa76f9f475f3d7449005a359c84ca0f306
     checkout: 9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
     cosignInstaller: cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003
     createGithubAppToken: 1b10c78c7865c340bc4f6099eb2f838309f1e8c3
     dependencyReview: 2031cfc080254a8a887f58cffee85186f0e49e48
     dockerBuildPush: bcafcacb16a39f128d818304e6c9c0c18556b85f
-    dockerLogin: 4907a6ddec9925e35a0a9e82d7399ccc52663121
+    dockerLogin: af1e73f918a031802d376d3c8bbc3fe56130a9b0
     dockerSetupBuildx: 4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
     dockerSetupQemu: ce360397dd3f832beb865e1373c09c0e9f86d70a
     downloadArtifact: 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
