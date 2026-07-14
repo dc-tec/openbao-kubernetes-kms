@@ -6,7 +6,7 @@ project:
   binary: bao-kms-provider
 
 toolchain:
-  go: "1.26.4"
+  go: "1.26.5"
   commandFramework:
     cliConfig: viper
   taskRunner: make
@@ -43,14 +43,14 @@ toolchain:
     uploadArtifact: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
   goDependencies:
     cobra: "1.10.2"
-    ginkgo: "2.29.0"
-    grpc: "1.79.3"
-    k8sKMS: "0.34.7"
-    gomega: "1.40.0"
-    mapstructure: "2.4.0"
+    ginkgo: "2.32.0"
+    grpc: "1.82.0"
+    k8sKMS: "0.36.2"
+    gomega: "1.42.1"
+    mapstructure: "2.5.0"
     pflag: "1.0.10"
     prometheusClientGolang: "1.23.2"
-    viper: "1.20.1"
+    viper: "1.21.0"
   testFrameworks:
     e2e: ginkgo
     assertions: gomega
@@ -129,8 +129,8 @@ artifacts:
   imageRuntimeBase: gcr.io/distroless/static-debian12:nonroot
   imageRuntimeBaseDigest: sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
   imageRuntimeUser: "65532:65532"
-  imageBuilderBase: docker.io/library/golang:1.26.4-bookworm
-  imageBuilderBaseDigest: sha256:5d2b868674b57c9e48cdd39e891acce4196b6926ca6d11e9c270a8f85106203d
+  imageBuilderBase: docker.io/library/golang:1.26.5-bookworm
+  imageBuilderBaseDigest: sha256:349ad04971da5f200a537641ae2c70774a592ca21fad4b513b65f813f546781a
   dockerfileFrontend: docker.io/docker/dockerfile:1.7
   dockerfileFrontendDigest: sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
   binaryName: bao-kms-provider
