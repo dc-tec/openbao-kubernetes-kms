@@ -420,6 +420,7 @@ chmod 0600 /bao/tls/identity.jwt
 `
 	runDocker(s.t, ctx, s.dockerPath,
 		"run", "--rm",
+		"--user", "0:0",
 		"--entrypoint", "/bin/sh",
 		"--volume", tmpDir+":/src:ro",
 		"--volume", s.volumes.tls+":/bao/tls",
@@ -464,6 +465,7 @@ chmod 0700 /var/lib/openbao-kms/state
 `
 	runDocker(s.t, ctx, s.dockerPath,
 		"run", "--rm",
+		"--user", "0:0",
 		"--entrypoint", "/bin/sh",
 		"--volume", s.volumes.state+":/var/lib/openbao-kms/state",
 		s.openBaoImage,
@@ -481,6 +483,7 @@ chmod 0700 /var/lib/openbao-kms/state
 `
 	runDocker(s.t, ctx, s.dockerPath,
 		"run", "--rm",
+		"--user", "0:0",
 		"--entrypoint", "/bin/sh",
 		"--volume", s.volumes.state+":/var/lib/openbao-kms/state",
 		s.openBaoImage,
@@ -549,6 +552,7 @@ chmod 0700 /kms-sample
 `
 	runDocker(t, ctx, dockerPath,
 		"run", "--rm",
+		"--user", "0:0",
 		"--entrypoint", "/bin/sh",
 		"--volume", volumeName+":/kms-sample",
 		helperImage,
