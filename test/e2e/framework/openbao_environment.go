@@ -39,7 +39,7 @@ const (
 	EnvDockerBinary = "DOCKER"
 	EnvSkipCleanup  = "E2E_SKIP_CLEANUP"
 
-	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.5.5@sha256:6150c4a6b62067db6141c8da7a6a6b5763f4f47c315343d0c848b40fecdfd452"
+	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.6.0@sha256:900bb64d0671cd1d82b693c56206f7263b582445f3a3bb6ba6e5213f524a6653"
 
 	openBaoListenAddress  = "0.0.0.0:8200"
 	openBaoTLSServerName  = "localhost"
