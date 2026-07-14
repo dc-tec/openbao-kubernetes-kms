@@ -839,6 +839,7 @@ func (f *OpenBaoEnvironment) prepareStorageVolume(ctx context.Context, image str
 func prepareOpenBaoStorageVolume(ctx context.Context, dockerBinary string, image string, storageVolume string) error {
 	cmd := exec.CommandContext(ctx, dockerBinary,
 		"run", "--rm",
+		"--user", "0:0",
 		"--entrypoint", "/bin/sh",
 		"--volume", storageVolume+":/bao/data",
 		image,
@@ -1185,9 +1186,19 @@ func (f *OpenBaoEnvironment) initializeForRestore(ctx context.Context, httpClien
 }
 
 func (f *OpenBaoEnvironment) copySnapshotIntoContainer(ctx context.Context, snapshotPath string) error {
-	cmd := exec.CommandContext(ctx, f.dockerBinary, "cp", snapshotPath, f.containerName+":/tmp/openbao-raft.snap")
+	const containerSnapshotPath = "/tmp/openbao-raft.snap"
+
+	cmd := exec.CommandContext(ctx, f.dockerBinary, "cp", snapshotPath, f.containerName+":"+containerSnapshotPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("copy OpenBao raft snapshot into restore container: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	cmd = exec.CommandContext(ctx, f.dockerBinary,
+		"exec", "--user", "0:0",
+		f.containerName,
+		"chown", "100:1000", containerSnapshotPath,
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("set OpenBao raft snapshot ownership: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }

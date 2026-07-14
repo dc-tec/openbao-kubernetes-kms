@@ -466,6 +466,7 @@ chmod 0644 /bao/tls/openbao-ca.crt
 `
 	runDocker(t, ctx, dockerPath,
 		"run", "--rm",
+		"--user", "0:0",
 		"--entrypoint", "/bin/sh",
 		"--volume", stagingDir+":/src:ro",
 		"--volume", volumes.config+":/config",
