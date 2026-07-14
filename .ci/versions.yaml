@@ -33,7 +33,7 @@ toolchain:
     dockerBuildPush: bcafcacb16a39f128d818304e6c9c0c18556b85f
     dockerLogin: af1e73f918a031802d376d3c8bbc3fe56130a9b0
     dockerSetupBuildx: 4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
-    dockerSetupQemu: ce360397dd3f832beb865e1373c09c0e9f86d70a
+    dockerSetupQemu: 96fe6ef7f33517b61c61be40b68a1882f3264fb8
     downloadArtifact: 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
     releasePlease: 45996ed1f6d02564a971a2fa1b5860e934307cf7
     setupGo: 4b73464bb391d4059bd26b0524d20df3927bd417
