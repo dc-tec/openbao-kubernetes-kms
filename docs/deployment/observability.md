@@ -42,12 +42,13 @@ The maintained dashboard sample lives at:
 deploy/grafana/dashboards/openbao-kms-overview.json
 ```
 
-Import it into Grafana with a Prometheus data source whose UID is `Prometheus`,
-or adjust the dashboard data source UID during import. The dashboard covers:
+Import it into Grafana with a Prometheus data source whose unique identifier
+(UID) is `Prometheus`, or adjust the dashboard data source UID during import.
+The dashboard covers:
 
 - KMS gRPC request rate, error ratio, and p95/p99 latency,
 - OpenBao request rate, error ratio, and p95/p99 latency,
-- status cache age, token TTL, certificate TTL, and circuit breaker state,
+- status cache age, token time to live (TTL), certificate TTL, and circuit breaker state,
 - active Transit key version, active `key_id` hash convergence, and rotation state,
 - auth failures, Transit metadata probe failures, decrypt validation errors,
 - panic recovery and stale socket cleanup counters.

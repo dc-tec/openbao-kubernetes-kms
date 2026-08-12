@@ -8,7 +8,10 @@ weight: 20
 
 This project treats strict, idiomatic Go as part of the security and reliability model.
 
-The provider runs in the Kubernetes API server boot path and handles plaintext key material at the KMS boundary. Loose typing, dynamic maps, implicit decoding, and unbounded error paths are implementation risks, not style preferences.
+The provider runs in the Kubernetes API server boot path. It handles plaintext
+key material at the Kubernetes Key Management Service (KMS) boundary. Loose
+typing, dynamic maps, implicit decoding, and unbounded error paths introduce
+implementation risk.
 
 ## Core Rules
 
@@ -17,7 +20,9 @@ The provider runs in the Kubernetes API server boot path and handles plaintext k
 - Production code does not use broad `any` or `interface{}` escape hatches except in reviewed boundary adapters.
 - Kubernetes annotations use `map[string]string`. This is allowed because the type is a Kubernetes protocol surface.
 - Viper is isolated to `internal/config` and command wiring. Business-logic packages do not depend on Viper.
-- Configuration, OpenBao DTOs, KMS models, AAD envelopes, annotations, registry state, and status values use typed structs.
+- Configuration, OpenBao data transfer objects (DTOs), KMS models, additional
+  authenticated data (AAD) envelopes, annotations, registry state, and status
+  values use typed structs.
 - Configuration and external JSON or YAML decode into typed structs with unknown-field rejection where the parser supports it.
 - Boundary DTOs are converted into internal domain models before crossing package boundaries.
 - JSON, YAML, AAD, annotations, and OpenBao request bodies are not constructed through ad hoc string concatenation.
@@ -50,7 +55,7 @@ Every exception is local, documented in code, covered by tests, and does not cro
 
 ## Required Gates
 
-Every implementation PR passes:
+Every implementation pull request passes:
 
 - `gofmt`
 - `gofumpt`
@@ -79,7 +84,9 @@ The `golangci-lint` policy includes at least:
 
 ## Enforcement
 
-The Makefile runs documentation and version checks plus ast-grep and Semgrep rule tests. The repository encodes custom code-quality policy with separate tool responsibilities:
+The Makefile runs documentation and version checks, ast-grep rules, and Semgrep
+rule tests. The repository assigns each custom code-quality policy to a specific
+tool:
 
 - `.ast-grep/sgconfig.yml`
 - `.ast-grep/rules/architecture`
@@ -98,7 +105,7 @@ ast-grep owns structural Go and architecture rules:
 
 Semgrep owns security and dangerous-API rules:
 
-- no disabled TLS verification,
+- no disabled Transport Layer Security (TLS) verification,
 - no default HTTP client or package-level HTTP helpers,
 - no `http.NewRequest` without context,
 - no runtime subprocess execution,
@@ -106,4 +113,6 @@ Semgrep owns security and dangerous-API rules:
 
 The repository also includes `.golangci.yml` as the baseline lint policy.
 
-The default is strict. Narrow reviewed exceptions are added only when a typed alternative is demonstrably worse. Prefer ast-grep or Semgrep exceptions over broad grep exclusions because they are easier to test and review.
+The default is strict. Add a narrow, reviewed exception only when the typed
+alternative would obscure or weaken the boundary. Prefer ast-grep or Semgrep
+exceptions over broad grep exclusions because reviewers can test their scope.

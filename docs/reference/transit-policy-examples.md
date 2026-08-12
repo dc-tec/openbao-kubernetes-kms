@@ -6,9 +6,11 @@ weight: 110
 
 # Transit Policy Examples
 
-This page collects the reference OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies these examples, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace the workload-specific identifiers such as mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
+These examples define the OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies them, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace workload-specific identifiers such as the mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
 
-## Plugin Hot-Path Policy
+<a id="plugin-hot-path-policy"></a>
+
+## Provider Hot-Path Policy
 
 Least-privilege OpenBao policy granting only the capabilities the provider needs at the encrypt and decrypt path:
 
@@ -32,7 +34,7 @@ path "sys/capabilities-self" {
 
 The provider reads `transit/config/keys` during runtime metadata probes. It uses this path to verify `disable_upsert=true`. `sys/capabilities-self` is required so `bao-kms-provider doctor` can verify the token's effective capabilities.
 
-If token renewal is enabled and the JWT role disables the default policy, add the required self-renewal path:
+If token renewal is enabled and the JSON Web Token (JWT) role disables the default policy, add the required self-renewal path:
 
 ```hcl
 path "auth/token/renew-self" {
@@ -44,7 +46,7 @@ The provider runtime does not call `auth/token/lookup-self`. Grant `lookup-self`
 
 ## Capabilities To Avoid
 
-The plugin token must not have:
+The provider token must not have:
 
 - `create` on `transit/encrypt/*` (key creation through encrypt; blocked by `disable_upsert` at the mount and refused at the token level),
 - `update` on `transit/keys/*` (the rotation capability; rotation belongs to operators or platform automation),
@@ -56,6 +58,9 @@ The plugin token must not have:
 OpenBao policies are path-based and deny by default. Capabilities are only what is explicitly granted.
 
 ## JWT Auth Role: OIDC Discovery
+
+This example configures JSON Web Token (JWT) authentication through OpenID
+Connect (OIDC) discovery.
 
 ```sh
 bao auth enable -path=k8s-workload-a-jwt jwt
@@ -85,7 +90,7 @@ bao write auth/k8s-workload-a-jwt/config \
   bound_issuer="https://issuer.example.internal"
 ```
 
-OpenBao JWT auth requires one of: OIDC discovery, a JWKS URL, or local validation public keys.
+OpenBao JWT auth requires OIDC discovery, a JSON Web Key Set (JWKS) URL, or local validation public keys.
 
 ## Certificate Auth Role: URI SAN
 

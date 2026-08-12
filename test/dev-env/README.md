@@ -1,19 +1,20 @@
 # OpenBao Kubernetes KMS Dev Environment
 
-This directory contains an interactive local validation environment for
-`bao-kms-provider`. It uses upstream Kubernetes through Kind, external OpenBao
-through Docker Compose, and OpenTofu for OpenBao-side configuration.
+The interactive local validation environment for `bao-kms-provider` uses
+upstream Kubernetes through Kind, external OpenBao through Docker Compose, and
+OpenTofu for OpenBao-side configuration.
 
 The lab is for development and controlled local validation. It is not release
-evidence by itself and does not replace the E2E release gates.
+evidence by itself and does not replace the end-to-end (E2E) release gates.
 
 ## What It Creates
 
 - a single-control-plane Kind cluster using the pinned Kind node image from
   `.ci/versions.yaml`,
 - a local single-node OpenBao server on the Kind Docker network, using raft
-  storage, generated TLS, and a local static seal,
-- OpenBao Transit and provider auth configured through OpenTofu,
+  storage, generated Transport Layer Security (TLS) material, and a local
+  static seal,
+- OpenBao Transit and provider authentication configured through OpenTofu,
 - a kubelet-managed provider static pod on the Kind control-plane node,
 - a Kubernetes `EncryptionConfiguration` that points `kube-apiserver` at the
   provider Unix socket,
@@ -40,7 +41,8 @@ From the repository root:
 make dev-env-up
 ```
 
-This performs the full JWT-auth flow by default:
+This target performs the full JSON Web Token (JWT) authentication flow by
+default:
 
 1. Generate a local JWT signer and provider JWT.
 2. Create the Kind cluster.
@@ -51,16 +53,18 @@ This performs the full JWT-auth flow by default:
 7. Patch `kube-apiserver` with the KMS config.
 8. Verify Secret readback and raw etcd KMS v2 envelope storage.
 
-To exercise the PKCS#11 certificate-auth path with SoftHSM:
+To test the PKCS#11 certificate-auth path with SoftHSM:
 
 ```sh
 make dev-env-reset
 make dev-env-up AUTH=pkcs11
 ```
 
-That mode builds the PKCS#11-enabled provider image, generates a SoftHSM token
-and client certificate, configures OpenBao cert auth with a URI SAN binding, and
-stages the HSM material into the Kind control-plane node for the static pod.
+This mode builds the PKCS#11-enabled provider image and generates a SoftHSM token
+and client certificate. It configures OpenBao certificate authentication with a
+URI subject alternative name (SAN) binding. It then stages the hardware
+security module (HSM) material into the Kind
+control-plane node for the static pod.
 
 Open Grafana at:
 
@@ -101,5 +105,5 @@ steps. `dev-env-reset` deletes the generated state.
   are local-only and stored under ignored state.
 - The Kind cluster must be created before Compose starts because Compose joins
   the external Docker network named `kind`.
-- The OpenBao shape intentionally follows the local server-mode pattern used by
-  `openbao-demo`, but remains single-node so KMS provider iteration stays fast.
+- The OpenBao deployment follows the local server-mode pattern used by
+  `openbao-demo`. It remains single-node to reduce local iteration time.

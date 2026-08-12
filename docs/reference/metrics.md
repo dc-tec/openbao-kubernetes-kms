@@ -6,7 +6,7 @@ weight: 40
 
 # Metrics
 
-This page is the authoritative reference for the Prometheus metrics and stable JSON log fields exported by `bao-kms-provider`. For observability principles, error classes, health endpoints, and alerts, see [Reference: Observability](/reference/observability/).
+This reference defines the Prometheus metrics and stable JSON log fields exported by `bao-kms-provider`. For observability principles, error classes, health endpoints, and alerts, see [Reference: Observability](/reference/observability/).
 
 ## Endpoint
 
@@ -79,7 +79,7 @@ Metric `operation` label values are normalized for Prometheus. The matching log 
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `openbao_kms_aad_validation_errors_total` | counter | `reason` | AAD validation failures during decrypt. |
+| `openbao_kms_aad_validation_errors_total` | counter | `reason` | Additional authenticated data (AAD) validation failures during decrypt. |
 | `openbao_kms_decrypt_key_id_errors_total` | counter | `reason` | Decrypt rejections caused by unknown, malformed, or stale-disallowed `key_id`. |
 
 ### Runtime Health

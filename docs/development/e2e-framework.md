@@ -6,13 +6,14 @@ weight: 40
 
 # E2E Framework
 
-The E2E framework is the command reference for integration and end-to-end
+The end-to-end (E2E) framework is the command reference for integration and E2E
 validation. It uses Ginkgo and Gomega specs, label-based routing, a suite
 manifest, pinned versions from `.ci/versions.yaml`, and machine-readable JUnit
-and Ginkgo JSON reports.
+and Ginkgo JSON reports. The lanes cover the Kubernetes Key Management Service
+(KMS) v2 protocol and continuous integration (CI) environments.
 
-Unit tests and hermetic integration tests should stay free of external services.
-E2E lanes own real OpenBao, provider container, Kind, and Kubernetes API server
+Unit tests and hermetic integration tests must not use external services. E2E
+lanes test real OpenBao, provider container, Kind, and Kubernetes API server
 behavior.
 
 ## Command Matrix
@@ -23,16 +24,16 @@ behavior.
 | Preview release OpenBao gate | `make test-e2e-release-preview-openbao` | Runs the manifest-defined OpenBao release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime |
 | Preview release Kind gate | `make test-e2e-release-preview-kind` | Runs the manifest-defined Kind release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime, Kind, kubectl |
 | OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.6.0` behavior. | Docker-compatible runtime |
-| OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao TLS cert auth method, listener client-certificate request, URI SAN role binding, cert login, and Transit access with the issued token. | Docker-compatible runtime |
-| Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Explicit implementation check for real SPIRE server and agent, Workload API socket, X.509 SVID selection, and provider local SPIFFE certificate validation. This lane is not wired into CI or the preview release gate. | Docker-compatible runtime |
+| OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao Transport Layer Security (TLS) certificate auth method, listener client-certificate request, URI subject alternative name (SAN) role binding, certificate login, and Transit access with the issued token. | Docker-compatible runtime |
+| Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Implementation check for a real SPIFFE Runtime Environment (SPIRE) server and agent, Workload API socket, X.509 SPIFFE Verifiable Identity Document (SVID) selection, and provider-local SPIFFE certificate validation. This lane is not wired into CI or the preview release gate. | Docker-compatible runtime |
 | Provider PKCS#11 SoftHSM certificate source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | Real SoftHSM token, PKCS#11 signer, provider image, OpenBao cert login, KMS v2 socket client, and Transit access. | Docker-compatible runtime |
 | Provider certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | Runs the supported PKCS#11 SoftHSM source lane. SPIRE remains explicit local implementation coverage only. | Docker-compatible runtime |
 | Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and provider auth. | Docker-compatible runtime |
 | Provider CLI | `make test-e2e-provider-cli-openbao-ci` | Provider image CLI commands against real OpenBao/config/state, including diagnostics and hardening failures. | Docker-compatible runtime |
 | Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, bad policy, expired or identity-drifted auth material, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
-| OpenBao HA failover | `make test-e2e-provider-ha-openbao-ci` | Integrated-raft active node failover while preserving old decrypt and new KMS operations. | Docker-compatible runtime |
+| OpenBao high-availability failover | `make test-e2e-provider-ha-openbao-ci` | Integrated-raft active node failover while preserving old decrypt and new KMS operations. | Docker-compatible runtime |
 | Decrypt storm smoke | `make test-e2e-provider-decrypt-storm-openbao-ci` | Concurrent KMS v2 decrypts through the provider and real OpenBao. | Docker-compatible runtime |
-| Sustained direct decrypt soak | `make test-e2e-provider-decrypt-soak-openbao-ci` | Direct decrypt latency, error bounds, memory growth, and PID growth. | Docker-compatible runtime |
+| Sustained direct decrypt soak | `make test-e2e-provider-decrypt-soak-openbao-ci` | Direct decrypt latency, error bounds, memory growth, and process ID (PID) growth. | Docker-compatible runtime |
 | Provider load soak | `make test-e2e-provider-load-soak-openbao-ci` | Sustained Status, Encrypt, and Decrypt traffic with latency and resource checks. | Docker-compatible runtime |
 | OpenBao restore | `make test-e2e-provider-restore-openbao-ci` | Backend replacement and integrated-raft snapshot restore with old ciphertext readback. | Docker-compatible runtime |
 | Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Key version promotion, old and new ciphertext decrypt, historical decryptability enforcement, missing-state fail-closed behavior, and observed rollback rejection. | Docker-compatible runtime |
@@ -40,9 +41,10 @@ behavior.
 | Kind smoke | `make test-e2e-kind-smoke` | Real API server KMS v2 encryption, raw etcd envelope storage, API server restart, and readback. | Docker-compatible runtime, Kind, kubectl |
 | Kind convergence | `make test-e2e-kind-convergence` | Three control-plane API servers decrypt through node-local providers and converge on KMS state. | Docker-compatible runtime, Kind, kubectl |
 | Kind static-pod upgrade | `make test-e2e-kind-upgrade-rollback` | Static-pod provider manifest upgrade and rollback preserves old Secret readback. | Docker-compatible runtime, Kind, kubectl |
-| Kind DR runbook | `make test-e2e-kind-dr-runbook` | OpenBao raft restore, provider state and config rehydration, API server restart, and Secret readback. | Docker-compatible runtime, Kind, kubectl |
+| Kind disaster-recovery runbook | `make test-e2e-kind-dr-runbook` | OpenBao raft restore, provider state and config rehydration, API server restart, and Secret readback. | Docker-compatible runtime, Kind, kubectl |
 
-Local kubeadm VM validation is a release-candidate gate, not public CI. It
+Local kubeadm virtual machine (VM) validation is a release-candidate gate, not
+part of public CI. It
 exercises host boot ordering, systemd, static-pod behavior, node reboot, paired
 restore, and multi-control-plane recovery in a VM substrate. Infrastructure-specific
 maintainer notes live next to the local harness implementation.
@@ -113,13 +115,15 @@ E2E_PROVIDER_IMAGE=ghcr.io/dc-tec/bao-kms-provider:e2e-local \
 ```
 
 Soak lanes are release evidence for the pinned CI environment only. They are not
-an SLO, capacity, or production performance claim.
+a service-level objective (SLO), capacity claim, or production performance
+claim.
 
 The SPIRE certificate-source lane is not part of the CI or preview release gate.
 It remains an explicit implementation check only. It does not make
 `auth.cert.source: spiffe` a supported user configuration until the supported
-OpenBao version can derive cert-auth identity aliases from URI SANs and release
-evidence covers that login path.
+OpenBao version can derive cert-auth identity aliases from Uniform Resource
+Identifier (URI) subject alternative names (SANs) and release evidence covers
+that login path.
 
 Current lane IDs:
 
@@ -240,8 +244,8 @@ writes `console.log`. Ginkgo-spec lanes also write `junit.xml` and
 and keep their evidence in `console.log`. The shared `E2E_JUNIT_REPORT` and
 `E2E_JSON_REPORT` variables apply to the generic `make test-e2e` entrypoint.
 
-E2E logs are redacted. The framework never writes OpenBao tokens, JWTs,
-plaintext, or full ciphertext to artifacts.
+E2E logs are redacted. The framework never writes OpenBao tokens, JSON Web
+Tokens (JWTs), plaintext, or full ciphertext to artifacts.
 
 ## Parallelism
 

@@ -6,7 +6,7 @@ weight: 30
 
 # KMS v2 Contract
 
-This page is the authoritative reference for the Kubernetes KMS v2 protocol behavior implemented by `bao-kms-provider`. The page focuses on observable contract: what the API server sees and what the provider must guarantee.
+This reference defines the observable Kubernetes KMS v2 protocol behavior implemented by `bao-kms-provider`: what the API server sees and what the provider must guarantee.
 
 ## Baseline
 
@@ -28,7 +28,7 @@ The implementation rejects unsafe socket paths, symlink targets, regular files a
 
 ## Provider Name
 
-The Kubernetes provider name is identity-bearing. It appears in the API server `EncryptionConfiguration` and participates in `key_id` and AAD scope.
+The Kubernetes provider name is identity-bearing. It appears in the API server `EncryptionConfiguration` and participates in `key_id` and additional authenticated data (AAD) scope. OpenBao exposes AAD through the `associated_data` field.
 
 Once encrypted data exists, changing the provider name requires a migration plan. The provider fails closed or warns loudly when local configuration does not match the Kubernetes encryption configuration that `doctor` validates. See [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
 
@@ -58,7 +58,7 @@ Invariant:
 EncryptResponse.key_id == most_recent_healthy_Status.key_id
 ```
 
-Kubernetes treats `Status.key_id` as authoritative. If encrypt returns a different `key_id`, the API server discards the encrypt response and treats the plugin as unhealthy.
+Kubernetes treats `Status.key_id` as authoritative. If encrypt returns a different `key_id`, the API server discards the encrypt response and treats the KMS provider plugin as unhealthy.
 
 ## Encrypt
 

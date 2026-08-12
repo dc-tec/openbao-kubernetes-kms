@@ -6,8 +6,8 @@ weight: 90
 
 # Support Policy
 
-This page explains which configurations are currently tested and what operators
-should expect from the preview release line.
+This policy defines the tested configurations and operator expectations for the
+preview release line.
 
 ## Current Status
 
@@ -42,16 +42,17 @@ that release's notes and compatibility table. In the default path, this means:
 
 - KMS v2 behavior against the tested Kubernetes and OpenBao versions.
 - OpenBao Transit with `aes256-gcm96`.
-- JWT auth in the default build.
+- JSON Web Token (JWT) auth in the default build.
 - systemd and static-pod deployment samples.
-- Release artifacts with checksums, SBOMs, signatures, and provenance
-  attestations.
+- Release artifacts with checksums, software bills of materials (SBOMs),
+  signatures, and provenance attestations.
 
-Optional PKCS#11 certificate-auth artifacts are covered only when a release
-publishes those artifacts and marks the PKCS#11 path as tested.
+Optional certificate-auth artifacts backed by a PKCS#11 hardware or software
+token are covered only when a release publishes those artifacts and marks the
+PKCS#11 path as tested.
 
 Preview releases do not cover production readiness, unlisted Kubernetes or
-OpenBao versions, unlisted OpenBao HA topologies, SPIFFE/SPIRE user
+OpenBao versions, unlisted OpenBao HA topologies, SPIFFE/SPIRE workload identity
 configuration, performance SLOs, or long-term maintenance windows.
 
 ## Security Fixes
@@ -59,14 +60,14 @@ configuration, performance SLOs, or long-term maintenance windows.
 Before a stable release line exists, security fixes apply to the latest released
 preview line only.
 
-Once stable releases exist, this page will document the stable-line security
+Once stable releases exist, this policy will document the stable-line security
 fix and backport policy.
 
 ## Operator Expectations
 
 Operators using preview releases should:
 
-- pin exact plugin versions,
+- pin exact provider versions,
 - pin OpenBao and Kubernetes versions,
 - keep etcd and OpenBao backups paired,
 - validate upgrades in staging,

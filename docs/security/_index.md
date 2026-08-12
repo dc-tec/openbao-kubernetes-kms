@@ -22,8 +22,8 @@ verification see [Getting Started: Install](/getting-started/install/#verify-rel
 
 - [Threat Model](/security/threat-model/) for in-scope and out-of-scope threats, attacker capabilities, and mitigations.
 - [Hardening](/security/hardening/) for runtime hardening of the provider process under systemd and as a static pod.
-- [Auth Model](/security/auth-model/) for JWT and certificate authentication, token lifecycle, and the rationale for avoiding a Kubernetes API circular dependency.
-- [AAD And Decrypt Validation](/security/aad-and-decrypt-validation/) for the security view of how the provider rejects stale, unknown, or annotation-inconsistent ciphertexts.
+- [Auth Model](/security/auth-model/) for JSON Web Token (JWT) and certificate authentication, token lifecycle, and the rationale for avoiding a Kubernetes API circular dependency.
+- [AAD And Decrypt Validation](/security/aad-and-decrypt-validation/) for the security view of how additional authenticated data (AAD) helps the provider reject stale, unknown, or annotation-inconsistent ciphertexts.
 
 ## Use Another Section If
 

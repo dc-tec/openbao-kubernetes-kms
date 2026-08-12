@@ -6,13 +6,16 @@ weight: 30
 
 # Install
 
-This page covers fetching a verified `bao-kms-provider` artifact, placing the runtime files, and confirming the local environment before wiring the provider into Kubernetes. It assumes [OpenBao Setup](/getting-started/openbao-setup/) has been completed.
+Complete [OpenBao Setup](/getting-started/openbao-setup/) before installing the
+provider. Then fetch a verified `bao-kms-provider` artifact, place the runtime
+files, and validate the local environment before wiring the provider into
+Kubernetes.
 
 ## Release Artifacts
 
 Every public release publishes native packages, tarballs, a static-pod bundle,
-a container image, and verification files such as checksums, signatures, SBOMs,
-and provenance attestations.
+a container image, and verification files such as checksums, signatures,
+software bills of materials (SBOMs), and provenance attestations.
 
 Verify the release artifacts before placing the provider on a control-plane
 host, and validate the deployment in a staging environment before using it to
@@ -30,20 +33,25 @@ Choose the artifact that matches the deployment model you will use.
 | Static-pod bundle | static-pod deployment | Deterministic tarball with static-pod manifest, provider config sample, encryption config, image reference, checksum, signature, and attestation. |
 | Container image | static-pod runtime | Distroless non-root image, runs as `65532:65532`, published and verified by image digest. The runtime base image is pinned by digest in `.ci/versions.yaml`. |
 
-Published release artifacts use the default JWT-only auth build. Certificate
-auth is an opt-in build variant:
+Published release artifacts use the default JSON Web Token (JWT)-only auth
+build. Certificate auth is an opt-in build variant:
 
 ```sh
 make build-certauth-pkcs11
 ```
 
-PKCS#11 cert-auth artifacts are separate host CGO builds via
-`make release-artifact-certauth-pkcs11-host`.
+Certificate-auth artifacts that use the PKCS#11 Cryptographic Token Interface
+are separate host builds. Build them with:
 
-PKCS#11 builds require CGO and a runtime PKCS#11 module on the host. PKCS#11 is
+```sh
+make release-artifact-certauth-pkcs11-host
+```
+
+PKCS#11 builds require cgo and a runtime PKCS#11 module on the host. PKCS#11 is
 an opt-in preview path only when the selected release publishes the matching
-artifact and marks that path as tested. `auth.cert.source: spiffe` is not a
-supported preview user configuration.
+artifact and marks that path as tested. `auth.cert.source: spiffe`, which
+selects SPIFFE workload identity, is not a supported preview user
+configuration.
 
 Release artifacts distinguish these auth paths:
 
@@ -76,7 +84,7 @@ Verify in this order:
 5. For static-pod deployments, verify the image signature and image provenance for the digest referenced by the static-pod bundle.
 
 Do not replace the release image digest with a tag-only reference. The static
-pod manifest should use the verified image digest from the selected release.
+pod manifest must use the verified image digest from the selected release.
 
 The examples below use `cosign` and the GitHub CLI.
 
@@ -123,6 +131,10 @@ gh attestation verify "oci://${IMAGE}" \
   --deny-self-hosted-runners
 ```
 
+Successful checksum verification prints `<artifact>: OK` for the selected
+artifact. Each signature and attestation command must exit with status `0` and
+identify the expected repository, workflow, source tag, and artifact digest.
+
 For the full supply-chain controls behind these artifacts, see
 [Development: CI And Supply Chain](/development/ci-supply-chain/).
 
@@ -152,7 +164,11 @@ Use the systemd tarball when native packaging is not available for your host ima
 sudo tar -C / -xzf bao-kms-provider_<version>_systemd_linux_amd64.tar.gz
 ```
 
-Then create the `openbao-kms` user, `openbao-kms` group, and `openbao-kms-socket` group according to [Deployment: Linux Identity Model](/deployment/linux-identity-model/). The tarball contains installable files, but distribution-specific user and group creation remains a host image responsibility.
+Then create the `openbao-kms` user, `openbao-kms` group, and
+`openbao-kms-socket` group according to [Deployment: Linux Identity
+Model](/deployment/linux-identity-model/). The tarball contains installable
+files, but the host image remains responsible for distribution-specific user
+and group creation.
 
 ## Install The Static-Pod Bundle
 
@@ -200,7 +216,11 @@ Recommended ownership:
 /run/openbao-kms                   openbao-kms:openbao-kms-socket  2750
 ```
 
-The provider runs as a non-root user (`openbao-kms`). The Kubernetes API server connects to the socket through the supplementary `openbao-kms-socket` group, which keeps API-server socket access separate from access to provider auth material. For the full identity model and rationale, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+The provider runs as the non-root `openbao-kms` user. The Kubernetes API server
+connects to the socket through the supplementary `openbao-kms-socket` group.
+This group keeps API server socket access separate from access to provider auth
+material. For the full identity model and rationale, see [Deployment: Linux
+Identity Model](/deployment/linux-identity-model/).
 
 For the configuration file shape and field reference, see [Configuration](/reference/configuration/).
 
@@ -226,6 +246,10 @@ Run the bootstrap check:
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml
 ```
+
+The configuration command must exit with status `0` and print the resolved
+identity fingerprint. `verify-key` and `doctor` must exit with status `0` and
+must not report any `[fail]` checks.
 
 `doctor` validates:
 

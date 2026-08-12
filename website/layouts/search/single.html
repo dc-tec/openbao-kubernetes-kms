@@ -22,7 +22,7 @@
     <section class="search-panel" aria-labelledby="search-panel-title">
       <div class="search-panel__header">
         <p class="section-label">Search</p>
-        <h2 id="search-panel-title">Find A Page Fast</h2>
+        <h2 id="search-panel-title">Find A Page</h2>
       </div>
 
       <form class="search-form" id="docs-search-form" role="search">
@@ -102,7 +102,7 @@
             title.textContent = doc.title;
 
             summary.className = "search-result__summary";
-            summary.textContent = doc.summary || "Open this page for the detailed answer.";
+            summary.textContent = doc.summary || "No page summary is available.";
 
             link.append(meta, title, summary);
             item.appendChild(link);

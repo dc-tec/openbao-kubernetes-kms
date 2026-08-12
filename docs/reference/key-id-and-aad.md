@@ -6,13 +6,13 @@ weight: 40
 
 # Key ID And AAD
 
-This page is the authoritative reference for the Kubernetes `key_id` format, KMS v2 annotations, the AAD envelope shape, decrypt validation order, and the local registry state. For the security framing of these mechanisms see [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
+This reference defines the Kubernetes `key_id` format, KMS v2 annotations, the additional authenticated data (AAD) envelope, decrypt validation order, and local registry state. OpenBao exposes AAD through the `associated_data` field. For the security framing of these mechanisms, see [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
 
 ## Goals
 
 - Keep Kubernetes `key_id` opaque and non-secret.
 - Prevent raw OpenBao topology from leaking into etcd metadata.
-- Ensure `key_id` values are stable across plugin restart.
+- Ensure `key_id` values are stable across provider restarts.
 - Ensure `key_id` changes when the active Transit key version changes.
 - Keep old `key_id` values decryptable while old Transit versions are allowed.
 - Bind ciphertext to provider, cluster, OpenBao namespace, key lineage, and key version through AAD.
@@ -24,7 +24,7 @@ This page is the authoritative reference for the Kubernetes `key_id` format, KMS
 - opaque,
 - deterministic from stable non-secret inputs,
 - safe to log,
-- stable across plugin restarts,
+- stable across provider restarts,
 - unique across provider, cluster, OpenBao namespace, Transit mount, key lineage, and key version scope,
 - never reused,
 - changed when the active Transit key version changes,
@@ -63,12 +63,12 @@ Inputs:
 
 | Input | Source | Requirement |
 |---|---|---|
-| `provider_name` | Plugin configuration and Kubernetes `EncryptionConfiguration` | Immutable after use. |
-| `cluster_id` | Plugin configuration | Stable cluster or trust-domain ID. |
-| `openbao_instance_id` | Plugin configuration | Stable OpenBao trust-domain ID. |
-| `openbao_namespace` | Optional plugin configuration | Stable namespace routing scope. Empty for the root namespace. |
-| `transit_mount_id` | Plugin configuration | Stable opaque mount ID, not the raw path. |
-| `transit_key_lineage_id` | Plugin configuration or platform metadata | Changes when the key is deleted and recreated. |
+| `provider_name` | Provider configuration and Kubernetes `EncryptionConfiguration` | Immutable after use. |
+| `cluster_id` | Provider configuration | Stable cluster or trust-domain ID. |
+| `openbao_instance_id` | Provider configuration | Stable OpenBao trust-domain ID. |
+| `openbao_namespace` | Optional provider configuration | Stable namespace routing scope. Empty for the root namespace. |
+| `transit_mount_id` | Provider configuration | Stable opaque mount ID, not the raw path. |
+| `transit_key_lineage_id` | Provider configuration or platform metadata | Changes when the key is deleted and recreated. |
 | `transit_key_version` | Transit metadata | Active version used for encryption. |
 | `transit_version_created_at_unix` | Transit metadata | Canonical Unix-second creation time for the Transit version. |
 
@@ -115,9 +115,9 @@ If a mount accessor is used:
 
 The Transit key name alone is not a safe identity. If a Transit key is deleted and recreated with the same name, the new key cannot decrypt old ciphertext.
 
-The platform assigns a `transit_key_lineage_id` when the Transit key is created. The plugin uses that value in `key_id` and AAD derivation. Recreating a key requires a new lineage ID and a documented migration plan.
+The platform assigns a `transit_key_lineage_id` when the Transit key is created. The provider uses that value in `key_id` and AAD derivation. Recreating a key requires a new lineage ID and a documented migration plan.
 
-The plugin refuses to operate when the configured lineage does not match expected administrative metadata where such metadata is available.
+The provider refuses to operate when the configured lineage does not match expected administrative metadata where such metadata is available.
 
 ## Annotations
 
@@ -147,11 +147,11 @@ Rules:
 
 ## OpenBao Request IDs
 
-OpenBao request IDs can be useful for correlating plugin logs and OpenBao audit logs. They are not stored in KMS annotations by default because they add noise, increase metadata size, and may expose operational correlation details.
+OpenBao request IDs can help correlate provider logs and OpenBao audit logs. They are not stored in KMS annotations by default because they add noise, increase metadata size, and may expose operational correlation details.
 
 The provider:
 
-- logs OpenBao request IDs in plugin logs only when available and safe,
+- logs OpenBao request IDs in provider logs only when available and safe,
 - does not include request IDs in annotations by default,
 - supports a debug-only correlation mode for controlled incident response. See [Reference: Observability: Correlation With OpenBao](/reference/observability/#correlation-with-openbao).
 
@@ -222,7 +222,15 @@ The local registry is a non-secret JSON file that records:
 - active Kubernetes `key_id`,
 - observed and promoted key snapshots.
 
-The file preserves rotation decisions across restart and keeps historical snapshots lookupable before Transit decrypt is attempted. A small adjacent checkpoint file records the last accepted generation and hash so a replayed older state file is rejected when the checkpoint survives. Neither file contains key material, plaintext, JWTs, tokens, raw Transit key names, or raw OpenBao mount paths. When `openbao.namespace` is configured, the namespace is persisted as non-secret identity scope so namespace drift fails closed during state validation.
+The file preserves rotation decisions across restarts. It also keeps historical
+snapshots available for lookup before Transit decrypt is attempted. A small
+adjacent checkpoint file records the last accepted generation and hash. If the
+checkpoint survives, the provider rejects a replayed older state file.
+
+Neither file contains key material, plaintext, JWTs, tokens, raw Transit key
+names, or raw OpenBao mount paths. When `openbao.namespace` is configured, the
+provider persists the namespace as non-secret identity scope. State validation
+then fails closed if the namespace changes.
 
 The state hash and checkpoint are local integrity and replay guards, not
 hardware-backed tamper protection. They detect corruption, unsafe restore, missing

@@ -6,7 +6,7 @@ weight: 20
 
 # Configuration
 
-This page is the authoritative reference for the `bao-kms-provider` configuration file. Identity-bearing fields and default values are stable across preview patch releases.
+This reference defines the `bao-kms-provider` configuration file. Identity-bearing fields and default values are stable across preview patch releases.
 
 ## Example
 
@@ -148,7 +148,7 @@ is treated as identity-bearing provider scope.
 | `auth.cert.minRemainingTtl` | `24h` |
 | `auth.cert.clockSkewLeeway` | `30s` |
 | `auth.cert.name` | empty, which lets OpenBao try every configured certificate role |
-| `auth.cert.pkcs11.maxSessions` | unset, but validation requires at least `2` when the PKCS#11 source is used |
+| `auth.cert.pkcs11.maxSessions` | unset, but validation requires at least `2` when the PKCS#11 hardware or software token source is used |
 | `bootstrap.graceTimeout` | `60s` |
 | `bootstrap.retryInterval` | `5s` |
 | `status.probeInterval` | `30s` |
@@ -169,9 +169,10 @@ is treated as identity-bearing provider scope.
 ## Auth Timing
 
 `auth.method` selects how the provider obtains its OpenBao token. The default
-preview release artifacts are JWT-only and use `jwt`. The `cert` method is
-available only in binaries built with a certificate-auth build tag, and PKCS#11
-certificate auth is a supported preview path only when the selected release
+preview release artifacts support only JSON Web Token (JWT) auth and use `jwt`.
+The `cert` method is available only in binaries built with a certificate-auth
+build tag. Certificate auth backed by a PKCS#11 hardware or software token is a
+supported preview path only when the selected release
 publishes matching opt-in artifacts and marks that path as tested.
 
 `auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. Once the remaining OpenBao token TTL drops below this value, the provider renews or re-logs in before the next request.
@@ -201,7 +202,11 @@ through 1024.
 
 ## Certificate Auth
 
-Certificate auth logs in to OpenBao through the TLS Certificate auth method by sending `POST /v1/<auth.cert.mountPath>/login` over a TLS connection that presents the configured client certificate. `auth.cert.name` maps to OpenBao's optional cert role `name` request field. Leave it empty only when the mount is intentionally configured so one matching role is unambiguous.
+Certificate auth logs in through the OpenBao TLS Certificate auth method. It
+sends `POST /v1/<auth.cert.mountPath>/login` over a TLS connection that presents
+the configured client certificate. `auth.cert.name` maps to OpenBao's optional
+cert role `name` request field. Leave it empty only when the mount is configured
+so that one matching role is unambiguous.
 
 PKCS#11-backed certificate auth:
 
@@ -230,7 +235,13 @@ This is the only certificate source covered by the current preview line when
 the selected release publishes the matching PKCS#11 artifact and marks that
 path as tested.
 
-OpenBao must be configured to request TLS client certificates on the listener used by the provider. In OpenBao listener terms, do not set `tls_disable` or `tls_disable_client_certs` to true for that listener. Role constraints should bind certificate identity, for example through `allowed_uri_sans` for URI identities. Keep cert auth binding enabled during token renewal and keep OCSP fail-open disabled when OCSP is used.
+OpenBao must request TLS client certificates on the listener used by the
+provider. In OpenBao listener terms, do not set `tls_disable` or
+`tls_disable_client_certs` to true for that listener. Role constraints must bind
+certificate identity, for example through `allowed_uri_sans` for URI
+identities. Keep cert auth binding enabled during token renewal. When the role
+uses Online Certificate Status Protocol (OCSP) checks, keep
+`ocsp_fail_open=false`.
 
 For the PKCS#11 source, `auth.cert.pkcs11.certificateFile` must be a PEM chain
 containing only `CERTIFICATE` blocks. Do not place a PEM private key in that
@@ -308,7 +319,7 @@ Startup fails closed when any of the following conditions hold:
 - Transit mount ID is empty,
 - key lineage ID is empty,
 - Transit mount or key names are empty,
-- required AAD scope inputs are missing,
+- required additional authenticated data (AAD) scope inputs are missing,
 - socket mode is broader than configured policy allows,
 
 ## Permissions
@@ -326,7 +337,10 @@ Recommended local permissions:
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
 ```
 
-JWT files, certificate chain files, and PKCS#11 PIN files should be readable only by the provider process. The socket should be readable and writable only by the provider and the local API server identity. The socket directory should be writable only by the provider identity.
+JWT files, certificate chain files, and PKCS#11 PIN files should be readable
+only by the provider process. The socket should be readable and writable only
+by the provider and the local API server identity. The socket directory should
+be writable only by the provider identity.
 
 `server.socketGroup` accepts a local group name or a decimal numeric GID. Use a group name for systemd or host-binary deployments. Use a numeric GID in static pod mode so the distroless non-root container does not depend on host group names being present inside the image.
 
@@ -377,7 +391,7 @@ The schema rejects unknown top-level and nested fields, reserves `configVersion:
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
-- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
+- [OpenBao JWT and OpenID Connect (OIDC) auth API](https://openbao.org/api-docs/auth/jwt/)
 - [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
 - [OpenBao TCP listener configuration](https://openbao.org/docs/configuration/listener/tcp/)
 - [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)

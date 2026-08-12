@@ -6,7 +6,7 @@ weight: 50
 
 # EncryptionConfiguration
 
-This page is the authoritative reference for the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Getting Started: Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/).
+This reference defines the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Getting Started: Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/).
 
 ## Minimal Shape
 
@@ -43,7 +43,7 @@ Identity-bearing. The value:
 
 - must match `transit.keyIdScope.providerName` in the provider configuration,
 - participates in `key_id` derivation; see [Reference: Key ID And AAD](/reference/key-id-and-aad/#recommended-format),
-- participates in AAD envelope construction; see [Reference: Key ID And AAD](/reference/key-id-and-aad/#aad-envelope),
+- participates in additional authenticated data (AAD) envelope construction; see [Reference: Key ID And AAD](/reference/key-id-and-aad/#aad-envelope),
 - must not change after encryption begins without a documented migration plan.
 
 `doctor` validates that the API server `EncryptionConfiguration` provider name matches the provider configuration; see [Reference: CLI: doctor](/reference/cli/#doctor).
@@ -60,7 +60,11 @@ The duration the API server waits for any KMS gRPC call before treating it as fa
 
 Initial recommendation: `3s`.
 
-Tightening this value should follow benchmark and failure-mode testing. The provider targets much lower normal latency; startup decrypt storms and OpenBao failover can produce tail latency that approaches the timeout. Set the timeout against measured p99 of `openbao_kms_grpc_duration_seconds` plus a safety margin, not against the steady-state median.
+Tighten this value only after benchmark and failure-mode testing. The provider
+targets much lower normal latency. Startup decrypt storms and OpenBao failover
+can still produce tail latency that approaches the timeout. Set the timeout
+against measured p99 of `openbao_kms_grpc_duration_seconds` plus a safety
+margin, not against the steady-state median.
 
 A timeout that is too short surfaces as `timeout` errors in the [error class catalog](/reference/observability/#error-classes) and may block writes to encrypted resources.
 

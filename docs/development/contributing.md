@@ -6,7 +6,8 @@ weight: 10
 
 # Contributing
 
-This page covers contributing to `bao-kms-provider`. Operator-side documentation is in [Start Here](/getting-started/) and the rest of the user-facing sections.
+Use this guide to contribute to `bao-kms-provider`. For operator procedures,
+start with [Start Here](/getting-started/).
 
 ## Project Layout
 
@@ -45,15 +46,16 @@ test/deployment
 
 ## Local Development
 
-Every PR should run the local core gate:
+Every pull request must pass the local core gate:
 
 ```sh
 make ci-core
 ```
 
-Run focused E2E lanes when a change touches OpenBao, Kubernetes, deployment,
-rotation, failure injection, or release packaging behavior. The lane commands
-live in [Development: E2E Framework](/development/e2e-framework/).
+Run focused end-to-end (E2E) lanes when a change touches OpenBao, Kubernetes,
+deployment, rotation, failure injection, or release packaging behavior. The
+lane commands live in
+[Development: E2E Framework](/development/e2e-framework/).
 
 For deployment sample or package metadata changes, run the focused deployment
 checks:
@@ -70,7 +72,9 @@ builds throwaway `.deb` and `.rpm` packages from a temporary placeholder binary.
 
 ## OpenBao Integration Tests
 
-OpenBao integration tests are build-tagged and stay hermetic. They use in-process HTTPS fakes for OpenBao response shapes and do not require external OpenBao credentials:
+OpenBao integration tests use build tags and remain hermetic. They use in-process
+HTTPS fakes for OpenBao response shapes and do not require external OpenBao
+credentials:
 
 ```sh
 go test -tags=integration ./internal/openbao -run TestOpenBaoTransitIntegration -count=1
@@ -78,7 +82,9 @@ go test -tags=integration ./internal/openbao -run TestOpenBaoTransitIntegration 
 
 ## OpenBao E2E Tests
 
-OpenBao E2E validation uses the ephemeral CI lane. E2E specs use Ginkgo v2 and Gomega, pinned in `.ci/versions.yaml`. Lanes are described in `test/e2e/suites.yaml`:
+OpenBao E2E validation uses the ephemeral continuous integration
+(CI) lane. E2E specs use the Ginkgo v2 and Gomega versions pinned in
+`.ci/versions.yaml`. The `test/e2e/suites.yaml` manifest describes the lanes:
 
 ```sh
 make test-e2e-openbao-ci
@@ -98,7 +104,8 @@ Implementation follows [Development: Code Quality](/development/code-quality/). 
 - no `map[string]interface{}` in production code,
 - no broad `any` or `interface{}` outside reviewed boundary adapters,
 - Viper stays at the CLI and configuration boundary,
-- OpenBao, configuration, KMS, AAD, and registry data use typed structs,
+- OpenBao, configuration, KMS, additional authenticated data (AAD), and registry
+  data use typed structs,
 - decode unknown fields strictly where the parser supports it,
 - no free-form string state machines in internal logic,
 - no panics in request-path code.
@@ -119,7 +126,7 @@ Any change to these surfaces requires:
 - a documented migration plan,
 - updated golden fixtures,
 - a release note,
-- an explicit compatibility section in [Reference: Compatibility](/reference/compatibility/).
+- a compatibility section in [Reference: Compatibility](/reference/compatibility/).
 
 ## Redaction Rules
 
@@ -145,9 +152,11 @@ Prefer:
 
 Avoid:
 
-- ad hoc string parsing for YAML, JSON, or JWT where robust parsers exist,
+- ad hoc string parsing for YAML, JSON, or JWT when a structured-data parser
+  exists,
 - dependencies that log requests by default,
-- dependencies that make TLS verification difficult to control.
+- dependencies that make Transport Layer Security (TLS) verification difficult
+  to control.
 
 ## Documentation Updates
 

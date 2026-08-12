@@ -21,13 +21,15 @@ Recommended install paths:
 /run/openbao-kms/kms.sock
 ```
 
-The JWT, client certificate, and PKCS#11 PIN paths are deployment-specific auth
-material. Only mount or create the paths used by the selected provider auth
-method.
+The JSON Web Token (JWT), client certificate, and PKCS#11 personal
+identification number (PIN) paths contain deployment-specific authentication
+material. Mount or create only the paths used by the selected provider
+authentication method.
 
 Files under `/etc/openbao-kms/` are operator-owned. The package creates the
 directory layout and installs examples under `/usr/share/doc/bao-kms-provider`;
-it does not install, replace, or migrate the live provider configuration, CA
+it does not install, replace, or migrate the live provider configuration,
+certificate authority (CA)
 bundle, JWT, certificate chain, or PKCS#11 PIN files during upgrade.
 
 Install package metadata:
@@ -39,11 +41,11 @@ Install package metadata:
 - `../../systemd/bao-kms-provider.service` runs the provider as `openbao-kms`.
 
 The package does not enable or start the service. Starting the provider changes
-the control-plane boot path and remains an explicit operator action.
+the control-plane boot path and requires an operator action.
 
-Removing the package does not stop a running provider process and does not delete
-state or configuration. Stop the service explicitly during a maintenance window
-before removing the package.
+Removing the package does not stop a running provider process or delete state
+and configuration. During a maintenance window, stop the service before you
+remove the package.
 
 The socket group is separate from the provider primary group so kube-apiserver
 can connect to the socket without receiving access to provider auth material. If

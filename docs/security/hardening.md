@@ -1,13 +1,13 @@
 ---
 title: "Hardening"
-description: "Required and recommended hardening for bao-kms-provider deployments: OpenBao, plugin host, file permissions, auth material, logging, metrics, and Kubernetes-side."
+description: "Required and recommended hardening for bao-kms-provider deployments: OpenBao, provider host, file permissions, auth material, logging, metrics, and Kubernetes-side."
 weight: 20
 ---
 
 # Hardening
 
-This page lists hardening requirements for deployments. Preview releases still
-need staging validation before production use. For the threat coverage see
+These requirements define the hardened deployment posture. Preview releases
+still need staging validation before production use. For the threat coverage see
 [Threat Model](/security/threat-model/). For the file ownership and group model
 the host-side requirements rely on, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
@@ -16,15 +16,15 @@ the host-side requirements rely on, see [Deployment: Linux Identity Model](/depl
 Required:
 
 - TLS enabled,
-- CA bundle pinned in plugin configuration,
+- CA bundle pinned in provider configuration,
 - server name verified,
 - Transit key export disabled,
 - plaintext backup disabled,
 - key deletion disabled,
 - OpenBao HA deployment outside the protected Kubernetes dependency path,
 - Transit upsert disabled at the dedicated mount,
-- plugin policy limited to metadata read, encrypt update, decrypt update, and `disable_upsert` inspection,
-- no Transit create, delete, rotate, export, backup, or configuration write permissions for the plugin token,
+- provider policy limited to metadata read, encrypt update, decrypt update, and `disable_upsert` inspection,
+- no Transit create, delete, rotate, export, backup, or configuration write permissions for the provider token,
 - audit logging enabled and monitored.
 
 Recommended:
@@ -34,13 +34,15 @@ Recommended:
 - a separate auth mount or role per Kubernetes cluster or trust domain,
 - change control around key rotation and `min_decryption_version`.
 
-## Plugin Host
+<a id="plugin-host"></a>
+
+## Provider Host
 
 Required:
 
 - configuration file readable only by root and the required service identity,
-- file-backed auth material readable only by the plugin process,
-- socket writable only by the plugin and the API server identity,
+- file-backed auth material readable only by the provider process,
+- socket writable only by the provider and the API server identity,
 - metrics and health endpoints bound to localhost by default,
 - no debug endpoints in production,
 - debug correlation disabled except during bounded incident response,
@@ -73,6 +75,9 @@ Recommended:
 For the rationale and runtime directory creation pattern see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
 
 ## Auth Material
+
+The default authentication path uses a JSON Web Token (JWT). The optional
+certificate path can use a PKCS#11 hardware or software token.
 
 Required for JWT auth:
 
@@ -108,12 +113,13 @@ Recommended for certificate auth:
 
 - PKCS#11 private keys stay non-exportable,
 - PKCS#11 PIN files are local regular files with provider-only read access,
-- OCSP fail-open remains disabled when OCSP is enabled,
+- Online Certificate Status Protocol (OCSP) fail-open remains disabled when
+  OCSP is enabled,
 - certificate TTL monitoring uses `openbao_kms_certificate_ttl_seconds`.
 
-The portable OpenBao/provider e2e lanes exercise bound-claim rejection and
-pinned public-key rollover. JWKS/OIDC discovery behavior remains
-issuer-environment specific and should be validated during issuer integration.
+The portable OpenBao/provider end-to-end lanes exercise bound-claim rejection
+and pinned public-key rollover. Validate issuer-specific JSON Web Key Set
+(JWKS) or OpenID Connect (OIDC) discovery behavior during issuer integration.
 
 For the trust-boundary discussion see [Auth Model](/security/auth-model/).
 

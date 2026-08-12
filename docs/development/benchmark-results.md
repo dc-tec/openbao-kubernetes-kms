@@ -6,17 +6,18 @@ weight: 57
 
 # Performance Evidence
 
-This page records benchmark and validation evidence used for release decisions.
-The results are release evidence from controlled validation environments, not
-general performance guarantees, service-level objectives, or capacity claims.
-Use them to understand the observed behavior, the micro-batching decision, and
-the remaining validation work before production claims.
+These benchmark and validation results support release decisions. They come
+from controlled validation environments and are not general performance
+guarantees, service-level objectives, or capacity claims. Use them to review
+observed behavior, the micro-batching decision, and the validation work that
+remains before production claims.
 
 ## Current Conclusion
 
 The captured runs do not show a release-blocking need for decrypt
 micro-batching in the current release line. Direct provider decrypt paths are
-covered by E2E soak tests in the repository, and the local kubeadm VM
+covered by end-to-end (E2E) soak tests in the repository, and the local kubeadm
+virtual machine (VM)
 cold-start runs show that increasing the
 Kubernetes Secret corpus from 10,000 to 50,000 objects increased API server
 list latency while provider and OpenBao decrypt counter deltas stayed small.
@@ -36,7 +37,8 @@ creation and large Secret list handling. It was not provider decrypt fan-out.
 | OpenBao deployment | Single external OpenBao instance for the captured runs |
 | KMS mode | Kubernetes KMS v2 over node-local Unix sockets |
 
-These runs do not validate OpenBao HA failover behavior under cold-start load.
+These runs do not validate OpenBao high-availability (HA) failover behavior
+under cold-start load.
 
 ## Summary
 
@@ -57,7 +59,7 @@ availability guarantees.
 
 ### Kubeadm VM Runs
 
-| Run | Date | Secret corpus | API endpoints | Object reads | Errors | p95 | Max | Provider decrypt delta | Transit decrypt delta | Result |
+| Run | Date | Secret corpus | API endpoints | Object reads | Errors | 95th percentile (p95) | Max | Provider decrypt delta | Transit decrypt delta | Result |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | Kubeadm VM cold start | 2026-05-11 | 10,000 | 3 | 30,000 | 0 | 2.497s | 2.497s | 21 | 21 | Passed |
 | Kubeadm VM cold start | 2026-05-11 | 50,000 | 3 | 150,000 | 0 | 19.78s | 19.78s | 21 | 24 | Passed |
@@ -70,7 +72,8 @@ the cleaner evidence for API server restart behavior because they capture
 provider counters before and after the restart window.
 
 `Object reads` means Kubernetes Secret objects returned by API server list
-responses. It is not the number of KMS Decrypt RPCs observed by the provider.
+responses. It is not the number of KMS Decrypt remote procedure calls (RPCs)
+observed by the provider.
 For cold-start runs, each API endpoint performs one full-corpus list operation,
 so the percentile sample set is intentionally small and p95 may equal max.
 Provider decrypt deltas were calculated from provider Prometheus metrics before
@@ -126,8 +129,8 @@ The evidence so far points to these conclusions:
 - A production KMS coalescer would add queueing, cancellation, fairness, and
   per-item error handling complexity without a demonstrated release need.
 
-Future benchmark work should compare batched and direct decrypt paths only if a
-new workload shows provider or OpenBao decrypt fan-out as the limiting factor.
+If a new workload shows that provider or OpenBao decrypt fan-out is the limiting
+factor, compare batched and direct decrypt paths in a future benchmark.
 
 ## Reproduction
 

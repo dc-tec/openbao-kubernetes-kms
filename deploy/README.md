@@ -3,11 +3,12 @@
 Deployment and packaging samples:
 
 - `config/provider-systemd.yaml`: host-service provider config sample.
-- `config/provider-static-pod.yaml`: static-pod provider config sample using a numeric socket GID.
+- `config/provider-static-pod.yaml`: static-pod provider config sample using a numeric socket group ID (GID).
 - `systemd/bao-kms-provider.service`: hardened sample systemd unit.
 - `static-pod/bao-kms-provider.yaml`: kubeadm-compatible static pod sample.
 - `kubernetes/encryption-config.yaml`: Kubernetes KMS v2 `EncryptionConfiguration` sample.
-- `prometheus/rules/openbao-kms.rules.yaml`: Prometheus alert rule sample for provider health, auth, rotation, latency, and decrypt validation signals.
+- `prometheus/rules/openbao-kms.rules.yaml`: Prometheus alert rule sample for
+  provider health, authentication, rotation, latency, and decrypt validation.
 - `grafana/dashboards/openbao-kms-overview.json`: Grafana dashboard sample for the provider's Prometheus metrics.
 - `package/linux`: nFPM, `sysusers.d`, `tmpfiles.d`, and maintainer-script inputs for `.deb` and `.rpm` packages.
 - `package/bundles`: deterministic tarball bundle README inputs for systemd and static-pod release bundles.

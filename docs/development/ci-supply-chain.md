@@ -6,9 +6,9 @@ weight: 50
 
 # CI And Supply Chain
 
-This page defines how the project builds confidence in source changes and
-public release artifacts. The same policy applies to code, deployment samples,
-container images, packages, and documentation.
+The continuous integration (CI) and supply-chain policy applies to code,
+deployment samples, container images, packages, documentation, and public
+release artifacts.
 
 The release model is:
 
@@ -61,8 +61,8 @@ make ci-core
 It covers formatting, vetting, static analysis, vulnerability checks, Semgrep,
 ast-grep rules, unit tests, race smoke, fuzz smoke, generated artifact checks,
 vendored dependency verification, license checks, KMS v2 fake conformance, key
-ID and AAD golden tests, configuration validation, redaction tests, and E2E
-suite manifest validation.
+ID and additional authenticated data (AAD) golden tests, configuration
+validation, redaction tests, and end-to-end (E2E) suite manifest validation.
 
 Run focused E2E lanes when a change touches runtime, OpenBao, Kubernetes, or
 deployment behavior. The canonical command list is [E2E Framework](/development/e2e-framework/).
@@ -92,7 +92,7 @@ Change-routed expansions add deeper checks:
 | `internal/openbao`, `internal/auth` | hermetic OpenBao client integration and OpenBao CI E2E |
 | `internal/socket`, deployment samples | systemd and static-pod staging checks |
 | status or rotation code | rotation and failure-injection lanes |
-| packaging or Dockerfile | image scan, SBOM smoke, reproducibility smoke |
+| packaging or Dockerfile | image scan, software bill of materials (SBOM) smoke, reproducibility smoke |
 | docs only | docs check and Hugo build |
 
 ### Main And Nightly
@@ -105,7 +105,7 @@ Main and scheduled lanes add the slower integration coverage:
 - static-pod upgrade and rollback,
 - Kind disaster-recovery runbook,
 - OpenBao failure injection,
-- OpenBao HA failover,
+- OpenBao high-availability failover,
 - Transit rotation,
 - provider upgrade and rollback,
 - provider and OpenBao load soak,
@@ -113,7 +113,8 @@ Main and scheduled lanes add the slower integration coverage:
 - image scan and SBOM generation.
 
 The soak lanes are release evidence for the pinned CI environment only. They do
-not establish a production SLO or broad capacity claim.
+not establish a production service-level objective (SLO) or broad capacity
+claim.
 
 Local kubeadm VM validation stays outside public CI because it restarts VMs,
 restarts API servers, and intentionally stops OpenBao in the validation
@@ -157,14 +158,14 @@ The tag release workflow:
 - verifies byte reproducibility,
 - generates `provenance-index.json`,
 - uploads byte-verified assets to the draft release,
-- publishes the GitHub Release and GHCR image tag through the
+- publishes the GitHub Release and GitHub Container Registry (GHCR) image tag through the
   maintainer-controlled `release-publish` GitHub Environment.
 
 Release credentials, signing keys, and tag-ruleset bypass are maintainer
 configuration, not user-facing deployment inputs.
 
-The tag release workflow uses GitHub `GITHUB_TOKEN`, OIDC, and attestations
-permissions for asset publication, signing, and provenance.
+The tag release workflow uses GitHub `GITHUB_TOKEN`, OpenID Connect (OIDC), and
+attestations permissions for asset publication, signing, and provenance.
 
 Private repository release dry runs on user-owned repositories cannot persist
 GitHub artifact attestations because GitHub does not expose that feature there.

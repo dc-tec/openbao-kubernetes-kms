@@ -11,9 +11,14 @@ control-plane host and a static pod managed by the kubelet. The choice depends
 on the control-plane lifecycle model, bootstrap dependencies, host hardening,
 upgrade process, and operator familiarity.
 
-Default to systemd when you control the host operating-system lifecycle. Use static pods when the control plane is already kubeadm-style, every control-plane node can preload the provider image by digest, and hostPath preparation is part of the node lifecycle.
+Default to systemd when you control the host operating-system lifecycle. Use
+static pods when the control plane is already kubeadm-style, every
+control-plane node can preload the provider image by digest, and hostPath
+preparation is part of the node lifecycle.
 
-A normal Kubernetes Deployment or DaemonSet running inside the protected cluster is not supported for protecting that same cluster's API server. The reasoning is in the [DaemonSet Is Not Supported](#daemonset-is-not-supported) section below.
+A Kubernetes Deployment or DaemonSet running inside the protected cluster is
+not supported for protecting that cluster's API server. See [DaemonSet Is Not
+Supported](#daemonset-is-not-supported) for the bootstrap dependency.
 
 ## At A Glance
 
@@ -24,7 +29,7 @@ A normal Kubernetes Deployment or DaemonSet running inside the protected cluster
 | Starts before | kubelet (configurable through `Before=`) | API server (kubelet starts both static pods together) |
 | Hardening surface | systemd directives (NoNewPrivileges, ProtectSystem, capability bounds, ...) | Pod `securityContext`, distroless non-root image |
 | File mounts | systemd `ReadWritePaths` and `ReadOnlyPaths` | hostPath volumes |
-| Identity | host user (`openbao-kms`) | container UID `65532:65532`, joined to host socket group |
+| Identity | host user (`openbao-kms`) | container user and group IDs (UID and GID) `65532:65532`, joined to host socket group |
 | Upgrade unit | distro package or binary replacement | container image digest pin |
 | Air-gap recovery | binary on host | preloaded image digest on host |
 | Fits which control-plane style | host-binary control planes, kubeadm with extra tooling | kubeadm-style control planes managing the API server as a static pod |
@@ -45,7 +50,11 @@ Use static pod mode when:
 - the provider manifest is managed with the same discipline as the API server manifest,
 - the team already operates hostPath-mounted control-plane files safely.
 
-Multi-control-plane validation exercises static-pod mode with one provider per control-plane node. All nodes must use the same provider name, cluster ID, OpenBao instance ID, Transit mount ID, key lineage ID, and Transit key name. A split in any identity-bearing value can make API servers disagree about active `key_id` state.
+Multi-control-plane validation exercises static-pod mode with one provider per
+control-plane node. All nodes must use the same provider name, cluster ID,
+OpenBao instance ID, Transit mount ID, key lineage ID, and Transit key name. A
+difference in any identity-bearing value can make API servers disagree about
+active `key_id` state.
 
 ## When systemd Is The Right Choice
 
@@ -81,15 +90,23 @@ Static pod risks:
 
 - the provider depends on kubelet and the container runtime; if either is unavailable, the provider does not start,
 - startup ordering with the API server is not a hard dependency graph; both static pods come up under kubelet at roughly the same time,
-- container image availability matters during disaster recovery; broken pull paths block plugin start,
-- host networking is often required to avoid CNI bootstrap dependencies during early boot,
+- container image availability matters during disaster recovery; broken pull paths block provider startup,
+- host networking is often required to avoid Container Network Interface (CNI) bootstrap dependencies during early boot,
 - socket file permissions and group ownership must be validated on the host since the container UID is opaque to host tools.
 
-The 10,000 and 50,000 Secret cold-start validation runs showed that large Kubernetes object lists drive API server and etcd load, while provider and OpenBao decrypt counter deltas stayed low. This supports the direct decrypt path. The provider still has to be available before API server startup. See [Development: Performance Evidence](/development/benchmark-results/).
+The 10,000 and 50,000 Secret cold-start validation runs showed that large
+Kubernetes object lists drive API server and etcd load. Provider and OpenBao
+decrypt counter deltas stayed low, which supports the direct decrypt path. The
+provider must still be available before API server startup. See [Development:
+Performance Evidence](/development/benchmark-results/).
 
 ## DaemonSet Is Not Supported
 
-A standard Kubernetes DaemonSet running in the protected cluster is not a supported deployment model for protecting that same cluster's API server. DaemonSets depend on the Kubernetes API server and controller machinery. If the API server cannot start without the KMS plugin, the DaemonSet that would start the plugin cannot itself be relied on.
+A standard Kubernetes DaemonSet running in the protected cluster is not a
+supported deployment model for protecting that same cluster's API server.
+DaemonSets depend on the Kubernetes API server and controller machinery. If the
+API server cannot start without the KMS provider plugin, it also cannot start
+the DaemonSet that runs the provider.
 
 A DaemonSet is acceptable for a different cluster (for example, a management cluster running the provider against its own OpenBao), or for non-boot-path diagnostics.
 

@@ -1,11 +1,26 @@
 ##@ Documentation
 
+DOCS_PROSE_PATHS := \
+	README.md \
+	SECURITY.md \
+	CONTRIBUTING.md \
+	':(glob)docs/**/*.md' \
+	':(glob)deploy/**/*.md' \
+	':(glob)test/**/*.md' \
+	hack/harvester/README.md \
+	':(glob)website/content/**/*.md' \
+	website/layouts/index.html \
+	website/layouts/_default/list.html \
+	website/layouts/search/single.html \
+	':(glob).github/ISSUE_TEMPLATE/*.md' \
+	.github/PULL_REQUEST_TEMPLATE.md
+
 .PHONY: docs-check
 docs-check: ## Check docs for known formatting artifacts.
-	@! grep -R -n --exclude-dir=_archive $$(printf '\357\277\274') README.md docs
-	@! grep -R -n --exclude-dir=_archive '⸻' README.md docs
-	@! grep -R -n --exclude-dir=_archive 'openbao-kms-provider' README.md docs
-	@! grep -R -n --exclude-dir=_archive '—' README.md docs
+	@status=0; git grep -n -I -e "$$(printf '\357\277\274')" -- $(DOCS_PROSE_PATHS) || status=$$?; test "$$status" -eq 1
+	@status=0; git grep -n -I -e '⸻' -- $(DOCS_PROSE_PATHS) || status=$$?; test "$$status" -eq 1
+	@status=0; git grep -n -I -e 'openbao-kms-provider' -- $(DOCS_PROSE_PATHS) || status=$$?; test "$$status" -eq 1
+	@status=0; git grep -n -I -e '—' -- $(DOCS_PROSE_PATHS) || status=$$?; test "$$status" -eq 1
 
 .PHONY: docs-deps
 docs-deps: ## Install the pinned Hugo binary locally.

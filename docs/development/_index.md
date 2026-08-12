@@ -15,14 +15,17 @@ browse:
 
 # Development
 
-These pages cover local development, CI, release process, and how the docs site is built. Use them as a contributor or reviewer rather than as an operator.
+Use these pages for local development, continuous integration (CI), release
+process, and documentation site maintenance. Operator procedures are in
+[Start Here](/getting-started/) and [Operations](/operations/).
 
 ## Topics
 
 - [Contributing](/development/contributing/) for local environment setup, Go version, and the contribution workflow.
 - [Code Quality](/development/code-quality/) for the strict typed Go conventions, ast-grep rules, and Semgrep boundaries.
 - [Testing](/development/testing/) for the unit, integration, and end-to-end testing strategy.
-- [E2E Framework](/development/e2e-framework/) for runnable E2E lane commands, labels, manifest routing, and reports.
+- [E2E Framework](/development/e2e-framework/) for runnable end-to-end (E2E)
+  lane commands, labels, manifest routing, and reports.
 - [Performance Evidence](/development/benchmark-results/) for captured load, cold-start, and recovery results.
 - [CI And Supply Chain](/development/ci-supply-chain/) for the CI pipeline, version pinning, and supply-chain controls.
 - [Docs Style Guide](/development/docs-style-guide/) for writing, structure, linking, and docs verification guidance.

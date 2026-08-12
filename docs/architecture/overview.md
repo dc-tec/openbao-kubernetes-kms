@@ -6,11 +6,11 @@ weight: 10
 
 # Overview
 
-This page is the maintainer-facing description of how `bao-kms-provider` is shaped. For the upstream protocol and Transit primer that this design rests on, see [Background](/architecture/background/). For existing Vault Transit KMS plugin work that informed this design, see [Related Work](/architecture/related-work/).
+This maintainer-facing overview describes the `bao-kms-provider` components, data flows, trust boundaries, and deployment shape. For the upstream protocol and Transit concepts, see [Background](/architecture/background/). For the Vault Transit KMS plugin work that informed the design, see [Related Work](/architecture/related-work/).
 
 ## Purpose
 
-The provider adapts Kubernetes KMS v2 to OpenBao Transit. Kubernetes talks to a local KMS plugin over gRPC. The plugin talks to OpenBao Transit over HTTPS.
+The provider adapts Kubernetes KMS v2 to OpenBao Transit. Kubernetes talks to the local KMS provider plugin over gRPC. `bao-kms-provider` talks to OpenBao Transit over HTTPS.
 
 ```text
 kube-apiserver
@@ -35,7 +35,7 @@ flowchart LR
     subgraph Plugin["bao-kms-provider"]
         KMS["KMS v2 server"]
         Registry["key registry"]
-        AAD["AAD builder / validator"]
+        AAD["additional authenticated data (AAD)<br/>builder / validator"]
         AuthManager["auth manager"]
         TransitClient["Transit client"]
         StatusCache["status cache"]
@@ -43,7 +43,7 @@ flowchart LR
     end
 
     subgraph Bao["OpenBao"]
-        BaoAuth["JWT or cert auth method"]
+        BaoAuth["JSON Web Token (JWT)<br/>or cert auth method"]
         Transit["Transit secrets engine"]
         Audit["audit devices"]
     end
@@ -71,7 +71,7 @@ flowchart LR
 
 ### bao-kms-provider
 
-The plugin process:
+The provider process:
 
 - serves the Kubernetes KMS v2 gRPC API over a Unix domain socket,
 - maintains the active key snapshot,
@@ -118,7 +118,7 @@ sequenceDiagram
     API->>Etcd: store encrypted resource data
 ```
 
-Encrypt does not use implicit Transit latest-version behavior. The plugin passes the explicit Transit `key_version` from the active snapshot.
+Encrypt does not use implicit Transit latest-version behavior. The provider passes the explicit Transit `key_version` from the active snapshot.
 
 ### Decrypt
 
@@ -162,13 +162,13 @@ Status reads from cached state populated by background probes; it does not perfo
 
 The provider sits across these boundaries:
 
-- Kubernetes API server to local plugin socket.
-- Plugin host process to OpenBao HTTPS endpoint.
+- Kubernetes API server to the local provider socket.
+- Provider host process to OpenBao HTTPS endpoint.
 - OpenBao policy boundary for Transit operations.
 - Local host filesystem boundary for configuration, auth material, CA bundle, socket, and registry state.
 - etcd persistence boundary for ciphertext and KMS annotations.
 
-The plugin sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog see [Threat Model](/security/threat-model/).
+The provider sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog, see [Threat Model](/security/threat-model/).
 
 ## Internal Active Key Model
 
@@ -188,7 +188,15 @@ type KeySnapshot struct {
 }
 ```
 
-The fields are non-secret identity and Transit metadata used to derive Kubernetes `key_id` values and reconstruct AAD. The active snapshot is computed by a background key watcher, not during hot-path Status calls. The implementation prefers deriving historical `key_id` values from stable configuration plus Transit metadata. A small local key registry state file with strict permissions persists rotation decisions across restart; see [Reference: Key ID And AAD: Local Registry State](/reference/key-id-and-aad/#local-registry-state).
+The fields are non-secret identity and Transit metadata. The provider uses them
+to derive Kubernetes `key_id` values and reconstruct AAD. A background key
+watcher computes the active snapshot outside hot-path Status calls. The
+implementation derives historical `key_id` values from stable configuration
+and Transit metadata when possible.
+
+A small local key registry state file with strict permissions persists rotation
+decisions across restarts. See [Reference: Key ID And AAD: Local Registry
+State](/reference/key-id-and-aad/#local-registry-state).
 
 ## Implementation Guardrails
 
@@ -224,11 +232,11 @@ flowchart TD
     A["host boot"]
     B["network and DNS available"]
     C["bao-kms-provider starts"]
-    D["plugin reads config / auth material / CA"]
-    E["plugin authenticates to OpenBao"]
-    F["plugin reads Transit metadata"]
-    G["plugin creates Unix socket"]
-    H["plugin reports ready"]
+    D["provider reads config / auth material / CA"]
+    E["provider authenticates to OpenBao"]
+    F["provider reads Transit metadata"]
+    G["provider creates Unix socket"]
+    H["provider reports ready"]
     I["kubelet starts kube-apiserver static pod"]
     J["kube-apiserver connects to KMS socket"]
 
@@ -243,7 +251,7 @@ flowchart TD
     B["kubelet starts"]
     C["kubelet starts bao-kms-provider static pod"]
     D["kubelet starts kube-apiserver static pod"]
-    E["plugin creates socket"]
+    E["provider creates socket"]
     F["kube-apiserver connects or retries"]
 
     A --> B
@@ -251,11 +259,16 @@ flowchart TD
     B --> D --> F
 ```
 
-Static-pod ordering must be tested because kubelet does not provide a strong dependency graph between static pods. The API server may start before the provider socket exists and must retry while the provider completes bootstrap. See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model selection rationale and [Deployment: Static Pod Deployment](/deployment/static-pod/) for the manifest and bootstrap risks.
+Static-pod ordering must be tested because kubelet does not provide a strong
+dependency graph between static pods. The API server may start before the
+provider socket exists. It must retry while the provider completes bootstrap.
+See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model
+selection rationale and [Deployment: Static Pod
+Deployment](/deployment/static-pod/) for the manifest and bootstrap risks.
 
 ## Multi-Control-Plane Operation
 
-Each control-plane node runs its own local plugin instance.
+Each control-plane node runs its own local provider instance.
 
 All instances share:
 
@@ -270,7 +283,7 @@ All instances share:
 
 Instances may have different auth credentials and OpenBao client tokens.
 
-Each instance also owns its own local registry state file. The content should converge to the same active `key_id`, while pending or recovered snapshots can differ temporarily during failover or rotation recovery.
+Each instance also owns a local registry state file. The active `key_id` converges across the files. Pending or recovered snapshots can differ temporarily during failover or rotation recovery.
 
 Promotion of a new Transit key version is stable across all control-plane nodes. If one node promotes early and another does not, API server behavior can become inconsistent. The activation delay and stable observation count reduce this risk; operational monitoring still checks for `key_id` convergence. See [Architecture: Rotation Model](/architecture/rotation-model/).
 
@@ -278,7 +291,7 @@ Promotion of a new Transit key version is stable across all control-plane nodes.
 
 Recommended placement is an external management plane or otherwise independent OpenBao deployment that does not depend on the protected Kubernetes API server.
 
-Running OpenBao inside the same protected cluster is strongly discouraged for this use case. If the API server requires the KMS plugin to start and the plugin requires OpenBao, then OpenBao must be reachable before the protected API server is healthy. A same-cluster OpenBao deployment introduces a circular dependency.
+Avoid running OpenBao inside the same protected cluster for this use case. If the API server requires the KMS provider plugin to start and the provider requires OpenBao, then OpenBao must be reachable before the protected API server is healthy. A same-cluster OpenBao deployment introduces a circular dependency.
 
 ## Source References
 
