@@ -23,7 +23,7 @@
 </span></span><span style=display:flex><span>  assets/             CSS and JavaScript sources
 </span></span><span style=display:flex><span>  static/             brand assets, fonts, vendored Mermaid
 </span></span><span style=display:flex><span>hugo.toml             site configuration and module mounts
-</span></span></code></pre></div><p>The live docs should describe the current project. Older plans and design notes
+</span></span></code></pre></div><p>The live docs must describe the current project. Older plans and design notes
 remain available through repository history.</p><h2 id=hugo-mounts>Hugo Mounts</h2><p><code>hugo.toml</code> mounts each docs section into Hugo&rsquo;s <code>content/</code> tree. This keeps the
 documentation source in <code>docs/</code> while letting Hugo render normal sections.</p><p>Example:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-toml data-lang=toml><span style=display:flex><span>[[<span style=color:#a6e22e>module</span>.<span style=color:#a6e22e>mounts</span>]]
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>source</span> = <span style=color:#e6db74>&#34;website/content&#34;</span>
@@ -32,16 +32,16 @@ documentation source in <code>docs/</code> while letting Hugo render normal sect
 </span></span><span style=display:flex><span>[[<span style=color:#a6e22e>module</span>.<span style=color:#a6e22e>mounts</span>]]
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>source</span> = <span style=color:#e6db74>&#34;docs/getting-started&#34;</span>
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>target</span> = <span style=color:#e6db74>&#34;content/getting-started&#34;</span>
-</span></span></code></pre></div><p>To add a new top-level docs section:</p><ol><li>Create <code>docs/&lt;section>/_index.md</code> with front matter.</li><li>Add a mount entry in <code>hugo.toml</code>.</li><li>Link the section from <code>website/layouts/index.html</code> if it should appear on
-the homepage.</li></ol><h2 id=local-builds>Local Builds</h2><p>The Makefile runs a pinned Hugo version through <code>go run</code>, so a global Hugo
+</span></span></code></pre></div><p>To add a new top-level docs section:</p><ol><li>Create <code>docs/&lt;section>/_index.md</code> with front matter.</li><li>Add a mount entry in <code>hugo.toml</code>.</li><li>Link the section from <code>website/layouts/index.html</code> if it belongs on the
+homepage.</li></ol><h2 id=local-builds>Local Builds</h2><p>The Makefile runs a pinned Hugo version through <code>go run</code>, so a global Hugo
 install is not required.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-sh data-lang=sh><span style=display:flex><span>make docs-deps    <span style=color:#75715e># install pinned Hugo into GOBIN once</span>
 </span></span><span style=display:flex><span>make docs-build   <span style=color:#75715e># build into public/</span>
 </span></span><span style=display:flex><span>make docs-serve   <span style=color:#75715e># serve locally on http://localhost:1313/</span>
 </span></span></code></pre></div><p>The Hugo version is pinned with <code>HUGO_VERSION</code> in the Makefile. Update that pin
 when a layout, shortcode, or build behavior depends on a newer Hugo release.</p><h2 id=checks>Checks</h2><p>Run both docs checks before merging documentation changes:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-sh data-lang=sh><span style=display:flex><span>make docs-check
 </span></span><span style=display:flex><span>make docs-build
-</span></span></code></pre></div><p><code>make docs-check</code> scans <code>docs/</code> and <code>README.md</code> for configured text and
-typography issues. <code>make docs-build</code> renders the site and should finish without
+</span></span></code></pre></div><p><code>make docs-check</code> scans tracked first-party prose for configured text and
+typography issues. A successful <code>make docs-build</code> run renders the site without
 warnings.</p><h2 id=templates>Templates</h2><p><code>website/layouts/</code> contains the Hugo templates used by the site:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>website/layouts/
 </span></span><span style=display:flex><span>  index.html
 </span></span><span style=display:flex><span>  _default/baseof.html

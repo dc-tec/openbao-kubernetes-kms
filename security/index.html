@@ -14,14 +14,14 @@ verification see <a href=/openbao-kubernetes-kms/getting-started/install/#verify
 .</p><h2 id=topics>Topics</h2><ul><li><a href=/openbao-kubernetes-kms/security/threat-model/>Threat Model</a>
 for in-scope and out-of-scope threats, attacker capabilities, and mitigations.</li><li><a href=/openbao-kubernetes-kms/security/hardening/>Hardening</a>
 for runtime hardening of the provider process under systemd and as a static pod.</li><li><a href=/openbao-kubernetes-kms/security/auth-model/>Auth Model</a>
-for JWT and certificate authentication, token lifecycle, and the rationale for avoiding a Kubernetes API circular dependency.</li><li><a href=/openbao-kubernetes-kms/security/aad-and-decrypt-validation/>AAD And Decrypt Validation</a>
-for the security view of how the provider rejects stale, unknown, or annotation-inconsistent ciphertexts.</li></ul><h2 id=use-another-section-if>Use Another Section If</h2><ul><li>the question is about CLI, config, or KMS v2 protocol behavior: go to <a href=/openbao-kubernetes-kms/reference/>Reference</a>
+for JSON Web Token (JWT) and certificate authentication, token lifecycle, and the rationale for avoiding a Kubernetes API circular dependency.</li><li><a href=/openbao-kubernetes-kms/security/aad-and-decrypt-validation/>AAD And Decrypt Validation</a>
+for the security view of how additional authenticated data (AAD) helps the provider reject stale, unknown, or annotation-inconsistent ciphertexts.</li></ul><h2 id=use-another-section-if>Use Another Section If</h2><ul><li>the question is about CLI, config, or KMS v2 protocol behavior: go to <a href=/openbao-kubernetes-kms/reference/>Reference</a>
 .</li><li>the question is about an operational runbook or incident response: go to <a href=/openbao-kubernetes-kms/operations/>Operations</a>
 .</li><li>the question is about how the design satisfies these properties: go to <a href=/openbao-kubernetes-kms/architecture/>Architecture</a>
 .</li></ul></article><section class=doc-directory aria-labelledby=browse-section><div class=doc-directory__header><p class=section-label>Browse</p><h2 id=browse-section>In This Section</h2></div><div class=doc-directory__items><a class=doc-directory__item href=/openbao-kubernetes-kms/security/threat-model/><span class=doc-directory__title>Threat Model</span>
 <span class=doc-directory__summary>Assets, trust boundaries, attacker capabilities, threats and controls, security properties provided and not provided by bao-kms-provider.</span>
 </a><a class=doc-directory__item href=/openbao-kubernetes-kms/security/hardening/><span class=doc-directory__title>Hardening</span>
-<span class=doc-directory__summary>Required and recommended hardening for bao-kms-provider deployments: OpenBao, plugin host, file permissions, auth material, logging, metrics, and Kubernetes-side.</span>
+<span class=doc-directory__summary>Required and recommended hardening for bao-kms-provider deployments: OpenBao, provider host, file permissions, auth material, logging, metrics, and Kubernetes-side.</span>
 </a><a class=doc-directory__item href=/openbao-kubernetes-kms/security/auth-model/><span class=doc-directory__title>Auth Model</span>
 <span class=doc-directory__summary>Authentication design for bao-kms-provider: JWT auth, certificate auth, token lifecycle, role constraints, local validation, and renewal considerations.</span>
 </a><a class=doc-directory__item href=/openbao-kubernetes-kms/security/aad-and-decrypt-validation/><span class=doc-directory__title>AAD And Decrypt Validation</span>
