@@ -54,7 +54,7 @@ Avoid:
 - internal shorthand such as "release gate", "support claim", or "evidence
   bundle" in operator-facing pages.
 
-The docs check rejects em dash characters in `docs/` and `README.md`. Use a
+The docs check rejects em dash characters in tracked first-party prose. Use a
 comma, period, parentheses, or rewrite the sentence.
 
 ## Page Structure
