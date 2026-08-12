@@ -5,6 +5,9 @@ server:
   socketGroup: openbao-kms-socket
   metricsAddress: "127.0.0.1:8081"
   healthAddress: "127.0.0.1:8082"
+  maxConcurrentStatus: 16
+  maxConcurrentEncrypt: 32
+  maxConcurrentDecrypt: 64
 openbao:
   address: https://bao.example.internal:8200
   namespace: ""

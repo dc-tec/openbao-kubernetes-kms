@@ -18,6 +18,9 @@ server:
   socketGroup: openbao-kms-socket
   metricsAddress: "127.0.0.1:8081"
   healthAddress: "127.0.0.1:8082"
+  maxConcurrentStatus: 16
+  maxConcurrentEncrypt: 32
+  maxConcurrentDecrypt: 64
 
 openbao:
   address: https://bao.example.internal:8200
@@ -129,6 +132,9 @@ is treated as identity-bearing provider scope.
 | `server.socketMode` | `"0660"` |
 | `server.metricsAddress` | `127.0.0.1:8081` |
 | `server.healthAddress` | `127.0.0.1:8082` |
+| `server.maxConcurrentStatus` | `16` |
+| `server.maxConcurrentEncrypt` | `32` |
+| `server.maxConcurrentDecrypt` | `64` |
 | `openbao.timeout` | `2s` |
 | `auth.method` | `jwt` |
 | `auth.loginBeforeTokenExpiry` | `5m` |
@@ -179,6 +185,13 @@ HTTP transport also uses fixed control-plane defaults for dial, TLS handshake,
 response-header, and idle-connection timeouts so failed or stalled connections
 are bounded in addition to the overall request deadline. These transport defaults
 are not configurable in the preview line.
+
+`server.maxConcurrentStatus`, `server.maxConcurrentEncrypt`, and
+`server.maxConcurrentDecrypt` limit active KMS handlers. The provider uses
+separate limits so one method cannot consume another method's capacity. A
+request above its method limit fails immediately with gRPC `ResourceExhausted`.
+The provider does not keep an internal request queue. Each value must be from 1
+through 1024.
 
 `auth.jwt.minRemainingTtl` controls how much JWT lifetime must remain before the provider will use a JWT for login. The JWT file is re-read before each re-login.
 

@@ -207,9 +207,12 @@ func startKMSV2Server(t *testing.T) (kmsapi.KeyManagementServiceClient, *fakes.K
 			KeyID:   active.KubernetesKeyID,
 			Active:  active,
 		}),
-		Registry:      registry,
-		Transit:       transit,
-		PluginVersion: conformancePluginVersion,
+		Registry:             registry,
+		Transit:              transit,
+		PluginVersion:        conformancePluginVersion,
+		MaxConcurrentStatus:  16,
+		MaxConcurrentEncrypt: 32,
+		MaxConcurrentDecrypt: 64,
 	})
 	if err != nil {
 		t.Fatalf("new KMS v2 server: %v", err)

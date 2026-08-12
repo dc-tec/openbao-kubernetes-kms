@@ -23,7 +23,10 @@ const configSchemaJSON = `{
         "socketMode": {"type": "string", "pattern": "^0[0-7]{3}$"},
         "socketGroup": {"type": "string", "minLength": 1},
         "metricsAddress": {"type": "string"},
-        "healthAddress": {"type": "string"}
+        "healthAddress": {"type": "string"},
+        "maxConcurrentStatus": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "maxConcurrentEncrypt": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "maxConcurrentDecrypt": {"type": "integer", "minimum": 1, "maximum": 1024}
       }
     },
     "openbao": {

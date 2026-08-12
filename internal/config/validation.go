@@ -26,6 +26,7 @@ const (
 	socketDisallowedMode     = os.FileMode(0o117)
 	maxDebugCorrelationTTL   = time.Hour
 	maxIncidentIDLength      = 64
+	maxConcurrentKMSRequests = 1024
 
 	authMethodJWT  = "jwt"
 	authMethodCert = "cert"
@@ -214,6 +215,9 @@ func validateValues(cfg Config) []ValidationProblem {
 	validateOpenBaoNamespace(&problems, cfg.OpenBao.Namespace)
 	validateAddress(&problems, "server.metricsAddress", cfg.Server.MetricsAddress)
 	validateAddress(&problems, "server.healthAddress", cfg.Server.HealthAddress)
+	validateConcurrencyLimit(&problems, "server.maxConcurrentStatus", cfg.Server.MaxConcurrentStatus)
+	validateConcurrencyLimit(&problems, "server.maxConcurrentEncrypt", cfg.Server.MaxConcurrentEncrypt)
+	validateConcurrencyLimit(&problems, "server.maxConcurrentDecrypt", cfg.Server.MaxConcurrentDecrypt)
 	validateAuthValues(&problems, cfg.Auth)
 	validateMountPath(&problems, "transit.mountPath", cfg.Transit.MountPath)
 	validateTransitKeyName(&problems, cfg.Transit.KeyName)
@@ -251,6 +255,12 @@ func validateValues(cfg Config) []ValidationProblem {
 	validateDebugCorrelation(&problems, cfg.Logging)
 
 	return problems
+}
+
+func validateConcurrencyLimit(problems *[]ValidationProblem, field string, value int) {
+	if value < 1 || value > maxConcurrentKMSRequests {
+		appendProblem(problems, field, "must be between 1 and 1024")
+	}
 }
 
 func validateAuthValues(problems *[]ValidationProblem, auth AuthConfig) {

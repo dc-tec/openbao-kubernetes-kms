@@ -84,6 +84,9 @@ func (c debugCorrelation) appendFields(attrs []slog.Attr) []slog.Attr {
 
 func (o observability) ObserveKMSRequest(ctx context.Context, obs kmsv2.RequestObservation) {
 	o.metrics.RecordGRPCRequest(obs.Method, obs.Status, obs.Duration)
+	if obs.ConcurrencyRejected {
+		o.metrics.RecordGRPCConcurrencyRejection(obs.Method)
+	}
 	if obs.PanicRecovered {
 		o.metrics.RecordPanicRecovery(obs.Method)
 	}

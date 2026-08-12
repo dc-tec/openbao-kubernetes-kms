@@ -183,6 +183,34 @@ func (c *authCollector) Collect(ch chan<- prometheus.Metric) {
 	)
 }
 
+type concurrencyCollector struct {
+	provider ConcurrencyProvider
+	inFlight *prometheus.Desc
+}
+
+func newConcurrencyCollector(provider ConcurrencyProvider) *concurrencyCollector {
+	return &concurrencyCollector{
+		provider: provider,
+		inFlight: prometheus.NewDesc(
+			"openbao_kms_grpc_in_flight",
+			"Current KMS v2 gRPC handler count by method.",
+			[]string{labelMethod},
+			nil,
+		),
+	}
+}
+
+func (c *concurrencyCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.inFlight
+}
+
+func (c *concurrencyCollector) Collect(ch chan<- prometheus.Metric) {
+	statusCount, encrypt, decrypt := c.provider.InFlightKMSRequests()
+	ch <- prometheus.MustNewConstMetric(c.inFlight, prometheus.GaugeValue, float64(statusCount), "status")
+	ch <- prometheus.MustNewConstMetric(c.inFlight, prometheus.GaugeValue, float64(encrypt), "encrypt")
+	ch <- prometheus.MustNewConstMetric(c.inFlight, prometheus.GaugeValue, float64(decrypt), "decrypt")
+}
+
 func nonNegativeSeconds(value time.Duration) float64 {
 	if value <= 0 {
 		return 0

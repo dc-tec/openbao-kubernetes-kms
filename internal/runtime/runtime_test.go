@@ -590,10 +590,13 @@ func mustKMSServerWithTransit(
 ) *kmsv2.Server {
 	t.Helper()
 	server, err := kmsv2.NewServer(kmsv2.Options{
-		StatusCache:   cache,
-		Registry:      registry,
-		Transit:       transit,
-		PluginVersion: pluginVersion,
+		StatusCache:          cache,
+		Registry:             registry,
+		Transit:              transit,
+		PluginVersion:        pluginVersion,
+		MaxConcurrentStatus:  16,
+		MaxConcurrentEncrypt: 32,
+		MaxConcurrentDecrypt: 64,
 	})
 	if err != nil {
 		t.Fatalf("kmsv2.NewServer: %v", err)
