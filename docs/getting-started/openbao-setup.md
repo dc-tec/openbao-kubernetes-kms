@@ -6,14 +6,18 @@ weight: 20
 
 # OpenBao Setup
 
-The provider expects an existing OpenBao deployment with the Transit secrets engine enabled, a single named key per Kubernetes cluster, a least-privilege policy, and one release-supported auth method for the host running the provider. This page lists the OpenBao-side commands in order. Run them as an OpenBao administrator before installing the provider; the static policy template in Step 4 is the bootstrap path before the provider binary and configuration file exist.
+Before installing the provider, provision OpenBao with the Transit secrets
+engine, one named key for each Kubernetes cluster, a least-privilege policy,
+and a release-supported host authentication method. Run the following commands
+in order as an OpenBao administrator. The static policy template in Step 4 is
+the bootstrap path before the provider binary and configuration file exist.
 
 ## Prerequisites
 
 - A reachable OpenBao instance (HTTPS endpoint, valid TLS).
 - An OpenBao token with administrative capabilities for `sys/`, `auth/`, and `transit/` paths.
 - A deterministic name for the Kubernetes Transit key. The naming convention used in this guide is `k8s-<workload>-etcd`. Replace `workload-a` with your environment-specific identifier in every example below.
-- A stable OpenBao instance ID and Transit mount ID for provider configuration. These are non-secret identity values used in Kubernetes `key_id` and AAD derivation.
+- A stable OpenBao instance ID and Transit mount ID for provider configuration. These are non-secret identity values used in Kubernetes `key_id` and additional authenticated data (AAD) derivation.
 - Optional: an OpenBao namespace for this Kubernetes cluster when a single OpenBao cluster serves multiple Kubernetes clusters. Configure it as `openbao.namespace`; auth and Transit paths in this guide remain relative to that namespace.
 
 For background on why each choice is made, see [Architecture: Transit Key Model](/architecture/transit-key-model/) and [Security: Auth Model](/security/auth-model/).
@@ -58,10 +62,14 @@ Recommended properties:
 | auto-rotate period | `0` (rotation is operator-driven) |
 
 For the current release line, `aes256-gcm96` is the only tested and supported
-key type. Other AEAD Transit key types need implementation, compatibility
-testing, and documentation before they can be supported.
+key type. Other authenticated encryption with associated data (AEAD) Transit
+key types need implementation, compatibility testing, and documentation before
+they can be supported.
 
-Once the key exists, do not enable `exportable` or `allow_plaintext_backup`: OpenBao treats both settings as irreversible once enabled. Keep `deletion_allowed=false` as well; unlike those two flags it is a tunable deletion guard, but enabling it permits catastrophic key deletion if a token also has delete capability.
+After creating the key, do not enable `exportable` or
+`allow_plaintext_backup`. OpenBao treats both settings as irreversible. Keep
+`deletion_allowed=false`. This setting is reversible, but enabling it permits
+key deletion when a token also has delete capability.
 
 ## Step 3: Capture The Key Lineage ID
 
@@ -86,7 +94,9 @@ The lineage ID is not a secret. It must be:
 - unique across deleted and recreated keys,
 - independent of the key name, mount path, OpenBao URL, or cluster name.
 
-An existing platform inventory ID or ULID can be used if it has the same properties. Do not derive the lineage ID from mutable topology strings.
+An existing platform inventory ID or Universally Unique Lexicographically
+Sortable Identifier (ULID) can be used if it has the same properties. Do not
+derive the lineage ID from mutable topology strings.
 
 If the Transit key is deleted and recreated, generate a new lineage ID and treat the event as a destructive migration. The provider uses this ID to reject decrypt requests carrying ciphertext from a different key generation.
 
@@ -156,7 +166,11 @@ For policy variants and rationale see [Reference: Transit Policy Examples](/refe
 
 ## Step 5: Configure JWT Auth
 
-JWT auth is the default preview build and release path. This getting-started path uses OIDC discovery for a concrete sequential setup. For JWKS, pinned local public keys, or PKCS#11 certificate auth variants, use [Reference: Transit Policy Examples](/reference/transit-policy-examples/) after this happy path is understood.
+JSON Web Token (JWT) auth is the default preview build and release path. This
+procedure uses OpenID Connect (OIDC) discovery. For a JSON Web Key Set (JWKS),
+pinned local public keys, or PKCS#11 certificate-auth variants, use [Reference:
+Transit Policy Examples](/reference/transit-policy-examples/) after completing
+this procedure.
 
 Enable JWT auth at a dedicated path:
 
@@ -172,7 +186,8 @@ bao write auth/k8s-workload-a-jwt/config \
   bound_issuer="https://issuer.example.internal"
 ```
 
-Create a role bound to the control-plane plugin identity:
+Create a role bound to the control-plane provider identity. The example uses a
+30-minute token time to live (TTL) and a one-hour maximum TTL:
 
 ```sh
 bao write auth/k8s-workload-a-jwt/role/openbao-kms-control-plane \
@@ -196,7 +211,12 @@ Recommended role constraints:
 - no default policy,
 - the narrow policy from Step 4.
 
-The provider reads JWTs from a host-mounted file. The JWT issuer should be reachable independently of the protected Kubernetes API server. Avoid using a Kubernetes ServiceAccount token from the same protected cluster as the only credential source. If that API server is unavailable, refreshing the token may be impossible during the recovery the provider is meant to support. See [Security: Auth Model](/security/auth-model/) for the trust-boundary discussion.
+The provider reads JWTs from a host-mounted file. For reliable recovery, use a
+JWT issuer that is reachable independently of the protected Kubernetes API
+server. Avoid using a Kubernetes ServiceAccount token from the same protected
+cluster as the only credential source. If that API server is unavailable, the
+provider might not be able to refresh the token during recovery. See [Security: Auth
+Model](/security/auth-model/) for the trust-boundary discussion.
 
 ## Step 6: Verify
 
@@ -220,7 +240,12 @@ bao-kms-provider verify-key \
   --config /etc/openbao-kms/config.yaml
 ```
 
-`verify-key` checks Transit metadata, key type, export settings, plaintext backup settings, deletion settings, and version restrictions. It is useful before changing API server encryption because it narrows OpenBao setup problems away from Kubernetes socket and API server wiring.
+The command must exit with status `0` and must not report a `[fail]` check.
+
+`verify-key` checks Transit metadata, key type, export settings, plaintext
+backup settings, deletion settings, and version restrictions. Run it before
+changing API server encryption to separate OpenBao setup problems from socket
+and API server wiring problems.
 
 ## Read Next
 

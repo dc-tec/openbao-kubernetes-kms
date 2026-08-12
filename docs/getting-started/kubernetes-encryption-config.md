@@ -6,13 +6,17 @@ weight: 40
 
 # Kubernetes Encryption Config
 
-This page covers the `EncryptionConfiguration` shape that the Kubernetes API server consumes, the API server flag wiring, and the initial migration of existing resources to KMS-encrypted storage. It assumes [Install](/getting-started/install/) is complete and `bao-kms-provider doctor` reports green on every control-plane node.
+Complete [Install](/getting-started/install/) and confirm that
+`bao-kms-provider doctor` succeeds on every control-plane node. Then configure
+the API server to consume `EncryptionConfiguration` and migrate existing
+resources to KMS-encrypted storage.
 
 ## Prerequisites
 
 - The provider is running on every control-plane node and exposes its Unix socket at the path documented in the provider configuration file.
 - `bao-kms-provider doctor` succeeds with the active configuration.
-- The Kubernetes API server has read access to its `EncryptionConfiguration` file, and the runtime user can connect to the provider socket through the `openbao-kms-socket` group (see [Deployment: Linux Identity Model](/deployment/linux-identity-model/)).
+- The Kubernetes API server has read access to its `EncryptionConfiguration` file.
+- The API server runtime user can connect to the provider socket through the `openbao-kms-socket` group (see [Deployment: Linux Identity Model](/deployment/linux-identity-model/)).
 
 ## Write The EncryptionConfiguration
 
@@ -42,10 +46,12 @@ Required values:
 | `providers[].kms.apiVersion` | Always `v2`. KMS v1 is not implemented. |
 | `name` | Identity-bearing. Must match `transit.keyIdScope.providerName` in the provider configuration. Do not change after encryption begins. |
 | `endpoint` | Must use the `unix://` scheme and match `server.socketPath` in the provider configuration. |
-| `timeout` | Start with `3s`. Tightening this value should follow benchmark and failure-mode testing; see [Reference: EncryptionConfiguration](/reference/encryption-config/). |
+| `timeout` | Start with `3s`. Tighten this value only after benchmark and failure-mode testing; see [Reference: EncryptionConfiguration](/reference/encryption-config/). |
 | `resources` | Start narrow (`secrets`). Common second step is to add `configmaps`. |
 
-CRDs can be encrypted with the same provider. Plan resource selection deliberately; size, read/write volume, and recovery impact all change as the encrypted set grows.
+Custom resource definitions (CRDs) can be encrypted with the same provider.
+Plan resource selection deliberately. Size, read and write volume, and recovery
+impact all change as the encrypted set grows.
 
 ## Configure The Kubernetes API Server
 
@@ -61,7 +67,11 @@ To enable in-place reload of the file when its contents change without restartin
 --encryption-provider-config-automatic-reload=true
 ```
 
-Reload is convenient, though the API server still depends on the provider being healthy at the moment a configuration change takes effect. A reload that introduces a misspelled provider name or an unreachable socket will surface as KMS Status failures and ultimately as encrypt or decrypt errors. Treat reload as a faster restart. The API server applies the new configuration immediately and surfaces errors at the next encrypt or decrypt call rather than during validation.
+The API server depends on a healthy provider when a configuration change takes
+effect. A misspelled provider name or unreachable socket causes KMS Status
+failures and then encrypt or decrypt errors. Treat reload as a faster restart.
+The API server applies the new configuration immediately. It reports errors on
+the next encrypt or decrypt call, not while validating the file.
 
 ## Restart Or Reload The API Server
 
@@ -80,11 +90,18 @@ After the API server has the new configuration:
      -o jsonpath='{.data.value}' | base64 -d
    ```
 
-End-to-end encryption verification (etcd inspection, key_id stability, AAD shape) belongs to the next page; see [First Encrypt](/getting-started/first-encrypt/).
+   Expected output: `probe`.
+
+End-to-end encryption verification, including etcd inspection, `key_id`
+stability, and additional authenticated data (AAD) shape, belongs to the next
+page. See [First Encrypt](/getting-started/first-encrypt/).
 
 ## Migrate Existing Resources
 
-Kubernetes encryption applies on write. Existing objects are not rewritten when the configuration changes. The first time the provider is enabled on an existing cluster, every targeted resource must be rewritten so its etcd payload is replaced with KMS-encrypted ciphertext.
+Kubernetes encryption applies on write. Existing objects are not rewritten when
+the configuration changes. When enabling the provider on an existing cluster,
+rewrite every targeted resource to replace its etcd payload with KMS-encrypted
+ciphertext.
 
 For Secrets:
 

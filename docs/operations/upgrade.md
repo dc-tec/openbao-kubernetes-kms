@@ -6,7 +6,9 @@ weight: 30
 
 # Upgrade
 
-This runbook covers upgrading `bao-kms-provider` across a control-plane fleet. Provider upgrades are operational events on the API server boot path, so they follow a one-node-at-a-time pattern with explicit verification between nodes.
+Upgrade `bao-kms-provider` one control-plane node at a time. Each provider is
+on the API server boot path, so verify the KMS path before continuing to the
+next node.
 
 For wire-format compatibility expectations and the upgrade-window history, see [Reference: Release Policy](/reference/release-policy/) and [Reference: Compatibility](/reference/compatibility/).
 
@@ -17,27 +19,29 @@ Verify:
 - the new binary or image is fetched and verified per [Install: Verify Release Artifacts](/getting-started/install/#verify-release-artifacts),
 - the cluster is not mid-rotation (check `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`),
 - OpenBao is healthy and the configured auth credentials on every node are valid,
-- the existing plugin reports a stable `key_id` hash on every control-plane node,
+- the existing provider reports a stable `key_id` hash on every control-plane node,
 - `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` passes,
 - the previous binary or image is still available on every node in case of rollback.
 
 Record:
 
-- current plugin version,
+- current provider version,
 - current Kubernetes `key_id` hash,
 - current Transit key version,
 - wire-format expectations from the new release notes.
 
 ## Upgrade Procedure
 
-Upgrade one control-plane node at a time. Do not upgrade all plugin instances simultaneously unless the cluster is in a controlled maintenance window and OpenBao and API server recovery has been tested.
+Upgrade one control-plane node at a time. Do not upgrade all provider instances
+simultaneously unless the cluster is in a controlled maintenance window and
+OpenBao and API server recovery has been tested.
 
 For each node:
 
 1. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` with the new binary or image. Resolve any failed checks before continuing.
-2. Stop the plugin on the target node.
+2. Stop the provider on the target node.
 3. Replace the binary or image with the new version.
-4. Start the plugin.
+4. Start the provider.
 5. Verify KMS Status and the active `key_id` hash:
 
    ```sh
@@ -54,7 +58,10 @@ After every node has been upgraded, confirm the metric `openbao_kms_status_key_i
 
 ## Rollback
 
-Rollback is safe only when the older version understands every active `key_id`, annotation, and AAD format currently present in etcd. Mixed wire formats during rollback can produce unknown-`key_id` decrypt errors.
+Rollback is safe only when the older version understands every active `key_id`,
+annotation, and additional authenticated data (AAD) format currently present in
+etcd. Mixed wire formats during rollback can produce unknown-`key_id` decrypt
+errors.
 
 Before rolling back:
 
@@ -64,23 +71,26 @@ Before rolling back:
 
 For each node:
 
-1. Stop the plugin on the target node.
+1. Stop the provider on the target node.
 2. Replace the binary or image with the previous version.
 3. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` with the previous version.
-4. Start the plugin.
+4. Start the provider.
 5. Verify Status and the `key_id` hash match the rest of the fleet.
 6. Restart the API server only if required.
 
 If rollback produces unknown-`key_id` errors, return to the newer version and investigate per [Operations: Troubleshooting](/operations/troubleshooting/#unknown-key-id).
 
-For systemd deployments, rollback means replacing the host binary or package and restarting `bao-kms-provider.service`. For static-pod deployments, rollback means restoring the previous image digest in the manifest and verifying that image is already present or pullable on the node.
+For systemd deployments, replace the host binary or package and restart
+`bao-kms-provider.service`. For static-pod deployments, restore the previous
+image digest in the manifest. Confirm that the image is present or pullable on
+the node.
 
 ## When Not To Upgrade
 
 Defer the upgrade if:
 
 - a Transit key rotation is in progress or pending stability,
-- OpenBao is in an HA failover or restore window,
+- OpenBao is in a high availability (HA) failover or restore window,
 - the new release notes call out wire-format changes and storage migration has not been planned,
 - backup and restore drills have not been completed for the current release.
 

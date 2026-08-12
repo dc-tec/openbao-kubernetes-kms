@@ -1,12 +1,15 @@
 ---
 title: "Troubleshooting"
-description: "Symptom-driven recovery for common bao-kms-provider failures: socket connectivity, OpenBao auth, Transit key issues, key_id and AAD validation, identity fallback, static pod problems."
+description: "Symptom-driven recovery for common bao-kms-provider failures: socket connectivity, OpenBao auth, Transit key issues, key_id and additional authenticated data validation, identity fallback, static pod problems."
 weight: 40
 ---
 
 # Troubleshooting
 
-This page maps common symptoms to likely causes and recovery steps. For the comprehensive failure-mode catalog with detection signals, mitigations, and impact analysis, see [Architecture: Failure Modes](/architecture/failure-modes/).
+Use the symptom sections below to identify the failing layer before changing
+configuration or recovery state. For the full failure-mode catalog, detection
+signals, mitigations, and impact analysis, see [Architecture: Failure
+Modes](/architecture/failure-modes/).
 
 Start with the least destructive checks:
 
@@ -19,6 +22,10 @@ bao-kms-provider doctor \
   --encryption-config /etc/kubernetes/encryption-config.yaml
 ```
 
+In a healthy baseline, each `curl` command exits with status `0`, the metric
+query returns the active `key_id` hash and cache age, and `doctor` does not
+report a `[fail]` check.
+
 Do not change identity-bearing fields, recreate Transit keys, or change Kubernetes encryption configuration until the failing layer is known.
 
 ## API Server Cannot Connect To KMS
@@ -27,7 +34,7 @@ Symptoms:
 
 - `kube-apiserver` logs mention KMS endpoint connection failure,
 - `/run/openbao-kms/kms.sock` is missing,
-- the plugin service or static pod is not running.
+- the provider service or static pod is not running.
 
 Check:
 
@@ -43,7 +50,7 @@ Use the systemd command for host-service deployments. Use kubelet and container-
 
 Recovery:
 
-1. Start or restart the plugin.
+1. Start or restart the provider.
 2. Fix socket directory ownership and mode (see [Deployment: Linux Identity Model](/deployment/linux-identity-model/)).
 3. Confirm the API server endpoint path matches `server.socketPath` in the provider configuration.
 4. Restart `kube-apiserver` if it does not reconnect.
@@ -54,7 +61,7 @@ Symptoms:
 
 - the socket exists,
 - `kube-apiserver` cannot connect,
-- permission denied errors appear in API server or plugin logs.
+- permission denied errors appear in API server or provider logs.
 
 Check:
 
@@ -68,16 +75,16 @@ Recovery:
 
 1. Ensure the API server runtime identity is a member of `openbao-kms-socket`.
 2. Set the runtime directory group to `openbao-kms-socket` and mode `2750`.
-3. In static-pod mode, ensure the numeric socket group GID matches `spec.securityContext.supplementalGroups` and `server.socketGroup`.
+3. In static-pod mode, ensure the numeric socket group ID (GID) matches `spec.securityContext.supplementalGroups` and `server.socketGroup`.
 4. Set the socket mode to `0660`.
-5. Restart the plugin.
+5. Restart the provider.
 6. Restart `kube-apiserver` if it does not reconnect.
 
 ## OpenBao Unavailable Or Sealed
 
 Symptoms:
 
-- plugin `/ready` returns non-200,
+- provider `/ready` returns non-200,
 - KMS Status is unhealthy,
 - OpenBao request errors appear in metrics,
 - decrypt or encrypt operations time out.
@@ -96,13 +103,13 @@ Recovery:
 2. Unseal or repair OpenBao.
 3. Verify TLS and DNS.
 4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
-5. Restart the plugin only if it does not recover on its own after OpenBao is healthy.
+5. Restart the provider only if it does not recover on its own after OpenBao is healthy.
 
 ## Transit Profile Fails Closed
 
 Symptoms:
 
-- plugin `/ready` returns non-200,
+- provider `/ready` returns non-200,
 - KMS Status is unhealthy,
 - `doctor` or `verify-key` reports `transit.profile` failure,
 - API server writes fail while existing reads may continue from cache.
@@ -133,16 +140,16 @@ can also make API server writes unavailable until OpenBao metadata is repaired.
 
 Symptoms:
 
-- OpenBao auth errors appear in plugin logs,
-- plugin `/ready` returns non-200,
+- OpenBao auth errors appear in provider logs,
+- provider `/ready` returns non-200,
 - token refresh failures.
 
 Check:
 
-- for JWT auth, the JWT file exists and is readable by the plugin process,
+- for JSON Web Token (JWT) auth, the JWT file exists and is readable by the provider process,
 - for JWT auth, the JWT `exp` claim is not near expiry,
 - for JWT auth, `iss`, `aud`, and `sub` claims match the OpenBao role configuration,
-- for JWT auth, OpenBao has the current signing keys through JWKS, OIDC discovery, or pinned public keys,
+- for JWT auth, OpenBao has the current signing keys through a JSON Web Key Set (JWKS), OpenID Connect (OIDC) discovery, or pinned public keys,
 - for certificate auth, the OpenBao listener requests client certificates,
 - for certificate auth, the certificate is not expired, has client-auth usage, and matches the configured role constraints,
 - for PKCS#11 auth, the module path, token label, key label, and PIN file are correct,
@@ -153,7 +160,7 @@ Recovery:
 1. Replace or restore the configured auth material.
 2. Fix OpenBao auth role constraints if they are wrong.
 3. Fix issuer, JWKS, OIDC discovery, certificate authority, or PKCS#11 reachability.
-4. Restart the plugin if the current in-memory token does not recover. The provider re-reads auth material before re-login.
+4. Restart the provider if the current in-memory token does not recover. The provider re-reads auth material before re-login.
 
 ## Transit Key Missing
 
@@ -195,7 +202,7 @@ Recovery:
 1. Restore the original identity-bearing configuration; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
 2. Restore the key registry state file and checkpoint if they were lost.
 3. Verify active and historical key snapshots are present.
-4. Restart the plugin.
+4. Restart the provider.
 5. Retry the Kubernetes read.
 
 After Transit rotation, current preview releases do not support synthesizing
@@ -278,6 +285,8 @@ closed to avoid advertising a registry that might not decrypt Kubernetes data.
 
 ## AAD Mismatch
 
+AAD means additional authenticated data in this runbook.
+
 Symptoms:
 
 - decrypt rejects the object with an AAD error,
@@ -301,7 +310,7 @@ Recovery:
 
 Symptoms:
 
-- the API server marks the plugin unhealthy,
+- the API server marks the provider unhealthy,
 - encrypt responses are discarded by the API server,
 - KMS v2 conformance tests fail.
 
@@ -309,16 +318,16 @@ Likely causes:
 
 - a race in active key snapshot handling,
 - a rotation promotion bug,
-- multiple plugin instances running with inconsistent configuration,
+- multiple provider instances running with inconsistent configuration,
 - Transit metadata observed inconsistently between probes.
 
 Recovery:
 
 1. Stop any in-progress rotation; see [Operations: Rotation](/operations/rotation/).
 2. Compare configuration on every control-plane node.
-3. Compare plugin versions across nodes.
-4. Restart the affected plugin instance.
-5. Roll back the plugin only if the older version supports the current `key_id` and AAD formats.
+3. Compare provider versions across nodes.
+4. Restart the affected provider instance.
+5. Roll back the provider only if the older version supports the current `key_id` and AAD formats.
 
 ## min_decryption_version Raised Too Early
 
@@ -345,7 +354,7 @@ metadata only.
 
 Symptoms:
 
-- kubelet cannot start the plugin static pod,
+- kubelet cannot start the provider static pod,
 - image pull errors appear in kubelet logs,
 - the socket is missing.
 

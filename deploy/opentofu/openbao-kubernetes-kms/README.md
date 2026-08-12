@@ -1,6 +1,7 @@
 # OpenTofu Module Skeleton
 
-This module skeleton configures the OpenBao-side primitives required by `bao-kms-provider`:
+This module skeleton configures the OpenBao resources required by
+`bao-kms-provider`:
 
 - Transit secrets engine mount,
 - Transit key with safe Kubernetes KMS defaults,
@@ -8,9 +9,13 @@ This module skeleton configures the OpenBao-side primitives required by `bao-kms
 - least-privilege OpenBao policy for the provider token, including `doctor`
   capability checks and optional token renewal.
 
-It intentionally does not render provider config files, render Kubernetes `EncryptionConfiguration`, configure provider auth roles, rotate Transit keys, or publish Kubernetes API objects.
+The module does not render provider configuration files or Kubernetes
+`EncryptionConfiguration`. It also does not configure provider authentication
+roles, rotate Transit keys, or publish Kubernetes API objects.
 
-The module uses OpenTofu `.tofu` files and the Vault-compatible provider. Configure the provider in the calling stack for your OpenBao address, token, CA bundle, and namespace.
+The module uses OpenTofu `.tofu` files and the Vault-compatible provider.
+Configure the provider in the calling stack with the OpenBao address, token,
+certificate authority (CA) bundle, and namespace.
 
 Example:
 
@@ -41,4 +46,8 @@ Outputs:
 - `provider_policy_name`
 - `provider_policy_hcl`
 
-`deletion_allowed`, `exportable`, `allow_plaintext_backup`, `derived`, `convergent_encryption`, and `auto_rotate_period` are fixed to safe values. Destroying the module should not be treated as a key deletion path; Transit key deletion is intentionally blocked by OpenBao unless an operator performs a separate break-glass change.
+The module fixes `deletion_allowed`, `exportable`, `allow_plaintext_backup`,
+`derived`, `convergent_encryption`, and `auto_rotate_period` instead of exposing
+them as inputs. Destroying the module does not provide a key-deletion path.
+OpenBao blocks Transit key deletion unless an operator first performs a separate
+break-glass change.

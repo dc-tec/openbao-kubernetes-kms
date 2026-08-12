@@ -6,9 +6,11 @@ weight: 50
 
 # First Encrypt
 
-This page validates that the `bao-kms-provider` path is working end to end after the previous getting-started steps. It confirms the Kubernetes API server is encrypting selected resources through the provider, that ciphertext lands in etcd in the expected shape, and that the provider's own signals are healthy.
-
-It assumes the provider is running, [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) has been written, and the API server has reloaded or restarted.
+Run this end-to-end validation after the provider is running, [Kubernetes
+Encryption Config](/getting-started/kubernetes-encryption-config/) is complete,
+and the API server has reloaded or restarted. The checks confirm that the API
+server encrypts selected resources through the provider, stores ciphertext in
+etcd, and receives healthy provider signals.
 
 ## Step 1: Create A Probe Secret
 
@@ -30,7 +32,9 @@ Expected output: `probe-do-not-store-plaintext`. If the read fails, check the AP
 
 ## Step 2: Confirm The Stored Value Is Encrypted
 
-This step requires direct access to etcd on a control-plane node, plus the PKI material the API server uses to talk to etcd. Run it only from a controlled administrative environment.
+This step requires direct access to etcd on a control-plane node and the public
+key infrastructure (PKI) material that the API server uses to connect to etcd.
+Run it only from a controlled administrative environment.
 
 ```sh
 ETCDCTL_API=3 etcdctl \
@@ -42,7 +46,7 @@ ETCDCTL_API=3 etcdctl \
   -w fields | head
 ```
 
-The value field should begin with the KMS v2 envelope prefix:
+The value field begins with the KMS v2 envelope prefix:
 
 ```text
 k8s:enc:kms:v2:openbao-kms-workload-a:
@@ -54,7 +58,10 @@ Do not store etcd output in logs or untrusted shells. Do not run this inspection
 
 ## Step 3: Confirm The Provider Signals Are Healthy
 
-The provider exposes health endpoints and Prometheus metrics on the addresses configured in `config.yaml`. The commands below use the default addresses: `server.healthAddress` on `127.0.0.1:8082` and `server.metricsAddress` on `127.0.0.1:8081`.
+The provider exposes health endpoints and Prometheus metrics on the addresses
+configured in `config.yaml`. The commands below use the default addresses:
+`server.healthAddress` on `127.0.0.1:8082` and `server.metricsAddress` on
+`127.0.0.1:8081`.
 
 Check liveness and readiness:
 
@@ -63,7 +70,11 @@ curl -sf http://127.0.0.1:8082/live
 curl -sf http://127.0.0.1:8082/ready
 ```
 
-Both endpoints should return HTTP 200. `/ready` reports OpenBao reachability, auth validity, Transit metadata freshness, active key snapshot availability, and cached KMS Status freshness. A non-200 response on `/ready` is the first signal that something is wrong even when kubectl reads still succeed against the API server cache.
+Both commands exit with status `0`, which confirms that both endpoints return
+HTTP 200. `/ready` reports OpenBao reachability, auth validity, Transit metadata
+freshness, active key snapshot availability, and cached KMS Status freshness.
+A non-200 response on `/ready` can precede read failures because the API server
+can still serve cached data.
 
 Confirm key_id stability through the metric:
 
@@ -85,7 +96,10 @@ Confirm encrypt and decrypt are landing on the provider:
 curl -sf http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_grpc_requests_total\{method="(encrypt|decrypt)"'
 ```
 
-The encrypt counter should increase when the probe Secret is written. The decrypt counter may not increase on every read because the Kubernetes API server can serve some reads from cache. After API server restart or cold-cache reads, decrypt counters should reflect real provider traffic.
+The encrypt counter increases when the probe Secret is written. The decrypt
+counter might not increase on every read because the Kubernetes API server can
+serve some reads from cache. An API server restart or cold-cache read causes
+decrypt traffic to reach the provider.
 
 For the full metric and log catalog see [Reference: Observability](/reference/observability/) and [Reference: Metrics](/reference/metrics/).
 
@@ -111,4 +125,4 @@ After this page:
 
 1. [Operations: Rotation](/operations/rotation/) once the encryption layer is in steady state.
 2. [Operations: Disaster Recovery](/operations/disaster-recovery/) to plan recovery posture before relying on the provider in production.
-3. [Reference: Key ID And AAD](/reference/key-id-and-aad/) for the full key_id format and AAD envelope.
+3. [Reference: Key ID And AAD](/reference/key-id-and-aad/) for the full `key_id` format and additional authenticated data (AAD) envelope.

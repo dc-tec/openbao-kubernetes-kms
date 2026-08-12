@@ -6,11 +6,19 @@ weight: 10
 
 # Rotation
 
-This runbook covers OpenBao Transit key rotation for `bao-kms-provider`. Transit key rotation and Kubernetes storage migration are separate operations. The plugin observes Transit key versions and exposes a new Kubernetes `key_id` only after the rotation state machine decides the new version is stable. Operators rewrite Kubernetes resources so old encrypted data is updated.
+OpenBao Transit key rotation and Kubernetes storage migration are separate
+operations. The provider observes Transit key versions and exposes a new
+Kubernetes `key_id` only after the rotation state machine determines that the
+new version is stable. Operators then rewrite Kubernetes resources to update
+data encrypted with old versions.
 
 For the design rationale behind the rotation state machine, including the flip-flop guards and observation thresholds, see [Architecture: Rotation Model](/architecture/rotation-model/).
 
-Rotation changes the active Transit version under an existing Transit key. It must not change the provider name, cluster ID, OpenBao instance ID, Transit mount ID, key lineage ID, mount path, or key name. Those fields are identity-bearing and changing them requires a migration plan; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+Rotation changes the active Transit version under an existing Transit key. It
+must not change the provider name, cluster ID, OpenBao instance ID, Transit
+mount ID, key lineage ID, mount path, or key name. These fields are
+identity-bearing. Changing one requires a migration plan; see [Configuration:
+Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
 
 ## Preview Boundary
 
@@ -29,7 +37,7 @@ Verify:
 
 - OpenBao backup is current.
 - etcd backup is current.
-- The plugin is healthy on every control-plane node.
+- The provider is healthy on every control-plane node.
 - All nodes report the same active `key_id` hash.
 - `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` passes on every control-plane node.
 - No `identity` fallback remains unexpectedly in the API server `EncryptionConfiguration`.
@@ -41,7 +49,7 @@ Record:
 - the current Transit key version,
 - the OpenBao backup ID,
 - the etcd backup ID,
-- the plugin version,
+- the provider version,
 - the control-plane node list.
 
 ## Rotate The Transit Key
@@ -52,16 +60,18 @@ Rotation is performed by an operator with OpenBao administrative rights:
 bao write -f transit/keys/k8s-workload-a-etcd/rotate
 ```
 
-The plugin token must not have rotate permission. The provisioned policy excludes this capability by design; see [Reference: Transit Policy Examples](/reference/transit-policy-examples/).
+The provider token must not have rotate permission. The provisioned policy
+excludes this capability by design; see [Reference: Transit Policy
+Examples](/reference/transit-policy-examples/).
 
 ## Observe Promotion
 
 After rotation:
 
-1. The plugin background probe observes the new Transit latest version.
-2. The plugin waits for `rotation.requireStableObservationCount` successful observations.
-3. The plugin waits `rotation.activationDelay`.
-4. The plugin promotes a new active key snapshot.
+1. The provider background probe observes the new Transit latest version.
+2. The provider waits for `rotation.requireStableObservationCount` successful observations.
+3. The provider waits `rotation.activationDelay`.
+4. The provider promotes a new active key snapshot.
 5. KMS `Status.key_id` changes.
 6. New encrypt operations use the explicit Transit `key_version` for the new version.
 
@@ -148,15 +158,18 @@ Do not raise OpenBao `min_decryption_version` until:
 prove that old ciphertext no longer exists in Kubernetes, etcd snapshots, or
 retained backups.
 
-Raising `min_decryption_version` too early can make old Kubernetes data unreadable even when the Transit key still exists. Lowering the value may help only when the old key version still exists and policy allows it. Treat this as an emergency recovery step, not a rollback plan.
+Raising `min_decryption_version` too early can make old Kubernetes data
+unreadable even when the Transit key still exists. Lowering the value may help
+only when the old key version still exists and policy allows it. Treat this as
+an emergency recovery step, not a rollback plan.
 
 ## Rollback
 
 If new encrypt or decrypt behavior fails before migration completes:
 
-1. Stop promotion by restoring the previous known-good plugin configuration and version if the rotation state machine has not yet activated the new version.
+1. Stop promotion by restoring the previous known-good provider configuration and version if the rotation state machine has not yet activated the new version.
 2. Keep old Transit key versions decryptable. Do not raise `min_decryption_version`.
-3. Restore the previous plugin version and configuration if the failure is plugin-related.
+3. Restore the previous provider version and configuration if the failure is provider-related.
 4. Do not delete the new Transit version.
 5. Do not recreate the Transit key.
 6. Use `doctor`, `rotation-plan`, and the metric catalog in [Reference: Observability](/reference/observability/) to identify the failing layer.
@@ -171,7 +184,7 @@ Abort rotation and consult [Operations: Troubleshooting](/operations/troubleshoo
 - Status flips old to new to old,
 - a back-to-back Transit rotation occurs before every node converges,
 - unknown `key_id` decrypt errors appear in metrics or logs,
-- AAD mismatch errors appear,
+- additional authenticated data (AAD) mismatch errors appear,
 - OpenBao metadata reads are inconsistent or missing intermediate Transit
   version creation metadata,
 - `min_decryption_version` was changed unexpectedly,

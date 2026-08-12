@@ -6,7 +6,11 @@ weight: 10
 
 # Overview
 
-`bao-kms-provider` is a Kubernetes KMS v2 provider plugin. It terminates the KMS v2 gRPC protocol on a local Unix domain socket and uses OpenBao Transit over HTTPS to wrap and unwrap Kubernetes storage keys. Kubernetes uses the plugin to envelope-encrypt selected API resources before those objects are persisted to etcd.
+`bao-kms-provider` is a Kubernetes Key Management Service (KMS) v2 provider
+plugin. It terminates the KMS v2 gRPC protocol on a local Unix domain socket
+and uses OpenBao Transit over HTTPS to wrap and unwrap Kubernetes storage keys.
+Kubernetes uses the provider to envelope-encrypt selected API resources before
+those objects are persisted to etcd.
 
 ## Component Picture
 
@@ -16,22 +20,26 @@ The provider sits on each control-plane host between `kube-apiserver` and OpenBa
 flowchart LR
     API["kube-apiserver"]
     Socket["local Unix domain socket"]
-    Plugin["bao-kms-provider"]
-    Auth["OpenBao auth<br/>JWT or scoped cert auth"]
+    Provider["bao-kms-provider"]
+    Auth["OpenBao auth<br/>JSON Web Token (JWT) or scoped cert auth"]
     Transit["OpenBao Transit wrap/unwrap"]
     Etcd["etcd"]
 
-    API --> Socket --> Plugin --> Auth --> Transit
+    API --> Socket --> Provider --> Auth --> Transit
     API --> Etcd
 ```
 
-The plugin runs on the same host as the Kubernetes API server. The tested
-preview deployment models are node-local systemd and static pod. The plugin
+The provider runs on the same host as the Kubernetes API server. The tested
+preview deployment models are node-local systemd and static pod. The provider
 does not depend on the protected Kubernetes API server to operate.
 
 ## What It Encrypts
 
-The provider participates in Kubernetes envelope encryption for selected API resources at the storage layer. The Kubernetes API server reads its `EncryptionConfiguration`, identifies which API resources are subject to encryption, and asks the provider to wrap the data encryption key (DEK) used to seal each object before the ciphertext is written to etcd.
+The provider participates in Kubernetes envelope encryption for selected API
+resources at the storage layer. The API server reads its
+`EncryptionConfiguration` and identifies which resources require encryption.
+It then asks the provider to wrap the data encryption key (DEK) used to seal
+each object before writing the ciphertext to etcd.
 
 The provider does not encrypt:
 
@@ -42,11 +50,24 @@ The provider does not encrypt:
 
 For threats outside this scope, see [Threat Model](/security/threat-model/).
 
-## Why This Plugin Exists
+<a id="why-this-plugin-exists"></a>
 
-OpenBao Transit can encrypt and decrypt caller-supplied data. OpenBao itself does not implement the Kubernetes KMS gRPC protocol. The Kubernetes API server expects a local KMS provider plugin reachable over a Unix domain socket; it does not call OpenBao Transit directly. `bao-kms-provider` adapts the two protocols and adds the Kubernetes-specific correctness rules around `key_id` stability, AAD binding, decrypt validation, and rotation behavior.
+## Why This Provider Exists
 
-The plugin sits in the Kubernetes API server boot path. Kubernetes documents that startup can drive thousands of decrypt operations against the KMS plugin. If the plugin, its socket, the auth credential, the OpenBao service, or the Transit key is unavailable, the API server may be unable to decrypt previously encrypted resources. Treat the provider as control-plane critical infrastructure.
+OpenBao Transit can encrypt and decrypt caller-supplied data. OpenBao itself
+does not implement the Kubernetes KMS gRPC protocol. The Kubernetes API server
+expects a local KMS provider plugin reachable over a Unix domain socket; it
+does not call OpenBao Transit directly. `bao-kms-provider` adapts the two
+protocols and adds Kubernetes-specific correctness rules for `key_id`
+stability, additional authenticated data (AAD) binding, decrypt validation,
+and rotation.
+
+The provider sits in the Kubernetes API server boot path. Kubernetes documents
+that startup can drive thousands of decrypt operations against the KMS
+provider plugin. If the provider, its socket, the auth credential, the OpenBao
+service, or the Transit key is unavailable, the API server may be unable to
+decrypt previously encrypted resources. Treat the provider as control-plane
+critical infrastructure.
 
 ## Tested Preview Scope
 
@@ -57,7 +78,10 @@ is available. Kubernetes `1.29+` KMS v2 clusters may work, but unlisted versions
 are not part of the tested preview matrix. KMS v2 is
 the only supported Kubernetes KMS API; KMS v1 is not implemented.
 
-The current OpenBao validation target is OpenBao `2.6.0` with the Transit secrets engine using `aes256-gcm96` keys. See [Compatibility](/reference/compatibility/) for the full supported version envelope and the upgrade discipline applied to this matrix.
+The current OpenBao validation target is OpenBao `2.6.0` with the Transit
+secrets engine using `aes256-gcm96` keys. See
+[Compatibility](/reference/compatibility/) for the full supported version
+envelope and upgrade rules for this matrix.
 
 ## Defaults And Boundaries
 
@@ -84,7 +108,7 @@ Use these defaults unless your platform has a documented reason to diverge:
 - Use one named Transit key per Kubernetes cluster or trust domain.
 - Use `aes256-gcm96` Transit keys for the supported path.
 - Keep Transit key export, plaintext backup, and deletion disabled.
-- Keep Transit key creation and rotation outside the plugin, through platform automation or an OpenBao administrator workflow.
+- Keep Transit key creation and rotation outside the provider, through platform automation or an OpenBao administrator workflow.
 - Generate and store a non-secret key lineage ID when each Transit key is created.
 - Prefer systemd when you control the host operating-system lifecycle.
 - Use static pods for kubeadm-style control planes only when image preload, hostPath preparation, and node-local provider identity are operationally controlled.
@@ -99,7 +123,7 @@ captured results.
 The current release line does not include:
 
 - Encrypting raw etcd disk blocks, node filesystems, or application volumes.
-- Creating, rotating, exporting, deleting, or backing up Transit keys from the plugin.
+- Creating, rotating, exporting, deleting, or backing up Transit keys from the provider.
 - Using OpenBao Transit datakey generation for the primary encrypt path.
 - Convergent encryption.
 - Legacy KMS v1.

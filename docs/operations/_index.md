@@ -13,7 +13,18 @@ browse:
 
 These pages answer task-based operator questions. Use them when you already know where you are in the lifecycle and need the next safe step.
 
-The runbooks assume `bao-kms-provider` is already installed on each control-plane node, OpenBao Transit is provisioned, and the Kubernetes API server uses a matching `EncryptionConfiguration`. Before changing rotation, recovery, or upgrade state, run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml`.
+The runbooks assume that `bao-kms-provider` is installed on each control-plane
+node, OpenBao Transit is provisioned, and the Kubernetes API server uses a
+matching `EncryptionConfiguration`. Before changing rotation, recovery, or
+upgrade state, run:
+
+```sh
+bao-kms-provider doctor \
+  --config /etc/openbao-kms/config.yaml \
+  --encryption-config /etc/kubernetes/encryption-config.yaml
+```
+
+The command must exit with status `0` and must not report a `[fail]` check.
 
 ## Workflows
 

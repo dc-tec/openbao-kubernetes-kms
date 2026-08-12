@@ -6,7 +6,10 @@ weight: 40
 
 # Linux Identity Model
 
-This page captures the user, group, file ownership, and runtime directory model shared by systemd and static-pod deployments. The API server must be able to connect to the provider socket. It must not gain access to provider auth material or writable provider state through that socket access path.
+The systemd and static-pod deployments share one user, group, file ownership,
+and runtime directory model. The API server must be able to connect to the
+provider socket. This access path must not grant access to provider auth
+material or writable provider state.
 
 ## Goals
 
@@ -25,7 +28,9 @@ group:        openbao-kms
 socket group: openbao-kms-socket
 ```
 
-Package installs create these identities through `sysusers.d` where available. Host images without `sysusers.d` support should create equivalent system users and groups during image build or configuration management.
+Package installs create these identities through `sysusers.d` where available.
+Host images without `sysusers.d` support must create equivalent system users
+and groups during image build or configuration management.
 
 Permissions:
 
@@ -45,7 +50,7 @@ Access matrix:
 
 | Actor | Required access | Must not have |
 |---|---|---|
-| `bao-kms-provider` process | read config, CA, selected auth material; write local registry state; create and own `kms.sock` | broad host write access or Linux capabilities |
+| `bao-kms-provider` process | read config, certificate authority (CA) bundle, and selected auth material; write local registry state; create and own `kms.sock` | broad host write access or Linux capabilities |
 | `kube-apiserver` process | connect to `/run/openbao-kms/kms.sock` | read access to provider auth material |
 | OpenBao administrator | manage Transit key, policy, and provider auth | access to Kubernetes etcd plaintext through this model |
 | package manager or host automation | create users, groups, directories, unit files, and examples | runtime access to provider token material after rollout |
@@ -58,9 +63,11 @@ Group=openbao-kms
 SupplementaryGroups=openbao-kms-socket
 ```
 
-The local `kube-apiserver` identity should be allowed to connect through the socket group. On hosts where `kube-apiserver` runs as root, root can connect regardless. The group model still provides a non-root packaging path.
+Allow the local `kube-apiserver` identity to connect through the socket group.
+On hosts where `kube-apiserver` runs as root, root can connect regardless. The
+group model still provides a non-root packaging path.
 
-Static pod mode uses the numeric host GID for `openbao-kms-socket` in both:
+Static pod mode uses the numeric host group ID (GID) for `openbao-kms-socket` in both:
 
 - `spec.securityContext.supplementalGroups`,
 - `server.socketGroup` in provider configuration.
@@ -77,7 +84,9 @@ The third field in the output is the value used in both the pod manifest and sta
 
 ## Runtime Directory Creation
 
-`RuntimeDirectory=` alone may create `/run/openbao-kms` with the service primary group rather than the socket access group. Packaging should prefer one of:
+`RuntimeDirectory=` alone may create `/run/openbao-kms` with the service primary
+group rather than the socket access group. Prefer one of these packaging
+methods:
 
 - a `tmpfiles.d` entry that creates `/run/openbao-kms` with `openbao-kms:openbao-kms-socket` and mode `2750`,
 - a privileged package install step that creates the directory before service start,

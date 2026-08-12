@@ -8,7 +8,10 @@ weight: 20
 
 OpenBao Transit key material and Kubernetes etcd data must be recoverable as a compatible pair.
 
-If etcd contains objects encrypted with a Transit key version that no longer exists or is no longer decryptable, Kubernetes may be unable to read those objects. Adding `identity` fallback to the API server `EncryptionConfiguration` does not decrypt existing KMS ciphertext.
+If etcd contains objects encrypted with a Transit key version that no longer
+exists or is no longer decryptable, Kubernetes may be unable to read those
+objects. Adding `identity` fallback to the API server
+`EncryptionConfiguration` does not decrypt existing KMS ciphertext.
 
 For the design view of the failure modes addressed by this runbook, see [Architecture: Failure Modes](/architecture/failure-modes/).
 
@@ -45,14 +48,14 @@ first-use registry state.
 ```mermaid
 flowchart TD
     Incident["Kubernetes API server cannot decrypt data"]
-    CheckKMS["Check plugin, socket, auth material, and OpenBao reachability"]
+    CheckKMS["Check provider, socket, auth material, and OpenBao reachability"]
     KMSHealthy{"KMS path healthy?"}
-    RestoreRuntime["Restore plugin, socket, auth material, or OpenBao availability"]
+    RestoreRuntime["Restore provider, socket, auth material, or OpenBao availability"]
     CheckKey["Verify Transit key and historical versions"]
     KeyPresent{"Required Transit key material present?"}
     RestoreBao["Restore OpenBao backup with required key versions"]
     CheckPair["Verify etcd backup and OpenBao backup are compatible"]
-    StartAPI["Start plugin, then start or restart kube-apiserver"]
+    StartAPI["Start provider, then start or restart kube-apiserver"]
     Validate["Validate Kubernetes API reads of encrypted resources"]
     DataLoss["Data unrecoverable without compatible OpenBao or etcd backup"]
 
@@ -76,12 +79,12 @@ Back up:
 - etcd snapshots,
 - OpenBao storage snapshots,
 - Transit key metadata and versions through OpenBao backup,
-- plugin configuration,
+- provider configuration,
 - local key registry state and its adjacent checkpoint,
 - key lineage IDs,
 - OpenBao auth configuration,
 - OpenBao policies,
-- CA bundles,
+- certificate authority (CA) bundles,
 - deployment manifests or systemd units.
 
 Record with every backup set:
@@ -93,7 +96,7 @@ Record with every backup set:
 - Transit key lineage ID,
 - active Transit key version,
 - active Kubernetes `key_id` hash,
-- plugin version.
+- provider version.
 
 Preserve historical Transit versions for at least as long as any retained etcd backup can reference them. Do not raise OpenBao `min_decryption_version` for versions that may still be needed by retained etcd backups.
 
@@ -130,10 +133,10 @@ security-relevant host data:
 1. Restore OpenBao to a point that contains the required Transit key and all required historical versions.
 2. Verify OpenBao is unsealed and healthy.
 3. Verify the OpenBao auth method and role configuration.
-4. Verify the plugin policy.
+4. Verify the provider policy.
 5. Run the `verify-key` check below.
 6. Run the `doctor` check below.
-7. Start the plugin.
+7. Start the provider.
 8. Start or restart `kube-apiserver`.
 9. Validate reads of encrypted Kubernetes resources.
 
@@ -144,7 +147,12 @@ bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
 bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
 ```
 
-If OpenBao is restored to a point before a Transit rotation but etcd contains data encrypted after that rotation, decrypt can fail. If etcd is restored to an earlier point and OpenBao is restored to a later compatible point, decrypt usually remains possible while old key versions are retained.
+Both commands must exit with status `0` and must not report a `[fail]` check.
+
+Decrypt can fail if OpenBao is restored to a point before a Transit rotation
+but etcd contains data encrypted after that rotation. If etcd is restored to an
+earlier point and OpenBao is restored to a later compatible point, old key
+versions usually keep the earlier data decryptable.
 
 ## Restore etcd And OpenBao Together
 
@@ -155,7 +163,7 @@ Preferred procedure when both stores must be restored:
 3. Verify the Transit key versions required by the etcd snapshot exist, are
    decryptable, and still have their original Unix-second creation timestamps.
 4. Restore etcd.
-5. Start the plugin.
+5. Start the provider.
 6. Start the API server.
 7. Validate Kubernetes API reads.
 
@@ -176,31 +184,35 @@ Symptoms:
 
 - Transit metadata exists,
 - decrypt fails for old ciphertext,
-- the key lineage ID no longer matches the value in plugin configuration,
+- the key lineage ID no longer matches the value in provider configuration,
 - old Kubernetes objects fail to read.
 
 Recovery:
 
-1. Stop the plugin.
+1. Stop the provider.
 2. Restore the original OpenBao key material from backup.
 3. Restore the original key lineage configuration.
 4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
-5. Start the plugin.
+5. Start the provider.
 6. Restart the API server.
 
 Do not accept a recreated key as compatible with data encrypted under the previous key.
 
-## Plugin Config Loss
+<a id="plugin-config-loss"></a>
+
+## Provider Configuration Loss
 
 1. Restore configuration from configuration management.
 2. Verify the identity-bearing fields match the previous values; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
 3. Restore the local key registry state and its checkpoint when available.
 4. Restore the CA bundle and selected auth material.
 5. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
-6. Start the plugin.
+6. Start the provider.
 7. Confirm the Status `key_id` hash matches other control-plane nodes or recorded backup metadata.
 
-Changing provider name, cluster ID, OpenBao instance ID, OpenBao namespace, Transit mount ID, key lineage ID, mount path, or key name causes `key_id` and AAD mismatches.
+Changing provider name, cluster ID, OpenBao instance ID, OpenBao namespace,
+Transit mount ID, key lineage ID, mount path, or key name causes `key_id` and
+additional authenticated data (AAD) mismatches.
 
 If both registry files are missing after Transit rotation, do not synthesize a
 replacement state file by hand. Current preview releases have no supported
@@ -209,7 +221,8 @@ state and checkpoint files are restored.
 
 ## Auth Issuer Loss
 
-If the configured JWT issuer, certificate authority, or PKCS#11 token is unavailable:
+If the configured JSON Web Token (JWT) issuer, certificate authority, or
+PKCS#11 token is unavailable:
 
 - existing OpenBao tokens continue until expiry,
 - re-login fails after token expiry,
@@ -227,7 +240,7 @@ Avoid relying only on a Kubernetes ServiceAccount token from the protected clust
 
 ## Control-Plane Node Replacement
 
-1. Install the plugin binary or preload the static pod image.
+1. Install the provider binary or preload the static pod image.
 2. Restore `/etc/openbao-kms/config.yaml`.
 3. Restore the local key registry state and checkpoint from the replaced node when available.
 4. Restore the CA bundle.
@@ -235,7 +248,7 @@ Avoid relying only on a Kubernetes ServiceAccount token from the protected clust
 6. Create `/run/openbao-kms` with safe permissions.
 7. Ensure `kube-apiserver` can access the socket through the `openbao-kms-socket` group.
 8. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
-9. Start the plugin before the API server.
+9. Start the provider before the API server.
 10. Confirm the Status `key_id` hash matches existing nodes.
 
 If both local registry files are unavailable, normal startup auto-bootstraps
@@ -246,7 +259,11 @@ The controlled `recover-state` workflow is deferred for the preview line.
 Otherwise startup fails closed before the API server is allowed to rely on a new
 active `key_id`.
 
-For systemd deployments, restore the package, unit, users, groups, and `tmpfiles.d` runtime directory entry. For static-pod deployments, preload the provider image digest, restore the manifest, and ensure the numeric `openbao-kms-socket` GID matches `supplementalGroups` and `server.socketGroup`.
+For systemd deployments, restore the package, unit, users, groups, and
+`tmpfiles.d` runtime directory entry. For static-pod deployments, preload the
+provider image digest and restore the manifest. Confirm that the numeric
+`openbao-kms-socket` group ID (GID) matches `supplementalGroups` and
+`server.socketGroup`.
 
 ## API Server Cannot Start
 
@@ -254,18 +271,22 @@ Recovery order when the API server fails to start because the KMS path is unheal
 
 1. Do not delete encrypted etcd data.
 2. Inspect API server logs for KMS connection or decrypt errors.
-3. Restore the plugin, socket, OpenBao, and auth material first.
+3. Restore the provider, socket, OpenBao, and auth material first.
 4. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml` locally. Include `--encryption-config /etc/kubernetes/encryption-config.yaml` when the API server encryption config is available.
-5. Start the plugin and verify KMS Status.
+5. Start the provider and verify KMS Status.
 6. Restart the API server.
 7. If OpenBao key material is missing, restore the OpenBao backup.
 8. If no key backup exists, restore a compatible etcd and OpenBao backup pair.
 
-Do not try to fix KMS ciphertext by changing the provider name or recreating Transit keys. Adding or reordering `identity` in the configuration only helps for plaintext objects or future writes; it does not decrypt data already encrypted with KMS.
+Do not try to fix KMS ciphertext by changing the provider name or recreating
+Transit keys. Adding or reordering `identity` only affects plaintext objects or
+future writes. It does not decrypt data already encrypted with KMS.
 
 ## Single-Node Control Plane
 
-Single-node clusters have higher recovery risk because there is no alternate API server or plugin instance. Prefer systemd mode, local image availability, and tested host-level recovery steps.
+Single-node clusters have higher recovery risk because there is no alternate
+API server or provider instance. Prefer systemd mode, local image availability,
+and tested host-level recovery steps.
 
 ## Multi-Node Control Plane
 
@@ -273,7 +294,7 @@ Recover one node at a time:
 
 - keep at least one known-good API server running when possible,
 - compare active `key_id` hashes across nodes,
-- avoid simultaneous plugin upgrades,
+- avoid simultaneous provider upgrades,
 - avoid simultaneous auth credential expiry,
 - avoid cluster-wide `min_decryption_version` changes during recovery.
 
