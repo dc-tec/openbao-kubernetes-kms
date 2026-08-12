@@ -84,7 +84,7 @@ endef
 
 $(eval $(call provider-e2e-target,test-e2e-provider-openbao-ci,^TestProviderContainerFullStackE2E$$$$,4m))
 $(eval $(call provider-e2e-target,test-e2e-provider-cli-openbao-ci,^TestProviderCLI(HappyPath|JWTClaimDriftRedacted|UnsupportedTransitKeyTypeFails|RotationMissingStateFailsClosed)E2E$$$$,12m))
-$(eval $(call provider-e2e-target,test-e2e-provider-failure-openbao-ci,^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|ExpiredJWTFailsClosed|JWTExpectedClaimDriftFailsClosed|JWTFileRotation|JWTSigningKeyRollover|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$$$$,12m))
+$(eval $(call provider-e2e-target,test-e2e-provider-failure-openbao-ci,^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|DisableUpsertDriftFailsClosed|ExpiredJWTFailsClosed|JWTExpectedClaimDriftFailsClosed|JWTFileRotation|JWTSigningKeyRollover|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$$$$,12m))
 $(eval $(call provider-e2e-target,test-e2e-provider-ha-openbao-ci,^TestProviderOpenBaoHAFailoverE2E$$$$,10m))
 $(eval $(call provider-e2e-target,test-e2e-provider-decrypt-storm-openbao-ci,^TestProviderDecryptStormSmokeE2E$$$$,5m))
 $(eval $(call provider-e2e-target,test-e2e-provider-decrypt-soak-openbao-ci,^TestProviderDecryptSoakE2E$$$$,7m))

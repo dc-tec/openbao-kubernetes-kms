@@ -522,6 +522,19 @@ func (f *OpenBaoEnvironment) InstallProviderPolicy(ctx context.Context, policy s
 	return f.write(ctx, httpClient, "sys/policies/acl/"+openBaoJWTPolicyName, policyRequestBody{Policy: policy})
 }
 
+func (f *OpenBaoEnvironment) SetTransitDisableUpsert(ctx context.Context, disabled bool) error {
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(
+		ctx,
+		httpClient,
+		f.TransitMount+"/config/keys",
+		disableUpsertRequestBody{DisableUpsert: disabled},
+	)
+}
+
 func (f *OpenBaoEnvironment) MetadataOnlyProviderPolicy() string {
 	return fmt.Sprintf(`path %q {
   capabilities = ["read"]

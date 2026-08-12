@@ -279,6 +279,83 @@ func TestControllerFailsClosedWhenStateMissingAfterTransitRotation(t *testing.T)
 	}
 }
 
+func TestControllerDisableUpsertFailureSkipsTransitMetadata(t *testing.T) {
+	tests := []struct {
+		name                       string
+		implicitKeyCreationEnabled bool
+		readErr                    error
+		wantMessage                string
+		wantBreakerFailures        int
+	}{
+		{
+			name:                       "implicit key creation enabled",
+			implicitKeyCreationEnabled: true,
+			wantMessage:                "disable_upsert is false",
+		},
+		{
+			name:                "mount configuration unavailable",
+			readErr:             errors.New("mount configuration unavailable"),
+			wantMessage:         "disable_upsert read failed",
+			wantBreakerFailures: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clock := newFakeClock()
+			store := newTestStore(t, clock)
+			observer := newTestObserver(t, clock, 3, 2*time.Minute)
+			transit := &fakeTransit{
+				profile:                    profileForLatest(1, clock.Now()),
+				implicitKeyCreationEnabled: tt.implicitKeyCreationEnabled,
+				disableUpsertErr:           tt.readErr,
+			}
+			stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+			controller := newTestController(t, clock, store, observer, transit, stateStore)
+
+			err := controller.ProbeOnce(context.Background())
+			if !errors.Is(err, status.ErrProbeFailed) {
+				t.Fatalf("expected probe failure, got %v", err)
+			}
+			if !strings.Contains(err.Error(), tt.wantMessage) {
+				t.Fatalf("expected error to contain %q, got %v", tt.wantMessage, err)
+			}
+			if transit.disableUpsertCalls != 1 || transit.readCalls != 0 {
+				t.Fatalf(
+					"unexpected Transit calls: disable_upsert=%d metadata=%d",
+					transit.disableUpsertCalls,
+					transit.readCalls,
+				)
+			}
+			if stateStore.saveCalls != 0 {
+				t.Fatalf("unsafe mount configuration saved registry state %d times", stateStore.saveCalls)
+			}
+			assertStoreHealth(t, store, kmsv2.HealthUnhealthy)
+			diagnostics, diagnosticsErr := store.Diagnostics(context.Background())
+			if diagnosticsErr != nil {
+				t.Fatalf("diagnostics: %v", diagnosticsErr)
+			}
+			if diagnostics.CircuitBreaker.ConsecutiveFailures != tt.wantBreakerFailures {
+				t.Fatalf(
+					"unexpected breaker failures: want %d got %d",
+					tt.wantBreakerFailures,
+					diagnostics.CircuitBreaker.ConsecutiveFailures,
+				)
+			}
+			if tt.implicitKeyCreationEnabled {
+				transit.implicitKeyCreationEnabled = false
+				if err := controller.ProbeOnce(context.Background()); err != nil {
+					t.Fatalf("metadata probe after disable_upsert recovery: %v", err)
+				}
+				if err := controller.DeepProbeOnce(context.Background()); err != nil {
+					t.Fatalf("deep probe after disable_upsert recovery: %v", err)
+				}
+				assertStoreHealth(t, store, kmsv2.HealthOK)
+			}
+		})
+	}
+}
+
 func TestControllerCircuitBreakerSkipsProbesWhileOpen(t *testing.T) {
 	clock := newFakeClock()
 	store := newTestStore(t, clock)
@@ -479,14 +556,25 @@ func assertStoreHealth(t testing.TB, store *status.Store, want string) {
 }
 
 type fakeTransit struct {
-	profile         openbao.KeyProfile
-	readErr         error
-	deepProbeErr    error
-	deepProbeResult openbao.ProbeResult
-	deepProbeSignal chan openbao.ProbeRequest
-	readCalls       int
-	deepProbeCalls  int
-	lastProbe       openbao.ProbeRequest
+	profile                    openbao.KeyProfile
+	readErr                    error
+	disableUpsertErr           error
+	implicitKeyCreationEnabled bool
+	deepProbeErr               error
+	deepProbeResult            openbao.ProbeResult
+	deepProbeSignal            chan openbao.ProbeRequest
+	readCalls                  int
+	disableUpsertCalls         int
+	deepProbeCalls             int
+	lastProbe                  openbao.ProbeRequest
+}
+
+func (f *fakeTransit) ReadDisableUpsert(context.Context, string) (bool, error) {
+	f.disableUpsertCalls++
+	if f.disableUpsertErr != nil {
+		return false, f.disableUpsertErr
+	}
+	return !f.implicitKeyCreationEnabled, nil
 }
 
 func (f *fakeTransit) ReadKeyProfile(context.Context, string, string) (openbao.KeyProfile, error) {

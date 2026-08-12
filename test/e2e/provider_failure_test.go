@@ -89,6 +89,24 @@ func TestProviderBadPolicyFailsClosedE2E(t *testing.T) {
 	stack.runClient(ctx, "policy-client", kmsClientModeExpectPolicyDenied, sampleReadOnly)
 }
 
+func TestProviderDisableUpsertDriftFailsClosedE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
+	defer cancel()
+
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-disable-upsert", providerFailureStackOptions{
+		Config: providerContainerConfigOptions{
+			ProbeInterval:     "1s",
+			DeepProbeInterval: "10m",
+		},
+	})
+	stack.runClient(ctx, "initial-client", kmsClientModeFullStack, sampleNotMounted)
+
+	if err := stack.environment.SetTransitDisableUpsert(ctx, false); err != nil {
+		t.Fatalf("allow implicit Transit key creation: %v", err)
+	}
+	stack.runClient(ctx, "unsafe-mount-client", kmsClientModeExpectUnhealthy, sampleNotMounted)
+}
+
 func TestProviderExpiredJWTFailsClosedE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), providerFailureDefaultTimeout)
 	defer cancel()

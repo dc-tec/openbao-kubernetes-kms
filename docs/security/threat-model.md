@@ -67,7 +67,7 @@ The design does not defend against every action by:
 | OpenBao token theft | Memory-only token storage, short TTLs, explicit renewal increment, no token logs. |
 | Auth material theft | File permissions, short JWT and certificate lifetimes, claim or certificate identity binding, and an external issuer where feasible. |
 | Transit key deletion | `deletion_allowed=false`, no delete permission for the plugin token, tested backups. |
-| Accidental key creation | `disable_upsert=true` at the Transit mount, no create permission for the plugin token. |
+| Accidental key creation | Runtime verification of `disable_upsert=true` at the Transit mount, no create permission for the plugin token. |
 | Key recreation with same name | Key lineage ID, decrypt validation, DR checks. |
 | Registry state rollback | State hash chain, adjacent checkpoint, monotonic generation checks, and fail-closed startup when the checkpoint survives. |
 | Ciphertext replay across clusters | AAD binds provider, cluster, OpenBao instance, key lineage, and key version. |

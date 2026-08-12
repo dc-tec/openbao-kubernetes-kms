@@ -57,6 +57,7 @@ Two columns flag operational severity:
 | Transit key deleted | Destructive admin action | Old ciphertext undecryptable | Metadata read fails, decrypt failures | `deletion_allowed=false`, no delete permission | Restore OpenBao backup with key material | Yes | Yes if no valid backup |
 | Transit key soft-deleted | Key archived or disabled | Encrypt and decrypt fail | Metadata state, decrypt errors | Change control | Restore key if possible | Yes | No if restored |
 | Transit key recreated same name | Key lineage lost | Old data undecryptable; `key_id` collision risk | Lineage mismatch, decrypt failures | Key lineage ID, delete protection | Restore original key; do not accept new lineage | Yes | Yes if original key lost |
+| `disable_upsert` false or unreadable | Mount drift or missing read permission | Status and Encrypt fail closed | Metadata probe error, unhealthy Status | Runtime mount check, no create permission | Set `disable_upsert=true` and restore read permission | Yes | No |
 | `min_decryption_version` raised too early | Operator error | Old ciphertext undecryptable | Decrypt failures for old `key_id` values | Verify migration first | Lower setting if key versions still exist | Yes | Possible |
 | Key backup missing | Disaster restore lacks Transit key versions | Data undecryptable | DR test failure | Coordinated OpenBao backups | Restore from valid backup | Yes | Yes |
 

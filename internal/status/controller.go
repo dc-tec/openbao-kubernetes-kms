@@ -25,6 +25,8 @@ const (
 	messageCircuitBreakerOpen    = "probe skipped while circuit breaker is open"
 	messageDeepProbeFailed       = "Transit deep probe failed"
 	messageRegistryStateSave     = "save registry state"
+	messageTransitUpsertAllowed  = "Transit disable_upsert is false"
+	messageTransitUpsertRead     = "Transit disable_upsert read failed"
 	messageTransitMetadataFailed = "Transit metadata read failed"
 )
 
@@ -40,6 +42,7 @@ const (
 
 // TransitProbeClient is the Transit metadata and deep-probe surface needed by Status.
 type TransitProbeClient interface {
+	ReadDisableUpsert(context.Context, string) (bool, error)
 	ReadKeyProfile(context.Context, string, string) (openbao.KeyProfile, error)
 	ProbeEncryptDecrypt(context.Context, openbao.ProbeRequest) (openbao.ProbeResult, error)
 }
@@ -138,6 +141,16 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	if !c.allowProbe(ProbeKindMetadata, now) {
 		c.store.publishMetadataUnhealthy(now)
 		return fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen)
+	}
+	disableUpsert, err := c.transit.ReadDisableUpsert(ctx, c.mountPath)
+	if err != nil {
+		c.store.publishMetadataUnhealthy(now)
+		c.recordProbeFailure(ProbeKindMetadata, now)
+		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageTransitUpsertRead, err)
+	}
+	if !disableUpsert {
+		c.store.publishMetadataUnhealthy(now)
+		return fmt.Errorf("%w: %s", ErrProbeFailed, messageTransitUpsertAllowed)
 	}
 
 	profile, err := c.transit.ReadKeyProfile(ctx, c.mountPath, c.keyName)

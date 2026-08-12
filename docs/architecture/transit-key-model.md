@@ -35,7 +35,7 @@ Recommended values and why each one is the way it is:
 | `auto_rotate_period` | `0` | Manual or platform-driven rotation is easier to coordinate with Kubernetes storage migration. See [Architecture: Rotation Model](/architecture/rotation-model/). |
 | `disable_upsert` (mount-level) | `true` | Prevents typo-driven accidental key creation through a misspelled encrypt path. |
 
-`disable_upsert` is configured at the Transit mount level. If the mount is shared with other applications, enabling it would affect those callers. A dedicated Transit mount for Kubernetes KMS keys is therefore recommended.
+`disable_upsert` is configured at the Transit mount level. The provider verifies this setting during each metadata probe. Status is unhealthy when the setting is false or unreadable. If the mount is shared with other applications, enabling it would affect those callers. A dedicated Transit mount for Kubernetes KMS keys is therefore recommended.
 
 ## Future Key Types
 

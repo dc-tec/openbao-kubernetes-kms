@@ -45,6 +45,7 @@ Required behavior:
 - Status reads from cached state.
 - Status does not perform live Transit encrypt or decrypt.
 - Status is healthy only after a metadata probe and a Transit encrypt/decrypt deep probe succeed.
+- Status is unhealthy when the provider cannot verify `disable_upsert=true` on the Transit mount.
 - A metadata-probe success does not clear a deep-probe failure.
 - A deep-probe success does not clear a metadata-probe failure.
 - Background OpenBao requests use the normal token reuse, renewal, and re-login lifecycle.
