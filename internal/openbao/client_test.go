@@ -205,6 +205,116 @@ func TestNewHTTPTransportUsesExplicitControlPlaneDefaults(t *testing.T) {
 	}
 }
 
+func TestOpenBaoResponseLimits(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation string
+		want      int64
+	}{
+		{
+			name:      "small response",
+			operation: transitOperationEncrypt,
+			want:      maxOpenBaoSmallResponseBytes,
+		},
+		{
+			name:      "key metadata response",
+			operation: transitOperationMetadataRead,
+			want:      maxOpenBaoLargeResponseBytes,
+		},
+		{
+			name:      "batch decrypt response",
+			operation: transitOperationBatchDecrypt,
+			want:      maxOpenBaoLargeResponseBytes,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := openBaoResponseLimit(test.operation); got != test.want {
+				t.Fatalf("unexpected response limit: got %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
+func TestReadBoundedResponseBodyAcceptsExactLimit(t *testing.T) {
+	body := strings.Repeat("a", 32)
+	encoded, err := readBoundedResponseBody(transitOperationEncrypt, strings.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("read exact-limit response: %v", err)
+	}
+	if string(encoded) != body {
+		t.Fatalf("unexpected response body: %q", string(encoded))
+	}
+}
+
+func TestReadOpenBaoResponseRejectsOversizedSuccessBody(t *testing.T) {
+	secretMarker := "secret-response-content"
+	body := secretMarker + strings.Repeat("a", maxOpenBaoSmallResponseBytes)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	var response disableUpsertResponse
+	_, err := readOpenBaoResponse(transitOperationDisableUpsertRead, resp, &response)
+	assertResponseTooLargeError(t, err, secretMarker)
+}
+
+func TestReadOpenBaoResponseRejectsOversizedLargeBody(t *testing.T) {
+	body := strings.Repeat("a", maxOpenBaoLargeResponseBytes+1)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	var response keyProfileResponse
+	_, err := readOpenBaoResponse(transitOperationMetadataRead, resp, &response)
+	assertResponseTooLargeError(t, err, "")
+}
+
+func TestReadOpenBaoResponseRejectsOversizedErrorBody(t *testing.T) {
+	secretMarker := "secret-error-content"
+	body := secretMarker + strings.Repeat("a", maxOpenBaoErrorResponseBytes)
+	resp := &http.Response{
+		StatusCode: http.StatusForbidden,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	_, err := readOpenBaoResponse(transitOperationEncrypt, resp, nil)
+	assertResponseTooLargeError(t, err, secretMarker)
+}
+
+func TestReadOpenBaoResponseAllowsLargeMetadataBody(t *testing.T) {
+	padding := strings.Repeat("a", maxOpenBaoSmallResponseBytes)
+	body := `{"data":{"disable_upsert":true},"padding":"` + padding + `"}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+	var response disableUpsertResponse
+	if _, err := readOpenBaoResponse(transitOperationMetadataRead, resp, &response); err != nil {
+		t.Fatalf("read large metadata response: %v", err)
+	}
+	if !response.Data.DisableUpsert {
+		t.Fatal("metadata response was not decoded")
+	}
+}
+
+func assertResponseTooLargeError(t *testing.T, err error, secretMarker string) {
+	t.Helper()
+	if !errors.Is(err, ErrResponseTooLarge) {
+		t.Fatalf("expected response-too-large error, got %v", err)
+	}
+	var openBaoErr *Error
+	if !errors.As(err, &openBaoErr) || openBaoErr.Class != ErrorClassUnavailable {
+		t.Fatalf("expected unavailable OpenBao error, got %v", err)
+	}
+	if got := requestErrorClass(err); got != ErrorClassUnavailable {
+		t.Fatalf("unexpected observed error class: %q", got)
+	}
+	if secretMarker != "" && strings.Contains(err.Error(), secretMarker) {
+		t.Fatalf("error contains response content: %q", err.Error())
+	}
+}
+
 func TestClientRequestFailureIsRedacted(t *testing.T) {
 	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path != "/v1/sys/capabilities-self" {
