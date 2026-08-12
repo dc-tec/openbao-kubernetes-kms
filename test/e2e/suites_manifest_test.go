@@ -300,7 +300,7 @@ func TestReleaseWorkflowKeepsPublicAttestationsAndPrivateDryRunFallback(t *testi
 		requireContains(
 			t,
 			workflow.body,
-			"uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373",
+			"uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8",
 			workflow.name,
 		)
 		requireContains(t, workflow.body, "if: ${{ !github.event.repository.private }}", workflow.name)
