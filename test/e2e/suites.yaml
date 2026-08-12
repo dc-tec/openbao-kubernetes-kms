@@ -177,7 +177,7 @@ lanes:
     makeTarget: test-e2e-provider-failure-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && failure && ci
-    runRegex: ^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|ExpiredJWTFailsClosed|JWTExpectedClaimDriftFailsClosed|JWTFileRotation|JWTSigningKeyRollover|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$
+    runRegex: ^TestProvider(OpenBaoOutageFailsClosed|OpenBaoSealFailsClosed|BadPolicyFailsClosed|DisableUpsertDriftFailsClosed|ExpiredJWTFailsClosed|JWTExpectedClaimDriftFailsClosed|JWTFileRotation|JWTSigningKeyRollover|TransitKeyMissingFailsClosed|StatusStalenessFailsClosed|StaleSocketReclaimed)E2E$
     prScope: main
     environment: local-openbao
     isolation: local-container

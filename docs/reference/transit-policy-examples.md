@@ -30,7 +30,7 @@ path "sys/capabilities-self" {
 }
 ```
 
-`sys/capabilities-self` is required so `bao-kms-provider doctor` can verify the token's effective capabilities.
+The provider reads `transit/config/keys` during runtime metadata probes. It uses this path to verify `disable_upsert=true`. `sys/capabilities-self` is required so `bao-kms-provider doctor` can verify the token's effective capabilities.
 
 If token renewal is enabled and the JWT role disables the default policy, add the required self-renewal path:
 

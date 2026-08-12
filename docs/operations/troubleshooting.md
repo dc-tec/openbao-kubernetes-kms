@@ -203,6 +203,20 @@ replacement registry state. Restore the state/checkpoint pair from backup or a
 known-good peer with matching identity scope; otherwise the provider fails
 closed.
 
+## Transit Allows Implicit Key Creation
+
+Symptoms:
+
+- KMS Status is unhealthy and does not publish a `key_id`,
+- metadata probes report that `disable_upsert` is false or unreadable.
+
+Recovery:
+
+1. Set `disable_upsert=true` on the configured Transit mount.
+2. Confirm that the provider token can read `<mount>/config/keys`.
+3. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
+4. Wait for the next metadata probe and confirm that Status becomes healthy.
+
 ## Transit Version Creation Time Changed
 
 Symptoms:
