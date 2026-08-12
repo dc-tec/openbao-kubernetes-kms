@@ -156,7 +156,7 @@ sequenceDiagram
     Plugin-->>API: health, version, active key_id
 ```
 
-Status reads from cached state populated by background probes; it does not perform a live Transit encrypt or decrypt on every call. Kubernetes polls Status regularly, and the Status `key_id` drives rotation behavior.
+Status reads from cached state populated by background probes; it does not perform a live Transit encrypt or decrypt on every call. The cache becomes healthy only after the metadata probe and the Transit encrypt/decrypt deep probe succeed. A successful probe does not clear a failure from the other probe type. Kubernetes polls Status regularly, and the Status `key_id` drives rotation behavior.
 
 ## Trust Boundaries
 
@@ -215,7 +215,7 @@ For the supporting policy see [Development: Code Quality](/development/code-qual
 
 ## Startup Sequence
 
-`bao-kms-provider` performs one successful bootstrap status probe before binding the Unix socket. Startup fails closed rather than exposing a socket without a fresh active snapshot.
+`bao-kms-provider` completes one successful metadata probe and one successful deep probe before it binds the Unix socket. Startup fails closed rather than exposing a socket without a verified active data path.
 
 Recommended systemd sequence:
 

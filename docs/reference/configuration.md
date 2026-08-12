@@ -184,7 +184,7 @@ are not configurable in the preview line.
 
 `auth.cert.minRemainingTtl` controls how much client certificate lifetime must remain before the provider will attempt OpenBao cert auth. The provider validates the certificate locally before login and records the observed certificate TTL for metrics.
 
-`bootstrap.graceTimeout` controls how long startup retries the initial status probe before the process exits. It exists to handle boot races such as auth material projection, DNS or routing settling, OpenBao restart, and clock synchronization.
+`bootstrap.graceTimeout` controls how long startup retries the initial metadata and deep probes before the process exits. It exists to handle boot races such as auth material projection, DNS or routing settling, OpenBao restart, and clock synchronization.
 
 ## Certificate Auth
 

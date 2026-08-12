@@ -18,16 +18,12 @@ func TestControllerProbeBuildsPersistsAndDeepProbes(t *testing.T) {
 	clock := newFakeClock()
 	store := newTestStore(t, clock)
 	observer := newTestObserver(t, clock, 3, 2*time.Minute)
-	auth := &fakeAuth{}
 	transit := &fakeTransit{profile: profileForLatest(1, clock.Now())}
 	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
-	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+	controller := newTestController(t, clock, store, observer, transit, stateStore)
 
 	if err := controller.ProbeOnce(context.Background()); err != nil {
 		t.Fatalf("probe once: %v", err)
-	}
-	if auth.refreshCalls != 1 {
-		t.Fatalf("expected one auth refresh, got %d", auth.refreshCalls)
 	}
 	if stateStore.saveCalls != 1 {
 		t.Fatalf("expected initial state save, got %d", stateStore.saveCalls)
@@ -36,8 +32,8 @@ func TestControllerProbeBuildsPersistsAndDeepProbes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("current status: %v", err)
 	}
-	if current.Healthz != kmsv2.HealthOK || current.KeyID == "" {
-		t.Fatalf("expected healthy status with key ID, got %+v", current)
+	if current.Healthz != kmsv2.HealthUnhealthy || current.KeyID != "" {
+		t.Fatalf("expected unhealthy status before the first deep probe, got %+v", current)
 	}
 
 	if err := controller.DeepProbeOnce(context.Background()); err != nil {
@@ -52,13 +48,19 @@ func TestControllerProbeBuildsPersistsAndDeepProbes(t *testing.T) {
 	if string(transit.lastProbe.AssociatedData) != "openbao-kubernetes-kms/status-probe/v1" {
 		t.Fatalf("unexpected deep probe AAD: %q", string(transit.lastProbe.AssociatedData))
 	}
+	current, err = store.Current(context.Background())
+	if err != nil {
+		t.Fatalf("current status after deep probe: %v", err)
+	}
+	if current.Healthz != kmsv2.HealthOK || current.KeyID == "" {
+		t.Fatalf("expected healthy status after both probes, got %+v", current)
+	}
 }
 
 func TestControllerDeepProbeRejectsOversizedTransitCiphertext(t *testing.T) {
 	clock := newFakeClock()
 	store := newTestStore(t, clock)
 	observer := newTestObserver(t, clock, 3, 2*time.Minute)
-	auth := &fakeAuth{}
 	transit := &fakeTransit{
 		profile: profileForLatest(1, clock.Now()),
 		deepProbeResult: openbao.ProbeResult{
@@ -67,7 +69,7 @@ func TestControllerDeepProbeRejectsOversizedTransitCiphertext(t *testing.T) {
 		},
 	}
 	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
-	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+	controller := newTestController(t, clock, store, observer, transit, stateStore)
 
 	if err := controller.ProbeOnce(context.Background()); err != nil {
 		t.Fatalf("metadata probe: %v", err)
@@ -89,7 +91,6 @@ func TestControllerDeepProbeRejectsUnexpectedTransitKeyVersion(t *testing.T) {
 	clock := newFakeClock()
 	store := newTestStore(t, clock)
 	observer := newTestObserver(t, clock, 3, 2*time.Minute)
-	auth := &fakeAuth{}
 	transit := &fakeTransit{
 		profile: profileForLatest(1, clock.Now()),
 		deepProbeResult: openbao.ProbeResult{
@@ -98,7 +99,7 @@ func TestControllerDeepProbeRejectsUnexpectedTransitKeyVersion(t *testing.T) {
 		},
 	}
 	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
-	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+	controller := newTestController(t, clock, store, observer, transit, stateStore)
 
 	if err := controller.ProbeOnce(context.Background()); err != nil {
 		t.Fatalf("metadata probe: %v", err)
@@ -116,17 +117,109 @@ func TestControllerDeepProbeRejectsUnexpectedTransitKeyVersion(t *testing.T) {
 	}
 }
 
+func TestControllerProbeFailureRemainsUnhealthyUntilSameProbeRecovers(t *testing.T) {
+	tests := []struct {
+		name       string
+		failedKind status.ProbeKind
+	}{
+		{name: "deep failure survives metadata success", failedKind: status.ProbeKindDeep},
+		{name: "metadata failure survives deep success", failedKind: status.ProbeKindMetadata},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clock := newFakeClock()
+			store := newTestStore(t, clock)
+			observer := newTestObserver(t, clock, 3, 2*time.Minute)
+			transit := &fakeTransit{profile: profileForLatest(1, clock.Now())}
+			stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+			controller := newTestController(t, clock, store, observer, transit, stateStore)
+
+			if err := controller.ProbeOnce(context.Background()); err != nil {
+				t.Fatalf("initial metadata probe: %v", err)
+			}
+			if err := controller.DeepProbeOnce(context.Background()); err != nil {
+				t.Fatalf("initial deep probe: %v", err)
+			}
+
+			switch tt.failedKind {
+			case status.ProbeKindDeep:
+				transit.deepProbeErr = errors.New("Transit data path unavailable")
+				if err := controller.DeepProbeOnce(context.Background()); !errors.Is(err, status.ErrProbeFailed) {
+					t.Fatalf("expected deep probe failure, got %v", err)
+				}
+				if err := controller.ProbeOnce(context.Background()); err != nil {
+					t.Fatalf("metadata probe after deep failure: %v", err)
+				}
+				transit.deepProbeErr = nil
+			case status.ProbeKindMetadata:
+				transit.readErr = errors.New("Transit metadata unavailable")
+				if err := controller.ProbeOnce(context.Background()); !errors.Is(err, status.ErrProbeFailed) {
+					t.Fatalf("expected metadata probe failure, got %v", err)
+				}
+				if err := controller.DeepProbeOnce(context.Background()); err != nil {
+					t.Fatalf("deep probe after metadata failure: %v", err)
+				}
+				transit.readErr = nil
+			}
+			assertStoreHealth(t, store, kmsv2.HealthUnhealthy)
+
+			if tt.failedKind == status.ProbeKindDeep {
+				if err := controller.DeepProbeOnce(context.Background()); err != nil {
+					t.Fatalf("deep probe recovery: %v", err)
+				}
+			} else if err := controller.ProbeOnce(context.Background()); err != nil {
+				t.Fatalf("metadata probe recovery: %v", err)
+			}
+			assertStoreHealth(t, store, kmsv2.HealthOK)
+		})
+	}
+}
+
+func TestControllerRotationRequiresDeepProbeForPromotedKey(t *testing.T) {
+	clock := newFakeClock()
+	store := newTestStore(t, clock)
+	observer := newTestObserver(t, clock, 1, 0)
+	transit := &fakeTransit{profile: profileForLatest(1, clock.Now())}
+	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+	controller := newTestController(t, clock, store, observer, transit, stateStore)
+
+	if err := controller.ProbeOnce(context.Background()); err != nil {
+		t.Fatalf("initial metadata probe: %v", err)
+	}
+	if err := controller.DeepProbeOnce(context.Background()); err != nil {
+		t.Fatalf("initial deep probe: %v", err)
+	}
+	assertStoreHealth(t, store, kmsv2.HealthOK)
+
+	transit.profile = profileForLatest(2, clock.Now())
+	if err := controller.ProbeOnce(context.Background()); err != nil {
+		t.Fatalf("rotation metadata probe: %v", err)
+	}
+	assertStoreHealth(t, store, kmsv2.HealthUnhealthy)
+
+	if err := controller.DeepProbeOnce(context.Background()); err != nil {
+		t.Fatalf("promoted-key deep probe: %v", err)
+	}
+	if transit.lastProbe.KeyVersion != 2 {
+		t.Fatalf("unexpected promoted deep-probe version: %d", transit.lastProbe.KeyVersion)
+	}
+	assertStoreHealth(t, store, kmsv2.HealthOK)
+}
+
 func TestControllerMetadataFailureMarksUnhealthyWithoutPromoting(t *testing.T) {
 	clock := newFakeClock()
 	store := newTestStore(t, clock)
 	observer := newTestObserver(t, clock, 1, 0)
-	auth := &fakeAuth{}
 	transit := &fakeTransit{profile: profileForLatest(1, clock.Now())}
 	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
-	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+	controller := newTestController(t, clock, store, observer, transit, stateStore)
 
 	if err := controller.ProbeOnce(context.Background()); err != nil {
 		t.Fatalf("initial probe: %v", err)
+	}
+	if err := controller.DeepProbeOnce(context.Background()); err != nil {
+		t.Fatalf("initial deep probe: %v", err)
 	}
 	initial, err := store.Current(context.Background())
 	if err != nil {
@@ -163,10 +256,9 @@ func TestControllerFailsClosedWhenStateMissingAfterTransitRotation(t *testing.T)
 	clock := newFakeClock()
 	store := newTestStore(t, clock)
 	observer := newTestObserver(t, clock, 3, 2*time.Minute)
-	auth := &fakeAuth{}
 	transit := &fakeTransit{profile: profileForLatest(4, clock.Now())}
 	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
-	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+	controller := newTestController(t, clock, store, observer, transit, stateStore)
 
 	err := controller.ProbeOnce(context.Background())
 	if !errors.Is(err, status.ErrStateUnavailable) {
@@ -187,36 +279,10 @@ func TestControllerFailsClosedWhenStateMissingAfterTransitRotation(t *testing.T)
 	}
 }
 
-func TestControllerAuthRefreshFailureSkipsTransitMetadata(t *testing.T) {
-	clock := newFakeClock()
-	store := newTestStore(t, clock)
-	observer := newTestObserver(t, clock, 3, 2*time.Minute)
-	auth := &fakeAuth{err: errors.New("fresh auth failed")}
-	transit := &fakeTransit{profile: profileForLatest(1, clock.Now())}
-	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
-	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
-
-	err := controller.ProbeOnce(context.Background())
-	if !errors.Is(err, status.ErrProbeFailed) {
-		t.Fatalf("expected auth probe failure, got %v", err)
-	}
-	if transit.readCalls != 0 {
-		t.Fatalf("auth failure should skip Transit metadata, got %d reads", transit.readCalls)
-	}
-	current, currentErr := store.Current(context.Background())
-	if currentErr != nil {
-		t.Fatalf("current status: %v", currentErr)
-	}
-	if current.Healthz != kmsv2.HealthUnhealthy {
-		t.Fatalf("expected unhealthy status after auth failure, got %s", current.Healthz)
-	}
-}
-
 func TestControllerCircuitBreakerSkipsProbesWhileOpen(t *testing.T) {
 	clock := newFakeClock()
 	store := newTestStore(t, clock)
 	observer := newTestObserver(t, clock, 1, 0)
-	auth := &fakeAuth{}
 	transit := &fakeTransit{
 		profile: profileForLatest(1, clock.Now()),
 		readErr: errors.New("metadata unavailable"),
@@ -226,7 +292,6 @@ func TestControllerCircuitBreakerSkipsProbesWhileOpen(t *testing.T) {
 		Clock:      clock,
 		Store:      store,
 		Observer:   observer,
-		Auth:       auth,
 		Transit:    transit,
 		StateStore: stateStore,
 		MountPath:  "transit",
@@ -242,15 +307,15 @@ func TestControllerCircuitBreakerSkipsProbesWhileOpen(t *testing.T) {
 			t.Fatalf("expected probe failure %d, got %v", i+1, err)
 		}
 	}
-	if auth.refreshCalls != 2 || transit.readCalls != 2 {
-		t.Fatalf("expected two attempted probes, got auth=%d read=%d", auth.refreshCalls, transit.readCalls)
+	if transit.readCalls != 2 {
+		t.Fatalf("expected two attempted probes, got %d reads", transit.readCalls)
 	}
 
 	if err := controller.ProbeOnce(context.Background()); !errors.Is(err, status.ErrCircuitBreakerOpen) {
 		t.Fatalf("expected open circuit breaker, got %v", err)
 	}
-	if auth.refreshCalls != 2 || transit.readCalls != 2 {
-		t.Fatalf("open circuit breaker should skip probe, got auth=%d read=%d", auth.refreshCalls, transit.readCalls)
+	if transit.readCalls != 2 {
+		t.Fatalf("open circuit breaker should skip probe, got %d reads", transit.readCalls)
 	}
 	diagnostics, err := store.Diagnostics(context.Background())
 	if err != nil {
@@ -274,6 +339,69 @@ func TestControllerCircuitBreakerSkipsProbesWhileOpen(t *testing.T) {
 	}
 }
 
+func TestControllerMetadataSuccessDoesNotResetDeepProbeCircuitBreaker(t *testing.T) {
+	clock := newFakeClock()
+	store := newTestStore(t, clock)
+	observer := newTestObserver(t, clock, 1, 0)
+	transit := &fakeTransit{profile: profileForLatest(1, clock.Now())}
+	stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
+	controller := newTestControllerWithOptions(t, status.ControllerOptions{
+		Clock:      clock,
+		Store:      store,
+		Observer:   observer,
+		Transit:    transit,
+		StateStore: stateStore,
+		MountPath:  "transit",
+		KeyName:    "k8s-workload-a-etcd",
+		Breaker: status.CircuitBreakerOptions{
+			FailureThreshold: 2,
+			OpenDuration:     time.Minute,
+		},
+	})
+
+	if err := controller.ProbeOnce(context.Background()); err != nil {
+		t.Fatalf("initial metadata probe: %v", err)
+	}
+	if err := controller.DeepProbeOnce(context.Background()); err != nil {
+		t.Fatalf("initial deep probe: %v", err)
+	}
+
+	transit.deepProbeErr = errors.New("Transit data path unavailable")
+	for attempt := 1; attempt <= 2; attempt++ {
+		if err := controller.DeepProbeOnce(context.Background()); !errors.Is(err, status.ErrProbeFailed) {
+			t.Fatalf("expected deep probe failure %d, got %v", attempt, err)
+		}
+		if err := controller.ProbeOnce(context.Background()); err != nil {
+			t.Fatalf("metadata probe between deep failures: %v", err)
+		}
+	}
+	deepCalls := transit.deepProbeCalls
+	if err := controller.DeepProbeOnce(context.Background()); !errors.Is(err, status.ErrCircuitBreakerOpen) {
+		t.Fatalf("expected open deep-probe circuit breaker, got %v", err)
+	}
+	if transit.deepProbeCalls != deepCalls {
+		t.Fatalf("open deep-probe circuit breaker made a Transit call: before=%d after=%d", deepCalls, transit.deepProbeCalls)
+	}
+	if err := controller.ProbeOnce(context.Background()); err != nil {
+		t.Fatalf("deep-probe breaker blocked metadata probe: %v", err)
+	}
+
+	diagnostics, err := store.Diagnostics(context.Background())
+	if err != nil {
+		t.Fatalf("diagnostics: %v", err)
+	}
+	if diagnostics.CircuitBreaker.State != status.CircuitBreakerOpen {
+		t.Fatalf("expected aggregate breaker to be open, got %s", diagnostics.CircuitBreaker.State)
+	}
+
+	clock.Advance(time.Minute)
+	transit.deepProbeErr = nil
+	if err := controller.DeepProbeOnce(context.Background()); err != nil {
+		t.Fatalf("deep probe after breaker window: %v", err)
+	}
+	assertStoreHealth(t, store, kmsv2.HealthOK)
+}
+
 func TestControllerLoadsPersistedPendingState(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 2, time.Minute)
@@ -284,10 +412,9 @@ func TestControllerLoadsPersistedPendingState(t *testing.T) {
 	}
 
 	store := newTestStore(t, clock)
-	auth := &fakeAuth{}
 	transit := &fakeTransit{profile: profileForLatest(2, clock.Now())}
 	stateStore := &fakeStateStore{state: pending.State}
-	controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+	controller := newTestController(t, clock, store, observer, transit, stateStore)
 
 	if err := controller.ProbeOnce(context.Background()); err != nil {
 		t.Fatalf("probe persisted pending state: %v", err)
@@ -307,7 +434,6 @@ func newTestController(
 	clock *fakeClock,
 	store *status.Store,
 	observer *status.Observer,
-	auth *fakeAuth,
 	transit *fakeTransit,
 	stateStore *fakeStateStore,
 ) *status.Controller {
@@ -317,7 +443,6 @@ func newTestController(
 		Clock:      clock,
 		Store:      store,
 		Observer:   observer,
-		Auth:       auth,
 		Transit:    transit,
 		StateStore: stateStore,
 		MountPath:  "transit",
@@ -335,14 +460,22 @@ func newTestControllerWithOptions(t *testing.T, opts status.ControllerOptions) *
 	return controller
 }
 
-type fakeAuth struct {
-	refreshCalls int
-	err          error
-}
+func assertStoreHealth(t testing.TB, store *status.Store, want string) {
+	t.Helper()
 
-func (f *fakeAuth) Refresh(context.Context) error {
-	f.refreshCalls++
-	return f.err
+	current, err := store.Current(context.Background())
+	if err != nil {
+		t.Fatalf("current status: %v", err)
+	}
+	if current.Healthz != want {
+		t.Fatalf("unexpected health: want %s got %s", want, current.Healthz)
+	}
+	if want == kmsv2.HealthOK && current.KeyID == "" {
+		t.Fatal("healthy status did not include key_id")
+	}
+	if want != kmsv2.HealthOK && current.KeyID != "" {
+		t.Fatalf("unhealthy status included key_id %s", current.KeyID)
+	}
 }
 
 type fakeTransit struct {
@@ -350,6 +483,7 @@ type fakeTransit struct {
 	readErr         error
 	deepProbeErr    error
 	deepProbeResult openbao.ProbeResult
+	deepProbeSignal chan openbao.ProbeRequest
 	readCalls       int
 	deepProbeCalls  int
 	lastProbe       openbao.ProbeRequest
@@ -366,6 +500,9 @@ func (f *fakeTransit) ReadKeyProfile(context.Context, string, string) (openbao.K
 func (f *fakeTransit) ProbeEncryptDecrypt(_ context.Context, req openbao.ProbeRequest) (openbao.ProbeResult, error) {
 	f.deepProbeCalls++
 	f.lastProbe = req
+	if f.deepProbeSignal != nil {
+		f.deepProbeSignal <- req
+	}
 	return f.deepProbeResult, f.deepProbeErr
 }
 

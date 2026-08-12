@@ -200,7 +200,7 @@ Static pod mode depends on:
 
 If kubelet or the container runtime is broken, the KMS plugin may not start and the API server may be unable to decrypt existing resources.
 
-The provider retries its initial status probe for `bootstrap.graceTimeout` before exiting. Static pod deployments should keep this enabled because auth material, container networking, DNS, OpenBao availability, and clock sync can settle after the container process starts.
+The provider retries its initial metadata and deep probes for `bootstrap.graceTimeout` before exiting. Static pod deployments should keep this enabled because auth material, container networking, DNS, OpenBao availability, and clock sync can settle after the container process starts.
 
 For single-node control planes, systemd is usually safer. See [Deployment: Choosing A Model](/deployment/choosing-a-model/).
 

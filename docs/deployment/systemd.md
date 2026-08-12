@@ -88,7 +88,7 @@ the configured certificate chain and PKCS#11 PIN file.
 | `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6` | Allows Unix sockets plus IPv4 and IPv6 OpenBao traffic. |
 | `CapabilityBoundingSet=` and `AmbientCapabilities=` | Runs without Linux capabilities. |
 
-`network-online.target` is only an ordering hint. It does not prove DNS, routing, OpenBao TLS, or the OpenBao load balancer is ready. The provider's `bootstrap.graceTimeout` handles those boot races by retrying the initial status probe before exiting.
+`network-online.target` is only an ordering hint. It does not prove DNS, routing, OpenBao TLS, or the OpenBao load balancer is ready. The provider's `bootstrap.graceTimeout` handles those boot races by retrying the initial metadata and deep probes before exiting.
 
 ## Directory Setup
 
@@ -154,6 +154,6 @@ Common failures during initial bring-up:
 - host DNS is not ready before service start,
 - the OpenBao TLS server name does not match the certificate.
 
-The provider retries the initial status probe for `bootstrap.graceTimeout` before exiting. Keep the grace long enough for auth material projection, DNS or routing, OpenBao restart, and clock-sync races. Keep it short enough that deterministic misconfiguration is visible in service status.
+The provider retries the initial metadata and deep probes for `bootstrap.graceTimeout` before exiting. Keep the grace long enough for auth material projection, DNS or routing, OpenBao restart, and clock-sync races. Keep it short enough that deterministic misconfiguration is visible in service status.
 
 For diagnosis and recovery see [Operations: Troubleshooting](/operations/troubleshooting/). For provider upgrade procedure see [Operations: Upgrade](/operations/upgrade/).

@@ -31,6 +31,35 @@ func TestProbeOnceWithBootstrapGraceRetriesUntilSuccess(t *testing.T) {
 	if probe.calls != 3 {
 		t.Fatalf("expected three probe attempts, got %d", probe.calls)
 	}
+	if probe.deepCalls != 1 {
+		t.Fatalf("expected one deep probe after metadata recovery, got %d", probe.deepCalls)
+	}
+	if len(sleeps) != 2 || sleeps[0] != 5*time.Second || sleeps[1] != 5*time.Second {
+		t.Fatalf("unexpected sleeps: %#v", sleeps)
+	}
+}
+
+func TestProbeOnceWithBootstrapGraceRetriesDeepProbeUntilSuccess(t *testing.T) {
+	probe := &fakeBootstrapProbe{deepFailures: 2, err: errors.New("Transit data path unavailable")}
+	now := time.Unix(100, 0).UTC()
+	var sleeps []time.Duration
+	err := probeOnceWithBootstrapGraceAndSleep(
+		context.Background(),
+		probe,
+		config.BootstrapConfig{GraceTimeout: 30 * time.Second, RetryInterval: 5 * time.Second},
+		func() time.Time { return now },
+		func(_ context.Context, delay time.Duration) error {
+			sleeps = append(sleeps, delay)
+			now = now.Add(delay)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("probe with grace: %v", err)
+	}
+	if probe.calls != 3 || probe.deepCalls != 3 {
+		t.Fatalf("unexpected probe calls: metadata=%d deep=%d", probe.calls, probe.deepCalls)
+	}
 	if len(sleeps) != 2 || sleeps[0] != 5*time.Second || sleeps[1] != 5*time.Second {
 		t.Fatalf("unexpected sleeps: %#v", sleeps)
 	}
@@ -79,14 +108,24 @@ func TestAuthLoginTimeoutDefaultsToFiveSecondsMinimum(t *testing.T) {
 }
 
 type fakeBootstrapProbe struct {
-	failures int
-	err      error
-	calls    int
+	failures     int
+	deepFailures int
+	err          error
+	calls        int
+	deepCalls    int
 }
 
 func (f *fakeBootstrapProbe) ProbeOnce(context.Context) error {
 	f.calls++
 	if f.calls <= f.failures {
+		return f.err
+	}
+	return nil
+}
+
+func (f *fakeBootstrapProbe) DeepProbeOnce(context.Context) error {
+	f.deepCalls++
+	if f.deepCalls <= f.deepFailures {
 		return f.err
 	}
 	return nil
