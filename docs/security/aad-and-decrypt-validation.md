@@ -6,11 +6,14 @@ weight: 40
 
 # AAD And Decrypt Validation
 
-This page describes the security framing of associated data (AAD) and decrypt validation in `bao-kms-provider`. For the exact `key_id` format, AAD envelope shape, annotation rules, and decrypt validation order, see [Reference: Key ID And AAD](/reference/key-id-and-aad/).
+The provider uses additional authenticated data (AAD) and local decrypt validation to reject ciphertext outside its expected scope. OpenBao exposes AAD through the `associated_data` field. For the exact `key_id` format, AAD envelope, annotation rules, and decrypt validation order, see [Reference: Key ID And AAD](/reference/key-id-and-aad/).
 
 ## What AAD Protects Against
 
-OpenBao Transit `associated_data` binds ciphertext to non-secret metadata for AEAD ciphers. Decrypt succeeds only when the same associated data is supplied. The provider uses AAD to bind every ciphertext to the provider, the cluster, the OpenBao instance, the Transit mount, the key lineage, and the active key version that produced it.
+OpenBao Transit `associated_data` binds ciphertext to non-secret metadata for
+AEAD ciphers. Decrypt succeeds only when the caller supplies the same data. The
+provider uses AAD to bind every ciphertext to the provider, cluster, OpenBao
+instance, Transit mount, key lineage, and active key version that produced it.
 
 This addresses the following threats:
 
@@ -57,7 +60,7 @@ If decrypt is failing during an incident, follow [Operations: Troubleshooting: A
 
 AAD and decrypt validation do not protect against:
 
-- A compromised plugin binary. The plugin sees plaintext on the way through, before AAD is reconstructed and after it is verified.
+- A compromised provider binary. The provider sees plaintext on the way through, before AAD is reconstructed and after it is verified.
 - An attacker with valid Transit decrypt permission. Transit will decrypt any ciphertext encrypted under the key, AAD or not, and the attacker can supply matching AAD if they have read access to the configuration.
 - Loss of Transit key material. AAD validates ciphertext authenticity; it does not recover lost keys. See [Operations: Disaster Recovery](/operations/disaster-recovery/).
 

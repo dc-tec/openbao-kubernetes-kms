@@ -6,7 +6,7 @@ weight: 30
 
 # Observability
 
-This page defines the observability surface of `bao-kms-provider`: principles, log structure, error classes, health endpoints, alerts, and debug correlation. The exhaustive metric and log-field reference is on a separate page; see [Reference: Metrics](/reference/metrics/).
+The `bao-kms-provider` observability surface includes structured logs, error classes, health endpoints, alerts, and debug correlation. For the metric and log-field reference, see [Reference: Metrics](/reference/metrics/).
 
 ## Principles
 
@@ -38,7 +38,7 @@ Example log entry:
 The provider must never log:
 
 - plaintext,
-- JWTs,
+- JSON Web Tokens (JWTs),
 - OpenBao tokens,
 - full ciphertext,
 - raw Transit key material,
@@ -99,11 +99,11 @@ Recommended alert conditions:
 - Token TTL below threshold.
 - `key_id` hash differs across control-plane nodes.
 - Rotation state stuck pending.
-- AAD validation errors.
+- Additional authenticated data (AAD) validation errors.
 - Unknown `key_id` errors.
 - Latency threshold breach for encrypt or decrypt.
 - Increase in `openbao_kms_grpc_concurrency_rejections_total`.
-- Plugin restart loop.
+- Provider restart loop.
 - Socket restart or stale socket detection.
 
 Example Prometheus alerting rules ship at `deploy/prometheus/rules/openbao-kms.rules.yaml`. Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.

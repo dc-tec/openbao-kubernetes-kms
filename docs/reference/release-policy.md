@@ -6,14 +6,15 @@ weight: 100
 
 # Release Policy
 
-This page explains when `bao-kms-provider` publishes releases, what each
-channel means, and which artifacts users should verify before deployment.
+This policy defines when `bao-kms-provider` publishes releases, what each
+channel means, and which artifacts users must verify before deployment.
 
 ## Public Release Status
 
 Public releases use SemVer tags without a leading `v`, for example `0.1.0`.
 Each public release publishes GitHub Release assets and a GHCR image, plus the
-checksums, signatures, SBOMs, and provenance attestations needed to verify them.
+checksums, signatures, software bills of materials (SBOMs), and provenance
+attestations needed to verify them.
 
 The current public release line is a preview line unless the release notes and
 [Support Policy](/reference/support-policy/) explicitly say otherwise.
@@ -59,14 +60,14 @@ A preview release is suitable for validating:
 
 - KMS v2 protocol behavior,
 - the tested OpenBao and Kubernetes matrix,
-- JWT auth in the default build,
-- PKCS#11 certificate auth only when matching opt-in artifacts are published
-  and marked as tested,
+- JSON Web Token (JWT) auth in the default build,
+- certificate auth backed by a PKCS#11 hardware or software token only when
+  matching opt-in artifacts are published and marked as tested,
 - rotation behavior,
 - bootstrap and recovery runbooks covered by the release,
 - artifact verification.
 
-SPIFFE/SPIRE certificate-source support is not part of the preview user-facing
+The SPIFFE/SPIRE certificate source is not part of the preview user-facing
 configuration. It will be documented only after the required OpenBao cert-auth
 behavior and release validation are in place.
 

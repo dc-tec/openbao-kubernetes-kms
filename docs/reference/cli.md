@@ -6,10 +6,10 @@ weight: 10
 
 # CLI
 
-This page documents the provider-owned operational commands, the Cobra-generated
+This reference documents the provider-owned operational commands, the Cobra-generated
 shell completion entry point, and the provider flags supported by
 `bao-kms-provider`. Commands print stable text or JSON output where documented
-and use stable exit codes. They never print plaintext, JWTs, OpenBao tokens, or
+and use stable exit codes. They never print plaintext, JSON Web Tokens (JWTs), OpenBao tokens, or
 full ciphertext.
 
 ## serve
@@ -71,7 +71,8 @@ check fails. Use `--output text` for the default human-readable report or
 `--output json` for automation.
 
 Transit profile failures include an impact prefix. `cryptographic_safety`
-findings protect the validated encryption and AAD contract. `api_server_availability`
+findings protect the validated encryption and additional authenticated data
+(AAD) contract. `api_server_availability`
 findings identify settings that can make Kubernetes reads or writes fail even
 though they may not weaken ciphertext confidentiality directly.
 

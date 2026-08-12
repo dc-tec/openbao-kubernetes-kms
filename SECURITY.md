@@ -6,7 +6,10 @@
 
 Use GitHub private vulnerability reporting for issues that could expose plaintext, bypass decrypt validation, weaken key identity, leak credentials, or alter release artifacts.
 
-If private reporting is not available, open a minimal public issue asking maintainers to establish a private channel. Do not include exploit details, plaintext, JWTs, OpenBao tokens, full Transit ciphertexts, kubeconfigs, logs with secrets, or environment-specific credentials.
+If private reporting is not available, open a minimal public issue that asks
+maintainers to establish a private channel. Do not include exploit details,
+plaintext, JSON Web Tokens (JWTs), OpenBao tokens, full Transit ciphertexts,
+kubeconfigs, logs with secrets, or environment-specific credentials.
 
 ## Supported Versions
 
@@ -19,9 +22,9 @@ See [Support Policy](docs/reference/support-policy.md) and [Release Policy](docs
 Security-sensitive areas include:
 
 - Kubernetes KMS v2 protocol behavior.
-- Key ID, annotation, and AAD derivation.
+- Key ID, annotation, and additional authenticated data (AAD) derivation.
 - OpenBao Transit request construction.
 - JWT authentication and OpenBao token lifecycle.
 - Unix socket permissions and stale socket handling.
 - Logs, metrics, debug output, and panic recovery.
-- CI, release, signing, SBOM, and provenance workflows.
+- CI, release, signing, software bill of materials (SBOM), and provenance workflows.

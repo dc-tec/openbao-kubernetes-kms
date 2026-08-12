@@ -29,7 +29,7 @@ domain socket. `bao-kms-provider` adapts those two contracts and adds the
 Kubernetes-specific correctness rules around:
 
 - stable, opaque Kubernetes `key_id` values,
-- Transit `associated_data` binding,
+- Transit `associated_data` binding for additional authenticated data (AAD),
 - explicit Transit `key_version` on encrypt,
 - local validation before Transit decrypt,
 - rotation and rollback safety,
@@ -43,7 +43,7 @@ flowchart LR
     API["kube-apiserver"]
     Socket["Unix socket<br/>/run/openbao-kms/kms.sock"]
     Provider["bao-kms-provider"]
-    Auth["OpenBao auth<br/>JWT or scoped cert auth"]
+    Auth["OpenBao auth<br/>JSON Web Token (JWT) or scoped cert auth"]
     Transit["OpenBao Transit<br/>explicit key_version + AAD"]
     Etcd["etcd<br/>KMS v2 envelope"]
 
@@ -54,7 +54,8 @@ flowchart LR
 
 The provider runs on each control-plane host. It does not depend on the
 protected Kubernetes API server to operate, which is required because the API
-server may need the KMS plugin during startup to read encrypted resources.
+server may need the KMS provider plugin during startup to read encrypted
+resources.
 
 ## Current Scope
 
@@ -64,11 +65,11 @@ server may need the KMS plugin during startup to read encrypted resources.
 | Kubernetes target | Tested against Kubernetes `1.34` and `1.35` Kind node images pinned by digest. Kubernetes `1.36` is the intended next test line once a pinned Kind image is available. Kubernetes `1.29+` KMS v2 clusters may work, but are covered only when listed in `.ci/versions.yaml`. |
 | OpenBao target | OpenBao `2.6.0` with Transit. JWT auth is the default preview auth path. |
 | Transit key type | `aes256-gcm96` is the supported and recommended default. |
-| Authentication | JWT auth by default. PKCS#11 certificate auth is opt-in and covered only when a release publishes matching artifacts and marks the path as tested. SPIFFE/SPIRE is not a supported preview configuration. OpenBao tokens stay in process memory. |
+| Authentication | JWT auth by default. Certificate auth backed by a PKCS#11 hardware or software token is opt-in and covered only when a release publishes matching artifacts and marks the path as tested. SPIFFE/SPIRE workload identity is not a supported preview configuration. OpenBao tokens stay in process memory. |
 | Deployment models | Hardened systemd unit or kubelet-managed static pod. |
 | Release maturity | Preview release line; see the [Support Policy](https://dc-tec.github.io/openbao-kubernetes-kms/reference/support-policy/). |
 | Release cadence | Event-driven releases, scheduled validation. |
-| Supply chain | Vendored builds, SBOMs, signed checksums, image signatures, provenance attestations, vulnerability scans, and reproducibility reports for public releases. |
+| Supply chain | Vendored builds, software bills of materials (SBOMs), signed checksums, image signatures, provenance attestations, vulnerability scans, and reproducibility reports for public releases. |
 
 Preview support is limited to the tested matrix. Newer or adjacent Kubernetes,
 OpenBao, OS, key-type, auth, or deployment combinations are not automatically
@@ -90,7 +91,7 @@ The implementation is built around fail-closed behavior:
 - ciphertext is bound to provider, cluster, OpenBao instance, Transit mount,
   key lineage, and Transit key version,
 - Status reads from cached state and does not perform live Transit decrypts,
-- the plugin does not create, rotate, export, delete, or back up Transit keys,
+- the provider does not create, rotate, export, delete, or back up Transit keys,
 - logs and metrics do not expose plaintext, JWTs, OpenBao tokens, full
   ciphertext, raw Transit key material, raw OpenBao paths, or raw key names.
 
@@ -212,7 +213,7 @@ Release policy is documented in
 - [Kubernetes: Encrypting confidential data at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
 - [Kubernetes: Static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
-- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
+- [OpenBao JWT and OpenID Connect (OIDC) auth API](https://openbao.org/api-docs/auth/jwt/)
 - [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
 - [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)
 

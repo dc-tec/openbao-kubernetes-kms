@@ -6,13 +6,13 @@ weight: 40
 
 # Rotation Model
 
-This page is the maintainer-facing description of the rotation state machine and invariants. For the operator runbook see [Operations: Rotation](/operations/rotation/).
+This maintainer-facing description defines the rotation state machine and its invariants. For the operator runbook, see [Operations: Rotation](/operations/rotation/).
 
 ## Principles
 
 Rotation is driven by OpenBao Transit key versions and Kubernetes KMS v2 `key_id`.
 
-The plugin does not rotate the Transit key. Rotation is a platform operation and Kubernetes data migration is an operator-controlled operation. This split keeps the plugin's permission surface narrow and keeps key-management decisions inside the platform's existing change-control path.
+The provider does not rotate the Transit key. Rotation is a platform operation, and Kubernetes data migration is an operator-controlled operation. This split keeps the provider's permission surface narrow. Key-management decisions remain in the platform's existing change-control path.
 
 Kubernetes recommends rotating KEKs at least every 90 days and explains that KMS v2 uses `key_id` changes to determine when data may be stale.
 
@@ -40,7 +40,7 @@ End-to-end flow:
 sequenceDiagram
     participant Operator as platform operator
     participant Bao as OpenBao Transit
-    participant Watcher as plugin key watcher
+    participant Watcher as provider key watcher
     participant Status as status cache
     participant API as kube-apiserver
 
@@ -60,7 +60,7 @@ sequenceDiagram
 
 ## Avoiding Key ID Flip-Flop
 
-The plugin must not flip-flop between `key_id` values during rotation. Recommended controls:
+The provider must not flip-flop between `key_id` values during rotation. Recommended controls:
 
 - require a stable observation count (`rotation.requireStableObservationCount`),
 - require an activation delay (`rotation.activationDelay`),
@@ -79,11 +79,11 @@ The flip-flop guard is critical because Kubernetes treats Status `key_id` change
 
 ## `min_encryption_version`
 
-`min_encryption_version` can be used as a guard after rotation to prevent encryption with older versions. It is managed by platform automation; the plugin only observes it.
+`min_encryption_version` can be used as a guard after rotation to prevent encryption with older versions. It is managed by platform automation; the provider only observes it.
 
 ## `min_decryption_version`
 
-`min_decryption_version` is dangerous. Raising it too early can make existing Kubernetes data undecryptable. It should only be raised after:
+`min_decryption_version` is dangerous. Raising it too early can make existing Kubernetes data undecryptable. Raise it only after:
 
 - every configured resource has been rewritten,
 - old `key_id` references are no longer observed,
@@ -113,4 +113,10 @@ For Kubernetes KMS v2, rewrap remains outside the hot path because Kubernetes ow
 
 ## Cross-Node Convergence
 
-Each control-plane node runs its own plugin and maintains its own snapshot. The activation delay and stable observation count reduce the chance that nodes promote the new version at materially different times, but they do not eliminate it. Operators verify cross-node convergence by comparing the `openbao_kms_status_key_id_hash` metric across nodes during and after rotation; see [Operations: Rotation: Observe Promotion](/operations/rotation/#observe-promotion).
+Each control-plane node runs its own provider instance and maintains its own
+snapshot. The activation delay and stable observation count reduce the chance
+that nodes promote the new version at materially different times, but they do
+not eliminate it. Operators verify cross-node convergence by comparing the
+`openbao_kms_status_key_id_hash` metric across nodes during and after rotation.
+See [Operations: Rotation: Observe
+Promotion](/operations/rotation/#observe-promotion).

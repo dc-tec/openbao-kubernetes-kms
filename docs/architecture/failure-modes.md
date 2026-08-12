@@ -1,14 +1,16 @@
 ---
 title: "Failure Modes"
-description: "Comprehensive catalog of failure modes the design considers: cause, impact, detection signals, mitigation, recovery, startup blocking, and data loss risk."
+description: "Failure modes the design considers: cause, impact, detection signals, mitigation, recovery, startup blocking, and data loss risk."
 weight: 50
 ---
 
 # Failure Modes
 
-This page is the comprehensive failure-mode catalog the design considers. Each row pairs a failure scenario with its detection signal, mitigation, and recovery action. For the operator runbooks that act on these signals see [Operations: Troubleshooting](/operations/troubleshooting/) and [Operations: Disaster Recovery](/operations/disaster-recovery/).
+This catalog pairs each failure scenario with its detection signal, mitigation, and recovery action. For runbooks that act on these signals, see [Operations: Troubleshooting](/operations/troubleshooting/) and [Operations: Disaster Recovery](/operations/disaster-recovery/).
 
-## How To Use This Page
+<a id="how-to-use-this-page"></a>
+
+## How To Use The Catalog
 
 Each row in the catalog answers four questions:
 
@@ -26,28 +28,28 @@ Two columns flag operational severity:
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|
-| Plugin unavailable | Service not installed, crash, disabled | API server cannot reach KMS | systemd or kubelet status, socket missing, KMS unhealthy | Restart policy, health checks | Start plugin, fix configuration | Yes | No |
-| Socket unavailable | Directory missing, listener failed | API server cannot call KMS | API server logs, `/live` failure | Pre-created runtime directory, safe socket setup | Fix path or permissions, restart plugin | Yes | No |
-| Kubelet or container runtime unavailable for static pod | Host boot failure | Plugin static pod cannot start | kubelet or CRI logs | systemd mode, local image cache | Fix kubelet or CRI, or run plugin as host service | Yes | No |
-| systemd ordering wrong | Plugin starts after API server | API server fails or retries | Boot logs | `Before=kubelet.service` where appropriate, tested units | Correct unit dependencies | Yes | No |
+| Provider unavailable | Service not installed, crash, disabled | API server cannot reach KMS | systemd or kubelet status, socket missing, KMS unhealthy | Restart policy, health checks | Start provider, fix configuration | Yes | No |
+| Socket unavailable | Directory missing, listener failed | API server cannot call KMS | API server logs, `/live` failure | Pre-created runtime directory, safe socket setup | Fix path or permissions, restart provider | Yes | No |
+| Kubelet or container runtime unavailable for static pod | Host boot failure | Provider static pod cannot start | kubelet or CRI logs | systemd mode, local image cache | Fix kubelet or CRI, or run provider as host service | Yes | No |
+| systemd ordering wrong | Provider starts after API server | API server fails or retries | Boot logs | `Before=kubelet.service` where appropriate, tested units | Correct unit dependencies | Yes | No |
 | Stale socket | Crash left socket path | Startup failure or wrong listener | Socket check | Safe stale cleanup | Remove verified-dead socket | Yes | No |
 | Wrong socket permissions | API server cannot connect | KMS unavailable | API server permission errors | Mode and group validation | Fix group or mode | Yes | No |
 | SELinux or AppArmor block | Host policy denies socket or file | KMS unavailable | Audit logs | Policy profiles, tests | Adjust policy | Yes | No |
 | Configuration file permissions unsafe | World-readable or world-writable | Secret or topology exposure or tamper | Startup validation | Fail closed | Fix permissions | Yes | No |
-| Plugin crash loop | Bug, bad configuration, OpenBao error path | KMS unavailable | Service logs | Supervisor, tests | Fix configuration or bug | Yes | No |
-| Image unavailable for static pod | Pull failure, air gap | Plugin not started | kubelet events or logs | Preloaded image, `IfNotPresent` or `Never` | Load image | Yes | No |
-| Package upgrade restarts systemd plugin | Maintenance event | Transient KMS outage | Service logs | Controlled rollout | Restart one node at a time | Possible | No |
+| Provider crash loop | Bug, bad configuration, OpenBao error path | KMS unavailable | Service logs | Supervisor, tests | Fix configuration or bug | Yes | No |
+| Image unavailable for static pod | Pull failure, air gap | Provider not started | kubelet events or logs | Preloaded image, `IfNotPresent` or `Never` | Load image | Yes | No |
+| Package upgrade restarts systemd provider | Maintenance event | Transient KMS outage | Service logs | Controlled rollout | Restart one node at a time | Possible | No |
 
 ## OpenBao And Transit
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|
 | OpenBao unavailable | Network, DNS, load balancer, outage | Encrypt and decrypt fail | Readiness, metrics, OpenBao request errors | HA OpenBao, local routing, retries | Restore OpenBao reachability | Yes for encrypted data | No |
-| OpenBao sealed | Manual seal, restart not unsealed | Transit unavailable | OpenBao health, plugin readiness | Auto-unseal, alerting | Unseal or restore OpenBao | Yes | No, unless key unavailable permanently |
+| OpenBao sealed | Manual seal, restart not unsealed | Transit unavailable | OpenBao health, provider readiness | Auto-unseal, alerting | Unseal or restore OpenBao | Yes | No, unless key unavailable permanently |
 | OpenBao inside same protected cluster | Circular dependency | KMS unavailable before API server | Bootstrap failure | External management plane | Start OpenBao independently or restore an external service | Yes | Possible if unrecoverable |
-| Audit backend pressure | OpenBao audit device slow or failing | Transit latency or errors | OpenBao metrics, plugin latency | HA audit sinks, capacity planning | Repair audit backend | Possible | No |
-| OpenBao leader failover | HA event | Transient errors or latency | OpenBao status, plugin retries | HA tuning, bounded retries | Wait or fix cluster | Possible | No |
-| TLS certificate expired | Certificate not renewed | Plugin cannot connect | TLS errors | Certificate monitoring | Renew certificate, reload plugin | Yes | No |
+| Audit backend pressure | OpenBao audit device slow or failing | Transit latency or errors | OpenBao metrics, provider latency | HA audit sinks, capacity planning | Repair audit backend | Possible | No |
+| OpenBao leader failover | HA event | Transient errors or latency | OpenBao status, provider retries | HA tuning, bounded retries | Wait or fix cluster | Possible | No |
+| TLS certificate expired | Certificate not renewed | Provider cannot connect | TLS errors | Certificate monitoring | Renew certificate, reload provider | Yes | No |
 | DNS or LB misrouting | Wrong backend or stale DNS | Auth or Transit errors | TLS or SNI errors, metadata mismatch | Pinned CA and SNI, instance ID checks | Fix DNS or load balancer | Yes | No |
 
 ## Transit Key Material
@@ -62,6 +64,11 @@ Two columns flag operational severity:
 | Key backup missing | Disaster restore lacks Transit key versions | Data undecryptable | DR test failure | Coordinated OpenBao backups | Restore from valid backup | Yes | Yes |
 
 ## Authentication And Issuer State
+
+This section uses JSON Web Token (JWT), JSON Web Key Set (JWKS), and OpenID
+Connect (OIDC) terminology. PKCS#11 refers to the interface for hardware or
+software cryptographic tokens. SPIFFE refers to the workload identity
+framework, and an SVID is a SPIFFE Verifiable Identity Document.
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|
@@ -83,7 +90,7 @@ Two columns flag operational severity:
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|
-| Status `key_id` differs from encrypt response | Race or bug | API server discards encrypt result, marks unhealthy | API server logs, plugin metrics | Snapshot consistency | Fix bug, restart with stable registry | Possible | No |
+| Status `key_id` differs from encrypt response | Race or bug | API server discards encrypt result, marks unhealthy | API server logs, provider metrics | Snapshot consistency | Fix bug, restart with stable registry | Possible | No |
 | `key_id` flip-flops | Unstable rotation observation | Stale marking oscillates | Metrics or logs hash changes | Stable observation count, activation delay | Pin active key, fix watcher | Possible | No |
 | Unknown `key_id` on decrypt | Configuration or provider changed, old data | Decrypt rejected | Decrypt `key_id` errors | Preserve key history | Restore old configuration or registry | Yes for affected data | Possible |
 | Registry state missing | State file removed or first startup after restore | Provider may need to rebuild snapshots before serving | `doctor`, `verify-key`, `rotation-plan`, startup logs with auto-bootstrap eligibility reason | Strict state file and checkpoint; auto-bootstrap only from initial Transit metadata | Restore state file and checkpoint from backup or a known-good peer; after rotation or brownfield import, current preview releases fail closed rather than rebuilding state | Possible | No |

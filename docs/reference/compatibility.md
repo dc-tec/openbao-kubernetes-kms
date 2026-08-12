@@ -6,14 +6,14 @@ weight: 80
 
 # Compatibility
 
-This page lists the versions and deployment shapes currently tested for
+This matrix lists the versions and deployment shapes currently tested for
 `bao-kms-provider`.
 
 ## Tested Preview Matrix
 
 The preview matrix is intentionally narrow. A tagged release covers only the
 versions, artifact families, and deployment models listed in its release notes
-and on this page.
+and in this matrix.
 
 The initial preview matrix is:
 
@@ -22,10 +22,11 @@ The initial preview matrix is:
 - Kubernetes KMS v2,
 - OpenBao `2.6.0`,
 - OpenBao Transit,
-- JWT auth in default release artifacts,
-- PKCS#11 certificate auth only when the selected release includes matching
-  opt-in artifacts and marks that path as tested,
-- SPIFFE/SPIRE is not a supported preview user configuration,
+- JSON Web Token (JWT) auth in default release artifacts,
+- certificate auth backed by a PKCS#11 hardware or software token only when the
+  selected release includes matching opt-in artifacts and marks that path as
+  tested,
+- SPIFFE/SPIRE workload identity is not a supported preview user configuration,
 - Linux control-plane nodes with filesystem Unix domain sockets.
 
 ## Kubernetes
@@ -110,8 +111,9 @@ encrypting with settings outside the validated contract.
 Findings are classified by impact:
 
 - `cryptographic_safety`: settings that weaken or change the validated
-  encryption and AAD contract, such as unsupported key type, exportable key
-  material, plaintext backup, derived mode, or convergent encryption.
+  encryption and additional authenticated data (AAD) contract, such as an
+  unsupported key type, exportable key material, plaintext backup, derived
+  mode, or convergent encryption.
 - `api_server_availability`: settings that can strand API server reads or
   writes, such as key deletion, unsupported encrypt/decrypt operations, or
   version restrictions that block active or historical versions.
