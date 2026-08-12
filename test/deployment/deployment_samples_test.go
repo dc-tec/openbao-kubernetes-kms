@@ -62,6 +62,8 @@ func TestGrafanaDashboardSampleIsValid(t *testing.T) {
 	requiredMetrics := []string{
 		"openbao_kms_grpc_requests_total",
 		"openbao_kms_grpc_duration_seconds_bucket",
+		"openbao_kms_grpc_in_flight",
+		"openbao_kms_grpc_concurrency_rejections_total",
 		"openbao_kms_openbao_requests_total",
 		"openbao_kms_openbao_duration_seconds_bucket",
 		"openbao_kms_auth_login_total",
@@ -105,6 +107,7 @@ func TestPrometheusRuleSampleIsValid(t *testing.T) {
 		"OpenBaoKMSKeyIDHashDiverged",
 		"OpenBaoKMSAADValidationErrors",
 		"OpenBaoKMSGRPCLatencyHigh",
+		"OpenBaoKMSConcurrencyRejected",
 	}
 	for _, alert := range requiredAlerts {
 		if !prometheusRulesContainAlert(group.Rules, alert) {

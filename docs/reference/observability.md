@@ -71,6 +71,7 @@ The provider tags every failed operation with one of these stable error classes.
 - `status_stale`
 - `timeout`
 - `canceled`
+- `concurrency_limit`
 - `unknown`
 
 ## Health Endpoints
@@ -101,6 +102,7 @@ Recommended alert conditions:
 - AAD validation errors.
 - Unknown `key_id` errors.
 - Latency threshold breach for encrypt or decrypt.
+- Increase in `openbao_kms_grpc_concurrency_rejections_total`.
 - Plugin restart loop.
 - Socket restart or stale socket detection.
 

@@ -32,6 +32,8 @@ The provider applies these rules to every metric:
 |---|---|---|---|
 | `openbao_kms_grpc_requests_total` | counter | `method`, `status` | KMS v2 gRPC method invocations and outcomes (`status`, `encrypt`, `decrypt`). |
 | `openbao_kms_grpc_duration_seconds` | histogram | `method` | Per-method latency for KMS v2 gRPC handlers. |
+| `openbao_kms_grpc_in_flight` | gauge | `method` | Current active Status, Encrypt, and Decrypt handler counts. |
+| `openbao_kms_grpc_concurrency_rejections_total` | counter | `method` | KMS v2 requests rejected because the method reached its configured active-request limit. |
 
 ### OpenBao Calls
 

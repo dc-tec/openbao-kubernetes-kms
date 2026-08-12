@@ -32,6 +32,7 @@ const (
 	errorClassTransitPolicyDenied = "transit_policy_denied"
 	errorClassAuthFailed          = "auth_failed"
 	errorClassCanceled            = "canceled"
+	errorClassConcurrencyLimit    = "concurrency_limit"
 	errorClassUnknown             = "unknown"
 )
 
@@ -66,16 +67,17 @@ var grpcErrorClasses = map[codes.Code]string{
 
 // RequestObservation is one redacted KMS v2 request observation.
 type RequestObservation struct {
-	Method            string
-	Status            string
-	Duration          time.Duration
-	KeyIDHash         string
-	TransitKeyVersion int
-	RequestUIDHash    string
-	ErrorClass        string
-	Healthz           string
-	PanicRecovered    bool
-	PanicType         string
+	Method              string
+	Status              string
+	Duration            time.Duration
+	KeyIDHash           string
+	TransitKeyVersion   int
+	RequestUIDHash      string
+	ErrorClass          string
+	Healthz             string
+	PanicRecovered      bool
+	PanicType           string
+	ConcurrencyRejected bool
 }
 
 // Observer receives redacted KMS v2 request and validation observations.
@@ -173,6 +175,8 @@ func validationErrorClass(err error) string {
 	case errors.Is(err, ErrRequestLimitExceeded),
 		errors.Is(err, ErrResponseLimitExceeded):
 		return errorClassProtocolLimit
+	case errors.Is(err, ErrConcurrencyLimitExceeded):
+		return errorClassConcurrencyLimit
 	case errors.Is(err, ErrStatusUnavailable),
 		errors.Is(err, ErrStatusUnhealthy),
 		errors.Is(err, ErrActiveKeyUnavailable),

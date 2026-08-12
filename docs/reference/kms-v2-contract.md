@@ -137,6 +137,13 @@ Decrypt requests that exceed these limits are rejected before Transit decrypt is
 
 The gRPC server also caps inbound and outbound protobuf messages at 65536 bytes. This keeps the transport envelope bounded while leaving room for protobuf overhead around the KMS v2 field limits.
 
+The provider limits active KMS handlers to 16 Status requests, 32 Encrypt
+requests, and 64 Decrypt requests by default. Operators can change each limit
+from 1 through 1024 in the provider configuration. The provider rejects a
+request above its method limit with gRPC `ResourceExhausted`. It does not queue
+the request. The separate limits reserve Decrypt capacity during API server
+startup.
+
 The OpenBao client also limits HTTP response bodies:
 
 - error responses: 64 KiB,

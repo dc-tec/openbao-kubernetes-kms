@@ -21,15 +21,18 @@ import (
 )
 
 const (
-	concurrentRequestCount  = 25
-	concurrentPayloadFormat = "payload-%d"
-	malformedKeyID          = "not-a-key-id"
-	mismatchedKeyIDSeed     = "different-key-id"
-	pluginVersion           = "v0.1.0-test"
-	statusCacheError        = "cache unavailable with sensitive internals"
-	testCiphertext          = "ciphertext"
-	testPlaintext           = "secret kube payload"
-	testRequestUID          = "safe-request-uid"
+	concurrentRequestCount   = 25
+	concurrentPayloadFormat  = "payload-%d"
+	testMaxConcurrentStatus  = 16
+	testMaxConcurrentEncrypt = 32
+	testMaxConcurrentDecrypt = 64
+	malformedKeyID           = "not-a-key-id"
+	mismatchedKeyIDSeed      = "different-key-id"
+	pluginVersion            = "v0.1.0-test"
+	statusCacheError         = "cache unavailable with sensitive internals"
+	testCiphertext           = "ciphertext"
+	testPlaintext            = "secret kube payload"
+	testRequestUID           = "safe-request-uid"
 )
 
 func TestStatusReturnsCachedActiveKeyIDWithoutTransit(t *testing.T) {
@@ -374,6 +377,142 @@ func TestRequestTimeoutCancelsTransitCall(t *testing.T) {
 	if transit.EncryptCalls() != 1 {
 		t.Fatalf("expected one transit encrypt call, got %d", transit.EncryptCalls())
 	}
+	status, encrypt, decrypt := server.InFlightKMSRequests()
+	if status != 0 || encrypt != 0 || decrypt != 0 {
+		t.Fatalf("request limit was not released: status=%d encrypt=%d decrypt=%d", status, encrypt, decrypt)
+	}
+}
+
+func TestStatusConcurrencyLimitIsIndependent(t *testing.T) {
+	server, _, _, _ := newTestServerWithOptions(t, kmsv2.Options{
+		StatusCache:         blockingStatusCache{},
+		MaxConcurrentStatus: 1,
+	})
+
+	blockedCtx, cancelBlocked := context.WithCancel(context.Background())
+	blockedDone := make(chan error, 1)
+	go func() {
+		_, blockedErr := server.Status(blockedCtx, &kmsapi.StatusRequest{})
+		blockedDone <- blockedErr
+	}()
+	waitForInFlight(t, server, 1, 0, 0)
+
+	_, err := server.Status(context.Background(), &kmsapi.StatusRequest{})
+	assertCode(t, err, codes.ResourceExhausted)
+
+	cancelBlocked()
+	assertCode(t, <-blockedDone, codes.Canceled)
+	waitForInFlight(t, server, 0, 0, 0)
+}
+
+func TestConcurrencyLimitsReserveDecryptAndStatusCapacity(t *testing.T) {
+	observer := &fakeObserver{}
+	server, _, transit, _ := newTestServerWithOptions(t, kmsv2.Options{
+		MaxConcurrentEncrypt: 1,
+		MaxConcurrentDecrypt: 1,
+		Observer:             observer,
+	})
+
+	encrypted, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{
+		Plaintext: []byte(testPlaintext),
+	})
+	if err != nil {
+		t.Fatalf("seed encrypt: %v", err)
+	}
+
+	transit.SetBlockEncrypt(true)
+	blockedCtx, cancelBlocked := context.WithCancel(context.Background())
+	blockedDone := make(chan error, 1)
+	go func() {
+		_, blockedErr := server.Encrypt(blockedCtx, &kmsapi.EncryptRequest{
+			Plaintext: []byte("blocked plaintext"),
+		})
+		blockedDone <- blockedErr
+	}()
+	waitForInFlight(t, server, 0, 1, 0)
+
+	_, err = server.Encrypt(context.Background(), &kmsapi.EncryptRequest{
+		Plaintext: []byte("rejected plaintext"),
+	})
+	assertCode(t, err, codes.ResourceExhausted)
+	if err == nil || err.Error() != "rpc error: code = ResourceExhausted desc = kms request concurrency limit reached" {
+		t.Fatalf("unexpected concurrency error: %v", err)
+	}
+	if transit.EncryptCalls() != 2 {
+		t.Fatalf("rejected request reached Transit: %d calls", transit.EncryptCalls())
+	}
+
+	statusResponse, err := server.Status(context.Background(), &kmsapi.StatusRequest{})
+	if err != nil || statusResponse.GetHealthz() != kmsv2.HealthOK {
+		t.Fatalf("Status was blocked by Encrypt limit: response=%v err=%v", statusResponse, err)
+	}
+	decrypted, err := server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
+		Ciphertext:  encrypted.GetCiphertext(),
+		KeyId:       encrypted.GetKeyId(),
+		Annotations: encrypted.GetAnnotations(),
+	})
+	if err != nil {
+		t.Fatalf("Decrypt was blocked by Encrypt limit: %v", err)
+	}
+	if !bytes.Equal(decrypted.GetPlaintext(), []byte(testPlaintext)) {
+		t.Fatalf("unexpected decrypted plaintext: %q", decrypted.GetPlaintext())
+	}
+
+	cancelBlocked()
+	assertCode(t, <-blockedDone, codes.Canceled)
+	waitForInFlight(t, server, 0, 0, 0)
+
+	foundLimitObservation := false
+	for _, request := range observer.requests {
+		if request.Status == "resource_exhausted" &&
+			request.ErrorClass == "concurrency_limit" &&
+			request.ConcurrencyRejected {
+			foundLimitObservation = true
+			break
+		}
+	}
+	if !foundLimitObservation {
+		t.Fatalf("missing concurrency-limit observation: %#v", observer.requests)
+	}
+}
+
+func TestDecryptConcurrencyLimitRejectsExcessRequests(t *testing.T) {
+	server, _, transit, _ := newTestServerWithOptions(t, kmsv2.Options{
+		MaxConcurrentDecrypt: 1,
+	})
+	encrypted, err := server.Encrypt(context.Background(), &kmsapi.EncryptRequest{
+		Plaintext: []byte(testPlaintext),
+	})
+	if err != nil {
+		t.Fatalf("seed encrypt: %v", err)
+	}
+
+	transit.SetBlockDecrypt(true)
+	blockedCtx, cancelBlocked := context.WithCancel(context.Background())
+	blockedDone := make(chan error, 1)
+	go func() {
+		_, blockedErr := server.Decrypt(blockedCtx, &kmsapi.DecryptRequest{
+			Ciphertext:  encrypted.GetCiphertext(),
+			KeyId:       encrypted.GetKeyId(),
+			Annotations: encrypted.GetAnnotations(),
+		})
+		blockedDone <- blockedErr
+	}()
+	waitForInFlight(t, server, 0, 0, 1)
+
+	_, err = server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
+		Ciphertext:  encrypted.GetCiphertext(),
+		KeyId:       encrypted.GetKeyId(),
+		Annotations: encrypted.GetAnnotations(),
+	})
+	assertCode(t, err, codes.ResourceExhausted)
+	if transit.DecryptCalls() != 1 {
+		t.Fatalf("rejected decrypt reached Transit: %d calls", transit.DecryptCalls())
+	}
+
+	cancelBlocked()
+	assertCode(t, <-blockedDone, codes.Canceled)
+	waitForInFlight(t, server, 0, 0, 0)
 }
 
 func TestStatusUsesRequestTimeout(t *testing.T) {
@@ -507,6 +646,10 @@ func TestPanicRecoveryReturnsRedactedInternalErrorAndObservation(t *testing.T) {
 	if request.ErrorClass != "panic" || !request.PanicRecovered || request.PanicType != "string" {
 		t.Fatalf("unexpected panic observation: %#v", request)
 	}
+	status, encrypt, decrypt := server.InFlightKMSRequests()
+	if status != 0 || encrypt != 0 || decrypt != 0 {
+		t.Fatalf("panic did not release request limit: status=%d encrypt=%d decrypt=%d", status, encrypt, decrypt)
+	}
 }
 
 func TestConcurrentEncryptDecrypt(t *testing.T) {
@@ -563,12 +706,24 @@ func newTestServerWithOptions(
 	})
 	transit := fakes.NewKMSTransit()
 	options := kmsv2.Options{
-		StatusCache:    cache,
-		Registry:       registry,
-		Transit:        transit,
-		PluginVersion:  pluginVersion,
-		RequestTimeout: overrides.RequestTimeout,
-		Observer:       overrides.Observer,
+		StatusCache:          cache,
+		Registry:             registry,
+		Transit:              transit,
+		PluginVersion:        pluginVersion,
+		RequestTimeout:       overrides.RequestTimeout,
+		MaxConcurrentStatus:  testMaxConcurrentStatus,
+		MaxConcurrentEncrypt: testMaxConcurrentEncrypt,
+		MaxConcurrentDecrypt: testMaxConcurrentDecrypt,
+		Observer:             overrides.Observer,
+	}
+	if overrides.MaxConcurrentStatus != 0 {
+		options.MaxConcurrentStatus = overrides.MaxConcurrentStatus
+	}
+	if overrides.MaxConcurrentEncrypt != 0 {
+		options.MaxConcurrentEncrypt = overrides.MaxConcurrentEncrypt
+	}
+	if overrides.MaxConcurrentDecrypt != 0 {
+		options.MaxConcurrentDecrypt = overrides.MaxConcurrentDecrypt
 	}
 	if overrides.StatusCache != nil {
 		options.StatusCache = overrides.StatusCache
@@ -613,6 +768,40 @@ func assertCode(t *testing.T, err error, code codes.Code) {
 	t.Helper()
 	if got := grpcstatus.Code(err); got != code {
 		t.Fatalf("unexpected gRPC code: want %s got %s err=%v", code, got, err)
+	}
+}
+
+func waitForInFlight(
+	t *testing.T,
+	server *kmsv2.Server,
+	wantStatus int,
+	wantEncrypt int,
+	wantDecrypt int,
+) {
+	t.Helper()
+	deadline := time.NewTimer(time.Second)
+	ticker := time.NewTicker(time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	for {
+		status, encrypt, decrypt := server.InFlightKMSRequests()
+		if status == wantStatus && encrypt == wantEncrypt && decrypt == wantDecrypt {
+			return
+		}
+		select {
+		case <-deadline.C:
+			t.Fatalf(
+				"in-flight request count did not converge: got status=%d encrypt=%d decrypt=%d, "+
+					"want status=%d encrypt=%d decrypt=%d",
+				status,
+				encrypt,
+				decrypt,
+				wantStatus,
+				wantEncrypt,
+				wantDecrypt,
+			)
+		case <-ticker.C:
+		}
 	}
 }
 

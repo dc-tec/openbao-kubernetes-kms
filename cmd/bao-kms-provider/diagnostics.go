@@ -564,10 +564,13 @@ func checkStatusEncryptConsistency(
 		return
 	}
 	server, err := kmsv2.NewServer(kmsv2.Options{
-		StatusCache:   store,
-		Registry:      store,
-		Transit:       &diagnosticTransit{},
-		PluginVersion: diagnosticPluginVersion(info),
+		StatusCache:          store,
+		Registry:             store,
+		Transit:              &diagnosticTransit{},
+		PluginVersion:        diagnosticPluginVersion(info),
+		MaxConcurrentStatus:  1,
+		MaxConcurrentEncrypt: 1,
+		MaxConcurrentDecrypt: 1,
 	})
 	if err != nil {
 		report.Fail(checkStatusEncryptInvariant, "Status/encrypt consistency", safeMessage(err))

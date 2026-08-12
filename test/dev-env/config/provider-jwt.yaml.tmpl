@@ -5,6 +5,9 @@ server:
   socketGroup: "1234"
   metricsAddress: "0.0.0.0:8081"
   healthAddress: "0.0.0.0:8082"
+  maxConcurrentStatus: 16
+  maxConcurrentEncrypt: 32
+  maxConcurrentDecrypt: 64
 openbao:
   address: https://openbao:8200
   namespace: ""

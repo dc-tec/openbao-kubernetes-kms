@@ -24,8 +24,12 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 	if err := recorder.RegisterAuthProvider(fakeAuthProvider{}); err != nil {
 		t.Fatalf("register auth: %v", err)
 	}
+	if err := recorder.RegisterConcurrencyProvider(fakeConcurrencyProvider{}); err != nil {
+		t.Fatalf("register concurrency: %v", err)
+	}
 
 	recorder.RecordGRPCRequest("decrypt", "not_found", 2*time.Millisecond)
+	recorder.RecordGRPCConcurrencyRejection("decrypt")
 	recorder.RecordOpenBaoRequest("transit decrypt", "permission_denied", 3*time.Millisecond)
 	recorder.RecordAuthLogin("ok")
 	recorder.RecordAuthRenewal("auth_failed")
@@ -38,6 +42,10 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 	output := scrapeMetrics(t, recorder.Handler())
 	for _, want := range []string{
 		`openbao_kms_grpc_requests_total{method="decrypt",status="not_found"} 1`,
+		`openbao_kms_grpc_concurrency_rejections_total{method="decrypt"} 1`,
+		`openbao_kms_grpc_in_flight{method="status"} 1`,
+		`openbao_kms_grpc_in_flight{method="encrypt"} 2`,
+		`openbao_kms_grpc_in_flight{method="decrypt"} 3`,
 		`openbao_kms_openbao_requests_total{operation="transit_decrypt",status="permission_denied"} 1`,
 		`openbao_kms_auth_login_total{status="ok"} 1`,
 		`openbao_kms_auth_renewal_total{status="auth_failed"} 1`,
@@ -102,4 +110,10 @@ func (fakeAuthProvider) State() auth.State {
 		TokenTTL:          5 * time.Minute,
 		CertTTL:           2 * time.Hour,
 	}
+}
+
+type fakeConcurrencyProvider struct{}
+
+func (fakeConcurrencyProvider) InFlightKMSRequests() (statusCount int, encryptCount int, decryptCount int) {
+	return 1, 2, 3
 }

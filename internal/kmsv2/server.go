@@ -33,6 +33,7 @@ const (
 	messageAnnotationsInvalid          = "annotations invalid"
 	messageAnnotationsMismatch         = "annotations do not match key snapshot"
 	messageCiphertextRequired          = "ciphertext is required"
+	messageConcurrencyLimitExceeded    = "kms request concurrency limit reached"
 	messageKMSRequestFailed            = "kms request failed"
 	messageKeyIDMalformed              = "key_id malformed"
 	messageKeyIDUnknown                = "key_id unknown"
@@ -53,11 +54,16 @@ const (
 	messageTransitUnavailable          = "transit unavailable"
 
 	messageConfigPluginVersionRequired     = "plugin version is required"
+	messageConfigMaxConcurrentDecrypt      = "max concurrent decrypt requests must be between 1 and 1024"
+	messageConfigMaxConcurrentEncrypt      = "max concurrent encrypt requests must be between 1 and 1024"
+	messageConfigMaxConcurrentStatus       = "max concurrent status requests must be between 1 and 1024"
 	messageConfigRegistryRequired          = "key registry is required"
 	messageConfigRequestTimeoutNonNegative = "request timeout must not be negative"
 	messageConfigStatusCacheRequired       = "status cache is required"
 	messageConfigTransitRequired           = "transit adapter is required"
 )
+
+const maxConcurrentKMSRequests = 1024
 
 var (
 	// ErrConfigInvalid identifies invalid KMS v2 server construction settings.
@@ -80,6 +86,8 @@ var (
 	ErrRequestLimitExceeded = errors.New("kms request exceeds protocol limits")
 	// ErrResponseLimitExceeded identifies KMS response fields outside Kubernetes KMS v2 bounds.
 	ErrResponseLimitExceeded = errors.New("kms response exceeds protocol limits")
+	// ErrConcurrencyLimitExceeded identifies a request rejected by a KMS concurrency limit.
+	ErrConcurrencyLimitExceeded = errors.New("kms request concurrency limit reached")
 	// ErrPanicRecovered identifies a recovered panic inside a KMS v2 request handler.
 	ErrPanicRecovered = errors.New("kms panic recovered")
 )
@@ -128,12 +136,15 @@ type TransitDecryptResponse struct {
 
 // Options contains KMS v2 server dependencies.
 type Options struct {
-	StatusCache    StatusCache
-	Registry       aad.SnapshotLookup
-	Transit        Transit
-	PluginVersion  string
-	RequestTimeout time.Duration
-	Observer       Observer
+	StatusCache          StatusCache
+	Registry             aad.SnapshotLookup
+	Transit              Transit
+	PluginVersion        string
+	RequestTimeout       time.Duration
+	MaxConcurrentStatus  int
+	MaxConcurrentEncrypt int
+	MaxConcurrentDecrypt int
+	Observer             Observer
 }
 
 // Server implements the Kubernetes KMS v2 service.
@@ -145,6 +156,9 @@ type Server struct {
 	transit        Transit
 	pluginVersion  string
 	requestTimeout time.Duration
+	statusLimiter  *concurrencyLimiter
+	encryptLimiter *concurrencyLimiter
+	decryptLimiter *concurrencyLimiter
 	observer       Observer
 }
 
@@ -165,6 +179,15 @@ func NewServer(opts Options) (*Server, error) {
 	if opts.RequestTimeout < 0 {
 		return nil, fmt.Errorf("%w: %s", ErrConfigInvalid, messageConfigRequestTimeoutNonNegative)
 	}
+	if opts.MaxConcurrentStatus <= 0 || opts.MaxConcurrentStatus > maxConcurrentKMSRequests {
+		return nil, fmt.Errorf("%w: %s", ErrConfigInvalid, messageConfigMaxConcurrentStatus)
+	}
+	if opts.MaxConcurrentEncrypt <= 0 || opts.MaxConcurrentEncrypt > maxConcurrentKMSRequests {
+		return nil, fmt.Errorf("%w: %s", ErrConfigInvalid, messageConfigMaxConcurrentEncrypt)
+	}
+	if opts.MaxConcurrentDecrypt <= 0 || opts.MaxConcurrentDecrypt > maxConcurrentKMSRequests {
+		return nil, fmt.Errorf("%w: %s", ErrConfigInvalid, messageConfigMaxConcurrentDecrypt)
+	}
 
 	return &Server{
 		statusCache:    opts.StatusCache,
@@ -172,6 +195,9 @@ func NewServer(opts Options) (*Server, error) {
 		transit:        opts.Transit,
 		pluginVersion:  opts.PluginVersion,
 		requestTimeout: opts.RequestTimeout,
+		statusLimiter:  newConcurrencyLimiter(opts.MaxConcurrentStatus),
+		encryptLimiter: newConcurrencyLimiter(opts.MaxConcurrentEncrypt),
+		decryptLimiter: newConcurrencyLimiter(opts.MaxConcurrentDecrypt),
 		observer:       opts.Observer,
 	}, nil
 }
@@ -195,6 +221,12 @@ func (s *Server) Status(ctx context.Context, _ *kmsapi.StatusRequest) (response 
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
 	defer recoverRPC(&err, &observation)
+	if !s.statusLimiter.tryAcquire() {
+		observation.ErrorClass = errorClass(ErrConcurrencyLimitExceeded)
+		observation.ConcurrencyRejected = true
+		return nil, rpcError(ErrConcurrencyLimitExceeded)
+	}
+	defer s.statusLimiter.release()
 
 	requestCtx, cancel := s.requestContext(ctx)
 	defer cancel()
@@ -227,6 +259,12 @@ func (s *Server) Encrypt(
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
 	defer recoverRPC(&err, &observation)
+	if !s.encryptLimiter.tryAcquire() {
+		observation.ErrorClass = errorClass(ErrConcurrencyLimitExceeded)
+		observation.ConcurrencyRejected = true
+		return nil, rpcError(ErrConcurrencyLimitExceeded)
+	}
+	defer s.encryptLimiter.release()
 
 	if request == nil || len(request.GetPlaintext()) == 0 {
 		return nil, rpcError(ErrPlaintextRequired)
@@ -303,6 +341,12 @@ func (s *Server) Decrypt(
 		s.observeRequest(ctx, observation, err, time.Since(start))
 	}()
 	defer recoverRPC(&err, &observation)
+	if !s.decryptLimiter.tryAcquire() {
+		observation.ErrorClass = errorClass(ErrConcurrencyLimitExceeded)
+		observation.ConcurrencyRejected = true
+		return nil, rpcError(ErrConcurrencyLimitExceeded)
+	}
+	defer s.decryptLimiter.release()
 
 	if request == nil || len(request.GetCiphertext()) == 0 {
 		return nil, rpcError(ErrCiphertextRequired)
@@ -447,6 +491,8 @@ func rpcError(err error) error {
 		return grpcstatus.Error(codes.InvalidArgument, safeMessage(err))
 	case errors.Is(err, ErrResponseLimitExceeded):
 		return grpcstatus.Error(codes.Internal, safeMessage(err))
+	case errors.Is(err, ErrConcurrencyLimitExceeded):
+		return grpcstatus.Error(codes.ResourceExhausted, safeMessage(err))
 	case errors.Is(err, keyregistry.ErrUnknownKeyID):
 		return grpcstatus.Error(codes.NotFound, safeMessage(err))
 	case errors.Is(err, ErrStatusUnavailable),
@@ -554,15 +600,14 @@ func contextRPCError(err error) error {
 }
 
 func safeMessage(err error) string {
+	if message := safeLimitMessage(err); message != "" {
+		return message
+	}
 	switch {
 	case errors.Is(err, ErrPlaintextRequired):
 		return messagePlaintextRequired
 	case errors.Is(err, ErrCiphertextRequired):
 		return messageCiphertextRequired
-	case errors.Is(err, ErrRequestLimitExceeded):
-		return messageRequestLimitExceeded
-	case errors.Is(err, ErrResponseLimitExceeded):
-		return messageResponseLimitExceeded
 	case errors.Is(err, keyregistry.ErrMalformedKeyID):
 		return messageKeyIDMalformed
 	case errors.Is(err, keyregistry.ErrUnknownKeyID):
@@ -585,6 +630,19 @@ func safeMessage(err error) string {
 		return messageStatusKeyIDMismatch
 	default:
 		return messageKMSRequestFailed
+	}
+}
+
+func safeLimitMessage(err error) string {
+	switch {
+	case errors.Is(err, ErrRequestLimitExceeded):
+		return messageRequestLimitExceeded
+	case errors.Is(err, ErrResponseLimitExceeded):
+		return messageResponseLimitExceeded
+	case errors.Is(err, ErrConcurrencyLimitExceeded):
+		return messageConcurrencyLimitExceeded
+	default:
+		return ""
 	}
 }
 

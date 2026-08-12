@@ -41,23 +41,30 @@ type AuthProvider interface {
 	State() auth.State
 }
 
+// ConcurrencyProvider exposes current KMS handler counts for collection.
+type ConcurrencyProvider interface {
+	InFlightKMSRequests() (statusCount int, encryptCount int, decryptCount int)
+}
+
 // Recorder owns all provider Prometheus collectors.
 type Recorder struct {
 	registry *prometheus.Registry
 
-	grpcRequests         *prometheus.CounterVec
-	grpcDuration         *prometheus.HistogramVec
-	openbaoRequests      *prometheus.CounterVec
-	openbaoDuration      *prometheus.HistogramVec
-	authRenewal          *prometheus.CounterVec
-	authLogin            *prometheus.CounterVec
-	panicRecoveries      *prometheus.CounterVec
-	socketRestarts       prometheus.Counter
-	metadataObservation  *prometheus.CounterVec
-	aadValidationErrors  *prometheus.CounterVec
-	decryptKeyIDErrors   *prometheus.CounterVec
-	statusProviderLoaded bool
-	authProviderLoaded   bool
+	grpcRequests              *prometheus.CounterVec
+	grpcDuration              *prometheus.HistogramVec
+	grpcConcurrencyRejections *prometheus.CounterVec
+	openbaoRequests           *prometheus.CounterVec
+	openbaoDuration           *prometheus.HistogramVec
+	authRenewal               *prometheus.CounterVec
+	authLogin                 *prometheus.CounterVec
+	panicRecoveries           *prometheus.CounterVec
+	socketRestarts            prometheus.Counter
+	metadataObservation       *prometheus.CounterVec
+	aadValidationErrors       *prometheus.CounterVec
+	decryptKeyIDErrors        *prometheus.CounterVec
+	statusProviderLoaded      bool
+	authProviderLoaded        bool
+	concurrencyProviderLoaded bool
 }
 
 // NewRecorder creates an isolated registry with provider metrics.
@@ -76,6 +83,13 @@ func NewRecorder() (*Recorder, error) {
 				Name:    "openbao_kms_grpc_duration_seconds",
 				Help:    "KMS v2 gRPC request duration by method.",
 				Buckets: requestDurationBuckets,
+			},
+			[]string{labelMethod},
+		),
+		grpcConcurrencyRejections: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "openbao_kms_grpc_concurrency_rejections_total",
+				Help: "Total KMS v2 gRPC requests rejected by a method concurrency limit.",
 			},
 			[]string{labelMethod},
 		),
@@ -186,11 +200,31 @@ func (r *Recorder) RegisterAuthProvider(provider AuthProvider) error {
 	return nil
 }
 
+// RegisterConcurrencyProvider registers KMS handler concurrency collectors.
+func (r *Recorder) RegisterConcurrencyProvider(provider ConcurrencyProvider) error {
+	if provider == nil {
+		return fmt.Errorf("concurrency provider is required")
+	}
+	if r.concurrencyProviderLoaded {
+		return fmt.Errorf("concurrency provider already registered")
+	}
+	if err := r.registry.Register(newConcurrencyCollector(provider)); err != nil {
+		return err
+	}
+	r.concurrencyProviderLoaded = true
+	return nil
+}
+
 // RecordGRPCRequest records one KMS v2 gRPC request.
 func (r *Recorder) RecordGRPCRequest(method string, requestStatus string, duration time.Duration) {
 	methodLabel := normalize(method)
 	r.grpcRequests.WithLabelValues(methodLabel, normalizeStatus(requestStatus)).Inc()
 	r.grpcDuration.WithLabelValues(methodLabel).Observe(duration.Seconds())
+}
+
+// RecordGRPCConcurrencyRejection records one KMS request rejected by a method limit.
+func (r *Recorder) RecordGRPCConcurrencyRejection(method string) {
+	r.grpcConcurrencyRejections.WithLabelValues(normalize(method)).Inc()
 }
 
 // RecordOpenBaoRequest records one OpenBao HTTP request.
@@ -239,6 +273,7 @@ func (r *Recorder) registerBaseCollectors() error {
 	collectors := []prometheus.Collector{
 		r.grpcRequests,
 		r.grpcDuration,
+		r.grpcConcurrencyRejections,
 		r.openbaoRequests,
 		r.openbaoDuration,
 		r.authRenewal,

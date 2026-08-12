@@ -24,6 +24,7 @@ type KMSTransit struct {
 	decryptCount int
 	lastEnc      kmsv2.TransitEncryptRequest
 	blockEncrypt bool
+	blockDecrypt bool
 	panicEncrypt bool
 }
 
@@ -85,10 +86,15 @@ func (f *KMSTransit) Decrypt(
 	}
 
 	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	f.decryptCount++
+	block := f.blockDecrypt
 	record, ok := f.records[string(request.Ciphertext)]
+	f.mu.Unlock()
+
+	if block {
+		<-ctx.Done()
+		return kmsv2.TransitDecryptResponse{}, ctx.Err()
+	}
 	if !ok {
 		return kmsv2.TransitDecryptResponse{}, errors.New("unknown ciphertext")
 	}
@@ -128,6 +134,14 @@ func (f *KMSTransit) SetBlockEncrypt(block bool) {
 	defer f.mu.Unlock()
 
 	f.blockEncrypt = block
+}
+
+// SetBlockDecrypt controls whether Decrypt blocks until context cancellation.
+func (f *KMSTransit) SetBlockDecrypt(block bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.blockDecrypt = block
 }
 
 // SetPanicEncrypt controls whether Encrypt panics.

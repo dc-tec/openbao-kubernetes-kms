@@ -155,14 +155,24 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 	}
 
 	kmsServer, err := kmsv2.NewServer(kmsv2.Options{
-		StatusCache:    store,
-		Registry:       store,
-		Transit:        transitAdapter{client: transitClient, mountPath: cfg.Transit.MountPath, keyName: cfg.Transit.KeyName},
-		PluginVersion:  b.info.Version,
-		RequestTimeout: cfg.OpenBao.Timeout,
-		Observer:       observer,
+		StatusCache: store,
+		Registry:    store,
+		Transit: transitAdapter{
+			client:    transitClient,
+			mountPath: cfg.Transit.MountPath,
+			keyName:   cfg.Transit.KeyName,
+		},
+		PluginVersion:        b.info.Version,
+		RequestTimeout:       cfg.OpenBao.Timeout,
+		MaxConcurrentStatus:  cfg.Server.MaxConcurrentStatus,
+		MaxConcurrentEncrypt: cfg.Server.MaxConcurrentEncrypt,
+		MaxConcurrentDecrypt: cfg.Server.MaxConcurrentDecrypt,
+		Observer:             observer,
 	})
 	if err != nil {
+		return serveDependencies{}, err
+	}
+	if err := metricsRecorder.RegisterConcurrencyProvider(kmsServer); err != nil {
 		return serveDependencies{}, err
 	}
 	grpcServer := grpc.NewServer(

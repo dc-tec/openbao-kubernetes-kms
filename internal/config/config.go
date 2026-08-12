@@ -24,6 +24,9 @@ const (
 	defaultSocketMode             = "0660"
 	defaultMetricsAddress         = "127.0.0.1:8081"
 	defaultHealthAddress          = "127.0.0.1:8082"
+	defaultMaxConcurrentStatus    = 16
+	defaultMaxConcurrentEncrypt   = 32
+	defaultMaxConcurrentDecrypt   = 64
 	defaultOpenBaoTimeout         = 2 * time.Second
 	defaultAuthMethod             = "jwt"
 	defaultMinJWTRemainingTTL     = 2 * time.Minute
@@ -72,11 +75,14 @@ type Config struct {
 
 // ServerConfig contains local listener and socket settings.
 type ServerConfig struct {
-	SocketPath     string `mapstructure:"socketPath"`
-	SocketMode     string `mapstructure:"socketMode"`
-	SocketGroup    string `mapstructure:"socketGroup"`
-	MetricsAddress string `mapstructure:"metricsAddress"`
-	HealthAddress  string `mapstructure:"healthAddress"`
+	SocketPath           string `mapstructure:"socketPath"`
+	SocketMode           string `mapstructure:"socketMode"`
+	SocketGroup          string `mapstructure:"socketGroup"`
+	MetricsAddress       string `mapstructure:"metricsAddress"`
+	HealthAddress        string `mapstructure:"healthAddress"`
+	MaxConcurrentStatus  int    `mapstructure:"maxConcurrentStatus"`
+	MaxConcurrentEncrypt int    `mapstructure:"maxConcurrentEncrypt"`
+	MaxConcurrentDecrypt int    `mapstructure:"maxConcurrentDecrypt"`
 }
 
 // OpenBaoConfig contains OpenBao client settings.
@@ -277,6 +283,9 @@ func applyDefaults(runtime *Runtime) {
 	runtime.v.SetDefault("server.socketMode", defaultSocketMode)
 	runtime.v.SetDefault("server.metricsAddress", defaultMetricsAddress)
 	runtime.v.SetDefault("server.healthAddress", defaultHealthAddress)
+	runtime.v.SetDefault("server.maxConcurrentStatus", defaultMaxConcurrentStatus)
+	runtime.v.SetDefault("server.maxConcurrentEncrypt", defaultMaxConcurrentEncrypt)
+	runtime.v.SetDefault("server.maxConcurrentDecrypt", defaultMaxConcurrentDecrypt)
 	runtime.v.SetDefault("openbao.timeout", defaultOpenBaoTimeout)
 	runtime.v.SetDefault("auth.method", defaultAuthMethod)
 	runtime.v.SetDefault("auth.jwt.minRemainingTtl", defaultMinJWTRemainingTTL)

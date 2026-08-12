@@ -48,11 +48,21 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Bootstrap.GraceTimeout != time.Minute || cfg.Bootstrap.RetryInterval != 5*time.Second {
 		t.Fatalf("unexpected bootstrap defaults: %#v", cfg.Bootstrap)
 	}
+	assertDefaultConcurrency(t, cfg.Server)
 	if cfg.Logging.DebugCorrelation.Enabled {
 		t.Fatal("debug correlation should default to disabled")
 	}
 	if cfg.Logging.DebugCorrelation.TTL != 15*time.Minute {
 		t.Fatalf("unexpected debug correlation ttl: %s", cfg.Logging.DebugCorrelation.TTL)
+	}
+}
+
+func assertDefaultConcurrency(t *testing.T, cfg ServerConfig) {
+	t.Helper()
+	if cfg.MaxConcurrentStatus != 16 ||
+		cfg.MaxConcurrentEncrypt != 32 ||
+		cfg.MaxConcurrentDecrypt != 64 {
+		t.Fatalf("unexpected concurrency defaults: %#v", cfg)
 	}
 }
 
@@ -515,6 +525,27 @@ func TestValidateRejectsUnsafeValues(t *testing.T) {
 			field: "state.path",
 			mutate: func(cfg *Config) {
 				cfg.State.Path = "key-registry.json"
+			},
+		},
+		{
+			name:  "max concurrent status too large",
+			field: "server.maxConcurrentStatus",
+			mutate: func(cfg *Config) {
+				cfg.Server.MaxConcurrentStatus = 1025
+			},
+		},
+		{
+			name:  "zero max concurrent encrypt",
+			field: "server.maxConcurrentEncrypt",
+			mutate: func(cfg *Config) {
+				cfg.Server.MaxConcurrentEncrypt = 0
+			},
+		},
+		{
+			name:  "negative max concurrent decrypt",
+			field: "server.maxConcurrentDecrypt",
+			mutate: func(cfg *Config) {
+				cfg.Server.MaxConcurrentDecrypt = -1
 			},
 		},
 	}

@@ -114,6 +114,15 @@ groups:
           summary: "OpenBao KMS gRPC latency is high"
           description: "p99 {{ $labels.method }} latency is above the starter 100ms threshold on {{ $labels.instance }}; tune this threshold to local OpenBao and control-plane behavior before paging."
 
+      - alert: OpenBaoKMSConcurrencyRejected
+        expr: sum by (job, instance, method) (increase(openbao_kms_grpc_concurrency_rejections_total[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OpenBao KMS rejected requests at a concurrency limit"
+          description: "The provider rejected {{ $labels.method }} requests at its configured concurrency limit on {{ $labels.instance }}."
+
       - alert: OpenBaoKMSStaleSocketRemoved
         expr: sum by (job, instance) (increase(openbao_kms_socket_restarts_total[10m])) > 0
         for: 1m
