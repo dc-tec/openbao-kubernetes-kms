@@ -77,6 +77,7 @@ The design does not defend against every action by:
 | Provider downgrade to plaintext | Remove `identity` fallback after migration; audit `EncryptionConfiguration`. |
 | Protected API server dependency loop | Use provider auth without TokenReview and keep OpenBao outside the protected API-server dependency path. |
 | OpenBao MITM | TLS CA validation and server name verification. |
+| Oversized OpenBao response | Per-operation HTTP response-body limits and redacted `openbao_unavailable` errors. |
 | OpenBao outage | Cached Status with staleness limits, fail closed, bootstrap grace, jittered auth retry backoff, alerting. |
 | Malicious or compromised plugin binary | Host hardening, pinned release artifacts, signing, reproducibility reports, and attestations. Defense is limited because the plugin sees KMS plaintext material in flight. |
 | Log leakage | Redaction rules and tests for plaintext, JWT, tokens, and ciphertext. |

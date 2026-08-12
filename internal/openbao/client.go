@@ -36,6 +36,10 @@ const (
 	defaultHTTPMaxIdleConns          = 64
 	defaultHTTPMaxIdleConnsPerHost   = 16
 	defaultHTTPMaxConnsPerHost       = 0
+
+	maxOpenBaoErrorResponseBytes = 64 << 10
+	maxOpenBaoSmallResponseBytes = 256 << 10
+	maxOpenBaoLargeResponseBytes = 4 << 20
 )
 
 // TokenSource returns the current OpenBao token for one request.
@@ -444,17 +448,46 @@ func readOpenBaoResponse(
 	response responsePayload,
 ) (string, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body := decodeErrorBody(resp.Body)
+		encoded, err := readBoundedResponseBody(operation, resp.Body, maxOpenBaoErrorResponseBytes)
+		if err != nil {
+			return "", err
+		}
+		body := decodeErrorBody(encoded)
 		return safeRequestID(body.RequestID), newHTTPError(operation, resp.StatusCode, body.Errors)
 	}
+
+	limit := openBaoResponseLimit(operation)
+	encoded, err := readBoundedResponseBody(operation, resp.Body, limit)
+	if err != nil {
+		return "", err
+	}
 	if response == nil {
-		_, _ = io.Copy(io.Discard, resp.Body)
 		return "", nil
 	}
-	if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
+	if err := json.Unmarshal(encoded, response); err != nil {
 		return "", fmt.Errorf("decode OpenBao %s response: %w", operation, err)
 	}
 	return requestIDFromResponse(response), nil
+}
+
+func openBaoResponseLimit(operation string) int64 {
+	switch operation {
+	case transitOperationMetadataRead, transitOperationBatchDecrypt:
+		return maxOpenBaoLargeResponseBytes
+	default:
+		return maxOpenBaoSmallResponseBytes
+	}
+}
+
+func readBoundedResponseBody(operation string, reader io.Reader, limit int64) ([]byte, error) {
+	encoded, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("read OpenBao %s response: %w", operation, err)
+	}
+	if int64(len(encoded)) > limit {
+		return nil, newResponseSizeError(operation, limit)
+	}
+	return encoded, nil
 }
 
 func (c *Client) resolve(apiPath string) string {
@@ -492,9 +525,9 @@ type errorBody struct {
 	Errors    []string `json:"errors"`
 }
 
-func decodeErrorBody(reader io.Reader) errorBody {
+func decodeErrorBody(encoded []byte) errorBody {
 	var body errorBody
-	if err := json.NewDecoder(reader).Decode(&body); err != nil {
+	if err := json.Unmarshal(encoded, &body); err != nil {
 		return errorBody{}
 	}
 	messages := make([]string, len(body.Errors))

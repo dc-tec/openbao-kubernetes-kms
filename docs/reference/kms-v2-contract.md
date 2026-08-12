@@ -137,6 +137,16 @@ Decrypt requests that exceed these limits are rejected before Transit decrypt is
 
 The gRPC server also caps inbound and outbound protobuf messages at 65536 bytes. This keeps the transport envelope bounded while leaving room for protobuf overhead around the KMS v2 field limits.
 
+The OpenBao client also limits HTTP response bodies:
+
+- error responses: 64 KiB,
+- key metadata and batch decrypt responses: 4 MiB,
+- all other successful responses: 256 KiB.
+
+The client reads one byte past the applicable limit to detect an oversized body.
+It does not depend on the HTTP `Content-Length` value. An oversized response
+fails as `openbao_unavailable`. The error does not include response content.
+
 The deep status probe also checks that a real non-secret Transit encrypt/decrypt
 round trip returns the expected Transit key version and ciphertext within the
 KMS v2 ciphertext limit. This turns backend response-shape drift into a

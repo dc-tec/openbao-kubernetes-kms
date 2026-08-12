@@ -15,6 +15,9 @@ const (
 	requestStatusError                  = "error"
 )
 
+// ErrResponseTooLarge identifies an OpenBao response that exceeds its operation limit.
+var ErrResponseTooLarge = errors.New("OpenBao response exceeds operation limit")
+
 // ErrorClass is a stable OpenBao error category for callers and metrics.
 type ErrorClass string
 
@@ -35,6 +38,27 @@ type Error struct {
 	Class      ErrorClass
 	StatusCode int
 	Operation  string
+}
+
+type responseSizeError struct {
+	operation string
+	limit     int64
+}
+
+func newResponseSizeError(operation string, limit int64) *responseSizeError {
+	return &responseSizeError{operation: operation, limit: limit}
+}
+
+func (e *responseSizeError) Error() string {
+	return fmt.Sprintf("openbao %s response exceeds %d-byte limit", e.operation, e.limit)
+}
+
+func (e *responseSizeError) Is(target error) bool {
+	return target == ErrResponseTooLarge
+}
+
+func (e *responseSizeError) Unwrap() error {
+	return &Error{Class: ErrorClassUnavailable, Operation: e.operation}
 }
 
 // Error returns a token/payload/path-safe message.
