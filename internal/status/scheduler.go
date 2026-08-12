@@ -42,7 +42,9 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	if err := contextErr(ctx); err != nil {
 		return err
 	}
-	_ = s.controller.ProbeOnce(ctx)
+	if err := s.controller.ProbeOnce(ctx); err == nil && s.controller.deepProbeRequired() {
+		_ = s.controller.DeepProbeOnce(ctx)
+	}
 
 	probeTicker := time.NewTicker(s.probeInterval)
 	defer probeTicker.Stop()
@@ -54,7 +56,9 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-probeTicker.C:
-			_ = s.controller.ProbeOnce(ctx)
+			if err := s.controller.ProbeOnce(ctx); err == nil && s.controller.deepProbeRequired() {
+				_ = s.controller.DeepProbeOnce(ctx)
+			}
 		case <-deepTicker.C:
 			_ = s.controller.DeepProbeOnce(ctx)
 		}

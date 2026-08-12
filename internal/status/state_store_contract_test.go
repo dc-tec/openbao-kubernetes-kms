@@ -119,20 +119,20 @@ func TestFileStateStoreRecreatesMissingCheckpointForValidState(t *testing.T) {
 
 func TestControllerAutoBootstrapBoundaryWithMissingStateFiles(t *testing.T) {
 	tests := []struct {
-		name              string
-		profile           func(*fakeClock) openbao.KeyProfile
-		wantErr           error
-		wantReason        string
-		wantSaveCalls     int
-		wantHealthyStatus bool
+		name            string
+		profile         func(*fakeClock) openbao.KeyProfile
+		wantErr         error
+		wantReason      string
+		wantSaveCalls   int
+		wantLoadedState bool
 	}{
 		{
 			name: "initial Transit metadata allowed",
 			profile: func(clock *fakeClock) openbao.KeyProfile {
 				return profileForLatest(1, clock.Now())
 			},
-			wantSaveCalls:     1,
-			wantHealthyStatus: true,
+			wantSaveCalls:   1,
+			wantLoadedState: true,
 		},
 		{
 			name: "rotated Transit metadata denied",
@@ -150,10 +150,9 @@ func TestControllerAutoBootstrapBoundaryWithMissingStateFiles(t *testing.T) {
 			clock := newFakeClock()
 			store := newTestStore(t, clock)
 			observer := newTestObserver(t, clock, 3, 2*time.Minute)
-			auth := &fakeAuth{}
 			transit := &fakeTransit{profile: tt.profile(clock)}
 			stateStore := &fakeStateStore{loadErr: keyregistry.ErrStateNotFound}
-			controller := newTestController(t, clock, store, observer, auth, transit, stateStore)
+			controller := newTestController(t, clock, store, observer, transit, stateStore)
 
 			err := controller.ProbeOnce(context.Background())
 			if !errors.Is(err, tt.wantErr) {
@@ -169,14 +168,13 @@ func TestControllerAutoBootstrapBoundaryWithMissingStateFiles(t *testing.T) {
 			if currentErr != nil {
 				t.Fatalf("current status: %v", currentErr)
 			}
-			if tt.wantHealthyStatus {
-				if current.Healthz != kmsv2.HealthOK || current.KeyID == "" {
-					t.Fatalf("expected healthy bootstrapped status, got %+v", current)
+			if tt.wantLoadedState {
+				if _, ok := store.Active(); !ok {
+					t.Fatal("expected bootstrapped registry state")
 				}
-				return
 			}
 			if current.Healthz != kmsv2.HealthUnhealthy || current.KeyID != "" {
-				t.Fatalf("expected unhealthy status without key_id, got %+v", current)
+				t.Fatalf("expected unhealthy status before a deep probe, got %+v", current)
 			}
 		})
 	}

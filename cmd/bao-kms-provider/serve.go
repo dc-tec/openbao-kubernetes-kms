@@ -140,7 +140,7 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 		return serveDependencies{}, err
 	}
 
-	store, controller, scheduler, err := buildStatusRuntime(cfg, authManager, transitClient, observer)
+	store, controller, scheduler, err := buildStatusRuntime(cfg, transitClient, observer)
 	if err != nil {
 		return serveDependencies{}, err
 	}
@@ -195,7 +195,6 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 
 func buildStatusRuntime(
 	cfg config.Config,
-	authManager *auth.Manager,
 	transitClient openbao.TransitClient,
 	probeObserver status.ProbeObserver,
 ) (*status.Store, *status.Controller, *status.Scheduler, error) {
@@ -222,7 +221,6 @@ func buildStatusRuntime(
 	controller, err := status.NewController(status.ControllerOptions{
 		Store:         store,
 		Observer:      observer,
-		Auth:          authManager,
 		Transit:       transitClient,
 		StateStore:    status.FileStateStore{Path: cfg.State.Path},
 		MountPath:     cfg.Transit.MountPath,
@@ -317,6 +315,7 @@ type authRuntimeObserver interface {
 
 type bootstrapProbeController interface {
 	ProbeOnce(context.Context) error
+	DeepProbeOnce(context.Context) error
 }
 
 func probeOnceWithBootstrapGrace(
@@ -335,19 +334,19 @@ func probeOnceWithBootstrapGraceAndSleep(
 	sleep func(context.Context, time.Duration) error,
 ) error {
 	if cfg.GraceTimeout <= 0 {
-		return controller.ProbeOnce(ctx)
+		return runBootstrapProbe(ctx, controller)
 	}
 	deadline := now().Add(cfg.GraceTimeout)
 	var lastErr error
 	for {
-		if err := controller.ProbeOnce(ctx); err == nil {
+		if err := runBootstrapProbe(ctx, controller); err == nil {
 			return nil
 		} else {
 			lastErr = err
 		}
 		remaining := deadline.Sub(now())
 		if remaining <= 0 {
-			return fmt.Errorf("bootstrap status probe did not succeed within %s: %w", cfg.GraceTimeout, lastErr)
+			return fmt.Errorf("bootstrap probes did not succeed within %s: %w", cfg.GraceTimeout, lastErr)
 		}
 		delay := cfg.RetryInterval
 		if delay <= 0 {
@@ -360,6 +359,13 @@ func probeOnceWithBootstrapGraceAndSleep(
 			return err
 		}
 	}
+}
+
+func runBootstrapProbe(ctx context.Context, controller bootstrapProbeController) error {
+	if err := controller.ProbeOnce(ctx); err != nil {
+		return err
+	}
+	return controller.DeepProbeOnce(ctx)
 }
 
 func sleepContext(ctx context.Context, delay time.Duration) error {

@@ -25,6 +25,9 @@ type Store struct {
 	maxStaleness time.Duration
 	healthz      string
 	updatedAt    time.Time
+	metadataOK   bool
+	deepProbeOK  bool
+	deepProbed   bool
 	state        keyregistry.StateFile
 	registry     keyregistry.Registry
 	active       keyregistry.KeySnapshot
@@ -70,7 +73,7 @@ func (s *Store) LoadState(state keyregistry.StateFile) error {
 	return nil
 }
 
-// PublishHealthy atomically publishes a successful probe result.
+// PublishHealthy atomically publishes state after all required checks succeed.
 func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt time.Time) error {
 	active, registry, err := runtimeRegistry(state)
 	if err != nil {
@@ -87,13 +90,19 @@ func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt time.Time)
 	s.registry = registry
 	s.active = active
 	s.hasState = true
-	s.healthz = kmsv2.HealthOK
+	s.metadataOK = true
+	s.deepProbeOK = true
+	s.deepProbed = true
+	s.updateHealthLocked()
 	s.updatedAt = updatedAt.UTC()
 	return nil
 }
 
-// PublishUnhealthy records a failed probe while retaining the last registry snapshot set.
-func (s *Store) PublishUnhealthy(updatedAt time.Time) {
+func (s *Store) publishMetadataHealthy(state keyregistry.StateFile, updatedAt time.Time) error {
+	active, registry, err := runtimeRegistry(state)
+	if err != nil {
+		return err
+	}
 	if updatedAt.IsZero() {
 		updatedAt = s.clock.Now()
 	}
@@ -101,8 +110,57 @@ func (s *Store) PublishUnhealthy(updatedAt time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.healthz = kmsv2.HealthUnhealthy
+	activeChanged := !s.hasState || s.active.KubernetesKeyID != active.KubernetesKeyID
+	s.state = state
+	s.registry = registry
+	s.active = active
+	s.hasState = true
+	s.metadataOK = true
+	if activeChanged {
+		s.deepProbeOK = false
+		s.deepProbed = false
+	}
+	s.updateHealthLocked()
 	s.updatedAt = updatedAt.UTC()
+	return nil
+}
+
+func (s *Store) publishMetadataUnhealthy(updatedAt time.Time) {
+	if updatedAt.IsZero() {
+		updatedAt = s.clock.Now()
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.metadataOK = false
+	s.updateHealthLocked()
+	s.updatedAt = updatedAt.UTC()
+}
+
+func (s *Store) publishDeepHealthy() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.deepProbeOK = true
+	s.deepProbed = true
+	s.updateHealthLocked()
+}
+
+func (s *Store) publishDeepUnhealthy() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.deepProbeOK = false
+	s.deepProbed = true
+	s.updateHealthLocked()
+}
+
+func (s *Store) deepProbeRequired() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.hasState && s.metadataOK && !s.deepProbed
 }
 
 // Current returns the cached KMS Status view without calling OpenBao.
@@ -204,6 +262,13 @@ func (s *Store) staleLocked(now time.Time) bool {
 		return true
 	}
 	return now.Sub(s.updatedAt) > s.maxStaleness
+}
+
+func (s *Store) updateHealthLocked() {
+	s.healthz = kmsv2.HealthUnhealthy
+	if s.metadataOK && s.deepProbeOK {
+		s.healthz = kmsv2.HealthOK
+	}
 }
 
 func runtimeRegistry(state keyregistry.StateFile) (keyregistry.KeySnapshot, keyregistry.Registry, error) {

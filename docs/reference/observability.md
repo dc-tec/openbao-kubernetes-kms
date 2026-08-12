@@ -78,7 +78,8 @@ The provider tags every failed operation with one of these stable error classes.
 ```text
 /live      process alive, gRPC server initialized, socket listener initialized
 /ready     OpenBao reachable, auth valid, Transit metadata fresh,
-           active key snapshot available, cached KMS Status fresh
+           active key snapshot available, latest deep probe successful,
+           cached KMS Status fresh
 /metrics   Prometheus metrics
 ```
 

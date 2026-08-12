@@ -100,3 +100,42 @@ func (b circuitBreaker) snapshot() CircuitBreakerSnapshot {
 		LastFailureAt:       b.lastFailureAt,
 	}
 }
+
+func aggregateCircuitBreakerSnapshots(
+	metadata CircuitBreakerSnapshot,
+	deep CircuitBreakerSnapshot,
+) CircuitBreakerSnapshot {
+	return CircuitBreakerSnapshot{
+		State:               aggregateCircuitBreakerState(metadata.State, deep.State),
+		ConsecutiveFailures: max(metadata.ConsecutiveFailures, deep.ConsecutiveFailures),
+		OpenedAt:            earliestTime(metadata.OpenedAt, deep.OpenedAt),
+		OpenUntil:           latestTime(metadata.OpenUntil, deep.OpenUntil),
+		LastFailureAt:       latestTime(metadata.LastFailureAt, deep.LastFailureAt),
+	}
+}
+
+func aggregateCircuitBreakerState(states ...CircuitBreakerState) CircuitBreakerState {
+	for _, state := range states {
+		if state == CircuitBreakerOpen {
+			return CircuitBreakerOpen
+		}
+	}
+	return CircuitBreakerClosed
+}
+
+func earliestTime(first time.Time, second time.Time) time.Time {
+	if first.IsZero() {
+		return second
+	}
+	if second.IsZero() || first.Before(second) {
+		return first
+	}
+	return second
+}
+
+func latestTime(first time.Time, second time.Time) time.Time {
+	if first.After(second) {
+		return first
+	}
+	return second
+}

@@ -21,7 +21,6 @@ const (
 
 	probeAssociatedDataValue = "openbao-kubernetes-kms/status-probe/v1"
 
-	messageAuthRefreshFailed     = "auth refresh failed"
 	messageContextRequired       = "context is required"
 	messageCircuitBreakerOpen    = "probe skipped while circuit breaker is open"
 	messageDeepProbeFailed       = "Transit deep probe failed"
@@ -33,16 +32,11 @@ const (
 type ProbeKind string
 
 const (
-	// ProbeKindMetadata refreshes auth, Transit metadata, and rotation state.
+	// ProbeKindMetadata reads Transit metadata and advances rotation state.
 	ProbeKindMetadata ProbeKind = "metadata"
 	// ProbeKindDeep performs a non-secret Transit encrypt/decrypt probe.
 	ProbeKindDeep ProbeKind = "deep"
 )
-
-// AuthRefresher is the auth lifecycle surface needed by background probes.
-type AuthRefresher interface {
-	Refresh(context.Context) error
-}
 
 // TransitProbeClient is the Transit metadata and deep-probe surface needed by Status.
 type TransitProbeClient interface {
@@ -67,7 +61,6 @@ type ControllerOptions struct {
 	Clock         Clock
 	Store         *Store
 	Observer      *Observer
-	Auth          AuthRefresher
 	Transit       TransitProbeClient
 	StateStore    StateStore
 	MountPath     string
@@ -78,17 +71,17 @@ type ControllerOptions struct {
 
 // Controller runs one-shot status probes used by the scheduler and tests.
 type Controller struct {
-	clock         Clock
-	store         *Store
-	observer      *Observer
-	auth          AuthRefresher
-	transit       TransitProbeClient
-	stateStore    StateStore
-	mountPath     string
-	keyName       string
-	breakerMu     sync.Mutex
-	breaker       circuitBreaker
-	probeObserver ProbeObserver
+	clock           Clock
+	store           *Store
+	observer        *Observer
+	transit         TransitProbeClient
+	stateStore      StateStore
+	mountPath       string
+	keyName         string
+	breakerMu       sync.Mutex
+	metadataBreaker circuitBreaker
+	deepBreaker     circuitBreaker
+	probeObserver   ProbeObserver
 }
 
 // NewController builds a status probe controller and loads persisted registry state when available.
@@ -98,8 +91,6 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		return nil, fmt.Errorf("%w: status store is required", ErrConfigInvalid)
 	case opts.Observer == nil:
 		return nil, fmt.Errorf("%w: rotation observer is required", ErrConfigInvalid)
-	case opts.Auth == nil:
-		return nil, fmt.Errorf("%w: auth refresher is required", ErrConfigInvalid)
 	case opts.Transit == nil:
 		return nil, fmt.Errorf("%w: Transit probe client is required", ErrConfigInvalid)
 	case opts.MountPath == "":
@@ -109,18 +100,18 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 	}
 
 	controller := &Controller{
-		clock:         clockOrReal(opts.Clock),
-		store:         opts.Store,
-		observer:      opts.Observer,
-		auth:          opts.Auth,
-		transit:       opts.Transit,
-		stateStore:    opts.StateStore,
-		mountPath:     opts.MountPath,
-		keyName:       opts.KeyName,
-		breaker:       newCircuitBreaker(opts.Breaker),
-		probeObserver: opts.ProbeObserver,
+		clock:           clockOrReal(opts.Clock),
+		store:           opts.Store,
+		observer:        opts.Observer,
+		transit:         opts.Transit,
+		stateStore:      opts.StateStore,
+		mountPath:       opts.MountPath,
+		keyName:         opts.KeyName,
+		metadataBreaker: newCircuitBreaker(opts.Breaker),
+		deepBreaker:     newCircuitBreaker(opts.Breaker),
+		probeObserver:   opts.ProbeObserver,
 	}
-	controller.store.UpdateCircuitBreaker(controller.breaker.snapshot())
+	controller.publishCircuitBreakerState()
 	if opts.StateStore != nil {
 		if err := controller.loadState(); err != nil {
 			return nil, err
@@ -129,7 +120,7 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 	return controller, nil
 }
 
-// ProbeOnce refreshes auth, reads Transit metadata, advances rotation state, and publishes cache health.
+// ProbeOnce reads Transit metadata, advances rotation state, and publishes metadata health.
 func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	start := time.Now()
 	defer func() {
@@ -144,21 +135,15 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 		return err
 	}
 	now := c.clock.Now()
-	if !c.allowProbe(now) {
-		c.store.PublishUnhealthy(now)
-		c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+	if !c.allowProbe(ProbeKindMetadata, now) {
+		c.store.publishMetadataUnhealthy(now)
 		return fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen)
-	}
-	if err := c.auth.Refresh(ctx); err != nil {
-		c.store.PublishUnhealthy(now)
-		c.recordProbeFailure(now)
-		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageAuthRefreshFailed, err)
 	}
 
 	profile, err := c.transit.ReadKeyProfile(ctx, c.mountPath, c.keyName)
 	if err != nil {
-		c.store.PublishUnhealthy(now)
-		c.recordProbeFailure(now)
+		c.store.publishMetadataUnhealthy(now)
+		c.recordProbeFailure(ProbeKindMetadata, now)
 		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageTransitMetadataFailed, err)
 	}
 
@@ -169,7 +154,7 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	} else {
 		assessment := AssessAutoBootstrapState(profile)
 		if !assessment.Allowed {
-			c.store.PublishUnhealthy(now)
+			c.store.publishMetadataUnhealthy(now)
 			return fmt.Errorf(
 				"%w: local registry state is absent and cannot be auto-bootstrapped: %s",
 				ErrStateUnavailable,
@@ -181,21 +166,21 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 		result = ObservationResult{State: rebuilt, Changed: true}
 	}
 	if err != nil {
-		c.store.PublishUnhealthy(now)
+		c.store.publishMetadataUnhealthy(now)
 		return err
 	}
 
 	if result.Changed && c.stateStore != nil {
 		if err := c.stateStore.Save(result.State); err != nil {
-			c.store.PublishUnhealthy(now)
+			c.store.publishMetadataUnhealthy(now)
 			return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, err)
 		}
 	}
-	if err := c.store.PublishHealthy(result.State, now); err != nil {
-		c.store.PublishUnhealthy(now)
+	if err := c.store.publishMetadataHealthy(result.State, now); err != nil {
+		c.store.publishMetadataUnhealthy(now)
 		return err
 	}
-	c.recordProbeSuccess()
+	c.recordProbeSuccess(ProbeKindMetadata)
 	return nil
 }
 
@@ -214,14 +199,13 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 		return err
 	}
 	now := c.clock.Now()
-	if !c.allowProbe(now) {
-		c.store.PublishUnhealthy(now)
-		c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+	if !c.allowProbe(ProbeKindDeep, now) {
+		c.store.publishDeepUnhealthy()
 		return fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen)
 	}
 	active, ok := c.store.Active()
 	if !ok {
-		c.store.PublishUnhealthy(now)
+		c.store.publishDeepUnhealthy()
 		return ErrStateUnavailable
 	}
 	result, err := c.transit.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
@@ -231,13 +215,13 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 		AssociatedData: []byte(probeAssociatedDataValue),
 	})
 	if err != nil {
-		c.store.PublishUnhealthy(now)
-		c.recordProbeFailure(now)
+		c.store.publishDeepUnhealthy()
+		c.recordProbeFailure(ProbeKindDeep, now)
 		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageDeepProbeFailed, err)
 	}
 	if len(result.Ciphertext) >= kmsv2.MaxKMSCiphertextBytes {
-		c.store.PublishUnhealthy(now)
-		c.recordProbeFailure(now)
+		c.store.publishDeepUnhealthy()
+		c.recordProbeFailure(ProbeKindDeep, now)
 		return fmt.Errorf(
 			"%w: %s: Transit ciphertext exceeds Kubernetes KMS v2 response limit",
 			ErrProbeFailed,
@@ -245,41 +229,63 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 		)
 	}
 	if result.KeyVersion != 0 && result.KeyVersion != active.TransitVersion {
-		c.store.PublishUnhealthy(now)
-		c.recordProbeFailure(now)
+		c.store.publishDeepUnhealthy()
+		c.recordProbeFailure(ProbeKindDeep, now)
 		return fmt.Errorf(
 			"%w: %s: Transit returned unexpected key version",
 			ErrProbeFailed,
 			messageDeepProbeFailed,
 		)
 	}
-	c.recordProbeSuccess()
+	c.store.publishDeepHealthy()
+	c.recordProbeSuccess(ProbeKindDeep)
 	return nil
 }
 
-func (c *Controller) allowProbe(now time.Time) bool {
+func (c *Controller) allowProbe(kind ProbeKind, now time.Time) bool {
 	c.breakerMu.Lock()
-	defer c.breakerMu.Unlock()
+	allowed := c.breakerForKind(kind).allow(now)
+	snapshot := aggregateCircuitBreakerSnapshots(c.metadataBreaker.snapshot(), c.deepBreaker.snapshot())
+	c.breakerMu.Unlock()
 
-	allowed := c.breaker.allow(now)
-	c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+	c.store.UpdateCircuitBreaker(snapshot)
 	return allowed
 }
 
-func (c *Controller) recordProbeFailure(now time.Time) {
+func (c *Controller) recordProbeFailure(kind ProbeKind, now time.Time) {
 	c.breakerMu.Lock()
-	defer c.breakerMu.Unlock()
+	c.breakerForKind(kind).recordFailure(now)
+	snapshot := aggregateCircuitBreakerSnapshots(c.metadataBreaker.snapshot(), c.deepBreaker.snapshot())
+	c.breakerMu.Unlock()
 
-	c.breaker.recordFailure(now)
-	c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+	c.store.UpdateCircuitBreaker(snapshot)
 }
 
-func (c *Controller) recordProbeSuccess() {
+func (c *Controller) recordProbeSuccess(kind ProbeKind) {
 	c.breakerMu.Lock()
-	defer c.breakerMu.Unlock()
+	c.breakerForKind(kind).recordSuccess()
+	snapshot := aggregateCircuitBreakerSnapshots(c.metadataBreaker.snapshot(), c.deepBreaker.snapshot())
+	c.breakerMu.Unlock()
 
-	c.breaker.recordSuccess()
-	c.store.UpdateCircuitBreaker(c.breaker.snapshot())
+	c.store.UpdateCircuitBreaker(snapshot)
+}
+
+func (c *Controller) breakerForKind(kind ProbeKind) *circuitBreaker {
+	if kind == ProbeKindDeep {
+		return &c.deepBreaker
+	}
+	return &c.metadataBreaker
+}
+
+func (c *Controller) publishCircuitBreakerState() {
+	c.store.UpdateCircuitBreaker(aggregateCircuitBreakerSnapshots(
+		c.metadataBreaker.snapshot(),
+		c.deepBreaker.snapshot(),
+	))
+}
+
+func (c *Controller) deepProbeRequired() bool {
+	return c.store.deepProbeRequired()
 }
 
 func (c *Controller) observeProbe(ctx context.Context, observation ProbeObservation) {
