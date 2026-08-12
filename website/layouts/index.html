@@ -38,7 +38,7 @@
           <span class="workflow-list__step">01</span>
           <div>
             <h3><a href="{{ relURL "getting-started/overview/" }}">Check Fit</a></h3>
-            <p>Confirm that Kubernetes KMS v2 is the right encryption layer for the resources you care about, and that the OpenBao Transit model matches your trust boundary and version envelope.</p>
+            <p>Confirm that Kubernetes KMS v2 covers the API resources you plan to encrypt. Check that the OpenBao Transit model matches your trust boundary and tested versions.</p>
             <div class="workflow-list__links">
               <a href="{{ relURL "getting-started/overview/" }}">Overview</a>
               <a href="{{ relURL "security/threat-model/" }}">Threat Model</a>
@@ -50,7 +50,7 @@
           <span class="workflow-list__step">02</span>
           <div>
             <h3><a href="{{ relURL "getting-started/openbao-setup/" }}">Set Up OpenBao</a></h3>
-            <p>Provision a Transit mount, an aes256-gcm96 key, a least-privilege policy, and JWT authentication for the Kubernetes API server identity.</p>
+            <p>Provision a Transit mount, an <code>aes256-gcm96</code> key, a least-privilege policy, and JSON Web Token (JWT) authentication for the Kubernetes API server identity.</p>
             <div class="workflow-list__links">
               <a href="{{ relURL "getting-started/openbao-setup/" }}">OpenBao Setup</a>
               <a href="{{ relURL "security/auth-model/" }}">Auth Model</a>
@@ -74,7 +74,7 @@
           <span class="workflow-list__step">04</span>
           <div>
             <h3><a href="{{ relURL "getting-started/first-encrypt/" }}">Verify End-To-End</a></h3>
-            <p>Run the first-encrypt smoke test, confirm key_id stability and AAD shape, and exercise the observability surface before relying on the provider in production.</p>
+            <p>Run the first-encrypt smoke test. Confirm <code>key_id</code> stability, additional authenticated data (AAD), metrics, health endpoints, and redacted logs before production use.</p>
             <div class="workflow-list__links">
               <a href="{{ relURL "getting-started/first-encrypt/" }}">First Encrypt</a>
               <a href="{{ relURL "reference/key-id-and-aad/" }}">Key ID And AAD</a>
@@ -85,8 +85,8 @@
         <li>
           <span class="workflow-list__step">05</span>
           <div>
-            <h3><a href="{{ relURL "operations/" }}">Operate Safely</a></h3>
-            <p>Run Transit key rotation, recover from OpenBao or etcd loss, upgrade the provider with rollback in mind, and consult the failure-mode catalog when something breaks.</p>
+            <h3><a href="{{ relURL "operations/" }}">Operate And Recover</a></h3>
+            <p>Rotate Transit keys, recover from OpenBao or etcd loss, and test provider rollback during upgrades. Use the failure-mode catalog to diagnose faults.</p>
             <div class="workflow-list__links">
               <a href="{{ relURL "operations/rotation/" }}">Rotation</a>
               <a href="{{ relURL "operations/disaster-recovery/" }}">Disaster Recovery</a>
@@ -126,7 +126,7 @@
         </a>
         <a href="{{ relURL "security/" }}">
           <span>Security</span>
-          <p>Threat model, hardening, JWT-first authentication, decrypt validation, and the security review record for each workstream.</p>
+          <p>Threat model, hardening requirements, JWT-first authentication, decrypt validation, and documented security limitations.</p>
         </a>
         <a href="{{ relURL "architecture/" }}">
           <span>Architecture</span>

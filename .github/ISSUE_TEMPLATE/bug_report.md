@@ -22,4 +22,6 @@ labels: bug
 
 ## Notes
 
-Do not include plaintext, JWTs, OpenBao tokens, full ciphertext, kubeconfigs, or sensitive cluster data. For security-sensitive reports, use private vulnerability reporting instead of a public issue.
+Do not include plaintext, JSON Web Tokens (JWTs), OpenBao tokens, full
+ciphertext, kubeconfigs, or sensitive cluster data. Use private vulnerability
+reporting for security-sensitive reports.

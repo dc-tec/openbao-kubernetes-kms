@@ -1,6 +1,8 @@
 # Contributing
 
-`openbao-kubernetes-kms` is control-plane security software. Contributions should preserve explicit contracts, pinned release inputs, and testable operational behavior.
+`openbao-kubernetes-kms` is control-plane security software. Contributions
+should preserve declared contracts, pinned release inputs, and testable
+operational behavior.
 
 ## Ground Rules
 
@@ -43,6 +45,8 @@ make docs-check
 make docs-build
 ```
 
-For focused end-to-end or deployment validation, use the targets documented in [Testing](docs/development/testing.md) and [E2E Framework](docs/development/e2e-framework.md).
+For focused end-to-end or deployment validation, use the targets documented in
+[Testing](docs/development/testing.md) and
+[E2E Framework](docs/development/e2e-framework.md).
 
 See [Code Quality](docs/development/code-quality.md) and [Contributing](docs/development/contributing.md) for the full contributor rules.

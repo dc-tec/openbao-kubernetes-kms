@@ -29,7 +29,7 @@ website/
 hugo.toml             site configuration and module mounts
 ```
 
-The live docs should describe the current project. Older plans and design notes
+The live docs must describe the current project. Older plans and design notes
 remain available through repository history.
 
 ## Hugo Mounts
@@ -53,8 +53,8 @@ To add a new top-level docs section:
 
 1. Create `docs/<section>/_index.md` with front matter.
 2. Add a mount entry in `hugo.toml`.
-3. Link the section from `website/layouts/index.html` if it should appear on
-   the homepage.
+3. Link the section from `website/layouts/index.html` if it belongs on the
+   homepage.
 
 ## Local Builds
 
@@ -79,8 +79,8 @@ make docs-check
 make docs-build
 ```
 
-`make docs-check` scans `docs/` and `README.md` for configured text and
-typography issues. `make docs-build` renders the site and should finish without
+`make docs-check` scans tracked first-party prose for configured text and
+typography issues. A successful `make docs-build` run renders the site without
 warnings.
 
 ## Templates

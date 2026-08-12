@@ -6,6 +6,6 @@ layout: "search"
 
 # Search
 
-Use this page when you know the question but not the section name.
+Search by command, flag, workflow step, or technical term.
 
 Search spans operator runbooks, deployment guides, reference pages, security guidance, maintainer docs, and contributor notes.

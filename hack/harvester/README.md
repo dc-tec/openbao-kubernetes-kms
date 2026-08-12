@@ -1,9 +1,10 @@
 # Harvester Kubeadm Lab
 
-The Harvester kubeadm lab is a local-only release-gate harness. It is not part
-of CI and must not be wired into pull-request checks. It creates real Harvester
-VMs so host-level kubeadm, kubelet, systemd, package install, reboot, and static
-pod behavior can be tested outside Kind.
+The Harvester kubeadm lab is a local-only release-gate harness for the
+Kubernetes Key Management Service (KMS) provider. It is not part of continuous
+integration (CI) and must not be wired into pull-request checks. It creates real
+Harvester virtual machines (VMs) to test host-level kubeadm, kubelet, systemd,
+package installation, reboot, and static pod behavior outside Kind.
 
 This runbook intentionally lives next to the local harness code instead of the
 public documentation site. Public docs describe the release evidence and gates;
@@ -122,7 +123,8 @@ make -C hack/harvester verify-guests
 ```
 
 This installs the pinned OpenBao version from `.ci/versions.yaml` on
-`obk-openbao-1`, configures TLS, Transit, and JWT auth, then installs the pinned
+`obk-openbao-1`, configures Transport Layer Security (TLS), Transit, and JSON
+Web Token (JWT) authentication, then installs the pinned
 kubeadm, kubelet, and kubectl version from `.ci/versions.yaml` on both kubeadm
 VMs.
 
@@ -140,7 +142,8 @@ control-plane certificates. The remaining multi-control-plane VMs join with
 exercise every control-plane endpoint directly without requiring an external
 load balancer.
 
-Generated lab identity material, the OpenBao CA, and kubeadm admin kubeconfigs
+Generated lab identity material, the OpenBao certificate authority (CA), and
+kubeadm admin kubeconfigs
 are written under `artifacts/harvester/`, which is ignored by git. OpenBao
 initialization material stays on the OpenBao VM under `/root/openbao-kms-lab/`
 and is not copied back to the workstation.
@@ -186,14 +189,18 @@ After the base lab has passed, run the local-only production confidence gate:
 make -C hack/harvester production-gate
 ```
 
-This target assumes the VMs are already created, bootstrapped, and wired. It is
-intentionally destructive within the lab: it restarts the systemd and static-pod
-providers, restarts kube-apiserver containers, restarts and unseals OpenBao,
-reboots the kubeadm VMs, reboots the OpenBao VM, stops OpenBao to verify cached
-API server writes stay envelope-encrypted and cold writes fail closed after API
-server restart, restores a paired OpenBao, provider state, and etcd backup,
-exercises provider upgrade and rollback for both deployment modes, and creates a
-small set of KMS-encrypted Kubernetes Secrets on both clusters.
+The VMs must already be created, bootstrapped, and wired. The target performs
+these destructive actions within the lab:
+
+- restarts the systemd and static-pod providers;
+- restarts kube-apiserver containers;
+- restarts and unseals OpenBao;
+- reboots the kubeadm and OpenBao VMs;
+- stops OpenBao, then verifies that cached API server writes remain
+  envelope-encrypted and cold writes fail closed after API server restart;
+- restores a paired OpenBao, provider state, and etcd backup;
+- tests provider upgrade and rollback for both deployment modes;
+- creates KMS-encrypted Kubernetes Secrets on both clusters.
 
 The gate is split into smaller targets so failures can be rerun without
 recreating the lab:
@@ -213,26 +220,34 @@ Set `HARVESTER_LOAD_SECRET_COUNT` to change the load-smoke size. The default is
 `25` Secrets per kubeadm cluster. These targets must remain local-only and must
 not be added to public pull-request CI.
 
-Use `verify-decrypt-warmup` for the heavier micro-batching
-decision workload. It creates a larger corpus of KMS-encrypted Kubernetes
-Secrets, verifies sample raw etcd envelopes, optionally restarts kube-apiserver,
-then repeatedly lists the full Secret corpus through kube-apiserver so Kubernetes
-itself drives the encrypted Secret read path and the cold KMS decrypt warmup. The
-summary reports full list count and `secret_objects_read`; provider metrics
-should be checked separately when interpreting how many KMS RPCs reached the
-provider after kube-apiserver caching. When
+Use `verify-decrypt-warmup` for the heavier micro-batching decision workload.
+The workload:
+
+- creates a larger corpus of KMS-encrypted Kubernetes Secrets;
+- verifies sample raw etcd envelopes;
+- optionally restarts kube-apiserver;
+- repeatedly lists the full Secret corpus through kube-apiserver;
+- reports the full list count and `secret_objects_read`.
+
+Kubernetes drives the encrypted Secret read path and the cold KMS decrypt
+warmup. Check provider metrics separately to determine how many KMS remote
+procedure calls (RPCs) reached the provider after kube-apiserver caching. When
 `HARVESTER_ENABLE_MULTI_CONTROL_PLANE=true`, the workload runs against the
 multi-control-plane kubeadm cluster through the per-control-plane kubeconfigs;
 otherwise it runs once against the systemd cluster and once against the static
 pod cluster.
 
-Use `verify-decrypt-cold-start` for a bounded cold-cache sizing
-check. It prepares the same encrypted Secret corpus, captures provider metrics,
-restarts kube-apiserver, lists the full corpus once through every selected API
-server, captures provider metrics again, and reports list latency plus provider
-decrypt and Transit decrypt counter deltas. This is the preferred quick rerun
-after a large corpus already exists because it isolates the startup recovery
-window from a long soak.
+Use `verify-decrypt-cold-start` for a bounded cold-cache sizing check. It:
+
+1. Prepares the encrypted Secret corpus.
+2. Captures provider metrics.
+3. Restarts kube-apiserver.
+4. Lists the full corpus once through every selected API server.
+5. Captures provider metrics again.
+6. Reports list latency and the provider and Transit decrypt counter deltas.
+
+After a large corpus exists, use this target for a focused rerun. It isolates
+the startup recovery window from a long soak.
 
 Default decrypt-warmup settings are intentionally heavier than the normal load
 smoke but still bounded for local use:
@@ -289,11 +304,10 @@ make -C hack/harvester verify-decrypt-cold-start
 When `HARVESTER_ENABLE_MULTI_CONTROL_PLANE=true`, the
 `production-gate` target also runs the multi-control-plane
 recovery gate.
-That gate writes and reads KMS-encrypted Secrets through each API server,
-verifies the raw etcd envelope on every member, restarts every provider static
-pod, restarts every kube-apiserver, and reboots every multi-control-plane VM one
-at a time while verifying writes through the surviving API servers during each
-outage.
+The gate writes and reads KMS-encrypted Secrets through each API server. It
+verifies the raw etcd envelope on every member, then restarts every provider
+static pod and kube-apiserver. It reboots each multi-control-plane VM in turn
+and verifies writes through the surviving API servers during each outage.
 
 ## Destroy
 
@@ -301,8 +315,9 @@ outage.
 make -C hack/harvester destroy
 ```
 
-By default the destroy target also deletes lab PVCs selected by the Helm release
-label. Set `DELETE_PVCS=false` to preserve disks while removing the release.
+By default, the destroy target also deletes lab persistent volume claims (PVCs)
+selected by the Helm release label. Set `DELETE_PVCS=false` to preserve disks
+while removing the release.
 
 ## Implementation Model
 
@@ -319,9 +334,9 @@ operations for OpenBao, provider state, and etcd.
 
 ## Remaining Gaps
 
-This setup creates the VMs, bootstraps OpenBao plus kubeadm, wires both provider
-deployment modes, validates raw etcd envelope storage, and runs destructive
-local recovery checks. OpenBao HA failover is covered by the portable
-provider/OpenBao integrated-raft e2e lane. The optional Harvester
-multi-control-plane topology closes the remaining kubeadm recovery gap in a real
-VM substrate while staying outside public CI.
+This setup creates the VMs and bootstraps OpenBao and kubeadm. It wires both
+provider deployment modes, validates raw etcd envelope storage, and runs
+destructive local recovery checks. The portable provider and OpenBao
+integrated-raft end-to-end (E2E) lane covers high availability (HA) failover.
+The optional Harvester multi-control-plane topology closes the remaining kubeadm
+recovery gap in a real VM substrate while staying outside public CI.
