@@ -16,7 +16,7 @@ start with [Start Here](/getting-started/).
 | Project | `openbao-kubernetes-kms` |
 | Go module | `github.com/dc-tec/openbao-kubernetes-kms` |
 | Binary | `bao-kms-provider` |
-| Go toolchain | `1.26.5` (pinned in `.go-version` and `.ci/versions.yaml`) |
+| Go toolchain | `1.26.6` (pinned in `.go-version` and `.ci/versions.yaml`) |
 | CLI and configuration framework | Viper (isolated to `internal/config` and command setup) |
 | Task runner | Makefile |
 | Version policy file | `.ci/versions.yaml` |
