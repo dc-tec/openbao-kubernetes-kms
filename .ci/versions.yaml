@@ -6,7 +6,7 @@ project:
   binary: bao-kms-provider
 
 toolchain:
-  go: "1.26.5"
+  go: "1.26.6"
   commandFramework:
     cliConfig: viper
   taskRunner: make
@@ -129,8 +129,8 @@ artifacts:
   imageRuntimeBase: gcr.io/distroless/static-debian12:nonroot
   imageRuntimeBaseDigest: sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
   imageRuntimeUser: "65532:65532"
-  imageBuilderBase: docker.io/library/golang:1.26.5-bookworm
-  imageBuilderBaseDigest: sha256:349ad04971da5f200a537641ae2c70774a592ca21fad4b513b65f813f546781a
+  imageBuilderBase: docker.io/library/golang:1.26.6-bookworm
+  imageBuilderBaseDigest: sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36
   dockerfileFrontend: docker.io/docker/dockerfile:1.7
   dockerfileFrontendDigest: sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
   binaryName: bao-kms-provider
