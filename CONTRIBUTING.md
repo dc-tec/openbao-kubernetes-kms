@@ -32,17 +32,27 @@ operational behavior.
 
 ## Local Checks
 
+Enter the pinned development environment and install the repository-managed
+tools:
+
+```sh
+devenv test
+devenv tasks run kms:bootstrap
+```
+
 Run the core local checks before opening a pull request:
 
 ```sh
-make ci-core
+devenv tasks run kms:ci-core
 ```
+
+The task runs `make ci-core`. Make remains the command contract for local and
+continuous integration (CI) checks.
 
 For documentation-only changes, also run:
 
 ```sh
-make docs-check
-make docs-build
+devenv tasks run kms:docs
 ```
 
 For focused end-to-end or deployment validation, use the targets documented in

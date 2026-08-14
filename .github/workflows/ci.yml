@@ -37,6 +37,7 @@ jobs:
       deployment: ${{ steps.diff.outputs.deployment }}
       openbao_e2e: ${{ steps.diff.outputs.openbao_e2e }}
       kind_e2e: ${{ steps.diff.outputs.kind_e2e }}
+      toolchain: ${{ steps.diff.outputs.toolchain }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,7 +56,7 @@ jobs:
           set -euo pipefail
 
           if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
-            for key in workflow docs image deployment openbao_e2e kind_e2e; do
+            for key in workflow docs image deployment openbao_e2e kind_e2e toolchain; do
               echo "${key}=false" >> "${GITHUB_OUTPUT}"
             done
             exit 0
@@ -90,6 +91,35 @@ jobs:
           set_output deployment '^(deploy/|hack/kubeadm/|test/deployment/)'
           set_output openbao_e2e '^(test/e2e/|internal/(openbao|auth|kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile(\..*)?|go\.(mod|sum)$|vendor/|Makefile|\.ci/versions\.yaml)'
           set_output kind_e2e '^(test/e2e/|deploy/|hack/kubeadm/|internal/(kmsv2|status|runtime|socket|keyregistry|aad)/|cmd/|Dockerfile(\..*)?|go\.(mod|sum)$|vendor/|Makefile|\.ci/versions\.yaml)'
+          set_output toolchain '^(devenv\.(nix|yaml|lock)$|\.go-version$|\.node-version$|\.hugo-version$|go\.mod$|\.ci/versions\.yaml$|\.github/tools/package(-lock)?\.json$|hack/dev/verify-devenv\.sh$|Makefile$|mk/)'
+
+  devenv-contract:
+    name: Devenv Contract (advisory)
+    needs: changes
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || needs.changes.outputs.toolchain == 'true'
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
+
+      - name: Configure the devenv binary cache
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: devenv
+
+      - name: Install devenv from the pinned package set
+        shell: bash
+        run: |
+          set -euo pipefail
+          nixpkgs_url="$(awk '/^  nixpkgs:/{getline; sub(/^    url: /, ""); print; exit}' devenv.yaml)"
+          nix profile add "${nixpkgs_url}#devenv"
+
+      - name: Verify the devenv contract
+        run: devenv test
 
   core:
     name: Core Quality
@@ -97,7 +127,7 @@ jobs:
     needs: changes
     env:
       GOFLAGS: -mod=vendor
-      SEMGREP_VERSION: "1.157.0"
+      SEMGREP_VERSION: "1.172.0"
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,7 +138,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: .github/tools/package-lock.json
 
@@ -129,7 +159,7 @@ jobs:
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
-          version: v0.69.3
+          version: v0.73.0
 
       - name: Run core quality gate
         run: make ci-core
@@ -157,7 +187,7 @@ jobs:
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
-          version: v0.69.3
+          version: v0.73.0
 
       - name: Scan image
         run: make security-scan-image IMAGE="${E2E_PROVIDER_IMAGE}"

@@ -1,5 +1,5 @@
 baseURL = "/"
-languageCode = "en-us"
+locale = "en-US"
 title = "OpenBao Kubernetes KMS Provider Docs"
 enableRobotsTXT = true
 disableKinds = ["taxonomy", "term", "RSS"]
