@@ -67,8 +67,9 @@ make docs-build   # build into public/
 make docs-serve   # serve locally on http://localhost:1313/
 ```
 
-The Hugo version is pinned with `HUGO_VERSION` in the Makefile. Update that pin
-when a layout, shortcode, or build behavior depends on a newer Hugo release.
+The Hugo version is pinned in `.hugo-version` and `.ci/versions.yaml`. Update
+both pins when a layout, shortcode, or build behavior depends on a newer Hugo
+release.
 
 ## Checks
 

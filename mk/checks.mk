@@ -30,6 +30,10 @@ lint: docs-check versions-check verify-e2e-manifest verify-fmt test-ast lint-ast
 	@if command -v "$(STATICCHECK)" >/dev/null 2>&1; then "$(STATICCHECK)" ./...; else printf '%s\n' 'staticcheck not installed; skipping staticcheck.'; fi
 	@if command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1; then "$(GOLANGCI_LINT)" run; else printf '%s\n' 'golangci-lint not installed; skipping golangci-lint.'; fi
 
+.PHONY: verify-devenv
+verify-devenv: ## Verify the pinned devenv toolchain contract.
+	@bash hack/dev/verify-devenv.sh
+
 .PHONY: lint-ci
 lint-ci: lint vulncheck ## Run lint plus vulnerability checks.
 

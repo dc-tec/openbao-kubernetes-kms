@@ -20,6 +20,7 @@ start with [Start Here](/getting-started/).
 | CLI and configuration framework | Viper (isolated to `internal/config` and command setup) |
 | Task runner | Makefile |
 | Version policy file | `.ci/versions.yaml` |
+| Development environment | devenv 2.1 or later |
 
 Go package layout:
 
@@ -46,11 +47,26 @@ test/deployment
 
 ## Local Development
 
+Install Nix and devenv 2.1 or later. Enter the repository root, then verify the
+pinned toolchain and install the repository-managed tools:
+
+```sh
+devenv test
+devenv tasks run kms:bootstrap
+```
+
+The shell sets `GOTOOLCHAIN=local`. It does not start Docker, Kubernetes,
+OpenBao, or other services. It does not create credentials.
+
 Every pull request must pass the local core gate:
 
 ```sh
-make ci-core
+devenv tasks run kms:ci-core
 ```
+
+This task runs `make ci-core`. Make remains the command contract for local and
+CI checks. Use `devenv shell` when you need an interactive shell. Use
+`devenv --profile editor shell` to add Go language-server and debugger tools.
 
 Run focused end-to-end (E2E) lanes when a change touches OpenBao, Kubernetes,
 deployment, rotation, failure injection, or release packaging behavior. The

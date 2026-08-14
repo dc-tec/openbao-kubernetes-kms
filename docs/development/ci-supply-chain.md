@@ -52,11 +52,18 @@ exact-pinned release evidence exists. See
 
 ## Local Parity
 
-Use the Makefile entry points locally. `make ci-core` is the standard fast gate:
+Use devenv to load the pinned toolchain. The named task calls the canonical
+Makefile entry point:
 
 ```sh
-make ci-core
+devenv test
+devenv tasks run kms:bootstrap
+devenv tasks run kms:ci-core
 ```
+
+The advisory `Devenv Contract` CI job verifies the Linux shell contract when
+toolchain files change. The existing Make targets remain authoritative for CI,
+release, and E2E behavior.
 
 It covers formatting, vetting, static analysis, vulnerability checks, Semgrep,
 ast-grep rules, unit tests, race smoke, fuzz smoke, generated artifact checks,

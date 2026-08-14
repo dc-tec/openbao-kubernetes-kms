@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -598,6 +599,10 @@ func requirePathMode(t *testing.T, root string, path string, mode os.FileMode) {
 
 func requireSetGID(t *testing.T, path string) {
 	t.Helper()
+	if runtime.GOOS == "darwin" {
+		t.Log("skip setgid assertion because macOS cannot preserve the Linux group on the staged path")
+		return
+	}
 
 	info, err := os.Stat(path)
 	if err != nil {

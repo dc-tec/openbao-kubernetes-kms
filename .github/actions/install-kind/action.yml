@@ -5,7 +5,7 @@ inputs:
   kind-version:
     description: kind version to install.
     required: false
-    default: v0.31.0
+    default: v0.32.0
   install-dir:
     description: Directory to install kind into.
     required: false
