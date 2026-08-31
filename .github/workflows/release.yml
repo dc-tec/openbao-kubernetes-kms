@@ -411,7 +411,7 @@ jobs:
             IMAGE="${{ needs.prepare.outputs.image }}"
 
       - name: Generate image SBOM (primary)
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
           format: spdx-json
@@ -422,7 +422,7 @@ jobs:
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate image SBOM (rebuild)
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           image: ${{ needs.prepare.outputs.image }}@${{ needs.rebuild.outputs.image_digest }}
           format: spdx-json
