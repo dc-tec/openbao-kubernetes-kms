@@ -1,0 +1,8 @@
+# The Make target supplies the digest-pinned builder from .ci/versions.yaml.
+ARG BUILDER_IMAGE
+FROM ${BUILDER_IMAGE}
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends systemd \
+    && rm -rf /var/lib/apt/lists/*
+# The install test requests root with docker run --user; keep the image non-root by default.
+USER 65532:65532

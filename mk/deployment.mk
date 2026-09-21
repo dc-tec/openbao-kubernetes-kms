@@ -35,3 +35,19 @@ package-build-check: ## Build throwaway native packages to validate nFPM metadat
 			$(NFPM_RUN) package --config "$(NFPM_CONFIG)" --packager "$$format" --target "$$target" >/dev/null; \
 		test -s "$$target"; \
 	done
+
+.PHONY: systemd-install-check
+systemd-install-check: ## Exercise the documented tarball installation in a disposable Linux container.
+	@set -eu; \
+	builder="$$(awk '/^  imageBuilderBase:/{print $$2}' .ci/versions.yaml)"; \
+	digest="$$(awk '/^  imageBuilderBaseDigest:/{print $$2}' .ci/versions.yaml)"; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	docker build --iidfile "$$tmp/image-id" \
+		--build-arg "BUILDER_IMAGE=$$builder@$$digest" \
+		-f test/deployment/Dockerfile.systemd-install test/deployment; \
+	docker run --rm --network=none --user 0:0 \
+		--mount "type=bind,source=$(CURDIR),target=/src,readonly" \
+		--env KMS_INSTALL_TEST_CONTAINER=1 \
+		--workdir /src \
+		"$$(cat "$$tmp/image-id")" bash test/deployment/systemd-install.sh

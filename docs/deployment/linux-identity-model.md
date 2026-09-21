@@ -35,6 +35,8 @@ and groups during image build or configuration management.
 Permissions:
 
 ```text
+/etc/openbao-kms                    root:openbao-kms                0750
+/etc/openbao-kms/tls                root:root                       0755
 /etc/openbao-kms/config.yaml        root:openbao-kms                0640
 /etc/openbao-kms/tls/ca.crt         root:root                       0644
 /var/lib/openbao-kms                openbao-kms:openbao-kms         0750
