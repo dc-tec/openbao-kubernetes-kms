@@ -21,6 +21,7 @@ toolchain:
     goLicenses: "2.0.1"
     nfpm: "2.46.3"
     trivy: "0.73.0"
+    trivyLinuxAmd64SHA256: "2edd39da482bb4e9831962487b68f68e3928ec3137794757f54d00383d79547b"
     cosign: "3.0.4"
     hugo: "0.164.0"
     helmCli: "4.2.3"
@@ -44,7 +45,6 @@ toolchain:
     releasePlease: 45996ed1f6d02564a971a2fa1b5860e934307cf7
     setupGo: 4b73464bb391d4059bd26b0524d20df3927bd417
     setupNode: 820762786026740c76f36085b0efc47a31fe5020
-    setupTrivy: 81e514348e19b6112ce2a7e3ecbafe19c1e1f567
     trivyAction: ed142fd0673e97e23eac54620cfb913e5ce36c25
     uploadArtifact: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
   goDependencies:
