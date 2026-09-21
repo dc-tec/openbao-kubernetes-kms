@@ -230,6 +230,11 @@ func NewHTTPClientWithTLSOptions(cfg HTTPClientConfig) (*http.Client, error) {
 	return &http.Client{
 		Timeout:   cfg.Timeout,
 		Transport: newHTTPTransport(tlsConfig),
+		// Keep tokens, login material, and Transit payloads at the configured
+		// endpoint. HA must use server-side forwarding or active-node routing.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}, nil
 }
 
@@ -447,6 +452,9 @@ func readOpenBaoResponse(
 	resp *http.Response,
 	response responsePayload,
 ) (string, error) {
+	if resp.StatusCode >= http.StatusMultipleChoices && resp.StatusCode < http.StatusBadRequest {
+		return "", &Error{Class: ErrorClassUnavailable, Operation: operation, StatusCode: resp.StatusCode}
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		encoded, err := readBoundedResponseBody(operation, resp.Body, maxOpenBaoErrorResponseBytes)
 		if err != nil {

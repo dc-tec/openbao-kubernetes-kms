@@ -77,6 +77,7 @@ The design does not defend against every action by:
 | Provider downgrade to plaintext | Remove `identity` fallback after migration; audit `EncryptionConfiguration`. |
 | Protected API server dependency loop | Use provider auth without TokenReview and keep OpenBao outside the protected API-server dependency path. |
 | OpenBao MITM | TLS CA validation and server name verification. |
+| Credentials or KMS material forwarded by HTTP redirects | Reject all redirects before sending a request to the redirect destination. |
 | Oversized OpenBao response | Per-operation HTTP response-body limits and redacted `openbao_unavailable` errors. |
 | KMS request flood | Separate active Status, Encrypt, and Decrypt limits, immediate `ResourceExhausted` rejection, and no internal request queue. |
 | OpenBao outage | Cached Status with staleness limits, fail closed, bootstrap grace, jittered auth retry backoff, alerting. |

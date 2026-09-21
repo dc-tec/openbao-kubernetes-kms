@@ -15,6 +15,8 @@ the bootstrap path before the provider binary and configuration file exist.
 ## Prerequisites
 
 - A reachable OpenBao instance (HTTPS endpoint, valid TLS).
+- An endpoint that serves requests without HTTP redirects. For HA, use OpenBao
+  server-side request forwarding or an endpoint routed to the active node.
 - An OpenBao token with administrative capabilities for `sys/`, `auth/`, and `transit/` paths.
 - A deterministic name for the Kubernetes Transit key. The naming convention used in this guide is `k8s-<workload>-etcd`. Replace `workload-a` with your environment-specific identifier in every example below.
 - A stable OpenBao instance ID and Transit mount ID for provider configuration. These are non-secret identity values used in Kubernetes `key_id` and additional authenticated data (AAD) derivation.
