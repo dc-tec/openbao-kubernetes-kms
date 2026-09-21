@@ -1,0 +1,50 @@
+name: Install Trivy
+description: Install the pinned Linux amd64 Trivy archive with retries and SHA256 verification.
+
+runs:
+  using: composite
+  steps:
+    - name: Download and verify Trivy
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [[ "$(uname -s)/$(uname -m)" != "Linux/x86_64" ]]; then
+          echo "This installer requires a Linux amd64 runner" >&2
+          exit 1
+        fi
+        version="$(awk '$1 == "trivy:" {gsub(/"/, "", $2); print $2; exit}' .ci/versions.yaml)"
+        digest="$(awk '$1 == "trivyLinuxAmd64SHA256:" {gsub(/"/, "", $2); print $2; exit}' .ci/versions.yaml)"
+        if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+          echo "Invalid Trivy version or archive SHA256 in .ci/versions.yaml" >&2
+          exit 1
+        fi
+
+        tmp_dir="$(mktemp -d)"
+        trap 'rm -rf "${tmp_dir}"' EXIT
+        archive="trivy_${version}_Linux-64bit.tar.gz"
+        download() {
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors --connect-timeout 15 --max-time 180 "$@"
+        }
+        if ! download --output "${tmp_dir}/${archive}" \
+          "https://github.com/aquasecurity/trivy/releases/download/v${version}/${archive}"; then
+          echo "Release download failed; trying the GitHub release-asset API"
+          asset_id="$(download "https://api.github.com/repos/aquasecurity/trivy/releases/tags/v${version}" |
+            jq -er --arg name "${archive}" '.assets[] | select(.name == $name) | .id')"
+          if ! [[ "${asset_id}" =~ ^[0-9]+$ ]]; then
+            echo "Invalid Trivy release asset ID" >&2
+            exit 1
+          fi
+          download --header 'Accept: application/octet-stream' \
+            --output "${tmp_dir}/${archive}" \
+            "https://api.github.com/repos/aquasecurity/trivy/releases/assets/${asset_id}"
+        fi
+        printf '%s  %s\n' "${digest}" "${tmp_dir}/${archive}" | sha256sum --check --status
+        tar -xzf "${tmp_dir}/${archive}" -C "${tmp_dir}" trivy
+
+        install_dir="${RUNNER_TEMP}/trivy-bin"
+        install -D -m 0755 "${tmp_dir}/trivy" "${install_dir}/trivy"
+        echo "${install_dir}" >> "${GITHUB_PATH}"
+        "${install_dir}/trivy" --version

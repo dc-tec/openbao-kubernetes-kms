@@ -157,9 +157,7 @@ jobs:
           echo "${GITHUB_WORKSPACE}/.venv-semgrep/bin" >> "${GITHUB_PATH}"
 
       - name: Install Trivy
-        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
-        with:
-          version: v0.73.0
+        uses: ./.github/actions/install-trivy
 
       - name: Run core quality gate
         run: make ci-core
@@ -185,9 +183,7 @@ jobs:
         run: docker load --input artifacts/e2e-images/provider-base.tar
 
       - name: Install Trivy
-        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
-        with:
-          version: v0.73.0
+        uses: ./.github/actions/install-trivy
 
       - name: Scan image
         run: make security-scan-image IMAGE="${E2E_PROVIDER_IMAGE}"

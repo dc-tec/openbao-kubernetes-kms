@@ -42,6 +42,12 @@ The policy is:
 - release container builder and runtime base images pinned by digest,
 - release artifact names and checksum filenames defined by the version policy.
 
+The repository-managed Trivy installer downloads the pinned Linux amd64 archive
+directly from its GitHub release. If that download fails, it uses the GitHub
+release-asset API. Both paths use bounded retries. The installer verifies the
+archive against `toolchain.qualityTools.trivyLinuxAmd64SHA256` before installation.
+Update that checksum with the Trivy version in `.ci/versions.yaml`.
+
 Current validation uses OpenBao `2.6.0`, Kubernetes KMS v2, Linux
 control-plane nodes, and exact-pinned Kind lanes for the Kubernetes `1.34` and
 `1.35` release lines recorded in `.ci/versions.yaml`. Kubernetes `1.36` is the
