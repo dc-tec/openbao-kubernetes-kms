@@ -23,11 +23,24 @@ runs:
         tmp_dir="$(mktemp -d)"
         trap 'rm -rf "${tmp_dir}"' EXIT
         archive="trivy_${version}_Linux-64bit.tar.gz"
-        curl --fail --silent --show-error --location \
-          --proto '=https' --proto-redir '=https' \
-          --retry 3 --retry-all-errors --connect-timeout 15 --max-time 180 \
-          --output "${tmp_dir}/${archive}" \
-          "https://github.com/aquasecurity/trivy/releases/download/v${version}/${archive}"
+        download() {
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --retry-all-errors --connect-timeout 15 --max-time 180 "$@"
+        }
+        if ! download --output "${tmp_dir}/${archive}" \
+          "https://github.com/aquasecurity/trivy/releases/download/v${version}/${archive}"; then
+          echo "Release download failed; trying the GitHub release-asset API"
+          asset_id="$(download "https://api.github.com/repos/aquasecurity/trivy/releases/tags/v${version}" |
+            jq -er --arg name "${archive}" '.assets[] | select(.name == $name) | .id')"
+          if ! [[ "${asset_id}" =~ ^[0-9]+$ ]]; then
+            echo "Invalid Trivy release asset ID" >&2
+            exit 1
+          fi
+          download --header 'Accept: application/octet-stream' \
+            --output "${tmp_dir}/${archive}" \
+            "https://api.github.com/repos/aquasecurity/trivy/releases/assets/${asset_id}"
+        fi
         printf '%s  %s\n' "${digest}" "${tmp_dir}/${archive}" | sha256sum --check --status
         tar -xzf "${tmp_dir}/${archive}" -C "${tmp_dir}" trivy
 
