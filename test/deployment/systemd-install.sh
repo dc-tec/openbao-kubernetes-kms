@@ -10,7 +10,9 @@ fi
 repo=/src
 work=$(mktemp -d)
 export GOCACHE="$work/go-cache"
-export GOFLAGS=-mod=vendor
+# This disposable fixture needs no Git metadata. The root-run container may
+# mount a checkout owned by another user or a worktree with external metadata.
+export GOFLAGS="-mod=vendor -buildvcs=false"
 export GOTOOLCHAIN=local
 ARCH=$(go env GOARCH)
 export ARCH
