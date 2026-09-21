@@ -540,11 +540,16 @@ func (f *OpenBaoEnvironment) MetadataOnlyProviderPolicy() string {
   capabilities = ["read"]
 }
 
+path %q {
+  capabilities = ["read"]
+}
+
 path "sys/capabilities-self" {
   capabilities = ["update"]
 }
 `,
 		path.Join(f.TransitMount, "keys", f.TransitKey),
+		path.Join(f.TransitMount, "config", "keys"),
 	)
 }
 

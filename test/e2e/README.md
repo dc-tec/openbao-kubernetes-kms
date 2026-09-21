@@ -86,7 +86,8 @@ The target uses real OpenBao Transit and JWT authentication with the provider
 image. It covers:
 
 - unavailable and sealed OpenBao instances;
-- reduced provider policy with `PermissionDenied` KMS errors;
+- reduced provider policy that retains key and mount metadata reads while
+  Encrypt and Decrypt return `PermissionDenied`;
 - startup failure for expired JWTs and expected-claim drift;
 - JWT file rotation and provider re-login;
 - provider re-login after signing-key rollover;

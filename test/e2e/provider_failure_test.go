@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/test/e2e/framework"
 )
 
@@ -84,6 +85,31 @@ func TestProviderBadPolicyFailsClosedE2E(t *testing.T) {
 
 	if err := stack.environment.InstallProviderPolicy(ctx, stack.environment.MetadataOnlyProviderPolicy()); err != nil {
 		t.Fatalf("install reduced OpenBao provider policy: %v", err)
+	}
+
+	// The reduced policy must preserve both metadata reads so that a
+	// background health probe cannot mask the expected Transit denial.
+	jwt, err := os.ReadFile(stack.environment.JWTFile)
+	if err != nil {
+		t.Fatalf("read provider JWT: %v", err)
+	}
+	authClient, err := stack.environment.NewAuthClient()
+	if err != nil {
+		t.Fatalf("create provider auth client: %v", err)
+	}
+	token, err := loginJWT(ctx, authClient, stack.environment, string(jwt))
+	if err != nil {
+		t.Fatalf("log in with reduced provider policy: %v", err)
+	}
+	client, err := stack.environment.NewClientWithTokenSource(openbao.StaticTokenSource{TokenValue: token.ClientToken})
+	if err != nil {
+		t.Fatalf("create restricted Transit client: %v", err)
+	}
+	if _, err := client.ReadDisableUpsert(ctx, stack.environment.TransitMount); err != nil {
+		t.Fatalf("read mount metadata with reduced provider policy: %v", err)
+	}
+	if _, err := client.ReadKeyProfile(ctx, stack.environment.TransitMount, stack.environment.TransitKey); err != nil {
+		t.Fatalf("read key metadata with reduced provider policy: %v", err)
 	}
 
 	stack.runClient(ctx, "policy-client", kmsClientModeExpectPolicyDenied, sampleReadOnly)
