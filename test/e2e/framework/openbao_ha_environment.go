@@ -233,10 +233,7 @@ func (h *OpenBaoHAEnvironment) start(ctx context.Context, startupWait time.Durat
 		if err := h.bootstrapTransit(ctx); err != nil {
 			return err
 		}
-		if err := h.bootstrapJWTAuth(ctx); err != nil {
-			return err
-		}
-		return h.configureAutopilot(ctx)
+		return h.bootstrapJWTAuth(ctx)
 	}); err != nil {
 		return h.nodeStartupError(ctx, 0, err)
 	}
@@ -256,10 +253,9 @@ func (h *OpenBaoHAEnvironment) start(ctx context.Context, startupWait time.Durat
 		}); err != nil {
 			return h.nodeStartupError(ctx, index, err)
 		}
-		if err := h.waitPeer(ctx, index, false, defaultOpenBaoHAClusterWaitTimeout); err != nil {
-			return err
-		}
-		if err := h.waitPromotedPeer(ctx, index, defaultOpenBaoHAClusterWaitTimeout); err != nil {
+		// Joining nodes start as Raft non-voters. Let Autopilot promote them
+		// using OpenBao's default health and stabilization thresholds.
+		if err := h.waitVoter(ctx, index, defaultOpenBaoHAClusterWaitTimeout); err != nil {
 			return err
 		}
 	}
@@ -280,29 +276,6 @@ func (h *OpenBaoHAEnvironment) writeHAConfigs(nodeNames []string) error {
 		}
 	}
 	return nil
-}
-
-func (h *OpenBaoHAEnvironment) promoteNode(ctx context.Context, index int) (string, error) {
-	if index <= 0 || index >= len(h.nodes) {
-		return "", fmt.Errorf("OpenBao HA promote node index out of range: %d", index)
-	}
-	args := []string{
-		"exec",
-		"--env", "BAO_ADDR=https://127.0.0.1:8200",
-		"--env", "BAO_CACERT=/bao/tls/ca.pem",
-		"--env", "BAO_TOKEN=" + h.Token,
-		h.nodes[0].name,
-		"bao", "operator", "raft", "promote", h.nodes[index].name,
-	}
-	cmd := exec.CommandContext(ctx, h.dockerBinary, args...)
-	output, err := cmd.CombinedOutput()
-	trimmed := strings.TrimSpace(string(output))
-	if err != nil {
-		if !strings.Contains(trimmed, "server is not a non-voter") {
-			return trimmed, fmt.Errorf("promote OpenBao HA node %s: %w: %s", h.nodes[index].name, err, trimmed)
-		}
-	}
-	return trimmed, nil
 }
 
 func (h *OpenBaoHAEnvironment) startNode(ctx context.Context, index int) error {
@@ -372,10 +345,9 @@ func (h *OpenBaoHAEnvironment) waitPeerCount(ctx context.Context, count int, tim
 	}
 }
 
-func (h *OpenBaoHAEnvironment) waitPeer(
+func (h *OpenBaoHAEnvironment) waitVoter(
 	ctx context.Context,
 	index int,
-	requireVoter bool,
 	timeout time.Duration,
 ) error {
 	if index <= 0 || index >= len(h.nodes) {
@@ -389,67 +361,18 @@ func (h *OpenBaoHAEnvironment) waitPeer(
 		peers, err := h.raftPeers(ctx)
 		if err == nil {
 			lastPeers = peers
-			if peer, ok := peers[nodeName]; ok && (!requireVoter || peer.Voter) {
+			if peer, ok := peers[nodeName]; ok && peer.Voter {
 				return nil
 			}
 		} else {
 			lastErr = err
 		}
 		if time.Now().After(deadline) {
-			state := "raft peer"
-			if requireVoter {
-				state = "raft voter"
-			}
 			return fmt.Errorf(
-				"timed out waiting for OpenBao HA node %s to become a %s\nlast raft peers: %s\nlast raft error: %s\n%s",
-				nodeName,
-				state,
-				formatRaftPeers(lastPeers),
-				formatError(lastErr),
-				h.nodeDiagnostics(ctx, index),
-			)
-		}
-		time.Sleep(time.Second)
-	}
-}
-
-func (h *OpenBaoHAEnvironment) waitPromotedPeer(
-	ctx context.Context,
-	index int,
-	timeout time.Duration,
-) error {
-	if index <= 0 || index >= len(h.nodes) {
-		return fmt.Errorf("OpenBao HA promote peer index out of range: %d", index)
-	}
-	nodeName := h.nodes[index].name
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	var lastPeers map[string]raftPeer
-	lastPromoteResult := "<not attempted>"
-	for {
-		peers, err := h.raftPeers(ctx)
-		if err == nil {
-			lastPeers = peers
-			if peer, ok := peers[nodeName]; ok {
-				if peer.Voter {
-					return nil
-				}
-				output, promoteErr := h.promoteNode(ctx, index)
-				lastPromoteResult = formatCommandResult(output, promoteErr)
-				if promoteErr != nil {
-					lastErr = promoteErr
-				}
-			}
-		} else {
-			lastErr = err
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf(
-				"timed out waiting for OpenBao HA node %s to become a raft voter\nlast raft peers: %s\nlast raft/promote error: %s\nlast promote result: %s\n%s",
+				"timed out waiting for OpenBao HA node %s to become a raft voter\nlast raft peers: %s\nlast raft error: %s\n%s",
 				nodeName,
 				formatRaftPeers(lastPeers),
 				formatError(lastErr),
-				lastPromoteResult,
 				h.clusterDiagnostics(ctx),
 			)
 		}
@@ -480,25 +403,6 @@ func (h *OpenBaoHAEnvironment) raftPeers(ctx context.Context) (map[string]raftPe
 		peers[peer.NodeID] = peer
 	}
 	return peers, nil
-}
-
-func (h *OpenBaoHAEnvironment) configureAutopilot(ctx context.Context) error {
-	args := []string{
-		"exec",
-		"--env", "BAO_ADDR=https://127.0.0.1:8200",
-		"--env", "BAO_CACERT=/bao/tls/ca.pem",
-		"--env", "BAO_TOKEN=" + h.Token,
-		h.nodes[0].name,
-		"bao", "operator", "raft", "autopilot", "set-config",
-		"-server-stabilization-time=1s",
-		"-last-contact-threshold=2s",
-		"-min-quorum=3",
-	}
-	cmd := exec.CommandContext(ctx, h.dockerBinary, args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("configure OpenBao HA autopilot: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
 }
 
 func (h *OpenBaoHAEnvironment) waitJWTLoginThroughNode(
@@ -593,6 +497,20 @@ func (h *OpenBaoHAEnvironment) survivorDiagnostics(ctx context.Context) string {
 
 func (h *OpenBaoHAEnvironment) clusterDiagnostics(ctx context.Context) string {
 	var out strings.Builder
+	diagCtx, cancel := context.WithTimeout(ctx, defaultOpenBaoHADiagnosticTimeout)
+	defer cancel()
+	_, _ = out.WriteString("== OpenBao HA autopilot state ==\n")
+	h.appendDockerDiagnostic(
+		diagCtx,
+		&out,
+		"autopilot state",
+		"exec",
+		"--env", "BAO_ADDR=https://127.0.0.1:8200",
+		"--env", "BAO_CACERT=/bao/tls/ca.pem",
+		"--env", "BAO_TOKEN="+h.Token,
+		h.nodes[0].name,
+		"bao", "operator", "raft", "autopilot", "state", "-format=json",
+	)
 	for index := range h.nodes {
 		_, _ = out.WriteString(h.nodeDiagnostics(ctx, index))
 	}
@@ -655,19 +573,6 @@ func formatError(err error) string {
 		return "<none>"
 	}
 	return err.Error()
-}
-
-func formatCommandResult(output string, err error) string {
-	if output == "" && err == nil {
-		return "<success>"
-	}
-	if output == "" {
-		return formatError(err)
-	}
-	if err == nil {
-		return output
-	}
-	return output + ": " + err.Error()
 }
 
 func (h *OpenBaoHAEnvironment) appendDockerDiagnostic(

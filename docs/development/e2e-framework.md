@@ -43,6 +43,11 @@ behavior.
 | Kind static-pod upgrade | `make test-e2e-kind-upgrade-rollback` | Static-pod provider manifest upgrade and rollback preserves old Secret readback. | Docker-compatible runtime, Kind, kubectl |
 | Kind disaster-recovery runbook | `make test-e2e-kind-dr-runbook` | OpenBao raft restore, provider state and config rehydration, API server restart, and Secret readback. | Docker-compatible runtime, Kind, kubectl |
 
+The OpenBao HA lane uses the pinned OpenBao version's default Autopilot health
+and stabilization thresholds. It waits for all three nodes to become Raft voters
+before stopping the active node. Voter readiness timeouts include Autopilot state
+and container logs to help diagnose membership and health failures.
+
 Local kubeadm virtual machine (VM) validation is a release-candidate gate, not
 part of public CI. It
 exercises host boot ordering, systemd, static-pod behavior, node reboot, paired
