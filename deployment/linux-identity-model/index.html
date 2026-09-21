@@ -14,7 +14,9 @@ material or writable provider state.</p><h2 id=goals>Goals</h2><ul><li>Run the p
 </span></span><span style=display:flex><span>socket group: openbao-kms-socket
 </span></span></code></pre></div><p>Package installs create these identities through <code>sysusers.d</code> where available.
 Host images without <code>sysusers.d</code> support must create equivalent system users
-and groups during image build or configuration management.</p><p>Permissions:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>/etc/openbao-kms/config.yaml        root:openbao-kms                0640
+and groups during image build or configuration management.</p><p>Permissions:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none><code class=language-text data-lang=text><span style=display:flex><span>/etc/openbao-kms                    root:openbao-kms                0750
+</span></span><span style=display:flex><span>/etc/openbao-kms/tls                root:root                       0755
+</span></span><span style=display:flex><span>/etc/openbao-kms/config.yaml        root:openbao-kms                0640
 </span></span><span style=display:flex><span>/etc/openbao-kms/tls/ca.crt         root:root                       0644
 </span></span><span style=display:flex><span>/var/lib/openbao-kms                openbao-kms:openbao-kms         0750
 </span></span><span style=display:flex><span>/var/lib/openbao-kms/identity.jwt   root:openbao-kms                0640
