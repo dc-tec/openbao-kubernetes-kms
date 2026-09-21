@@ -38,7 +38,7 @@ toolchain:
     dockerBuildPush: bcafcacb16a39f128d818304e6c9c0c18556b85f
     dockerLogin: af1e73f918a031802d376d3c8bbc3fe56130a9b0
     dockerSetupBuildx: 4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
-    dockerSetupQemu: 96fe6ef7f33517b61c61be40b68a1882f3264fb8
+    dockerSetupQemu: 1f40c72289eff860ee54a304f1438e3cff362e0a
     downloadArtifact: 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
     installNix: 630ae543ea3a38a9a4166f03376c02c50f408342
     releasePlease: 45996ed1f6d02564a971a2fa1b5860e934307cf7
