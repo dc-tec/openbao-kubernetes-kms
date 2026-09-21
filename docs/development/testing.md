@@ -46,6 +46,21 @@ For captured load and cold-start evidence, see [Performance Evidence](/developme
 | Security and supply chain | Run redaction checks, fuzz targets, static analysis, vulnerability scan, license check, software bill of materials (SBOM), and vendor verification. | `make ci-core`, security CI, release workflow |
 | Disaster recovery | Validate OpenBao raft restore, provider state rehydration, etcd restore pairing, and Kubernetes readback after replacement. | Kind DR, OpenBao restore, and local VM validation |
 
+## Installation Regression Check
+
+Run `make systemd-install-check` with Docker available. It uses the pinned
+Go builder image with Debian systemd tools to build a systemd bundle and
+execute the install guide's shell blocks in a disposable Linux container.
+The test image build requires network access to install those tools; the
+installation check itself runs without network access. It checks service-user
+file access, separation from the socket group, unit syntax, and preservation
+of configuration and state when the install commands run again.
+
+The Deployment Samples CI job runs this check for installation documentation,
+packaging, bundle builder, and deployment test changes. This check does not
+start systemd, authenticate to OpenBao, or prove Kubernetes boot and recovery
+behavior. Use the VM and E2E lanes for those checks.
+
 ## Negative Path Bias
 
 Encrypt and decrypt working once is not enough. The test suite must prove that

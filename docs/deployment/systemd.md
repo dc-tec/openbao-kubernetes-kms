@@ -104,8 +104,12 @@ metadata and deep probes before exiting.
 
 ## Directory Setup
 
+For `0.1.0-preview.1` and `0.1.0-preview.2`, apply the persistent directory
+permission correction in [Install](/getting-started/install/#correct-directory-access-in-existing-previews)
+so tmpfiles processing preserves service-user access after reboot.
+
 ```sh
-install -d -o root -g root -m 0750 /etc/openbao-kms
+install -d -o root -g openbao-kms -m 0750 /etc/openbao-kms
 install -d -o root -g root -m 0755 /etc/openbao-kms/tls
 install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms
 install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms/state
@@ -137,7 +141,7 @@ systemctl status bao-kms-provider.service
 Run `doctor` before enabling kube-apiserver encryption:
 
 ```sh
-bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
+sudo -u openbao-kms bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
 ```
 
 After the Kubernetes `EncryptionConfiguration` is staged, include it in the check:
