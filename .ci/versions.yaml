@@ -27,7 +27,7 @@ toolchain:
     kubectlCli: "1.36.3"
     pinStatus: pinned
   githubActions:
-    anchoreSbom: e22c389904149dbc22b58101806040fa8d37a610
+    anchoreSbom: 3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
     attestBuildProvenance: 0f67c3f4856b2e3261c31976d6725780e5e4c373
     cache: cdf6c1fa76f9f475f3d7449005a359c84ca0f306
     cachix: 38b082610b782e7e93e209c35fd730d399dee866
