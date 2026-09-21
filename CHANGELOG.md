@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.0-preview.2](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.1...0.1.0-preview.2) (2026-09-21)
+
+
+### Features
+
+* **tooling:** add pinned devenv environment ([#57](https://github.com/dc-tec/openbao-kubernetes-kms/issues/57)) ([07d6fa7](https://github.com/dc-tec/openbao-kubernetes-kms/commit/07d6fa7493dbb0ce6608acf8a71262f14910d14f))
+
+
+### Bug Fixes
+
+* **ci:** update Go toolchain to 1.26.4 ([#24](https://github.com/dc-tec/openbao-kubernetes-kms/issues/24)) ([aa82b2d](https://github.com/dc-tec/openbao-kubernetes-kms/commit/aa82b2da39aebf6e06f608e817c7079e13b81486))
+* **ci:** update Go toolchain to 1.26.6 ([#56](https://github.com/dc-tec/openbao-kubernetes-kms/issues/56)) ([0ed6c91](https://github.com/dc-tec/openbao-kubernetes-kms/commit/0ed6c912971731f37fc6f60fa80117f0c3c3a165))
+* **deps:** update gRPC to 1.83.2 for GO-2026-6443 ([#68](https://github.com/dc-tec/openbao-kubernetes-kms/issues/68)) ([25948aa](https://github.com/dc-tec/openbao-kubernetes-kms/commit/25948aaec6155a0845b8543eebed2103ece4afb8))
+* **deps:** update x/mod to v0.40.0 ([#61](https://github.com/dc-tec/openbao-kubernetes-kms/issues/61)) ([208a27e](https://github.com/dc-tec/openbao-kubernetes-kms/commit/208a27e69d6164c9327c0be7f9cb36210f4318bf))
+* **kmsv2:** bound concurrent requests ([#53](https://github.com/dc-tec/openbao-kubernetes-kms/issues/53)) ([1f20f10](https://github.com/dc-tec/openbao-kubernetes-kms/commit/1f20f10ec521e0ccb6aeefd263672ab350b83066))
+* **openbao:** bound HTTP response bodies ([#52](https://github.com/dc-tec/openbao-kubernetes-kms/issues/52)) ([82854c2](https://github.com/dc-tec/openbao-kubernetes-kms/commit/82854c2df8ce5e3c93987b94c6f109220086ba52))
+* **openbao:** reject redirects before forwarding credentials ([228f0a2](https://github.com/dc-tec/openbao-kubernetes-kms/commit/228f0a20d22c6889f8a633824709d27ee397623a))
+* **status:** correct probe health and token use ([#50](https://github.com/dc-tec/openbao-kubernetes-kms/issues/50)) ([7c59a38](https://github.com/dc-tec/openbao-kubernetes-kms/commit/7c59a38b0ce840fa21015918a3e20662a242eac4))
+* **status:** enforce Transit disable_upsert at runtime ([#51](https://github.com/dc-tec/openbao-kubernetes-kms/issues/51)) ([1582938](https://github.com/dc-tec/openbao-kubernetes-kms/commit/15829384444959b5a4ec8e7abb909cb48f3590a8))
+* **test:** stabilize nightly OpenBao E2E fixtures ([60e149d](https://github.com/dc-tec/openbao-kubernetes-kms/commit/60e149d9771744a705d9807277e2daf7201fd889))
+
 ## 0.1.0-preview.1 (2026-05-14)
 
 
