@@ -187,6 +187,13 @@ response-header, and idle-connection timeouts so failed or stalled connections
 are bounded in addition to the overall request deadline. These transport defaults
 are not configurable in the preview line.
 
+OpenBao clients reject all HTTP redirects, including HTTPS and same-origin
+redirects. A redirect returns an `unavailable` error without forwarding tokens,
+login material, or Transit request bodies. Set `openbao.address` to an HTTPS
+endpoint that serves requests directly. For HA, use OpenBao server-side request
+forwarding or route the endpoint to the active node. HTTP redirect-based routing
+is not supported.
+
 `server.maxConcurrentStatus`, `server.maxConcurrentEncrypt`, and
 `server.maxConcurrentDecrypt` limit active KMS handlers. The provider uses
 separate limits so one method cannot consume another method's capacity. A
