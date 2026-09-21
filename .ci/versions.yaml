@@ -49,10 +49,10 @@ toolchain:
     uploadArtifact: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
   goDependencies:
     cobra: "1.10.2"
-    ginkgo: "2.32.0"
+    ginkgo: "2.32.2"
     grpc: "1.83.2"
-    k8sKMS: "0.36.2"
-    gomega: "1.42.1"
+    k8sKMS: "0.37.0"
+    gomega: "1.43.0"
     mapstructure: "2.5.0"
     pflag: "1.0.10"
     prometheusClientGolang: "1.23.2"
