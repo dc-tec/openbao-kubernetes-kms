@@ -8,6 +8,17 @@ weight: 20
 
 This reference defines the `bao-kms-provider` configuration file. Identity-bearing fields and default values are stable across preview patch releases.
 
+## Value Types
+
+String fields require YAML strings. Quote values that YAML would otherwise
+interpret as numbers or booleans. For example, use `keyName: "0123"`,
+`mountPath: "1e3"`, and `socketGroup: "1234"`. The provider rejects numeric or
+boolean values in string fields instead of converting them.
+
+Duration fields require duration strings, such as `30s`, `"2m"`, or `0s` where
+zero is allowed. Bare numbers such as `activationDelay: 120` are rejected. Use
+`activationDelay: 120s` to specify two minutes.
+
 ## Example
 
 ```yaml

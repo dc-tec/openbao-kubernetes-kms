@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -269,12 +270,41 @@ func Load(runtime *Runtime, opts LoadOptions) (Config, error) {
 		}
 	}
 
+	if err := validateDurationInputTypes(runtime.v, reflect.TypeFor[Config](), ""); err != nil {
+		return Config{}, fmt.Errorf("decode config: %w", err)
+	}
 	var cfg Config
-	if err := runtime.v.UnmarshalExact(&cfg, viper.DecodeHook(mapstructure.StringToTimeDurationHookFunc())); err != nil {
+	if err := runtime.v.UnmarshalExact(&cfg,
+		viper.DecodeHook(mapstructure.StringToTimeDurationHookFunc()),
+		func(decoder *mapstructure.DecoderConfig) { decoder.WeaklyTypedInput = false },
+	); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
 
 	return cfg, nil
+}
+
+// validateDurationInputTypes rejects numeric durations before mapstructure can
+// interpret them as nanoseconds, even with WeaklyTypedInput disabled. Native
+// time.Duration values come from defaults; file values must be strings.
+func validateDurationInputTypes(v *viper.Viper, configType reflect.Type, prefix string) error {
+	for index := range configType.NumField() {
+		field := configType.Field(index)
+		key := prefix + field.Tag.Get("mapstructure")
+		switch {
+		case field.Type == reflect.TypeFor[time.Duration]():
+			switch v.Get(key).(type) {
+			case nil, string, time.Duration:
+			default:
+				return fmt.Errorf("%s must be a duration string with units, such as 30s or 0s", key)
+			}
+		case field.Type.Kind() == reflect.Struct:
+			if err := validateDurationInputTypes(v, field.Type, key+"."); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func applyDefaults(runtime *Runtime) {
