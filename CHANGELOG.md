@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.1-preview.2](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.2...0.1.1-preview.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* **config:** reject implicit scalar coercion ([#75](https://github.com/dc-tec/openbao-kubernetes-kms/issues/75)) ([edd3d29](https://github.com/dc-tec/openbao-kubernetes-kms/commit/edd3d29ed9374f82de9520fa47c68d0ca6edc556))
+* **deployment:** make systemd installation usable and testable ([#73](https://github.com/dc-tec/openbao-kubernetes-kms/issues/73)) ([684db20](https://github.com/dc-tec/openbao-kubernetes-kms/commit/684db2071cc62ad0decc90fcbc7442d93158d4c5))
+* **rotation:** add guarded operator key retirement ([#77](https://github.com/dc-tec/openbao-kubernetes-kms/issues/77)) ([2e13e70](https://github.com/dc-tec/openbao-kubernetes-kms/commit/2e13e7021395992f99af3dca6d384a2a2abb9d34))
+* **status:** recover deep probes and protect pod startup ([#76](https://github.com/dc-tec/openbao-kubernetes-kms/issues/76)) ([d2ff1e1](https://github.com/dc-tec/openbao-kubernetes-kms/commit/d2ff1e1878ffff2d1a7bcb187db0f8acaf81e5d0))
+
 ## [0.1.0-preview.2](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.1...0.1.0-preview.2) (2026-09-21)
 
 
