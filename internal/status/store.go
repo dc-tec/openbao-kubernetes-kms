@@ -160,7 +160,7 @@ func (s *Store) deepProbeRequired() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.hasState && s.metadataOK && !s.deepProbed
+	return s.hasState && s.metadataOK && (!s.deepProbed || !s.deepProbeOK)
 }
 
 // Current returns the cached KMS Status view without calling OpenBao.

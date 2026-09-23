@@ -48,6 +48,7 @@ Required behavior:
 - Status is unhealthy when the provider cannot verify `disable_upsert=true` on the Transit mount.
 - A metadata-probe success does not clear a deep-probe failure.
 - A deep-probe success does not clear a metadata-probe failure.
+- After a deep-probe failure, the scheduler retries the deep probe after successful metadata probes, subject to the deep-probe circuit breaker. It does not wait for `status.deepProbeInterval` to elapse.
 - Background OpenBao requests use the normal token reuse, renewal, and re-login lifecycle.
 - Status becomes unhealthy when the cache exceeds `status.statusMaxStaleness`.
 - Status `key_id` changes only after the rotation state machine promotes a new active snapshot.
