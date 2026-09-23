@@ -317,7 +317,7 @@ func (s StateFile) Registry() (Registry, error) {
 		switch snapshot.State {
 		case StateRetired:
 			decryptableHistorical = append(decryptableHistorical, snapshot)
-		case StatePending, StateRejected:
+		case StatePending, StateRejected, StateRemoved:
 		default:
 			return Registry{}, fmt.Errorf("%w: snapshot state %q is invalid", ErrStateCorrupt, snapshot.State)
 		}
@@ -334,7 +334,7 @@ func (s StateFile) ActiveSnapshot() (KeySnapshot, error) {
 	return active, nil
 }
 
-// ValidateStateProgress verifies monotonic generation, hash chain, and active key version progress.
+// ValidateStateProgress verifies state progress and preserves accepted key identities.
 func ValidateStateProgress(previous StateFile, next StateFile) error {
 	if err := previous.Validate(); err != nil {
 		return err
@@ -359,6 +359,9 @@ func ValidateStateProgress(previous StateFile, next StateFile) error {
 	}
 	if nextActive.TransitVersion < previousActive.TransitVersion {
 		return fmt.Errorf("%w: active Transit version decreased", ErrStateRollback)
+	}
+	if err := validateRetainedSnapshots(previous, next); err != nil {
+		return err
 	}
 	return nil
 }

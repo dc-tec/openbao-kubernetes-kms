@@ -26,7 +26,11 @@ The provider static pod mounts everything it needs from the host:
 - certificate authority (CA) bundle,
 - configured auth material such as a JSON Web Token (JWT) file, certificate chain, or PKCS#11 personal identification number (PIN) file,
 - runtime socket directory,
-- optional local state directory.
+- local state directory owned by the provider's OS user.
+
+The provider acquires `<state.path>.lock` before bootstrap. Prepare the state
+directory with the pod's `runAsUser` as its owner and without group or world
+write permission. Keep the lock file in place across container restarts.
 
 ## Example Manifest
 

@@ -183,7 +183,7 @@ type KeySnapshot struct {
     TransitVersionCreatedAt time.Time
     CreatedAt               time.Time
     KubernetesKeyID         string
-    State                   SnapshotState // active, pending, retired, rejected
+    State                   SnapshotState // active, pending, retired, rejected, removed
     AADMode                 AADMode       // aad.required
 }
 ```

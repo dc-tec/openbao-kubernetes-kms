@@ -1,6 +1,6 @@
 ---
 title: "CLI"
-description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, config, policy openbao, completion, exit codes."
+description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, retire-versions, config, policy openbao, completion, exit codes."
 weight: 10
 ---
 
@@ -173,6 +173,40 @@ Treat it as a local preflight signal. The operator still owns independent
 migration records, backup-retention records, and any change to
 `min_decryption_version`.
 
+## retire-versions
+
+Plan or apply operator-authorized removal of historical keys from local decrypt
+lookup. See the required evidence and node-by-node procedure in
+[Operations: Rotation](/operations/rotation/#retire-local-versions-before-raising-the-minimum).
+
+```sh
+bao-kms-provider retire-versions \
+  --config /etc/openbao-kms/config.yaml \
+  --before-version 2 --output json
+```
+
+| Flag | Meaning |
+|---|---|
+| `--before-version N` | Remove historical versions below `N`. `N` must exceed `1` and must not exceed the local active version. |
+| `--apply` | Persist the reviewed transition. Without this flag, the command only reports a plan. |
+| `--expected-state-hash HASH` | Required with `--apply`. Must match the current state's `stateHash` from the reviewed plan. |
+| `--output text\|json` | Report format. Default: `text`. |
+
+The report contains `applied`, `beforeVersion`, `stateHash`, `nextStateHash`,
+`nextGeneration`, `activeKeyIdHash`, `removedVersions` (Transit versions and key
+ID hashes), and `limitations`. No eligible versions means no new generation.
+
+The command requires readable, valid live OpenBao metadata and existing local
+state. It rejects pending rotation, a local active version different from
+Transit `latest_version`, and metadata that makes a retained key unusable.
+Apply also requires the provider to be stopped and the state directory to be
+owned by the invoking user. It returns exit code `4` when these checks or state
+saving fail, and `2` for invalid command options.
+
+Removed identities remain in hashed state as `removed` records. The command
+does not change OpenBao policy or key metadata and does not prove migration or
+backup completeness.
+
 ## config
 
 Inspect the typed configuration after defaults, file config, environment overrides, and supported root flag overrides have been applied.
@@ -253,7 +287,7 @@ Report-style commands also support:
 --output text|json
 ```
 
-`doctor`, `verify-key`, `rotation-plan`, and `verify-rotation` support stable
+`doctor`, `verify-key`, `rotation-plan`, `verify-rotation`, and `retire-versions` support stable
 JSON reports for automation consumers. `text` remains the default.
 
 ## Exit Codes

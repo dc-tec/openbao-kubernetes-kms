@@ -14,6 +14,7 @@ import (
 const (
 	initialStateFixturePath = "../../test/testdata/keyregistry/state-initial-v1.json"
 	rotatedStateFixturePath = "../../test/testdata/keyregistry/state-rotated-v1-v2.json"
+	removedStateFixturePath = "../../test/testdata/keyregistry/state-removed-v1-active-v2.json"
 )
 
 func TestStateCompatibilityGoldenFixtures(t *testing.T) {
@@ -29,6 +30,26 @@ func TestStateCompatibilityGoldenFixtures(t *testing.T) {
 		t.Fatalf("promote fixture state: %v", err)
 	}
 	assertStateMatchesFixture(t, promoted.State, rotatedStateFixturePath)
+	removed, err := keyregistry.RetireVersions(promoted.State, 2)
+	if err != nil {
+		t.Fatalf("retire fixture version: %v", err)
+	}
+	assertStateMatchesFixture(t, removed, removedStateFixturePath)
+}
+
+func TestStateCompatibilityRemovedFixtureExcludesHistoricalKeyID(t *testing.T) {
+	initial := loadStateFixture(t, initialStateFixturePath)
+	removed := loadStateFixture(t, removedStateFixturePath)
+	registry, err := removed.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.Lookup(initial.ActiveKeyID); !errors.Is(err, keyregistry.ErrUnknownKeyID) {
+		t.Fatalf("removed fixture still accepts historical key: %v", err)
+	}
+	if _, err := registry.Lookup(removed.ActiveKeyID); err != nil {
+		t.Fatalf("removed fixture lost active key: %v", err)
+	}
 }
 
 func TestStateCompatibilityFixturesLoadAndRetainHistoricalKeyID(t *testing.T) {

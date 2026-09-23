@@ -57,6 +57,11 @@ func newServeCommand(runtimeConfig *config.Runtime, configPath *string, info ver
 			if err != nil {
 				return err
 			}
+			lock, err := keyregistry.LockState(cfg.State.Path)
+			if err != nil {
+				return cli.WithExitCode(cli.ExitRuntime, err)
+			}
+			defer func() { _ = lock.Close() }()
 			builder := runtimeBuilder{info: info, logWriter: cmd.ErrOrStderr()}
 			deps, err := builder.build(cmd.Context(), cfg)
 			if err != nil {

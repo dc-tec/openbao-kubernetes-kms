@@ -292,7 +292,7 @@ func runtimeRegistry(state keyregistry.StateFile) (keyregistry.KeySnapshot, keyr
 		switch snapshot.State {
 		case keyregistry.StateRetired:
 			historical = append(historical, snapshot)
-		case keyregistry.StatePending, keyregistry.StateRejected:
+		case keyregistry.StatePending, keyregistry.StateRejected, keyregistry.StateRemoved:
 		default:
 			return keyregistry.KeySnapshot{}, keyregistry.Registry{}, fmt.Errorf(
 				"snapshot state %q is not registry-decryptable",

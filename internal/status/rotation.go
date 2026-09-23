@@ -260,7 +260,7 @@ func (o *Observer) intermediateHistoricalRecords(
 		switch snapshot.State {
 		case keyregistry.StateActive, keyregistry.StateRetired:
 			retainedVersions[snapshot.TransitVersion] = struct{}{}
-		case keyregistry.StatePending, keyregistry.StateRejected:
+		case keyregistry.StatePending, keyregistry.StateRejected, keyregistry.StateRemoved:
 		default:
 			return nil, fmt.Errorf("%w: unsupported snapshot state", ErrTransitMetadataInvalid)
 		}
@@ -341,6 +341,21 @@ func validateProfile(profile openbao.KeyProfile) error {
 	return nil
 }
 
+// ValidateStateProfile checks persisted identities and usable versions without
+// advancing observations or promoting a pending version.
+func (o *Observer) ValidateStateProfile(state keyregistry.StateFile, profile openbao.KeyProfile) error {
+	if err := state.Validate(); err != nil {
+		return err
+	}
+	if err := validateProfile(profile); err != nil {
+		return err
+	}
+	if err := o.validateStateScope(state); err != nil {
+		return err
+	}
+	return validateProfileForState(profile, state)
+}
+
 func validateProfileForState(profile openbao.KeyProfile, state keyregistry.StateFile) error {
 	for _, record := range state.Snapshots {
 		snapshot, err := record.Snapshot()
@@ -356,7 +371,7 @@ func validateProfileForState(profile openbao.KeyProfile, state keyregistry.State
 			if err := validateHistoricalSnapshot(profile, snapshot); err != nil {
 				return err
 			}
-		case keyregistry.StatePending, keyregistry.StateRejected:
+		case keyregistry.StatePending, keyregistry.StateRejected, keyregistry.StateRemoved:
 		default:
 			return fmt.Errorf("%w: unsupported snapshot state", ErrTransitMetadataInvalid)
 		}

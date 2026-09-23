@@ -38,12 +38,14 @@ const (
 	StateRetired SnapshotState = "retired"
 	// StateRejected marks a snapshot rejected by validation or rollback checks.
 	StateRejected SnapshotState = "rejected"
+	// StateRemoved records operator-authorized removal from decrypt lookup.
+	StateRemoved SnapshotState = "removed"
 )
 
 // Valid reports whether the state is one of the recognized snapshot states.
 func (s SnapshotState) Valid() bool {
 	switch s {
-	case StateActive, StatePending, StateRetired, StateRejected:
+	case StateActive, StatePending, StateRetired, StateRejected, StateRemoved:
 		return true
 	default:
 		return false
@@ -203,6 +205,9 @@ func NewRegistry(active KeySnapshot, historical []KeySnapshot) (Registry, error)
 		normalized, normalizeErr := snapshot.Normalize()
 		if normalizeErr != nil {
 			return Registry{}, normalizeErr
+		}
+		if normalized.State == StateRemoved {
+			continue
 		}
 		if insertErr := registry.insert(normalized); insertErr != nil {
 			return Registry{}, insertErr
