@@ -95,6 +95,14 @@ spec:
           mountPath: /run/openbao-kms
         - name: state
           mountPath: /var/lib/openbao-kms/state
+      startupProbe:
+        httpGet:
+          host: 127.0.0.1
+          path: /live
+          port: 8082
+        periodSeconds: 5
+        timeoutSeconds: 1
+        failureThreshold: 24
       livenessProbe:
         httpGet:
           host: 127.0.0.1
@@ -149,6 +157,7 @@ and GID `65532:65532`, matching the distroless non-root image user.
 | `readOnlyRootFilesystem: true` | Forces writes into explicit hostPath mounts. |
 | `capabilities.drop: [ALL]` | Runs without Linux capabilities. |
 | immutable image digest | Prevents image drift during recovery. |
+| startup probe | Defers liveness and readiness probes until the provider completes bootstrap. |
 | liveness and readiness probes | Lets kubelet report provider process and dependency health. |
 
 ## Image Availability
@@ -223,6 +232,12 @@ The provider retries its initial metadata and deep probes for
 pod deployments because auth material, container networking, DNS, OpenBao
 availability, and clock synchronization can settle after the container starts.
 
+The sample startup probe allows about two minutes for `/live` to become
+available. This covers the default 60-second bootstrap grace with time for
+in-flight probes and listener setup. If you increase `bootstrap.graceTimeout`
+or authentication/request timeouts, increase the startup probe budget to cover
+them. Liveness and readiness probes start after the startup probe succeeds.
+
 For single-node control planes, systemd is usually safer. See [Deployment: Choosing A Model](/deployment/choosing-a-model/).
 
 ## Verification
@@ -249,5 +264,6 @@ with the configured owner and mode, and the API server can connect to it. The
 
 ## Source References
 
+- [Kubernetes startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#protect-slow-starting-containers-with-startup-probes)
 - [Kubernetes static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)

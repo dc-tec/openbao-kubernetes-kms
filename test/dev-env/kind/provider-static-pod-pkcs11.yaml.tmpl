@@ -61,6 +61,14 @@ spec:
           mountPath: /run/openbao-kms
         - name: state
           mountPath: /var/lib/openbao-kms/state
+      startupProbe:
+        httpGet:
+          host: 127.0.0.1
+          path: /live
+          port: 8082
+        periodSeconds: 5
+        timeoutSeconds: 1
+        failureThreshold: 24
       livenessProbe:
         httpGet:
           host: 127.0.0.1

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"gopkg.in/yaml.v3"
@@ -186,6 +187,38 @@ func TestStaticPodManifestIsHostOnlyAndNonRoot(t *testing.T) {
 	requirePodSecurity(t, pod.Spec.SecurityContext)
 	requireContainer(t, pod.Spec.Containers)
 	requireHostPathVolumes(t, pod.Spec.Volumes)
+}
+
+func TestStaticPodStartupProbeAllowsBootstrapGrace(t *testing.T) {
+	cfg := loadProviderConfig(t, "deploy/config/provider-static-pod.yaml")
+	for _, manifest := range []string{
+		"deploy/static-pod/bao-kms-provider.yaml",
+		"test/dev-env/kind/provider-static-pod.yaml.tmpl",
+		"test/dev-env/kind/provider-static-pod-pkcs11.yaml.tmpl",
+	} {
+		t.Run(manifest, func(t *testing.T) {
+			var pod podManifest
+			decodeYAML(t, manifest, &pod)
+			if len(pod.Spec.Containers) != 1 {
+				t.Fatalf("expected one provider container, got %d", len(pod.Spec.Containers))
+			}
+			startup := pod.Spec.Containers[0].StartupProbe
+			if startup.HTTPGet.Host != "127.0.0.1" || startup.HTTPGet.Path != "/live" || startup.HTTPGet.Port != 8082 {
+				t.Fatalf("startup probe must use the local liveness endpoint: %+v", startup.HTTPGet)
+			}
+			if startup.FailureThreshold <= 0 || startup.PeriodSeconds <= 0 || startup.TimeoutSeconds <= 0 {
+				t.Fatal("startup probe must have a bounded failure threshold, period, and timeout")
+			}
+			// Allow the bootstrap grace plus time for the final in-flight probes
+			// and listener setup before kubelet can restart the container.
+			earliestFailure := time.Duration(startup.InitialDelaySeconds+
+				(startup.FailureThreshold-1)*startup.PeriodSeconds) * time.Second
+			if earliestFailure < cfg.Bootstrap.GraceTimeout+30*time.Second {
+				t.Fatalf("startup failure budget %s does not cover bootstrap grace %s with margin",
+					earliestFailure, cfg.Bootstrap.GraceTimeout)
+			}
+		})
+	}
 }
 
 func requirePodBasics(t *testing.T, pod podManifest) {
@@ -661,9 +694,11 @@ type container struct {
 	Image           string                   `yaml:"image"`
 	ImagePullPolicy string                   `yaml:"imagePullPolicy"`
 	Args            []string                 `yaml:"args"`
+	Env             []containerEnv           `yaml:"env"`
 	Ports           []containerPort          `yaml:"ports"`
 	SecurityContext containerSecurityContext `yaml:"securityContext"`
 	VolumeMounts    []volumeMount            `yaml:"volumeMounts"`
+	StartupProbe    probe                    `yaml:"startupProbe"`
 	LivenessProbe   probe                    `yaml:"livenessProbe"`
 	ReadinessProbe  probe                    `yaml:"readinessProbe"`
 }
@@ -672,6 +707,11 @@ type containerPort struct {
 	Name          string `yaml:"name"`
 	ContainerPort int    `yaml:"containerPort"`
 	Protocol      string `yaml:"protocol"`
+}
+
+type containerEnv struct {
+	Name  string `yaml:"name"`
+	Value string `yaml:"value"`
 }
 
 type containerSecurityContext struct {
@@ -711,6 +751,8 @@ type probe struct {
 	HTTPGet             httpGet `yaml:"httpGet"`
 	InitialDelaySeconds int     `yaml:"initialDelaySeconds"`
 	PeriodSeconds       int     `yaml:"periodSeconds"`
+	TimeoutSeconds      int     `yaml:"timeoutSeconds"`
+	FailureThreshold    int     `yaml:"failureThreshold"`
 }
 
 type httpGet struct {
