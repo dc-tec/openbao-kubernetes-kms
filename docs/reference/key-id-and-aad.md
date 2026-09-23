@@ -250,7 +250,10 @@ State-file invariants enforced at load:
 - the current hash must match the typed state body,
 - malformed previous or current hashes are rejected,
 - duplicate persisted `key_id` records are rejected,
-- pending and rejected snapshots are retained in state but excluded from decrypt lookup,
+- pending, rejected, and removed snapshots are retained in state but excluded from decrypt lookup,
+- normal rotation preserves every accepted active or retired identity; only the
+  operator retirement transition can remove its decrypt eligibility,
+- removed records remain unchanged across later rotations,
 - the checkpoint rejects older generations and same-generation hash mismatches,
 - the active Transit version must not move backwards during normal promotion,
 - when live Transit `latest_version` jumps over intermediate versions, the
@@ -273,6 +276,13 @@ line; operators must not synthesize replacement state by hand. If the checkpoint
 exists but the state file is missing or older than the checkpoint, startup fails
 closed.
 
+Before writing state, `serve` and `retire-versions --apply` acquire the same
+persistent `<state.path>.lock` file. The state directory must be owned by the
+process's effective OS user and must not be group or world writable. The lock
+file is private to that user and remains after shutdown. Never remove the lock
+file while a writer runs. These locks require a local filesystem with working
+advisory file locks.
+
 ## Golden Fixtures
 
 The implementation maintains golden fixtures for:
@@ -280,6 +290,7 @@ The implementation maintains golden fixtures for:
 - key snapshot to `key_id` derivation,
 - annotations to AAD reconstruction,
 - historical key snapshots after rotation,
+- operator-retired state with removal records,
 - malformed annotation rejection.
 
 Changing `key_id` or AAD derivation is a wire-format compatibility change. See [Reference: Compatibility: Breaking Changes](/reference/compatibility/#breaking-changes).

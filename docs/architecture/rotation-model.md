@@ -20,19 +20,19 @@ Kubernetes recommends rotating KEKs at least every 90 days and explains that KMS
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ObservedOld
-    ObservedOld --> NewVersionObserved: Transit latest version increases
-    NewVersionObserved --> PendingStability: first successful observation
-    PendingStability --> PendingStability: successful observation count below threshold
-    PendingStability --> PendingActivationDelay: stable observation threshold met
-    PendingActivationDelay --> Active: activation delay elapsed
-    Active --> RetiredAfterMigration: operator migration evidence retained
-
-    NewVersionObserved --> Rejected: metadata inconsistent
-    PendingStability --> Rejected: version rollback or probe failure
-    PendingActivationDelay --> Rejected: metadata stale or inconsistent
-    Rejected --> ObservedOld: operator resolves or DR mode selected
+    [*] --> Active: initial bootstrap
+    [*] --> Pending: newer Transit version observed
+    Pending --> Pending: collect stable observations and wait activationDelay
+    Pending --> Active: promotion guards satisfied
+    Active --> Retired: another version promoted
+    Retired --> Removed: operator applies retire-versions
 ```
+
+These states describe individual snapshots. The previous active snapshot stays
+active while a newer snapshot is pending. A retired snapshot remains available
+for decrypt. A removed snapshot is a persistent record excluded from decrypt.
+Validation failures make status unhealthy; they do not persist a `rejected`
+transition.
 
 End-to-end flow:
 
@@ -55,6 +55,7 @@ sequenceDiagram
     API->>API: mark older encrypted data stale
     Operator->>API: run storage migration / resource rewrite
     Operator->>Watcher: collect local verify-rotation preflight
+    Operator->>Watcher: apply reviewed retire-versions plan on every node
     Operator->>Bao: consider min_decryption_version only after independent rewrite and backup evidence
 ```
 
@@ -102,6 +103,31 @@ historical snapshot in the local registry. If any retained historical version is
 blocked, Status becomes unhealthy instead of advertising a decrypt registry that
 OpenBao can no longer serve. `min_encryption_version` is checked against the
 active version only.
+
+### Operator-Controlled Retirement
+
+The provider does not infer retirement from OpenBao minimum versions. Those
+settings cannot prove that Kubernetes objects or retained backups no longer
+need an old key. The operator uses `retire-versions` after collecting that proof.
+
+The command changes eligible `retired` snapshots to `removed` in a new hashed
+state generation. It preserves their identities and observation metadata as
+removal records. It excludes them from decrypt lookup and Transit usability
+checks. Normal state transitions must preserve every previously decryptable
+active or retired key and every removal record. They cannot authorize removal
+or reintroduce a removed identity.
+
+Retirement requires no pending rotation, an active version equal to OpenBao's
+latest version, and valid live metadata for all retained decryptable versions.
+The command defaults to a read-only plan. Applying a plan requires its exact
+state hash and exclusive access to the state writer lock. `serve` acquires the
+same lock before bootstrap can write state.
+
+This is a local transition. Operators apply it on every control-plane node
+before raising a shared OpenBao minimum. The provider does not scan ciphertext,
+coordinate cluster-wide retirement, change OpenBao settings, or provide an
+automatic reversal. Restoring an older state/checkpoint pair is a separate
+disaster-recovery operation and requires matching backup and Transit evidence.
 
 The operator runbook for raising `min_decryption_version` lives at [Operations: Rotation: min_decryption_version](/operations/rotation/#min_decryption_version).
 

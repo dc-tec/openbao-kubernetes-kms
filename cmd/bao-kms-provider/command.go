@@ -53,6 +53,7 @@ func newRootCommand(info version.Info) *cobra.Command {
 		newBenchmarkCommand(runtimeConfig, &configPath),
 		newRotationPlanCommand(runtimeConfig, &configPath),
 		newVerifyRotationCommand(runtimeConfig, &configPath),
+		newRetireVersionsCommand(runtimeConfig, &configPath),
 		newPolicyCommand(runtimeConfig, &configPath),
 	)
 

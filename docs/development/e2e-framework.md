@@ -36,7 +36,7 @@ behavior.
 | Sustained direct decrypt soak | `make test-e2e-provider-decrypt-soak-openbao-ci` | Direct decrypt latency, error bounds, memory growth, and process ID (PID) growth. | Docker-compatible runtime |
 | Provider load soak | `make test-e2e-provider-load-soak-openbao-ci` | Sustained Status, Encrypt, and Decrypt traffic with latency and resource checks. | Docker-compatible runtime |
 | OpenBao restore | `make test-e2e-provider-restore-openbao-ci` | Backend replacement and integrated-raft snapshot restore with old ciphertext readback. | Docker-compatible runtime |
-| Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Key version promotion, old and new ciphertext decrypt, historical decryptability enforcement, missing-state fail-closed behavior, and observed rollback rejection. | Docker-compatible runtime |
+| Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Key version promotion, old and new ciphertext decrypt, historical decryptability enforcement, guarded operator retirement, writer exclusion, missing-state fail-closed behavior, and observed rollback rejection. | Docker-compatible runtime |
 | Provider upgrade and rollback | `make test-e2e-provider-upgrade-rollback-openbao-ci` | Old and new provider images over the same state volume preserve decrypt compatibility. | Docker-compatible runtime |
 | Kind smoke | `make test-e2e-kind-smoke` | Real API server KMS v2 encryption, raw etcd envelope storage, API server restart, and readback. | Docker-compatible runtime, Kind, kubectl |
 | Kind convergence | `make test-e2e-kind-convergence` | Three control-plane API servers decrypt through node-local providers and converge on KMS state. | Docker-compatible runtime, Kind, kubectl |

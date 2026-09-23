@@ -4,8 +4,10 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,6 +93,75 @@ func TestProviderTransitMinDecryptionVersionBlocksHistoricalE2E(t *testing.T) {
 		t.Fatalf("set OpenBao Transit min_decryption_version: %v", err)
 	}
 	stack.runClientWithEnv(ctx, "min-decryption-client", kmsClientModeExpectUnhealthy, sampleNotMounted, nil)
+
+	// An observed minimum must not authorize local retirement. The operator must
+	// stop the writer and apply the exact reviewed state transition.
+	plan := retirementPlan(t, ctx, stack)
+	applyArgs := []string{
+		"retire-versions", "--config", containerConfigPath, "--before-version", "2",
+		"--apply", "--expected-state-hash", plan.StateHash, "--output", "json",
+	}
+	if output, err := runProviderMaintenance(ctx, stack, applyArgs...); err == nil || !strings.Contains(output, "locked") {
+		t.Fatalf("retirement failed to exclude running provider: %v: %s", err, output)
+	}
+	if output, err := runProviderMaintenance(ctx, stack, "serve", "--config", containerConfigPath); err == nil ||
+		!strings.Contains(output, "locked") {
+		t.Fatalf("second serve failed to stop before bootstrap: %v: %s", err, output)
+	}
+	runDocker(t, ctx, dockerPath, "stop", stack.providerName)
+	output, err := runProviderMaintenance(ctx, stack, applyArgs...)
+	if err != nil {
+		t.Fatalf("apply retirement: %v: %s", err, output)
+	}
+	var applied retirementE2EReport
+	if err := json.Unmarshal([]byte(output), &applied); err != nil {
+		t.Fatalf("decode applied retirement: %v: %s", err, output)
+	}
+	if !applied.Applied || applied.NextStateHash != plan.NextStateHash {
+		t.Fatalf("applied retirement differs from reviewed plan: %+v", applied)
+	}
+	stack.restartProvider(ctx, stack.providerImage)
+	stack.runClientWithEnv(ctx, "retirement-client", "expect-retirement", sampleReadOnly, rotationEnv)
+}
+
+type retirementE2EReport struct {
+	Applied         bool   `json:"applied"`
+	StateHash       string `json:"stateHash"`
+	NextStateHash   string `json:"nextStateHash"`
+	RemovedVersions []struct {
+		TransitVersion int `json:"transitVersion"`
+	} `json:"removedVersions"`
+}
+
+func retirementPlan(t *testing.T, ctx context.Context, stack *providerFailureStack) retirementE2EReport {
+	t.Helper()
+	output, err := runProviderMaintenance(ctx, stack, "retire-versions", "--config", containerConfigPath,
+		"--before-version", "2", "--output", "json")
+	if err != nil {
+		t.Fatalf("plan retirement: %v: %s", err, output)
+	}
+	var plan retirementE2EReport
+	if err := json.Unmarshal([]byte(output), &plan); err != nil {
+		t.Fatalf("decode retirement plan: %v: %s", err, output)
+	}
+	if plan.Applied || plan.StateHash == "" || plan.NextStateHash == "" || len(plan.RemovedVersions) != 1 ||
+		plan.RemovedVersions[0].TransitVersion != 1 {
+		t.Fatalf("unexpected retirement plan: %+v", plan)
+	}
+	return plan
+}
+
+func runProviderMaintenance(ctx context.Context, stack *providerFailureStack, command ...string) (string, error) {
+	args := make([]string, 0, 14+len(command))
+	args = append(args,
+		"run", "--rm", "--network", stack.networkName, "--read-only",
+		"--volume", stack.volumes.config+":/config:ro",
+		"--volume", stack.volumes.tls+":/bao/tls:ro",
+		"--volume", stack.volumes.run+":/run/openbao-kms",
+		"--volume", stack.volumes.state+":/var/lib/openbao-kms/state",
+		stack.providerImage,
+	)
+	return runDockerOutput(ctx, stack.dockerPath, append(args, command...)...)
 }
 
 func TestProviderMissingStateAfterRotationFailsClosedE2E(t *testing.T) {

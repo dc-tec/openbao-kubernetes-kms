@@ -163,6 +163,57 @@ unreadable even when the Transit key still exists. Lowering the value may help
 only when the old key version still exists and policy allows it. Treat this as
 an emergency recovery step, not a rollback plan.
 
+### Retire Local Versions Before Raising the Minimum
+
+After collecting the evidence above, retire the obsolete versions in each
+node's provider registry. For example, to retain version `2` and later:
+
+1. Verify that every provider has promoted version `2` or later and no rotation
+   is pending. Keep Transit rotation paused during this procedure.
+2. Run a plan on each node as the provider's OS user:
+
+   ```sh
+   bao-kms-provider retire-versions \
+     --config /etc/openbao-kms/config.yaml \
+     --before-version 2 --output json
+   ```
+
+3. Review `removedVersions`, the unchanged `activeKeyIdHash`, and the proposed
+   `nextStateHash`. Keep the output with the migration and backup evidence.
+4. On one node at a time, stop the provider through its deployment manager.
+   For a static pod, suspend kubelet's management of that manifest so it cannot
+   restart the provider during maintenance. Account for the local API server's
+   dependence on the provider while it is stopped.
+5. Apply the reviewed plan as the same OS user that runs the provider:
+
+   ```sh
+   bao-kms-provider retire-versions \
+     --config /etc/openbao-kms/config.yaml \
+     --before-version 2 --apply \
+     --expected-state-hash '<stateHash from this node’s reviewed plan>'
+   ```
+
+6. Restart that provider and verify readiness, active `key_id`, and reads and
+   writes. Repeat steps 4–6 on the remaining nodes. If the state hash changed,
+   generate and review a new plan before applying it.
+7. Back up the updated state/checkpoint pairs. After every node has completed
+   retirement, raise OpenBao `min_decryption_version` through the platform's
+   change-control procedure. Verify readiness and reads and writes again.
+
+Retirement immediately prevents that node from decrypting the removed versions,
+even while OpenBao still permits them. The command neither deletes Transit key
+material nor changes OpenBao minimum versions. Lowering an OpenBao minimum does
+not reverse local retirement. There is no automatic undo command.
+
+`serve` and `retire-versions --apply` share `<state.path>.lock`. Do not delete or
+replace this file while either process runs. The state directory must be owned
+by the provider's OS user and must not be group or world writable.
+
+If saving reports an error, inspect the state before retrying. The state file
+can have reached the new generation before checkpoint saving failed. Startup
+repairs a checkpoint that is behind a valid state; an older reviewed hash then
+fails. Do not restore one file from the pair or edit either file by hand.
+
 ## Rollback
 
 If new encrypt or decrypt behavior fails before migration completes:

@@ -145,6 +145,27 @@ After the first stable release, these surfaces remain backward compatible within
 - decrypt support for historical `key_id` values,
 - CLI JSON report shape for report-style commands.
 
+## Operator Retirement Compatibility
+
+`retire-versions --apply` intentionally ends local decrypt support for the
+versions selected by the operator. Existing `key_id` derivation, annotations,
+AAD, active keys, and retained historical identities do not change. Existing
+state without removal records remains readable.
+
+The transition adds `removed` records to the preview state format. Older
+binaries that do not recognize this state reject it. Upgrade every provider
+before retirement. After applying retirement, do not downgrade to such a binary
+or erase the removal records. Recovery requires a reviewed restoration of a
+matching state/checkpoint pair and the required Transit versions. See
+[Operations: Rotation](/operations/rotation/#retire-local-versions-before-raising-the-minimum)
+for the migration procedure and
+[Architecture: Rotation Model](/architecture/rotation-model/#operator-controlled-retirement)
+for the design decision.
+
+The state writer lock also requires the state directory to be owned by the
+provider's OS user. Run retirement with that account. Existing deployments with
+a different directory owner must correct ownership before starting this version.
+
 ## CI Version Policy
 
 CI does not use floating `latest` inputs for the tested compatibility matrix.

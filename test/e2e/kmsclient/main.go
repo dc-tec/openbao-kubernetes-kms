@@ -51,6 +51,7 @@ const (
 	modeExpectJWTRefresh        = "expect-jwt-refresh"
 	modeExpectRotationPromotion = "expect-rotation-promotion"
 	modeExpectRotationRollback  = "expect-rotation-rollback"
+	modeExpectRetirement        = "expect-retirement"
 	modeDecryptStorm            = "decrypt-storm"
 	modeDecryptSoak             = "decrypt-soak"
 	modeLoadSoak                = "load-soak"
@@ -112,6 +113,7 @@ var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceC
 	modeExpectJWTRefresh:        expectJWTRefresh,
 	modeExpectRotationPromotion: expectRotationPromotion,
 	modeExpectRotationRollback:  expectRotationRollback,
+	modeExpectRetirement:        expectRetirement,
 	modeDecryptStorm:            decryptStorm,
 	modeDecryptSoak:             decryptSoak,
 	modeLoadSoak:                loadSoak,
@@ -632,6 +634,19 @@ func expectRotationPromotion(ctx context.Context, client kmsapi.KeyManagementSer
 	decrypt(ctx, client, rotated)
 	writeSampleAt(currentRotationSamplePath(), rotated)
 	decryptSample(ctx, client, preRotation, "pre-rotation sample after promotion")
+}
+
+func expectRetirement(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+	retained := readSampleAt(currentRotationSamplePath())
+	removed := readSampleAt(currentSamplePath())
+	current := waitForHealthyStatusWithin(ctx, client, 75*time.Second)
+	if current.GetKeyId() != retained.KeyID {
+		failf("retirement changed active key_id")
+	}
+	decryptSample(ctx, client, retained, "retained sample after retirement")
+	decrypt(ctx, client, encrypt(ctx, client, current.GetKeyId()))
+	_, err := decryptStored(ctx, client, removed)
+	assertCode(err, codes.NotFound, "operator-retired key_id")
 }
 
 func expectRotationRollback(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
