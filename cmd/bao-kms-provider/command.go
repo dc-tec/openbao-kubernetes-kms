@@ -55,6 +55,7 @@ func newRootCommand(info version.Info) *cobra.Command {
 		newVerifyRotationCommand(runtimeConfig, &configPath),
 		newRetireVersionsCommand(runtimeConfig, &configPath),
 		newPolicyCommand(runtimeConfig, &configPath),
+		newInitCommand(),
 	)
 
 	return cmd
