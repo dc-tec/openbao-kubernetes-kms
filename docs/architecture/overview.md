@@ -1,29 +1,17 @@
 ---
 title: Components and data flow
-description: "Component model, data flow, trust boundaries, deployment shape, internal active key model, startup sequence, and multi-control-plane operation for bao-kms-provider."
+description: "The provider's components, how Encrypt, Decrypt, and Status flow through them, the key snapshot model, startup ordering, and how multiple control-plane nodes stay consistent."
 eyebrow: Architecture
 weight: 10
+verifiedBy:
+  - internal/kmsv2
+  - internal/keyregistry
+  - internal/runtime
 ---
 
-This maintainer-facing overview describes the `bao-kms-provider` components, data flows, trust boundaries, and deployment shape. For the upstream protocol and Transit concepts, see [Background](/docs/architecture/background/). For the Vault Transit KMS plugin work that informed the design, see [Related work](/docs/architecture/related-work/).
-
-## Purpose
-
-The provider adapts Kubernetes KMS v2 to OpenBao Transit. Kubernetes talks to the local KMS provider plugin over gRPC. `bao-kms-provider` talks to OpenBao Transit over HTTPS.
-
-```text
-kube-apiserver
-  -> Unix domain socket
-  -> bao-kms-provider
-  -> OpenBao Transit
-  -> bao-kms-provider
-  -> kube-apiserver
-  -> encrypted Kubernetes API resource data in etcd
-```
-
-The provider participates in Kubernetes envelope encryption for selected API resources. It does not encrypt raw etcd disk blocks or any workload storage outside the Kubernetes API resource persistence path.
-
-## Component diagram
+`bao-kms-provider` adapts Kubernetes KMS v2 to OpenBao Transit. The API server
+calls it over gRPC on a local Unix socket, and it calls Transit over HTTPS.
+For the upstream behavior this relies on, see [Background](/docs/architecture/background/).
 
 ```mermaid
 flowchart LR
@@ -62,42 +50,17 @@ flowchart LR
     Observability -.->|observes| TransitClient
 ```
 
-## Components
+The provider serves KMS v2, keeps the active key snapshot and its registry
+state, answers Status from a cache that background probes fill, validates
+decrypt requests, builds the AAD, logs in to OpenBao, and exposes health,
+metrics, and redacted logs. It sees plaintext in flight, so treat it as
+control-plane critical; see [Security: Threat model](/docs/security/threat-model/).
 
-### kube-apiserver
+OpenBao must run outside the protected cluster. The API server needs the
+provider to start, and the provider needs OpenBao, so an OpenBao inside the
+same cluster would be a circular dependency during recovery.
 
-`kube-apiserver` is configured with an `EncryptionConfiguration` that contains a KMS v2 provider entry. The provider name and endpoint participate in the encryption format and remain stable after encryption begins.
-
-### bao-kms-provider
-
-The provider process:
-
-- serves the Kubernetes KMS v2 gRPC API over a Unix domain socket,
-- maintains the active key snapshot,
-- persists non-secret registry state,
-- returns cached KMS Status,
-- validates decrypt `key_id` and annotations,
-- constructs Transit associated data when enabled,
-- authenticates to OpenBao,
-- calls Transit encrypt and decrypt,
-- exposes local health and metrics endpoints,
-- produces structured redacted logs.
-
-### OpenBao
-
-OpenBao provides:
-
-- JWT or certificate authentication,
-- short-lived OpenBao tokens,
-- Transit key metadata,
-- Transit encrypt and decrypt operations,
-- audit records for cryptographic operations.
-
-OpenBao must be available independently of the protected Kubernetes API server. Running OpenBao inside the protected cluster creates a bootstrap dependency during API server recovery.
-
-## Data flow
-
-### Encrypt
+## Encrypt
 
 ```mermaid
 sequenceDiagram
@@ -117,9 +80,10 @@ sequenceDiagram
     API->>Etcd: store encrypted resource data
 ```
 
-Encrypt does not use implicit Transit latest-version behavior. The provider passes the explicit Transit `key_version` from the active snapshot.
+Encrypt always passes the active snapshot's explicit `key_version`, never the
+implicit latest.
 
-### Decrypt
+## Decrypt
 
 ```mermaid
 sequenceDiagram
@@ -139,39 +103,17 @@ sequenceDiagram
     Plugin-->>API: plaintext
 ```
 
-Decrypt does not brute-force unknown keys or try every historical key. A
-well-formed unknown `key_id` can trigger rate-limited metadata discovery for the
-configured key. If it remains unknown, it fails before Transit decrypt is called.
+Decrypt never tries other keys or versions. A well-formed unknown `key_id` can
+trigger one rate-limited metadata lookup for the configured key; if it is still
+unknown, it fails before Transit is called.
 
-### Status
+## Status
 
-```mermaid
-sequenceDiagram
-    participant API as kube-apiserver
-    participant Plugin as bao-kms-provider
-    participant Cache as status cache
+Status reads health, version, and the active `key_id` from a cache. The cache
+turns healthy only after both a metadata probe and an encrypt-and-decrypt deep
+probe succeed, and neither clears the other's failure.
 
-    API->>Plugin: Status()
-    Plugin->>Cache: read cached health/version/key_id
-    Cache-->>Plugin: cached status
-    Plugin-->>API: health, version, active key_id
-```
-
-Status reads from cached state populated by background probes; it does not perform a live Transit encrypt or decrypt on every call. The cache becomes healthy only after the metadata probe and the Transit encrypt/decrypt deep probe succeed. A successful probe does not clear a failure from the other probe type. Kubernetes polls Status regularly, and the Status `key_id` drives rotation behavior.
-
-## Trust boundaries
-
-The provider sits across these boundaries:
-
-- Kubernetes API server to the local provider socket.
-- Provider host process to OpenBao HTTPS endpoint.
-- OpenBao policy boundary for Transit operations.
-- Local host filesystem boundary for configuration, auth material, CA bundle, socket, and registry state.
-- etcd persistence boundary for ciphertext and KMS annotations.
-
-The provider sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog, see [Threat model](/docs/security/threat-model/).
-
-## Internal active key model
+## Key snapshots
 
 ```go
 type KeySnapshot struct {
@@ -189,44 +131,18 @@ type KeySnapshot struct {
 }
 ```
 
-The fields are non-secret identity and Transit metadata. The provider uses them
-to derive Kubernetes `key_id` values and reconstruct AAD. A background key
-watcher computes the active snapshot outside hot-path Status calls. The
-implementation derives historical `key_id` values from stable configuration
-and Transit metadata when possible.
+Snapshots hold only non-secret identity and Transit metadata, enough to derive
+each `key_id` and rebuild its AAD. A background watcher computes the active
+snapshot outside the Status path, and the local registry keeps rotation
+decisions across restarts; see
+[Reference: Key ID and AAD](/docs/reference/key-id-and-aad/#local-registry-state).
 
-A small local key registry state file with strict permissions persists rotation
-decisions across restarts. See [Reference: Key ID And AAD: Local Registry
-State](/docs/reference/key-id-and-aad/#local-registry-state).
+## Startup
 
-## Implementation guardrails
+The provider binds its socket only after one metadata probe and one deep probe
+succeed, so the API server never sees a socket without a working data path.
 
-The implementation encodes design boundaries as local and CI checks before feature work begins.
-
-ast-grep owns structural Go and architecture rules:
-
-- no broad dynamic types in production code,
-- no runtime panics,
-- no root contexts in runtime packages,
-- no Viper imports outside the configuration boundary,
-- no environment reads outside the configuration boundary,
-- no concrete OpenBao or Transit client imports from `internal/kmsv2`.
-
-Semgrep owns security and dangerous-API rules:
-
-- no disabled TLS verification,
-- no default HTTP client or package-level HTTP helpers,
-- no `http.NewRequest` without context,
-- no runtime subprocess execution,
-- no sensitive log field names.
-
-For the supporting policy see [Contribute: Code quality](/contribute/code-quality/).
-
-## Startup sequence
-
-`bao-kms-provider` completes one successful metadata probe and one successful deep probe before it binds the Unix socket. Startup fails closed rather than exposing a socket without a verified active data path.
-
-Recommended systemd sequence:
+With systemd, the provider is ready before kubelet starts the API server:
 
 ```mermaid
 flowchart TD
@@ -244,7 +160,8 @@ flowchart TD
     A --> B --> C --> D --> E --> F --> G --> H --> I --> J
 ```
 
-Recommended static-pod sequence:
+With static pods, kubelet starts both pods without ordering them, so the API
+server retries until the socket appears. Test this ordering on your platform:
 
 ```mermaid
 flowchart TD
@@ -260,43 +177,12 @@ flowchart TD
     B --> D --> F
 ```
 
-Static-pod ordering must be tested because kubelet does not provide a strong
-dependency graph between static pods. The API server may start before the
-provider socket exists. It must retry while the provider completes bootstrap.
-See [Get started: Choose a deployment model](/docs/get-started/deployment-model/) for the model
-selection rationale and [Get Started: Static Pod
-Deployment](/docs/get-started/static-pod/) for the manifest and bootstrap risks.
+## Multiple control-plane nodes
 
-## Multi-control-plane operation
-
-Each control-plane node runs its own local provider instance.
-
-All instances share:
-
-- the same provider name,
-- the same cluster ID,
-- the same OpenBao instance ID,
-- the same Transit mount ID,
-- the same Transit key lineage ID,
-- the same Transit key,
-- the same AAD policy,
-- the same `key_id` derivation algorithm.
-
-Instances may have different auth credentials and OpenBao client tokens.
-
-Each instance also owns a local registry state file. The active `key_id` converges across the files. Pending or recovered snapshots can differ temporarily during failover or rotation recovery.
-
-Promotion of a new Transit key version is stable across all control-plane nodes. If one node promotes early and another does not, API server behavior can become inconsistent. The activation delay and stable observation count reduce this risk; operational monitoring still checks for `key_id` convergence. See [Architecture: Rotation model](/docs/architecture/rotation-model/).
-
-## OpenBao placement
-
-Recommended placement is an external management plane or otherwise independent OpenBao deployment that does not depend on the protected Kubernetes API server.
-
-Avoid running OpenBao inside the same protected cluster for this use case. If the API server requires the KMS provider plugin to start and the provider requires OpenBao, then OpenBao must be reachable before the protected API server is healthy. A same-cluster OpenBao deployment introduces a circular dependency.
-
-## Source references
-
-- [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
-- [Kubernetes encryption at rest documentation](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
-- [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
-- [Kubernetes static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)
+Every control-plane node runs its own provider with identical identity values,
+Transit key, and AAD rules; only auth credentials and tokens differ. Each keeps
+its own registry state. The active `key_id` converges across nodes, while
+pending snapshots can differ briefly during rotation. The activation delay and
+stable observation count make early promotion on one node unlikely, and
+monitoring compares `openbao_kms_status_key_id_hash` across nodes; see
+[Rotation model](/docs/architecture/rotation-model/).

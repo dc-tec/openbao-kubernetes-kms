@@ -1,112 +1,100 @@
 ---
 title: Failure modes
-description: "Failure modes the design considers: cause, impact, detection signals, mitigation, recovery, startup blocking, and data loss risk."
+description: "Each failure the design considers, how it shows up, whether it blocks API server startup, and whether it can lose data."
 eyebrow: Architecture
 weight: 50
+verifiedBy:
+  - test/e2e/provider_failure_test.go
+  - test/e2e/kind_dr_test.go
+  - internal/kmsv2
 ---
 
-This catalog pairs each failure scenario with its detection signal, mitigation, and recovery action. For runbooks that act on these signals, see [Operate: Troubleshooting](/docs/operate/troubleshooting/) and [Operate: Disaster recovery](/docs/operate/disaster-recovery/).
-
-<a id="how-to-use-this-page"></a>
-
-## How to use the catalog
-
-Each row in the catalog answers four questions:
-
-- What goes wrong?
-- How does an operator detect it?
-- What design control mitigates it?
-- What recovery action restores service?
-
-Two columns flag operational severity:
-
-- **Blocks API server startup?** indicates whether the API server cannot decrypt previously encrypted resources during startup if this failure is active.
-- **Permanent data loss risk?** indicates whether the failure can leave Kubernetes resources unrecoverable.
+Each row names a failure, its cause, its impact, and how you detect it. Two
+columns flag severity: whether the failure stops the API server from
+decrypting existing data at startup, and whether it can leave resources
+permanently unrecoverable. For recovery steps, see
+[Operate: Troubleshooting](/docs/operate/troubleshooting/) and
+[Operate: Disaster recovery](/docs/operate/disaster-recovery/).
 
 ## Bootstrap and runtime
 
-| Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
-|---|---|---|---|---|---|---|---|
-| Provider unavailable | Service not installed, crash, disabled | API server cannot reach KMS | systemd or kubelet status, socket missing, KMS unhealthy | Restart policy, health checks | Start provider, fix configuration | Yes | No |
-| Socket unavailable | Directory missing, listener failed | API server cannot call KMS | API server logs, `/live` failure | Pre-created runtime directory, safe socket setup | Fix path or permissions, restart provider | Yes | No |
-| Kubelet or container runtime unavailable for static pod | Host boot failure | Provider static pod cannot start | kubelet or CRI logs | systemd mode, local image cache | Fix kubelet or CRI, or run provider as host service | Yes | No |
-| systemd ordering wrong | Provider starts after API server | API server fails or retries | Boot logs | `Before=kubelet.service` where appropriate, tested units | Correct unit dependencies | Yes | No |
-| Stale socket | Crash left socket path | Startup failure or wrong listener | Socket check | Safe stale cleanup | Remove verified-dead socket | Yes | No |
-| Wrong socket permissions | API server cannot connect | KMS unavailable | API server permission errors | Mode and group validation | Fix group or mode | Yes | No |
-| SELinux or AppArmor block | Host policy denies socket or file | KMS unavailable | Audit logs | Policy profiles, tests | Adjust policy | Yes | No |
-| Configuration file permissions unsafe | World-readable or world-writable | Secret or topology exposure or tamper | Startup validation | Fail closed | Fix permissions | Yes | No |
-| Provider crash loop | Bug, bad configuration, OpenBao error path | KMS unavailable | Service logs | Supervisor, tests | Fix configuration or bug | Yes | No |
-| Image unavailable for static pod | Pull failure, air gap | Provider not started | kubelet events or logs | Preloaded image, `IfNotPresent` or `Never` | Load image | Yes | No |
-| Package upgrade restarts systemd provider | Maintenance event | Transient KMS outage | Service logs | Controlled rollout | Restart one node at a time | Possible | No |
+| Failure mode | Cause | Impact | Detection | Blocks startup | Data loss |
+|---|---|---|---|---|---|
+| Provider unavailable | Service not installed, crash, disabled | API server cannot reach KMS | systemd or kubelet status, socket missing, KMS unhealthy | Yes | No |
+| Socket unavailable | Directory missing, listener failed | API server cannot call KMS | API server logs, `/live` failure | Yes | No |
+| Kubelet or container runtime unavailable for static pod | Host boot failure | Provider static pod cannot start | kubelet or CRI logs | Yes | No |
+| systemd ordering wrong | Provider starts after API server | API server fails or retries | Boot logs | Yes | No |
+| Stale socket | Crash left socket path | Startup failure or wrong listener | Socket check | Yes | No |
+| Wrong socket permissions | API server cannot connect | KMS unavailable | API server permission errors | Yes | No |
+| SELinux or AppArmor block | Host policy denies socket or file | KMS unavailable | Audit logs | Yes | No |
+| Configuration file permissions unsafe | World-readable or world-writable | Secret or topology exposure or tamper | Startup validation | Yes | No |
+| Provider crash loop | Bug, bad configuration, OpenBao error path | KMS unavailable | Service logs | Yes | No |
+| Image unavailable for static pod | Pull failure, air gap | Provider not started | kubelet events or logs | Yes | No |
+| Package upgrade restarts systemd provider | Maintenance event | Transient KMS outage | Service logs | Possible | No |
 
 ## OpenBao and Transit
 
-| Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
-|---|---|---|---|---|---|---|---|
-| OpenBao unavailable | Network, DNS, load balancer, outage | Encrypt and decrypt fail | Readiness, metrics, OpenBao request errors | HA OpenBao, local routing, retries | Restore OpenBao reachability | Yes for encrypted data | No |
-| OpenBao sealed | Manual seal, restart not unsealed | Transit unavailable | OpenBao health, provider readiness | Auto-unseal, alerting | Unseal or restore OpenBao | Yes | No, unless key unavailable permanently |
-| OpenBao inside same protected cluster | Circular dependency | KMS unavailable before API server | Bootstrap failure | External management plane | Start OpenBao independently or restore an external service | Yes | Possible if unrecoverable |
-| Audit backend pressure | OpenBao audit device slow or failing | Transit latency or errors | OpenBao metrics, provider latency | HA audit sinks, capacity planning | Repair audit backend | Possible | No |
-| OpenBao leader failover | HA event | Transient errors or latency | OpenBao status, provider retries | HA tuning, bounded retries | Wait or fix cluster | Possible | No |
-| TLS certificate expired | Certificate not renewed | Provider cannot connect | TLS errors | Certificate monitoring | Renew certificate, reload provider | Yes | No |
-| DNS or LB misrouting | Wrong backend or stale DNS | Auth or Transit errors | TLS or SNI errors, metadata mismatch | Pinned CA and SNI, instance ID checks | Fix DNS or load balancer | Yes | No |
+| Failure mode | Cause | Impact | Detection | Blocks startup | Data loss |
+|---|---|---|---|---|---|
+| OpenBao unavailable | Network, DNS, load balancer, outage | Encrypt and decrypt fail | Readiness, metrics, OpenBao request errors | Yes for encrypted data | No |
+| OpenBao sealed | Manual seal, restart not unsealed | Transit unavailable | OpenBao health, provider readiness | Yes | No, unless key unavailable permanently |
+| OpenBao inside same protected cluster | Circular dependency | KMS unavailable before API server | Bootstrap failure | Yes | Possible if unrecoverable |
+| Audit backend pressure | OpenBao audit device slow or failing | Transit latency or errors | OpenBao metrics, provider latency | Possible | No |
+| OpenBao leader failover | HA event | Transient errors or latency | OpenBao status, provider retries | Possible | No |
+| TLS certificate expired | Certificate not renewed | Provider cannot connect | TLS errors | Yes | No |
+| DNS or LB misrouting | Wrong backend or stale DNS | Auth or Transit errors | TLS or SNI errors, metadata mismatch | Yes | No |
 
 ## Transit key material
 
-| Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
-|---|---|---|---|---|---|---|---|
-| Transit key deleted | Destructive admin action | Old ciphertext undecryptable | Metadata read fails, decrypt failures | `deletion_allowed=false`, no delete permission | Restore OpenBao backup with key material | Yes | Yes if no valid backup |
-| Transit key soft-deleted | Key archived or disabled | Encrypt and decrypt fail | Metadata state, decrypt errors | Change control | Restore key if possible | Yes | No if restored |
-| Transit key recreated same name | Key lineage lost | Old data undecryptable; `key_id` collision risk | Lineage mismatch, decrypt failures | Key lineage ID, delete protection | Restore original key; do not accept new lineage | Yes | Yes if original key lost |
-| `disable_upsert` false or unreadable | Mount drift or missing read permission | Status and Encrypt fail closed | Metadata probe error, unhealthy Status | Runtime mount check, no create permission | Set `disable_upsert=true` and restore read permission | Yes | No |
-| `min_decryption_version` raised too early | Operator error | Old ciphertext undecryptable | Decrypt failures for old `key_id` values | Verify migration first | Lower setting if key versions still exist | Yes | Possible |
-| Key backup missing | Disaster restore lacks Transit key versions | Data undecryptable | DR test failure | Coordinated OpenBao backups | Restore from valid backup | Yes | Yes |
+| Failure mode | Cause | Impact | Detection | Blocks startup | Data loss |
+|---|---|---|---|---|---|
+| Transit key deleted | Destructive admin action | Old ciphertext undecryptable | Metadata read fails, decrypt failures | Yes | Yes if no valid backup |
+| Transit key soft-deleted | Key archived or disabled | Encrypt and decrypt fail | Metadata state, decrypt errors | Yes | No if restored |
+| Transit key recreated same name | Key lineage lost | Old data undecryptable; `key_id` collision risk | Lineage mismatch, decrypt failures | Yes | Yes if original key lost |
+| `disable_upsert` false or unreadable | Mount drift or missing read permission | Status and Encrypt fail closed | Metadata probe error, unhealthy Status | Yes | No |
+| `min_decryption_version` raised too early | Operator error | Old ciphertext undecryptable | Decrypt failures for old `key_id` values | Yes | Possible |
+| Key backup missing | Disaster restore lacks Transit key versions | Data undecryptable | DR test failure | Yes | Yes |
 
 ## Authentication and issuer state
 
-This section uses JSON Web Token (JWT), JSON Web Key Set (JWKS), and OpenID
-Connect (OIDC) terminology. PKCS#11 refers to the interface for hardware or
-software cryptographic tokens. SPIFFE refers to the workload identity
-framework, and an SVID is a SPIFFE Verifiable Identity Document.
-
-| Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
-|---|---|---|---|---|---|---|---|
-| JWT expired and API server down | Protected cluster issued JWT and cannot renew | OpenBao login fails | Auth metrics, JWT expiry check | External issuer, sufficient TTL, file refresh | Replace JWT from external issuer or restore enough API server function to issue a token | Yes | No |
-| JWT file missing | Provisioning error | Login impossible | Startup validation | File checks, configuration management | Restore JWT file | Yes | No |
-| JWT wrong audience | Issuer or configuration mismatch | Login denied | Auth error | Bound audience tests | Issue correct JWT or fix role | Yes | No |
-| JWT wrong subject or claims | Role mismatch | Login denied | Auth error | Claim binding documentation | Issue correct JWT or fix role | Yes | No |
-| Issuer changed | OIDC or JWT issuer rotation | Login denied | Auth logs | Planned overlap | Update OpenBao configuration and JWT source | Yes | No |
-| JWKS rotated | New signing key unknown | Login denied | JWT auth errors | JWKS monitoring, overlapping keys | Refresh JWKS or OpenBao configuration | Yes | No |
-| OpenBao cannot reach JWKS or OIDC discovery | Network failure | Login denied or cache expiry | Auth errors | Pinned public keys for recovery | Restore discovery or configure keys | Possible | No |
-| Clock skew | Host, OpenBao, or issuer clocks differ | JWT invalid | Auth errors, NTP alerts | NTP or chrony, leeway | Fix clocks | Yes | No |
-| Revoked JWT still cryptographically valid | JWT auth lacks TokenReview | Token may be accepted until expiry | Hard to detect | Short TTL, external issuer controls | Rotate JWT and signing keys if needed | No immediate | No |
-| Certificate expired | Certificate or SVID not renewed | OpenBao cert login fails | Auth metrics, certificate TTL metric | Certificate monitoring, SPIFFE or PKCS#11 renewal process | Renew certificate or restore SPIFFE/PKCS#11 issuer | Yes | No |
-| Certificate identity drift | Wrong certificate, SPIFFE ID, or trust domain | Local validation or OpenBao role rejects login | Auth error | Exact local identity checks and OpenBao role constraints | Restore correct certificate identity or update config and role together before use | Yes | No |
-| PKCS#11 module or token unavailable | Module path, token label, key label, PIN, or hardware failure | Login impossible | Startup validation, auth error | Provider-only PIN file, token monitoring | Restore module or token, fix labels, replace hardware through planned procedure | Yes | No |
-| SPIFFE Workload API unavailable | SPIFFE agent or socket unavailable | Login impossible | Auth error, certificate TTL metric approaches zero | Independent SPIFFE availability and socket permissions | Restore SPIFFE agent or socket access | Yes | No |
+| Failure mode | Cause | Impact | Detection | Blocks startup | Data loss |
+|---|---|---|---|---|---|
+| JWT expired and API server down | Protected cluster issued JWT and cannot renew | OpenBao login fails | Auth metrics, JWT expiry check | Yes | No |
+| JWT file missing | Provisioning error | Login impossible | Startup validation | Yes | No |
+| JWT wrong audience | Issuer or configuration mismatch | Login denied | Auth error | Yes | No |
+| JWT wrong subject or claims | Role mismatch | Login denied | Auth error | Yes | No |
+| Issuer changed | OIDC or JWT issuer rotation | Login denied | Auth logs | Yes | No |
+| JWKS rotated | New signing key unknown | Login denied | JWT auth errors | Yes | No |
+| OpenBao cannot reach JWKS or OIDC discovery | Network failure | Login denied or cache expiry | Auth errors | Possible | No |
+| Clock skew | Host, OpenBao, or issuer clocks differ | JWT invalid | Auth errors, NTP alerts | Yes | No |
+| Revoked JWT still cryptographically valid | JWT auth lacks TokenReview | Token may be accepted until expiry | Hard to detect | No immediate | No |
+| Certificate expired | Certificate or SVID not renewed | OpenBao cert login fails | Auth metrics, certificate TTL metric | Yes | No |
+| Certificate identity drift | Wrong certificate, SPIFFE ID, or trust domain | Local validation or OpenBao role rejects login | Auth error | Yes | No |
+| PKCS#11 module or token unavailable | Module path, token label, key label, PIN, or hardware failure | Login impossible | Startup validation, auth error | Yes | No |
+| SPIFFE Workload API unavailable | SPIFFE agent or socket unavailable | Login impossible | Auth error, certificate TTL metric approaches zero | Yes | No |
 
 ## KMS contract, registry, and decrypt
 
-| Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
-|---|---|---|---|---|---|---|---|
-| Status `key_id` differs from encrypt response | Race or bug | API server discards encrypt result, marks unhealthy | API server logs, provider metrics | Snapshot consistency | Fix bug, restart with stable registry | Possible | No |
-| `key_id` flip-flops | Unstable rotation observation | Stale marking oscillates | Metrics or logs hash changes | Stable observation count, activation delay | Pin active key, fix watcher | Possible | No |
-| Unknown `key_id` on decrypt | Configuration or provider changed, old data | Decrypt rejected | Decrypt `key_id` errors | Preserve key history | Restore old configuration or registry | Yes for affected data | Possible |
-| Registry state missing | State file removed or first startup after restore | Provider may need to rebuild snapshots before serving | `doctor`, `verify-key`, `rotation-plan`, startup logs with auto-bootstrap eligibility reason | Strict state file and checkpoint; auto-bootstrap only from initial Transit metadata | Restore state file and checkpoint from backup or a known-good peer; after rotation or brownfield import, current preview releases fail closed rather than rebuilding state | Possible | No |
-| Registry state corrupt or rolled back | Disk corruption, unsafe restore, replayed file | Startup or probe fails closed | State load errors, hash mismatch, rollback error | State hash chain, checkpoint, permission checks, monotonic generation | Restore last valid state file and checkpoint from backup or a known-good peer; controlled `recover-state` is deferred | Yes | No |
-| Registry state and checkpoint both replaced | Privileged host compromise or unsafe full-directory restore | Local replay guard can be bypassed by a self-consistent pair | Node comparison, backup metadata, host integrity monitoring | Host filesystem controls, immutable backups, external evidence; local checkpoint is not tamper-proof | Rebuild trust from known-good backup or peer evidence; investigate host compromise | Possible | Possible |
-| Missing or malformed annotations | Bug, corruption, or mismatched provider | Decrypt rejected when AAD required | AAD validation metrics | AAD required in the current release line | Restore matching configuration or recover from a valid backup | Yes for affected data | No if recoverable backup exists |
-| AAD mismatch | Wrong cluster, key, or provider metadata | Decrypt rejected | AAD error | Stable configuration, validation | Restore matching configuration | Yes for affected data | Possible |
-| API server decrypt storm | Startup with many encrypted objects | Latency, timeouts, or `ResourceExhausted` above the Decrypt limit | Duration and in-flight metrics, request status, API server logs | Separate active Encrypt and Decrypt limits, OpenBao capacity, local routing, soak evidence; batching remains future work | Scale OpenBao, tune the Decrypt limit and timeout, reduce retries; implement batching only if release evidence requires it | Yes if severe | No |
-| OpenBao response exceeds its body limit | Backend fault, proxy fault, or unexpected response growth | Request fails as unavailable; metadata or deep-probe responses also make Status unhealthy | OpenBao request error metrics and provider logs | 64 KiB error-body limit, 4 MiB metadata and batch-decrypt limit, 256 KiB limit for other successful responses | Inspect the OpenBao or proxy response; restore a response shape within the documented limit | Possible | No |
-| Provider name changed | `EncryptionConfiguration` drift | Old encrypted data may not match provider | API server errors | Immutable provider name | Restore old name or configure migration | Yes for affected data | Possible |
+| Failure mode | Cause | Impact | Detection | Blocks startup | Data loss |
+|---|---|---|---|---|---|
+| Status `key_id` differs from encrypt response | Race or bug | API server discards encrypt result, marks unhealthy | API server logs, provider metrics | Possible | No |
+| `key_id` flip-flops | Unstable rotation observation | Stale marking oscillates | Metrics or logs hash changes | Possible | No |
+| Unknown `key_id` on decrypt | Configuration or provider changed, old data | Decrypt rejected | Decrypt `key_id` errors | Yes for affected data | Possible |
+| Registry state missing | State file removed or first startup after restore | Provider may need to rebuild snapshots before serving | `doctor`, `verify-key`, `rotation-plan`, startup logs with auto-bootstrap eligibility reason | Possible | No |
+| Registry state corrupt or rolled back | Disk corruption, unsafe restore, replayed file | Startup or probe fails closed | State load errors, hash mismatch, rollback error | Yes | No |
+| Registry state and checkpoint both replaced | Privileged host compromise or unsafe full-directory restore | Local replay guard can be bypassed by a self-consistent pair | Node comparison, backup metadata, host integrity monitoring | Possible | Possible |
+| Missing or malformed annotations | Bug, corruption, or mismatched provider | Decrypt rejected when AAD required | AAD validation metrics | Yes for affected data | No if recoverable backup exists |
+| AAD mismatch | Wrong cluster, key, or provider metadata | Decrypt rejected | AAD error | Yes for affected data | Possible |
+| API server decrypt storm | Startup with many encrypted objects | Latency, timeouts, or `ResourceExhausted` above the Decrypt limit | Duration and in-flight metrics, request status, API server logs | Yes if severe | No |
+| OpenBao response exceeds its body limit | Backend fault, proxy fault, or unexpected response growth | Request fails as unavailable; metadata or deep-probe responses also make Status unhealthy | OpenBao request error metrics and provider logs | Possible | No |
+| Provider name changed | `EncryptionConfiguration` drift | Old encrypted data may not match provider | API server errors | Yes for affected data | Possible |
 
 ## Kubernetes encryption scope and migration
 
-| Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
-|---|---|---|---|---|---|---|---|
-| `identity` fallback left enabled permanently | Migration incomplete | Plaintext writes possible if provider order changes or KMS is unavailable with `identity` first | Configuration audit | Remove after migration | Rewrite resources and remove fallback | No | Confidentiality loss |
-| `identity` fallback removed too early | Old plaintext or misordered data | Reads may fail depending on provider set | API errors | Verify migration first | Restore fallback temporarily and migrate | Possible | No |
-| Only some resources encrypted | Configuration scope incomplete | Unprotected resources in etcd | Encryption configuration review | Explicit resource list | Update configuration, rewrite resources | No | Confidentiality loss |
-| Existing resources not rewritten | Encryption only applies on write | Old data remains under old provider or plaintext | Audit and migration checks | Storage migration | Rewrite resources | No | Confidentiality loss |
-| Mixed plaintext and encrypted backups | Backups taken across migration | Inconsistent confidentiality | Backup audit | Backup labeling | Handle according to sensitivity | No | Confidentiality loss |
+| Failure mode | Cause | Impact | Detection | Blocks startup | Data loss |
+|---|---|---|---|---|---|
+| `identity` fallback left enabled permanently | Migration incomplete | Plaintext writes possible if provider order changes or KMS is unavailable with `identity` first | Configuration audit | No | Confidentiality loss |
+| `identity` fallback removed too early | Old plaintext or misordered data | Reads may fail depending on provider set | API errors | Possible | No |
+| Only some resources encrypted | Configuration scope incomplete | Unprotected resources in etcd | Encryption configuration review | No | Confidentiality loss |
+| Existing resources not rewritten | Encryption only applies on write | Old data remains under old provider or plaintext | Audit and migration checks | No | Confidentiality loss |
+| Mixed plaintext and encrypted backups | Backups taken across migration | Inconsistent confidentiality | Backup audit | No | Confidentiality loss |

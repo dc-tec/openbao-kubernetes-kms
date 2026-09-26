@@ -9,7 +9,8 @@ verifiedBy:
   - test/e2e/provider_rotation_test.go
 ---
 
-Rotation adds a new version to the existing Transit key. The provider promotes
+Kubernetes recommends rotating the key at least every 90 days. Rotation adds a
+new version to the existing Transit key. The provider promotes
 it only after it has observed the version as stable, and Kubernetes data
 written with older versions stays readable until you rewrite it. Rotation never
 changes identity-bearing values; see

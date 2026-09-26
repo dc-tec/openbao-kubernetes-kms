@@ -1,93 +1,54 @@
 ---
 title: Transit key model
-description: "OpenBao Transit key, policy, and isolation design rationale: key ownership, recommended profile, optional key types, features to use and avoid."
+description: "Why the Transit key is owned outside the provider, why each key setting has its value, and which Transit features the design uses and avoids."
 eyebrow: Architecture
 weight: 30
+verifiedBy:
+  - internal/openbao/transit.go
+  - deploy/opentofu/openbao-kubernetes-kms/main.tofu
 ---
 
-This maintainer-facing rationale explains the OpenBao Transit key, policy, and isolation choices. For the commands that provision the key, see [Get started: Prepare OpenBao](/docs/get-started/openbao/). For the canonical policy and Transit key configuration examples, see [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
+Each Kubernetes cluster or trust domain gets one dedicated Transit key on a
+dedicated mount. For the commands, see
+[Get started: Prepare OpenBao](/docs/get-started/openbao/); for the policy
+text, see [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
 
 ## Key ownership
 
-The Transit key is created and managed outside the provider by:
+Platform automation or an OpenBao administrator creates, rotates, and backs up
+the key. The provider token can only read metadata, encrypt, and decrypt, so a
+compromised provider gains no key-management authority, and key changes stay
+in existing change control and audit.
 
-- platform automation,
-- OpenTofu or Terraform,
-- an OpenBao operator,
-- an administrative workflow,
-- or a management-plane controller.
+One key per cluster isolates blast radius, keeps AAD scope unambiguous, and
+keeps the policy small. Sharing a key across clusters would weaken the
+cross-cluster replay protection and couple the clusters operationally.
 
-The provider token has no permission to create, delete, rotate, export, back up, or restore the key. This least-privilege boundary prevents a provider compromise from giving an attacker key-management authority. Key ownership stays in operator-controlled tooling, which already has the audit trail and change control around it.
+## Key settings
 
-## Recommended Transit key profile
-
-Recommended values and why each one is the way it is:
-
-| Setting | Recommendation | Rationale |
+| Setting | Value | Why |
 |---|---|---|
-| `type` | `aes256-gcm96` | Default compatibility choice. AES-GCM is the conservative AEAD mode and aligns with most regulated environments. |
-| `derived` | `false` | Avoid treating derivation context as the primary cluster isolation boundary. The provider uses configured cluster scope and additional authenticated data (AAD) instead. |
-| `convergent_encryption` | `false` | Kubernetes encryption-at-rest does not need deterministic ciphertext. Convergent encryption can leak equality relationships between objects. |
-| `exportable` | `false` | Key export increases blast radius. Once enabled, OpenBao does not allow the flag to be turned off again. |
-| `allow_plaintext_backup` | `false` | Plaintext backup increases blast radius. Once enabled, OpenBao does not allow the flag to be turned off again. |
-| `deletion_allowed` | `false` | Key deletion can make data unrecoverable. The provider token also lacks delete capability; this flag is a second layer of defense at the key level. |
-| `auto_rotate_period` | `0` | Manual or platform-driven rotation is easier to coordinate with Kubernetes storage migration. See [Architecture: Rotation model](/docs/architecture/rotation-model/). |
-| `disable_upsert` (mount-level) | `true` | Prevents typo-driven accidental key creation through a misspelled encrypt path. |
+| `type` | `aes256-gcm96` | A conservative AEAD mode and the only tested type. |
+| `derived` | `false` | Cluster isolation comes from a dedicated key and AAD, not from derivation context. |
+| `convergent_encryption` | `false` | Deterministic ciphertext would reveal which objects are equal. |
+| `exportable` | `false` | Export widens the blast radius, and OpenBao cannot turn it off again. |
+| `allow_plaintext_backup` | `false` | Same risk as export, and also irreversible. |
+| `deletion_allowed` | `false` | Deletion destroys data; this is a second layer behind the policy's missing delete capability. |
+| `auto_rotate_period` | `0` | Rotation must be coordinated with `key_id` promotion and resource rewrites. |
+| `disable_upsert` (mount) | `true` | A misspelled key name must fail instead of creating a key. It applies to the whole mount, which is why the mount is dedicated. |
 
-`disable_upsert` is configured at the Transit mount level. The provider verifies this setting during each metadata probe. Status is unhealthy when the setting is false or unreadable. If the mount is shared with other applications, enabling it would affect those callers. A dedicated Transit mount for Kubernetes KMS keys is therefore recommended.
+The provider checks `disable_upsert` on every metadata probe and reports
+unhealthy when it is off or unreadable.
 
-## Future key types
+## Transit features
 
-Other AEAD Transit key types may be evaluated in a future release. They must not replace `aes256-gcm96` in the supported matrix until the provider validation, OpenBao integration tests, compatibility policy, diagnostics, and release evidence explicitly cover them.
-
-## Recommended policy surface
-
-The provider token receives only the capabilities needed for the encrypt and decrypt path:
-
-- Transit metadata read on the configured key path,
-- Transit encrypt update on the configured key path,
-- Transit decrypt update on the configured key path,
-- inspection of `transit/config/keys` to verify `disable_upsert`,
-- `sys/capabilities-self` for `doctor`'s self-capability check.
-
-Capabilities the provider must not have:
-
-- Transit key rotation (operator action),
-- Transit key delete (a destructive operation that the operator handles deliberately),
-- Transit key export read,
-- Transit plaintext backup read,
-- broad `sudo` or admin authority.
-
-OpenBao policies are path-based and deny by default; capabilities are only what is explicitly granted. For the canonical policy text and the renderable CLI command see [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
-
-## Features to use
-
-| Transit feature | Use in this design |
+| Feature | Use |
 |---|---|
-| `key_version` | Required on every encrypt. Avoids implicit-latest races during rotation. |
-| `associated_data` | Required AAD binding for supported AEAD key types; see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/). |
-| `min_encryption_version` | Useful as a guard after rotation to prevent encryption with retired versions. Operator-driven, not provider-driven. |
-| `min_decryption_version` | Dangerous if raised too early; only after independent migration evidence and backup-retention evidence. `verify-rotation` alone is not enough. See [Operate: Rotation: min_decryption_version](/docs/operate/rotation/#retire-old-versions). |
-| `disable_upsert` | Enabled at the mount level. |
-| `batch_input` | Outside the provider runtime for this release line; future decrypt coalescing must be introduced with explicit benchmarks and failure semantics. |
-| `rewrap` | Operational tool outside the Kubernetes KMS hot path. |
-
-## Features to avoid
-
-| Transit feature | Reason |
-|---|---|
-| Transit datakey generation | Kubernetes KMS v2 already defines the API server and KMS provider plugin envelope interaction. Datakey generation would complicate semantics without clear benefit. |
-| Convergent encryption | Deterministic ciphertext is not needed and can reveal equality relationships. |
-| Derived keys as primary cluster isolation | Increases complexity and makes context management security-critical. The design prefers one key per cluster or trust domain instead. |
-| Provider-managed key rotation | Rotation must be coordinated with Kubernetes `key_id` observation and resource migration. The provider observes rotation but does not perform it. |
-
-## One key per cluster or trust domain
-
-The design recommends one named Transit key per Kubernetes cluster or trust domain. This:
-
-- isolates blast radius across clusters,
-- makes AAD scope unambiguous,
-- simplifies the OpenBao policy surface,
-- aligns with the [Threat model](/docs/security/threat-model/) "Ciphertext replay across clusters" control.
-
-Sharing a single Transit key across clusters is rejected at the design level because it weakens AAD's cross-cluster replay guarantee and forces operational coupling between clusters.
+| `key_version` | Always sent on encrypt, so rotation cannot race the call. |
+| `associated_data` | Always sent; see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/#aad-envelope). |
+| `min_encryption_version`, `min_decryption_version` | Operator-managed; the provider observes them. See [Rotation model](/docs/architecture/rotation-model/). |
+| `batch_input` | Not used; decrypt micro-batching needs benchmarks and failure semantics first. |
+| `rewrap` | Outside the KMS path. Kubernetes detects stale data through `key_id` changes and rewrites resources itself. |
+| Data key generation | Avoided; KMS v2 already defines the envelope between the API server and the plugin. |
+| Convergent or derived keys | Avoided; see the settings above. |
+| Provider-driven rotation | Avoided; the provider observes rotation and never performs it. |
