@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"strings"
@@ -58,6 +59,8 @@ type Runtime struct {
 // LoadOptions controls typed configuration loading.
 type LoadOptions struct {
 	Path string
+	// Content, when set, is decoded as the configuration file instead of Path.
+	Content []byte
 }
 
 // Config is the typed provider configuration model.
@@ -260,14 +263,19 @@ func BindRootFlags(runtime *Runtime, flags *pflag.FlagSet) error {
 
 // Load reads optional file config and decodes it into typed configuration.
 func Load(runtime *Runtime, opts LoadOptions) (Config, error) {
-	if opts.Path != "" {
+	switch {
+	case opts.Content != nil:
+		if err := runtime.v.ReadConfig(bytes.NewReader(opts.Content)); err != nil {
+			return Config{}, fmt.Errorf("read config: %w", err)
+		}
+	case opts.Path != "":
 		runtime.v.SetConfigFile(opts.Path)
 		if err := runtime.v.ReadInConfig(); err != nil {
 			return Config{}, fmt.Errorf("read config: %w", err)
 		}
-		if !runtime.v.InConfig("configVersion") {
-			return Config{}, fmt.Errorf("decode config: configVersion is required")
-		}
+	}
+	if (opts.Content != nil || opts.Path != "") && !runtime.v.InConfig("configVersion") {
+		return Config{}, fmt.Errorf("decode config: configVersion is required")
 	}
 
 	if err := validateDurationInputTypes(runtime.v, reflect.TypeFor[Config](), ""); err != nil {

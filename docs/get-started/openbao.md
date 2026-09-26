@@ -27,6 +27,13 @@ permission.
   independently of the protected Kubernetes API server. See
   [Security: Auth model](/docs/security/auth-model/).
 
+{{< callout type="tip" title="Generated with init?" >}}
+If you ran [`init`](/docs/get-started/plan-values/#generate-the-files-with-init),
+review `generated/openbao-setup.sh` and run it instead of Steps 1, 2, 4, and 5.
+It applies `generated/openbao-policy.hcl`, and `init --new-key` already
+generated the lineage ID from Step 3.
+{{< /callout >}}
+
 {{< callout type="tip" title="Manage OpenBao with OpenTofu" >}}
 The OpenTofu module in `deploy/opentofu/openbao-kubernetes-kms` creates the
 Transit mount, `disable_upsert`, the key, and the policy from Steps 1, 2, and 4.

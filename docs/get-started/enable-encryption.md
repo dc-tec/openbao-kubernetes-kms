@@ -50,6 +50,9 @@ resources:
 | `identity: {}` | Keeps existing plaintext data readable until Step 5 and verification are complete. |
 | `resources` | Start with `secrets`. Add more resource types later, one at a time. |
 
+If you ran [`init`](/docs/get-started/plan-values/#generate-the-files-with-init),
+copy `generated/encryption-config.yaml` instead of writing the file by hand.
+
 Check the file against the provider configuration on each node:
 
 ```sh
