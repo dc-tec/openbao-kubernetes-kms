@@ -25,7 +25,8 @@ Required:
   plaintext backup, and deletion disabled.
 - A provider policy limited to key metadata read, encrypt, decrypt,
   `disable_upsert` inspection, and its own capabilities and renewal. No create,
-  rotate, delete, export, backup, or configuration permission.
+  rotate, trim, delete, export, backup, restore, rewrap, or configuration
+  permission; `doctor` checks these paths for the configured key.
 - OpenBao HA outside the protected cluster's dependency path, with audit
   logging enabled and monitored.
 
