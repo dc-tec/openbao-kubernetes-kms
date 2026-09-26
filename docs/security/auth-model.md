@@ -4,9 +4,7 @@ description: "Authentication design for bao-kms-provider: JWT auth, certificate 
 weight: 30
 ---
 
-# Auth Model
-
-`bao-kms-provider` authenticates to OpenBao with a JSON Web Token (JWT) or a client certificate. For the commands that provision OpenBao auth, see [OpenBao Setup: Step 5](/getting-started/openbao-setup/#step-5-configure-auth). For the configuration fields, see [Configuration: Auth Timing](/reference/configuration/#auth-timing).
+`bao-kms-provider` authenticates to OpenBao with a JSON Web Token (JWT) or a client certificate. For the commands that provision OpenBao auth, see [OpenBao Setup: Step 5](/docs/getting-started/openbao-setup/#step-5-configure-jwt-auth). For the configuration fields, see [Configuration: Auth Timing](/docs/reference/configuration/#auth-timing).
 
 ## Supported Auth Methods
 

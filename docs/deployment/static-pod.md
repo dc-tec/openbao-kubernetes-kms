@@ -4,14 +4,12 @@ description: "Static pod manifest, image preload, host preparation, and bootstra
 weight: 30
 ---
 
-# Static Pod Deployment
-
 Static pod deployment is appropriate for kubeadm-style environments and
 image-based control-plane management. It keeps the provider under kubelet
 management alongside the API server. Kubelet, the container runtime, and local
 image availability are therefore part of the KMS provider boot path.
 
-For the model selection rationale see [Deployment: Choosing A Model](/deployment/choosing-a-model/). For the user, group, and file ownership model see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+For the model selection rationale see [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/). For the user, group, and file ownership model see [Deployment: Linux Identity Model](/docs/deployment/linux-identity-model/).
 
 ## Constraints
 
@@ -242,7 +240,7 @@ in-flight probes and listener setup. If you increase `bootstrap.graceTimeout`
 or authentication/request timeouts, increase the startup probe budget to cover
 them. Liveness and readiness probes start after the startup probe succeeds.
 
-For single-node control planes, systemd is usually safer. See [Deployment: Choosing A Model](/deployment/choosing-a-model/).
+For single-node control planes, systemd is usually safer. See [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/).
 
 ## Verification
 

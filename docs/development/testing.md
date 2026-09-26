@@ -4,8 +4,6 @@ description: "Testing strategy for bao-kms-provider: protocol correctness, fail-
 weight: 30
 ---
 
-# Testing
-
 A Kubernetes Key Management Service (KMS) provider plugin failure can prevent
 the API server from starting or make encrypted Kubernetes resources unreadable.
 The test strategy therefore prioritizes negative paths, rotation, and recovery
@@ -13,10 +11,10 @@ over a single happy-path encrypt and decrypt check.
 
 The following sections define what the test system must prove. For runnable
 end-to-end (E2E) lanes and
-Make targets, see [E2E Framework](/development/e2e-framework/). For continuous
+Make targets, see [E2E Framework](/docs/development/e2e-framework/). For continuous
 integration (CI) lanes
-and release evidence requirements, see [CI And Supply Chain](/development/ci-supply-chain/).
-For captured load and cold-start evidence, see [Performance Evidence](/development/benchmark-results/).
+and release evidence requirements, see [CI And Supply Chain](/docs/development/ci-supply-chain/).
+For captured load and cold-start evidence, see [Performance Evidence](/docs/development/benchmark-results/).
 
 ## Test Priorities
 
@@ -104,7 +102,7 @@ cold-start evidence shows a release-blocking need.
 ## Release Evidence
 
 Release evidence is assembled from the test layers above and the supply-chain
-controls documented in [CI And Supply Chain](/development/ci-supply-chain/).
+controls documented in [CI And Supply Chain](/docs/development/ci-supply-chain/).
 In summary:
 
 - every pull request proves deterministic logic, conformance, redaction,
@@ -118,7 +116,7 @@ The exact Kubernetes patch versions, Kind node images, OpenBao image, and tool
 versions live in `.ci/versions.yaml`. Kubernetes `1.36` is tracked as the
 intended next validation line until a digest-pinned Kind node image exists.
 Additional Kubernetes or OpenBao versions remain candidates until exact-pinned
-lanes and release evidence exist. See [Reference: Compatibility](/reference/compatibility/)
+lanes and release evidence exist. See [Reference: Compatibility](/docs/reference/compatibility/)
 for the support boundary.
 
 ## Local Fuzz Campaigns

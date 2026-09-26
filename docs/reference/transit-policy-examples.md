@@ -4,9 +4,7 @@ description: "Reference OpenBao policy, auth role, and Transit key configuration
 weight: 110
 ---
 
-# Transit Policy Examples
-
-These examples define the OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies them, see [Getting Started: OpenBao Setup](/getting-started/openbao-setup/). Replace workload-specific identifiers such as the mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
+These examples define the OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies them, see [Getting Started: OpenBao Setup](/docs/getting-started/openbao-setup/). Replace workload-specific identifiers such as the mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
 
 <a id="plugin-hot-path-policy"></a>
 
@@ -141,7 +139,7 @@ bao write transit/keys/k8s-workload-a-etcd/config \
   auto_rotate_period="0"
 ```
 
-Verify the exact CLI syntax against the OpenBao CLI version you are running. See [Reference: Compatibility: OpenBao](/reference/compatibility/#openbao) for the validated OpenBao version.
+Verify the exact CLI syntax against the OpenBao CLI version you are running. See [Reference: Compatibility: OpenBao](/docs/reference/compatibility/#openbao) for the validated OpenBao version.
 
 ## Generating The Policy From Configuration
 
@@ -152,4 +150,4 @@ bao-kms-provider policy openbao \
   --config /etc/openbao-kms/config.yaml
 ```
 
-Review the rendered paths before applying. See [Reference: CLI: policy openbao](/reference/cli/#policy-openbao).
+Review the rendered paths before applying. See [Reference: CLI: policy openbao](/docs/reference/cli/#policy-openbao).

@@ -4,8 +4,6 @@ description: "Authoritative reference for the bao-kms-provider command-line inte
 weight: 10
 ---
 
-# CLI
-
 This reference documents the provider-owned operational commands, the Cobra-generated
 shell completion entry point, and the provider flags supported by
 `bao-kms-provider`. Commands print stable text or JSON output where documented
@@ -198,7 +196,7 @@ migration records, backup-retention records, and any change to
 
 Plan or apply operator-authorized removal of historical keys from local decrypt
 lookup. See the required evidence and node-by-node procedure in
-[Operations: Rotation](/operations/rotation/#retire-local-versions-before-raising-the-minimum).
+[Operations: Rotation](/docs/operations/rotation/#retire-local-versions-before-raising-the-minimum).
 
 ```sh
 bao-kms-provider retire-versions \
@@ -237,7 +235,7 @@ bao-kms-provider config \
   --config /etc/openbao-kms/config.yaml
 ```
 
-The output includes the derived identity fingerprint when all identity-bearing fields are present. See [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+The output includes the derived identity fingerprint when all identity-bearing fields are present. See [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
 
 ## config schema
 
@@ -287,7 +285,7 @@ bao-kms-provider policy openbao \
   --config /etc/openbao-kms/config.yaml
 ```
 
-The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy. See [Reference: Transit Policy Examples](/reference/transit-policy-examples/) for variants and rationale.
+The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy. See [Reference: Transit Policy Examples](/docs/reference/transit-policy-examples/) for variants and rationale.
 
 ## Common Flags
 

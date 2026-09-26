@@ -4,8 +4,6 @@ description: "Captured load, decrypt warmup, and kubeadm cold-start evidence use
 weight: 57
 ---
 
-# Performance Evidence
-
 These benchmark and validation results support release decisions. They come
 from controlled validation environments and are not general performance
 guarantees, service-level objectives, or capacity claims. Use them to review

@@ -4,10 +4,8 @@ description: "Verify end-to-end encryption: create a probe Secret, confirm stora
 weight: 50
 ---
 
-# First Encrypt
-
 Run this end-to-end validation after the provider is running, [Kubernetes
-Encryption Config](/getting-started/kubernetes-encryption-config/) is complete,
+Encryption Config](/docs/getting-started/kubernetes-encryption-config/) is complete,
 and the API server has reloaded or restarted. The checks confirm that the API
 server encrypts selected resources through the provider, stores ciphertext in
 etcd, and receives healthy provider signals.
@@ -28,7 +26,7 @@ kubectl get secret openbao-kms-first-encrypt \
   -o jsonpath='{.data.value}' | base64 -d
 ```
 
-Expected output: `probe-do-not-store-plaintext`. If the read fails, check the API server log for the encryption provider error class (see [Reference: Observability](/reference/observability/) for the catalog).
+Expected output: `probe-do-not-store-plaintext`. If the read fails, check the API server log for the encryption provider error class (see [Reference: Observability](/docs/reference/observability/) for the catalog).
 
 ## Step 2: Confirm The Stored Value Is Encrypted
 
@@ -101,7 +99,7 @@ counter might not increase on every read because the Kubernetes API server can
 serve some reads from cache. An API server restart or cold-cache read causes
 decrypt traffic to reach the provider.
 
-For the full metric and log catalog see [Reference: Observability](/reference/observability/) and [Reference: Metrics](/reference/metrics/).
+For the full metric and log catalog see [Reference: Observability](/docs/reference/observability/) and [Reference: Metrics](/docs/reference/metrics/).
 
 ## Step 4: Clean Up
 
@@ -123,6 +121,6 @@ After this page:
 
 ## Read Next
 
-1. [Operations: Rotation](/operations/rotation/) once the encryption layer is in steady state.
-2. [Operations: Disaster Recovery](/operations/disaster-recovery/) to plan recovery posture before relying on the provider in production.
-3. [Reference: Key ID And AAD](/reference/key-id-and-aad/) for the full `key_id` format and additional authenticated data (AAD) envelope.
+1. [Operations: Rotation](/docs/operations/rotation/) once the encryption layer is in steady state.
+2. [Operations: Disaster Recovery](/docs/operations/disaster-recovery/) to plan recovery posture before relying on the provider in production.
+3. [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/) for the full `key_id` format and additional authenticated data (AAD) envelope.

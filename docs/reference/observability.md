@@ -4,9 +4,7 @@ description: "Principles, error classes, health endpoints, alerts, log shape, an
 weight: 30
 ---
 
-# Observability
-
-The `bao-kms-provider` observability surface includes structured logs, error classes, health endpoints, alerts, and debug correlation. For the metric and log-field reference, see [Reference: Metrics](/reference/metrics/).
+The `bao-kms-provider` observability surface includes structured logs, error classes, health endpoints, alerts, and debug correlation. For the metric and log-field reference, see [Reference: Metrics](/docs/reference/metrics/).
 
 ## Principles
 
@@ -46,7 +44,7 @@ The provider must never log:
 - raw key names by default,
 - full annotation maps.
 
-For the full set of stable log fields see [Reference: Metrics](/reference/metrics/#log-fields).
+For the full set of stable log fields see [Reference: Metrics](/docs/reference/metrics/#log-fields).
 
 ## Error Classes
 
@@ -117,7 +115,7 @@ Recommended alert conditions:
 
 Example Prometheus alerting rules ship at `deploy/prometheus/rules/openbao-kms.rules.yaml`. Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
 
-An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Deployment: Observability](/deployment/observability/) for scrape and import guidance.
+An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Deployment: Observability](/docs/deployment/observability/) for scrape and import guidance.
 
 ## Correlation With OpenBao
 
@@ -152,4 +150,4 @@ logging:
     incidentId: INC-12345
 ```
 
-For the configuration field reference see [Configuration: Debug Correlation](/reference/configuration/#debug-correlation).
+For the configuration field reference see [Configuration: Debug Correlation](/docs/reference/configuration/#debug-correlation).

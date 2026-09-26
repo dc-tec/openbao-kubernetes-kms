@@ -4,8 +4,6 @@ description: "Strict typed Go conventions, ast-grep architecture rules, Semgrep 
 weight: 20
 ---
 
-# Code Quality
-
 This project treats strict, idiomatic Go as part of the security and reliability model.
 
 The provider runs in the Kubernetes API server boot path. It handles plaintext

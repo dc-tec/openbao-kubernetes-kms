@@ -4,12 +4,10 @@ description: "Symptom-driven recovery for common bao-kms-provider failures: sock
 weight: 40
 ---
 
-# Troubleshooting
-
 Use the symptom sections below to identify the failing layer before changing
 configuration or recovery state. For the full failure-mode catalog, detection
 signals, mitigations, and impact analysis, see [Architecture: Failure
-Modes](/architecture/failure-modes/).
+Modes](/docs/architecture/failure-modes/).
 
 Start with the least destructive checks:
 
@@ -51,7 +49,7 @@ Use the systemd command for host-service deployments. Use kubelet and container-
 Recovery:
 
 1. Start or restart the provider.
-2. Fix socket directory ownership and mode (see [Deployment: Linux Identity Model](/deployment/linux-identity-model/)).
+2. Fix socket directory ownership and mode (see [Deployment: Linux Identity Model](/docs/deployment/linux-identity-model/)).
 3. Confirm the API server endpoint path matches `server.socketPath` in the provider configuration.
 4. Restart `kube-apiserver` if it does not reconnect.
 
@@ -187,7 +185,7 @@ Recovery:
 1. Confirm the Transit mount path and key name match the provider configuration.
 2. Confirm the OpenBao namespace if applicable.
 3. Confirm the token policy grants metadata read on the configured key path.
-4. If the key was deleted, restore the OpenBao backup containing the original key. See [Disaster Recovery: Transit Key Loss](/operations/disaster-recovery/#transit-key-loss).
+4. If the key was deleted, restore the OpenBao backup containing the original key. See [Disaster Recovery: Transit Key Loss](/docs/operations/disaster-recovery/#transit-key-loss).
 
 Do not recreate the key with the same name and expect old data to decrypt. Recreated keys produce a new lineage; old ciphertext is bound to the previous lineage.
 
@@ -211,7 +209,7 @@ Likely causes:
 
 Recovery:
 
-1. Restore the original identity-bearing configuration; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+1. Restore the original identity-bearing configuration; see [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
 2. Restore the key registry state file and checkpoint if they were lost.
 3. Verify active and historical key snapshots are present.
 4. Restart the provider.
@@ -335,7 +333,7 @@ Likely causes:
 
 Recovery:
 
-1. Stop any in-progress rotation; see [Operations: Rotation](/operations/rotation/).
+1. Stop any in-progress rotation; see [Operations: Rotation](/docs/operations/rotation/).
 2. Compare configuration on every control-plane node.
 3. Compare provider versions across nodes.
 4. Restart the affected provider instance.
@@ -353,10 +351,10 @@ Recovery:
 
 1. Lower `min_decryption_version` if the old key version still exists and policy allows it.
 2. Restore an OpenBao backup if the old key version no longer exists.
-3. Rerun storage migration only after reads through the KMS path are healthy; see [Operations: Rotation](/operations/rotation/#migrate-kubernetes-data).
+3. Rerun storage migration only after reads through the KMS path are healthy; see [Operations: Rotation](/docs/operations/rotation/#migrate-kubernetes-data).
 4. Verify old backups are either expired or still decryptable.
 
-If old key material no longer exists, restore the OpenBao backup. See [Disaster Recovery: Transit Key Loss](/operations/disaster-recovery/#transit-key-loss).
+If old key material no longer exists, restore the OpenBao backup. See [Disaster Recovery: Transit Key Loss](/docs/operations/disaster-recovery/#transit-key-loss).
 
 Do not treat `verify-rotation` as proof that raising
 `min_decryption_version` was safe. It reports local registry and Transit
@@ -377,7 +375,7 @@ Recovery:
 3. Set image pull policy appropriately for air-gapped environments.
 4. Restart kubelet if needed.
 
-See [Deployment: Static Pod Deployment](/deployment/static-pod/) for the image preload and digest-pinning rules.
+See [Deployment: Static Pod Deployment](/docs/deployment/static-pod/) for the image preload and digest-pinning rules.
 
 ## Identity Fallback Issues
 
@@ -394,7 +392,7 @@ Recovery:
 
 1. Restore the last known-good `EncryptionConfiguration`.
 2. Restart or reload `kube-apiserver`.
-3. Complete resource migration; see [Kubernetes Encryption Config: Migrate Existing Resources](/getting-started/kubernetes-encryption-config/#migrate-existing-resources).
+3. Complete resource migration; see [Kubernetes Encryption Config: Migrate Existing Resources](/docs/getting-started/kubernetes-encryption-config/#migrate-existing-resources).
 4. Remove the fallback after migration verification.
 
 ## Do Not Do This During Incidents

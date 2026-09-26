@@ -1,0 +1,29 @@
+/* Additions to the shared site.css. Keep site.css identical to the OpenBao
+   Operator theme so it can move into a shared theme module; put features this
+   site needs on top of it here. */
+
+/* Mermaid diagrams render on the paper surface, not as dark code blocks. */
+.diagram-block {
+  margin: 1.7rem 0;
+}
+
+.article-content .diagram-block pre.mermaid {
+  padding: 1.25rem;
+  margin: 0;
+  overflow-x: auto;
+  color: var(--text);
+  text-align: center;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+}
+
+/* Keep diagram source hidden until Mermaid replaces it with SVG. */
+.article-content .diagram-block pre.mermaid:not([data-processed]) {
+  color: transparent;
+}
+
+.article-content .diagram-block pre.mermaid[data-mermaid-error] {
+  color: var(--text);
+  text-align: left;
+}

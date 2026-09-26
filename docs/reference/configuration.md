@@ -4,8 +4,6 @@ description: "Authoritative reference for the bao-kms-provider configuration fil
 weight: 20
 ---
 
-# Configuration
-
 This reference defines the `bao-kms-provider` configuration file. Identity-bearing fields and default values are stable across preview patch releases.
 
 ## Value Types
@@ -314,7 +312,7 @@ Changing these fields after encryption begins can make existing data unreadable 
 - `transit.mountPath`
 - Kubernetes `EncryptionConfiguration` provider name
 
-Treat these values as immutable. Any change requires a documented migration plan; see [Operations: Disaster Recovery](/operations/disaster-recovery/) for the procedure.
+Treat these values as immutable. Any change requires a documented migration plan; see [Operations: Disaster Recovery](/docs/operations/disaster-recovery/) for the procedure.
 
 Use `openbao.namespace` when one OpenBao cluster serves multiple Kubernetes
 clusters through separate namespaces. The namespace must be a relative OpenBao
@@ -378,7 +376,7 @@ be writable only by the provider identity.
 
 `server.socketGroup` accepts a local group name or a decimal numeric GID. Use a group name for systemd or host-binary deployments. Use a numeric GID in static pod mode so the distroless non-root container does not depend on host group names being present inside the image.
 
-For the full identity model and rationale see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+For the full identity model and rationale see [Deployment: Linux Identity Model](/docs/deployment/linux-identity-model/).
 
 ## Unsafe Options
 

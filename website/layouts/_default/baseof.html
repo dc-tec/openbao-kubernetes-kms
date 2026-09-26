@@ -1,31 +1,30 @@
-{{- $pageTitle := partial "page_title.html" . -}}
 <!doctype html>
-<html lang="{{ site.Language.Locale | default "en-US" }}">
+<html lang="{{ site.Language.Locale }}">
   <head>
-    {{ partial "site_head.html" . }}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <meta name="theme-color" content="#08141d">
+    <meta name="description" content="{{ .Description | default site.Params.description }}">
+    {{ if eq site.Version.Name "next" }}<meta name="robots" content="noindex,follow">{{ end }}
+    <title>{{ if not .IsHome }}{{ .Title }} · {{ end }}{{ if not site.Version.IsDefault }}{{ (index hugo.Data.version_lines site.Version.Name).label }} · {{ end }}{{ site.Title }}</title>
+    <link rel="canonical" href="{{ .Permalink }}">
+    <link rel="icon" type="image/png" href="{{ "img/brand/favicon.png" | relURL }}">
+    <meta property="og:title" content="{{ if not .IsHome }}{{ .Title }} · {{ end }}{{ site.Title }}">
+    <meta property="og:description" content="{{ .Description | default site.Params.description }}">
+    <meta property="og:type" content="{{ cond .IsHome "website" "article" }}">
+    <meta property="og:url" content="{{ .Permalink }}">
+    {{ $styles := slice (resources.Get "css/site.css") (resources.Get "css/extensions.css") | resources.Concat "css/bundle.css" | minify | fingerprint }}
+    <link rel="stylesheet" href="{{ $styles.RelPermalink }}" integrity="{{ $styles.Data.Integrity }}">
+    {{ $script := resources.Get "js/site.js" | minify | fingerprint }}
+    <script defer src="{{ $script.RelPermalink }}" integrity="{{ $script.Data.Integrity }}"></script>
   </head>
-  <body class="page-kind-{{ .Kind }} section-{{ .Section }}{{ if .IsHome }} is-home{{ end }}">
-    <div class="site-frame">
-      {{ partial "site_header.html" . }}
-      {{ if .IsHome }}
-        {{ block "main" . }}{{ end }}
-      {{ else if or (eq .Layout "error") (eq .Type "error") }}
-        {{ block "main" . }}{{ end }}
-      {{ else }}
-        <main class="docs-shell" aria-label="{{ $pageTitle }}">
-          <aside class="docs-shell__sidebar">
-            {{ partial "site_nav.html" . }}
-          </aside>
-          <div class="docs-shell__main">
-            {{ block "main" . }}{{ end }}
-          </div>
-          <aside class="docs-shell__rail">
-            {{ partial "site_toc.html" . }}
-          </aside>
-        </main>
-      {{ end }}
-      {{ partial "site_footer.html" . }}
-    </div>
-    {{ partial "mermaid_script.html" . }}
+  <body class="{{ if .IsHome }}is-home{{ else if eq .Section "docs" }}is-doc has-doc-sidebar{{ else }}is-global{{ end }}">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    {{ partial "header.html" . }}
+    <button class="nav-scrim" type="button" aria-label="Close navigation" data-nav-close></button>
+    {{ block "body" . }}{{ end }}
+    {{ partial "search.html" . }}
+    {{ partial "mermaid-script.html" . }}
   </body>
 </html>

@@ -4,9 +4,7 @@ description: "Authoritative metric and log-field reference: every Prometheus met
 weight: 40
 ---
 
-# Metrics
-
-This reference defines the Prometheus metrics and stable JSON log fields exported by `bao-kms-provider`. For observability principles, error classes, health endpoints, and alerts, see [Reference: Observability](/reference/observability/).
+This reference defines the Prometheus metrics and stable JSON log fields exported by `bao-kms-provider`. For observability principles, error classes, health endpoints, and alerts, see [Reference: Observability](/docs/reference/observability/).
 
 ## Endpoint
 
@@ -108,7 +106,7 @@ Stable JSON log fields. Operators can rely on these names across preview patch r
 | `openbao_request_id` | string | OpenBao request ID when debug correlation is enabled and OpenBao returned a safe ID. |
 | `probe_kind` | string | Status-controller probe kind (`metadata`, `deep`) on `status.probe` events. |
 | `healthz` | string | KMS v2 Status health value on `kms.status` request events. |
-| `error_class` | string | One of the stable error classes; see [Observability: Error Classes](/reference/observability/#error-classes). |
+| `error_class` | string | One of the stable error classes; see [Observability: Error Classes](/docs/reference/observability/#error-classes). |
 | `request_uid_hash` | string | Hash of the KMS request UID when debug correlation is enabled. |
 | `debug_correlation_incident` | string | Operator-supplied incident ID when debug correlation is enabled. |
 | `debug_correlation_expires_at` | string | RFC 3339 timestamp at which debug correlation will expire. |

@@ -4,9 +4,7 @@ description: "Authoritative reference for the Kubernetes key_id format, KMS v2 a
 weight: 40
 ---
 
-# Key ID And AAD
-
-This reference defines the Kubernetes `key_id` format, KMS v2 annotations, the additional authenticated data (AAD) envelope, decrypt validation order, and local registry state. OpenBao exposes AAD through the `associated_data` field. For the security framing of these mechanisms, see [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
+This reference defines the Kubernetes `key_id` format, KMS v2 annotations, the additional authenticated data (AAD) envelope, decrypt validation order, and local registry state. OpenBao exposes AAD through the `associated_data` field. For the security framing of these mechanisms, see [Security: AAD And Decrypt Validation](/docs/security/aad-and-decrypt-validation/).
 
 ## Goals
 
@@ -153,7 +151,7 @@ The provider:
 
 - logs OpenBao request IDs in provider logs only when available and safe,
 - does not include request IDs in annotations by default,
-- supports a debug-only correlation mode for controlled incident response. See [Reference: Observability: Correlation With OpenBao](/reference/observability/#correlation-with-openbao).
+- supports a debug-only correlation mode for controlled incident response. See [Reference: Observability: Correlation With OpenBao](/docs/reference/observability/#correlation-with-openbao).
 
 ## AAD Envelope
 
@@ -295,7 +293,7 @@ The implementation maintains golden fixtures for:
 - operator-retired state with removal records,
 - malformed annotation rejection.
 
-Changing `key_id` or AAD derivation is a wire-format compatibility change. See [Reference: Compatibility: Breaking Changes](/reference/compatibility/#breaking-changes).
+Changing `key_id` or AAD derivation is a wire-format compatibility change. See [Reference: Compatibility: Breaking Changes](/docs/reference/compatibility/#breaking-changes).
 
 ## Source References
 

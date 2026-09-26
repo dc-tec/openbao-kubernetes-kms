@@ -4,8 +4,6 @@ description: "Current preview support scope, tested versions, security fix expec
 weight: 90
 ---
 
-# Support Policy
-
 This policy defines the tested configurations and operator expectations for the
 preview release line.
 
@@ -33,7 +31,7 @@ are listed as tested.
 Kubernetes `1.36` is the intended next validation line once a digest-pinned
 Kind node image is available. Kubernetes `1.29+` KMS v2 clusters may work, but
 unlisted versions are not part of the tested preview scope. See
-[Reference: Compatibility](/reference/compatibility/) for the detailed matrix.
+[Reference: Compatibility](/docs/reference/compatibility/) for the detailed matrix.
 
 ## What Preview Covers
 
@@ -73,4 +71,4 @@ Operators using preview releases should:
 - validate upgrades in staging,
 - run `bao-kms-provider doctor` on every control-plane node,
 - avoid main, nightly, release candidate, and preview channels in production,
-- avoid changing identity-bearing configuration fields after encryption begins; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+- avoid changing identity-bearing configuration fields after encryption begins; see [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).

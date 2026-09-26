@@ -4,8 +4,6 @@ description: "User, group, file ownership, and runtime directory creation model 
 weight: 40
 ---
 
-# Linux Identity Model
-
 The systemd and static-pod deployments share one user, group, file ownership,
 and runtime directory model. The API server must be able to connect to the
 provider socket. This access path must not grant access to provider auth

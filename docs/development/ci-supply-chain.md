@@ -4,8 +4,6 @@ description: "Version pinning, CI lanes, release automation, artifact signing, p
 weight: 50
 ---
 
-# CI And Supply Chain
-
 The continuous integration (CI) and supply-chain policy applies to code,
 deployment samples, container images, packages, documentation, and public
 release artifacts.
@@ -54,7 +52,7 @@ control-plane nodes, and exact-pinned Kind lanes for the Kubernetes `1.34` and
 intended next validation line once a digest-pinned Kind node image is available.
 Future Kubernetes or OpenBao versions become support claims only after
 exact-pinned release evidence exists. See
-[Reference: Compatibility](/reference/compatibility/).
+[Reference: Compatibility](/docs/reference/compatibility/).
 
 ## Local Parity
 
@@ -78,7 +76,7 @@ ID and additional authenticated data (AAD) golden tests, configuration
 validation, redaction tests, and end-to-end (E2E) suite manifest validation.
 
 Run focused E2E lanes when a change touches runtime, OpenBao, Kubernetes, or
-deployment behavior. The canonical command list is [E2E Framework](/development/e2e-framework/).
+deployment behavior. The canonical command list is [E2E Framework](/docs/development/e2e-framework/).
 
 ## CI Lanes
 
@@ -238,7 +236,7 @@ release-please PR merge
 | preview | tagged release for controlled validation | not production |
 | stable | production-ready release line | only after production-readiness gates pass |
 
-For channel rules see [Reference: Release Policy](/reference/release-policy/).
+For channel rules see [Reference: Release Policy](/docs/reference/release-policy/).
 
 ## Release Evidence
 
@@ -260,4 +258,4 @@ Every public release publishes or retains:
 - `provenance-index.json`,
 - release notes.
 
-Install-time verification is documented in [Getting Started: Install](/getting-started/install/#verify-release-artifacts).
+Install-time verification is documented in [Getting Started: Install](/docs/getting-started/install/#verify-release-artifacts).

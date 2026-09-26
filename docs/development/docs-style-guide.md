@@ -4,8 +4,6 @@ description: "Writing, structure, linking, and verification guidance for the pub
 weight: 70
 ---
 
-# Docs Style Guide
-
 The documentation should help operators make safe decisions without having to
 read the source code first. Contributor and architecture pages can go deeper,
 but public workflow pages should stay practical and easy to follow.
@@ -76,7 +74,7 @@ Use the shape that matches the section:
 Link to the canonical page for a topic instead of repeating the same detail in
 several places.
 
-- Use absolute site paths such as `/operations/rotation/`.
+- Use absolute site paths such as `/docs/operations/rotation/`.
 - Avoid `.md` links from published docs.
 - Section landing pages should help readers move to the right section if they
   arrived in the wrong place.
@@ -93,13 +91,13 @@ description: "Short description used by search and previews."
 weight: 10
 ```
 
-Section landing pages also use `browse` to define the intended order:
+Do not repeat the title as a `#` heading in the body. The page template
+renders `title` as the only H1 and `description` as the lede, so the body
+starts with the first paragraph or `##` section.
 
-```yaml
-browse:
-  - "/getting-started/overview"
-  - "/getting-started/openbao-setup"
-```
+Add every new page to `website/data/navigation.yaml`. That file defines the
+sidebar and the Previous and Next links of the first group. The rendered-site
+check fails the build when a published page is missing from the navigation.
 
 ## Diagrams
 
@@ -117,4 +115,5 @@ make docs-build
 ```
 
 `make docs-check` catches configured text and typography checks. `make
-docs-build` runs the Hugo build and should complete without warnings.
+docs-build` runs the Hugo build, fails on any warning, and then checks the
+rendered site for broken links, missing fragments, and navigation gaps.

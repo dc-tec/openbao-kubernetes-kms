@@ -1,0 +1,120 @@
+# Sidebar navigation. Every published docs page must appear here;
+# website/scripts/check-rendered-site.py fails the build otherwise.
+primary:
+  - title: Start Here
+    description: "Confirm the deployment fits, set up OpenBao Transit, install the provider, wire Kubernetes encryption, and verify end-to-end."
+    url: docs/getting-started/
+    items:
+      - title: Overview
+        url: docs/getting-started/overview/
+      - title: OpenBao Setup
+        url: docs/getting-started/openbao-setup/
+      - title: Install
+        url: docs/getting-started/install/
+      - title: Choosing A Model
+        url: docs/deployment/choosing-a-model/
+      - title: Kubernetes Encryption Config
+        url: docs/getting-started/kubernetes-encryption-config/
+      - title: First Encrypt
+        url: docs/getting-started/first-encrypt/
+  - title: Deployment
+    description: "Choose between systemd and static-pod, then apply the matching Linux identity, file paths, and runtime hardening."
+    url: docs/deployment/
+    items:
+      - title: Choosing A Model
+        url: docs/deployment/choosing-a-model/
+      - title: systemd Deployment
+        url: docs/deployment/systemd/
+      - title: Static Pod Deployment
+        url: docs/deployment/static-pod/
+      - title: Linux Identity Model
+        url: docs/deployment/linux-identity-model/
+      - title: Observability Deployment
+        url: docs/deployment/observability/
+  - title: Operations
+    description: "Task-focused operator guidance for rotation, disaster recovery, upgrade, and troubleshooting."
+    url: docs/operations/
+    items:
+      - title: Rotation
+        url: docs/operations/rotation/
+      - title: Disaster Recovery
+        url: docs/operations/disaster-recovery/
+      - title: Upgrade
+        url: docs/operations/upgrade/
+      - title: Troubleshooting
+        url: docs/operations/troubleshooting/
+  - title: Reference
+    description: "Exact behavior, configuration shape, KMS v2 contract, key_id and additional authenticated data format, observability surface, and policy boundaries."
+    url: docs/reference/
+    items:
+      - title: CLI
+        url: docs/reference/cli/
+      - title: Configuration
+        url: docs/reference/configuration/
+      - title: KMS v2 Contract
+        url: docs/reference/kms-v2-contract/
+      - title: Key ID And AAD
+        url: docs/reference/key-id-and-aad/
+      - title: EncryptionConfiguration
+        url: docs/reference/encryption-config/
+      - title: Observability
+        url: docs/reference/observability/
+      - title: Metrics
+        url: docs/reference/metrics/
+      - title: Compatibility
+        url: docs/reference/compatibility/
+      - title: Support Policy
+        url: docs/reference/support-policy/
+      - title: Release Policy
+        url: docs/reference/release-policy/
+      - title: Transit Policy Examples
+        url: docs/reference/transit-policy-examples/
+  - title: Security
+    description: "Threat model, hardening, authentication and decrypt validation."
+    url: docs/security/
+    items:
+      - title: Threat Model
+        url: docs/security/threat-model/
+      - title: Hardening
+        url: docs/security/hardening/
+      - title: Auth Model
+        url: docs/security/auth-model/
+      - title: AAD And Decrypt Validation
+        url: docs/security/aad-and-decrypt-validation/
+  - title: Architecture
+    description: "Maintainer-facing design rationale: components, KMS v2 and Transit background, key model, rotation model, failure modes, and prior art."
+    url: docs/architecture/
+    items:
+      - title: Overview
+        url: docs/architecture/overview/
+      - title: Background
+        url: docs/architecture/background/
+      - title: Transit Key Model
+        url: docs/architecture/transit-key-model/
+      - title: Rotation Model
+        url: docs/architecture/rotation-model/
+      - title: Failure Modes
+        url: docs/architecture/failure-modes/
+      - title: Related Work
+        url: docs/architecture/related-work/
+  - title: Development
+    description: "Contributor-facing workflow: contributing, code quality, testing, CI, release process, docs style, and the docs site itself."
+    url: docs/development/
+    items:
+      - title: Contributing
+        url: docs/development/contributing/
+      - title: Code Quality
+        url: docs/development/code-quality/
+      - title: Testing
+        url: docs/development/testing/
+      - title: E2E Framework
+        url: docs/development/e2e-framework/
+      - title: Performance Evidence
+        url: docs/development/benchmark-results/
+      - title: CI And Supply Chain
+        url: docs/development/ci-supply-chain/
+      - title: Docs Style Guide
+        url: docs/development/docs-style-guide/
+      - title: Docs Site
+        url: docs/development/docs-site/
+secondary: []

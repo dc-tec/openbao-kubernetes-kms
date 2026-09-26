@@ -4,8 +4,6 @@ description: "Assets, trust boundaries, attacker capabilities, threats and contr
 weight: 10
 ---
 
-# Threat Model
-
 This threat model defines the assets, trust boundaries, attacker capabilities, and security properties considered by `bao-kms-provider`.
 
 ## Assets
@@ -93,10 +91,10 @@ The design provides:
 - confidentiality against offline etcd readers without OpenBao decrypt access,
 - stronger rotation correctness through explicit Transit key version selection on every encrypt,
 - deterministic, scoped, non-secret Kubernetes `key_id` values,
-- metadata binding through Transit associated data; see [AAD And Decrypt Validation](/security/aad-and-decrypt-validation/),
+- metadata binding through Transit associated data; see [AAD And Decrypt Validation](/docs/security/aad-and-decrypt-validation/),
 - auditable OpenBao Transit operations,
 - narrowed provider permissions,
-- reduced Kubernetes API circular dependency through provider authentication that avoids TokenReview; see [Auth Model](/security/auth-model/).
+- reduced Kubernetes API circular dependency through provider authentication that avoids TokenReview; see [Auth Model](/docs/security/auth-model/).
 
 ## Security Properties Not Provided
 

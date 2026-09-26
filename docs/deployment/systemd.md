@@ -4,8 +4,6 @@ description: "Hardened systemd unit, directory setup, and startup procedure for 
 weight: 20
 ---
 
-# systemd Deployment
-
 systemd is the preferred hardened deployment model when operators control the
 host operating system. It does not depend on kubelet, the container runtime, or
 the Kubernetes API server to start the provider. This separation matters
@@ -13,13 +11,13 @@ because `kube-apiserver` may require the provider to decrypt existing resources
 during startup.
 
 For the model selection rationale, see [Deployment: Choosing A
-Model](/deployment/choosing-a-model/). For the user, group, and file ownership
+Model](/docs/deployment/choosing-a-model/). For the user, group, and file ownership
 model, see [Deployment: Linux Identity
-Model](/deployment/linux-identity-model/).
+Model](/docs/deployment/linux-identity-model/).
 
 ## Recommended Unit
 
-The maintained sample unit lives at `deploy/systemd/bao-kms-provider.service` in the repository. It uses the identity model from [Linux Identity Model](/deployment/linux-identity-model/).
+The maintained sample unit lives at `deploy/systemd/bao-kms-provider.service` in the repository. It uses the identity model from [Linux Identity Model](/docs/deployment/linux-identity-model/).
 
 ```ini
 [Unit]
@@ -74,7 +72,7 @@ kubelet starts the static-pod API server.
 Use `deploy/config/provider-systemd.yaml` as the starting provider configuration
 for host-service deployments. Install only packages or tarballs that have passed
 the checksum, signature, and provenance verification described in
-[Getting Started: Install](/getting-started/install/#verify-release-artifacts).
+[Getting Started: Install](/docs/getting-started/install/#verify-release-artifacts).
 
 The sample unit uses the default JSON Web Token (JWT) configuration. PKCS#11
 certificate-auth deployments must replace the JWT `ConditionPathExists=` line
@@ -105,7 +103,7 @@ metadata and deep probes before exiting.
 ## Directory Setup
 
 For `0.1.0-preview.1` and `0.1.0-preview.2`, apply the persistent directory
-permission correction in [Install](/getting-started/install/#correct-directory-access-in-existing-previews)
+permission correction in [Install](/docs/getting-started/install/#correct-directory-access-in-existing-previews)
 so tmpfiles processing preserves service-user access after reboot.
 
 ```sh
@@ -165,7 +163,7 @@ as active and `doctor` exits with status `0` without a `[fail]` check.
 - Avoid debug endpoints.
 - Use systemd restart limits suitable for control-plane recovery.
 
-For the broader hardening surface beyond the systemd unit see [Security: Hardening](/security/hardening/).
+For the broader hardening surface beyond the systemd unit see [Security: Hardening](/docs/security/hardening/).
 
 ## Failure Modes
 
@@ -183,4 +181,4 @@ The provider retries the initial metadata and deep probes for
 material projection, DNS or routing, OpenBao restart, and clock synchronization.
 Keep it short enough that service status exposes deterministic misconfiguration.
 
-For diagnosis and recovery see [Operations: Troubleshooting](/operations/troubleshooting/). For provider upgrade procedure see [Operations: Upgrade](/operations/upgrade/).
+For diagnosis and recovery see [Operations: Troubleshooting](/docs/operations/troubleshooting/). For provider upgrade procedure see [Operations: Upgrade](/docs/operations/upgrade/).

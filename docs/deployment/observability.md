@@ -4,8 +4,6 @@ description: "Deploy the Prometheus scrape, alert rules, and Grafana dashboard s
 weight: 50
 ---
 
-# Observability Deployment
-
 `bao-kms-provider` exposes Prometheus metrics on `server.metricsAddress` at
 `/metrics`. The default listen address is `127.0.0.1:8081`, so a production
 scrape normally needs a node-local Prometheus agent, host networking, or another
@@ -53,5 +51,5 @@ The dashboard covers:
 - auth failures, Transit metadata probe failures, decrypt validation errors,
 - panic recovery and stale socket cleanup counters.
 
-For the metric contract, see [Reference: Metrics](/reference/metrics/). For
-health and alerting semantics, see [Reference: Observability](/reference/observability/).
+For the metric contract, see [Reference: Metrics](/docs/reference/metrics/). For
+health and alerting semantics, see [Reference: Observability](/docs/reference/observability/).

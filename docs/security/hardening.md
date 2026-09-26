@@ -4,12 +4,10 @@ description: "Required and recommended hardening for bao-kms-provider deployment
 weight: 20
 ---
 
-# Hardening
-
 These requirements define the hardened deployment posture. Preview releases
 still need staging validation before production use. For the threat coverage see
-[Threat Model](/security/threat-model/). For the file ownership and group model
-the host-side requirements rely on, see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+[Threat Model](/docs/security/threat-model/). For the file ownership and group model
+the host-side requirements rely on, see [Deployment: Linux Identity Model](/docs/deployment/linux-identity-model/).
 
 ## OpenBao
 
@@ -72,7 +70,7 @@ Recommended:
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
 ```
 
-For the rationale and runtime directory creation pattern see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
+For the rationale and runtime directory creation pattern see [Deployment: Linux Identity Model](/docs/deployment/linux-identity-model/).
 
 ## Auth Material
 
@@ -121,7 +119,7 @@ The portable OpenBao/provider end-to-end lanes exercise bound-claim rejection
 and pinned public-key rollover. Validate issuer-specific JSON Web Key Set
 (JWKS) or OpenID Connect (OIDC) discovery behavior during issuer integration.
 
-For the trust-boundary discussion see [Auth Model](/security/auth-model/).
+For the trust-boundary discussion see [Auth Model](/docs/security/auth-model/).
 
 ## Logging
 
@@ -135,7 +133,7 @@ The provider must never log:
 - raw OpenBao paths by default,
 - raw key names by default.
 
-Use bounded error classes and hashed `key_id` values. For the full log shape and field reference see [Reference: Observability](/reference/observability/) and [Reference: Metrics](/reference/metrics/).
+Use bounded error classes and hashed `key_id` values. For the full log shape and field reference see [Reference: Observability](/docs/reference/observability/) and [Reference: Metrics](/docs/reference/metrics/).
 
 ## Metrics
 

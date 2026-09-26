@@ -4,10 +4,8 @@ description: "Repository layout, local development setup, test expectations, cod
 weight: 10
 ---
 
-# Contributing
-
 Use this guide to contribute to `bao-kms-provider`. For operator procedures,
-start with [Start Here](/getting-started/).
+start with [Start Here](/docs/getting-started/).
 
 ## Project Layout
 
@@ -71,7 +69,7 @@ CI checks. Use `devenv shell` when you need an interactive shell. Use
 Run focused end-to-end (E2E) lanes when a change touches OpenBao, Kubernetes,
 deployment, rotation, failure injection, or release packaging behavior. The
 lane commands live in
-[Development: E2E Framework](/development/e2e-framework/).
+[Development: E2E Framework](/docs/development/e2e-framework/).
 
 For deployment sample or package metadata changes, run the focused deployment
 checks:
@@ -110,11 +108,11 @@ The OpenBao CI target starts real OpenBao, bootstraps provider auth, runs the
 provider, and exercises the Unix socket with the Kubernetes KMS v2 protobuf
 client.
 
-For the full E2E framework, label routing, suite manifest rules, and report artifacts see [Development: E2E Framework](/development/e2e-framework/).
+For the full E2E framework, label routing, suite manifest rules, and report artifacts see [Development: E2E Framework](/docs/development/e2e-framework/).
 
 ## Go Code Quality
 
-Implementation follows [Development: Code Quality](/development/code-quality/). Key rules:
+Implementation follows [Development: Code Quality](/docs/development/code-quality/). Key rules:
 
 - no `map[string]any` in production code,
 - no `map[string]interface{}` in production code,
@@ -142,7 +140,7 @@ Any change to these surfaces requires:
 - a documented migration plan,
 - updated golden fixtures,
 - a release note,
-- a compatibility section in [Reference: Compatibility](/reference/compatibility/).
+- a compatibility section in [Reference: Compatibility](/docs/reference/compatibility/).
 
 ## Redaction Rules
 
@@ -154,7 +152,7 @@ Tests must prove these never appear in logs or command output:
 - full ciphertext,
 - raw Transit key material.
 
-For the full redaction policy see [Reference: Observability: Logs](/reference/observability/#logs) and [Security: Hardening: Logging](/security/hardening/#logging).
+For the full redaction policy see [Reference: Observability: Logs](/docs/reference/observability/#logs) and [Security: Hardening: Logging](/docs/security/hardening/#logging).
 
 ## Dependency Policy
 
@@ -178,11 +176,11 @@ Avoid:
 
 When implementation changes behavior, update documentation in the same change:
 
-- configuration changes update [Reference: Configuration](/reference/configuration/),
-- KMS protocol behavior updates [Reference: KMS v2 Contract](/reference/kms-v2-contract/),
-- `key_id` or AAD changes update [Reference: Key ID And AAD](/reference/key-id-and-aad/),
+- configuration changes update [Reference: Configuration](/docs/reference/configuration/),
+- KMS protocol behavior updates [Reference: KMS v2 Contract](/docs/reference/kms-v2-contract/),
+- `key_id` or AAD changes update [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/),
 - operational changes update the relevant operations or deployment runbook,
-- support and version-envelope changes update [Reference: Compatibility](/reference/compatibility/).
+- support and version-envelope changes update [Reference: Compatibility](/docs/reference/compatibility/).
 
 For writing style, page structure, links, and docs verification, see
-[Development: Docs Style Guide](/development/docs-style-guide/).
+[Development: Docs Style Guide](/docs/development/docs-style-guide/).

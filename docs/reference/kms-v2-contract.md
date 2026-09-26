@@ -4,8 +4,6 @@ description: "The Kubernetes KMS v2 gRPC behavior bao-kms-provider satisfies: en
 weight: 30
 ---
 
-# KMS v2 Contract
-
 This reference defines the observable Kubernetes KMS v2 protocol behavior implemented by `bao-kms-provider`: what the API server sees and what the provider must guarantee.
 
 ## Baseline
@@ -30,7 +28,7 @@ The implementation rejects unsafe socket paths, symlink targets, regular files a
 
 The Kubernetes provider name is identity-bearing. It appears in the API server `EncryptionConfiguration` and participates in `key_id` and additional authenticated data (AAD) scope. OpenBao exposes AAD through the `associated_data` field.
 
-Once encrypted data exists, changing the provider name requires a migration plan. The provider fails closed or warns loudly when local configuration does not match the Kubernetes encryption configuration that `doctor` validates. See [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+Once encrypted data exists, changing the provider name requires a migration plan. The provider fails closed or warns loudly when local configuration does not match the Kubernetes encryption configuration that `doctor` validates. See [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
 
 ## Status
 
@@ -124,7 +122,7 @@ Required behavior:
 - never log full ciphertext.
 
 The provider requires valid AAD annotations. There is no supported mode that
-decrypts without AAD. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
+decrypts without AAD. See [Security: AAD And Decrypt Validation](/docs/security/aad-and-decrypt-validation/).
 
 Metadata-validated pending snapshots can decrypt before local promotion. They
 cannot encrypt. Unknown-key discovery shares the request timeout, runs at most
@@ -196,7 +194,7 @@ Disallowed annotation content:
 - full ciphertext,
 - high-cardinality user-controlled values.
 
-For the full annotation schema and AAD envelope shape see [Reference: Key ID And AAD](/reference/key-id-and-aad/).
+For the full annotation schema and AAD envelope shape see [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/).
 
 ## Decrypt Micro-Batching
 
@@ -236,7 +234,7 @@ Errors map to stable classes in logs and metrics:
 - `canceled`
 - `unknown`
 
-Errors returned to Kubernetes are specific enough for diagnosis but contain no secrets, tokens, plaintext, full ciphertext, or raw sensitive paths. See [Reference: Observability: Error Classes](/reference/observability/#error-classes).
+Errors returned to Kubernetes are specific enough for diagnosis but contain no secrets, tokens, plaintext, full ciphertext, or raw sensitive paths. See [Reference: Observability: Error Classes](/docs/reference/observability/#error-classes).
 
 ## Validation Thresholds
 

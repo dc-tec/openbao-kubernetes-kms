@@ -1,0 +1,55 @@
+{{ define "body" }}
+{{- $line := index hugo.Data.version_lines site.Version.Name -}}
+{{- $versionHome := .Site.Home.RelPermalink -}}
+{{- $getStartedURL := printf "%sdocs/getting-started/" $versionHome -}}
+{{- $compatibilityURL := printf "%sdocs/reference/compatibility/" $versionHome -}}
+<main id="main-content" class="home-main home-quiet home-with-sections">
+  <section class="home-intro">
+    <div class="home-intro-copy">
+      <h1>{{ site.Title }}</h1>
+      <p class="home-summary">{{ site.Params.tagline }}</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="{{ $getStartedURL }}">
+          Get started <span>→</span>
+        </a>
+        <a class="button button-secondary" href="{{ $compatibilityURL }}">
+          Check compatibility
+        </a>
+      </div>
+    </div>
+    <aside class="home-current" aria-label="Documentation status">
+      <p>Current documentation</p>
+      <dl>
+        <div><dt>Docs</dt><dd>{{ $line.label }}</dd></div>
+        <div><dt>Release</dt><dd>{{ $line.release }}</dd></div>
+        <div><dt>Status</dt><dd>{{ $line.state }}</dd></div>
+      </dl>
+      <a href="{{ site.Params.releasesURL }}">View release notes</a>
+    </aside>
+  </section>
+
+  <section class="home-project">
+    <div>
+      <h2>Understand the design</h2>
+      <p>Review the trust boundaries, key model, and failure modes before you put the provider on the API server boot path.</p>
+    </div>
+    <div class="home-project-links">
+      <a href="{{ printf "%sdocs/architecture/" $versionHome }}">Architecture</a>
+      <a href="{{ printf "%sdocs/security/threat-model/" $versionHome }}">Threat model</a>
+    </div>
+  </section>
+
+  <section class="home-project">
+    <div>
+      <h2>Contribute</h2>
+      <p>Set up the repository, follow the project standards, and run the required checks.</p>
+    </div>
+    <div class="home-project-links">
+      <a href="{{ site.Params.contributeURL | relURL }}">Contributor guide</a>
+      <a href="{{ site.Params.repository }}">GitHub repository</a>
+    </div>
+  </section>
+
+  {{ partial "footer.html" . }}
+</main>
+{{ end }}

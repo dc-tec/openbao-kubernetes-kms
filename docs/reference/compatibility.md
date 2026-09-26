@@ -4,8 +4,6 @@ description: "Tested Kubernetes, OpenBao, OS, deployment mode, Transit key type,
 weight: 80
 ---
 
-# Compatibility
-
 This matrix lists the versions and deployment shapes currently tested for
 `bao-kms-provider`.
 
@@ -92,7 +90,7 @@ Not targeted for the current release line:
 | DaemonSet | Not recommended for protecting the same cluster's API server. |
 | Sidecar with `kube-apiserver` | Not targeted. |
 
-See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model selection rationale.
+See [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) for the model selection rationale.
 
 ## Transit Key Types
 
@@ -157,9 +155,9 @@ binaries that do not recognize this state reject it. Upgrade every provider
 before retirement. After applying retirement, do not downgrade to such a binary
 or erase the removal records. Recovery requires a reviewed restoration of a
 matching state/checkpoint pair and the required Transit versions. See
-[Operations: Rotation](/operations/rotation/#retire-local-versions-before-raising-the-minimum)
+[Operations: Rotation](/docs/operations/rotation/#retire-local-versions-before-raising-the-minimum)
 for the migration procedure and
-[Architecture: Rotation Model](/architecture/rotation-model/#operator-controlled-retirement)
+[Architecture: Rotation Model](/docs/architecture/rotation-model/#operator-controlled-retirement)
 for the design decision.
 
 The state writer lock also requires the state directory to be owned by the
@@ -178,7 +176,7 @@ The implementation uses a central version manifest at `.ci/versions.yaml` for:
 - release matrix rows,
 - intended next validation lines and future candidate versions.
 
-For the full CI and supply-chain controls see [Development: CI And Supply Chain](/development/ci-supply-chain/).
+For the full CI and supply-chain controls see [Development: CI And Supply Chain](/docs/development/ci-supply-chain/).
 
 ## Breaking Changes
 

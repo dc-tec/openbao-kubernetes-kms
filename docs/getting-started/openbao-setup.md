@@ -4,8 +4,6 @@ description: "Provision the Transit mount, key, least-privilege policy, and Open
 weight: 20
 ---
 
-# OpenBao Setup
-
 Before installing the provider, provision OpenBao with the Transit secrets
 engine, one named key for each Kubernetes cluster, a least-privilege policy,
 and a release-supported host authentication method. Run the following commands
@@ -22,7 +20,7 @@ the bootstrap path before the provider binary and configuration file exist.
 - A stable OpenBao instance ID and Transit mount ID for provider configuration. These are non-secret identity values used in Kubernetes `key_id` and additional authenticated data (AAD) derivation.
 - Optional: an OpenBao namespace for this Kubernetes cluster when a single OpenBao cluster serves multiple Kubernetes clusters. Configure it as `openbao.namespace`; auth and Transit paths in this guide remain relative to that namespace.
 
-For background on why each choice is made, see [Architecture: Transit Key Model](/architecture/transit-key-model/) and [Security: Auth Model](/security/auth-model/).
+For background on why each choice is made, see [Architecture: Transit Key Model](/docs/architecture/transit-key-model/) and [Security: Auth Model](/docs/security/auth-model/).
 
 ## Step 1: Enable The Transit Mount
 
@@ -87,7 +85,7 @@ Example output:
 7d34fb7df15f4e4c95d6c2a50fe90d84
 ```
 
-Store the lineage ID in platform configuration management and supply it to the provider through `transit.keyIdScope.keyLineageId` (see [Configuration](/reference/configuration/)).
+Store the lineage ID in platform configuration management and supply it to the provider through `transit.keyIdScope.keyLineageId` (see [Configuration](/docs/reference/configuration/)).
 
 The lineage ID is not a secret. It must be:
 
@@ -164,14 +162,14 @@ The policy must not grant:
 - `read` on plaintext backup paths,
 - broad `sudo` or admin permissions.
 
-For policy variants and rationale see [Reference: Transit Policy Examples](/reference/transit-policy-examples/).
+For policy variants and rationale see [Reference: Transit Policy Examples](/docs/reference/transit-policy-examples/).
 
 ## Step 5: Configure JWT Auth
 
 JSON Web Token (JWT) auth is the default preview build and release path. This
 procedure uses OpenID Connect (OIDC) discovery. For a JSON Web Key Set (JWKS),
 pinned local public keys, or PKCS#11 certificate-auth variants, use [Reference:
-Transit Policy Examples](/reference/transit-policy-examples/) after completing
+Transit Policy Examples](/docs/reference/transit-policy-examples/) after completing
 this procedure.
 
 Enable JWT auth at a dedicated path:
@@ -218,7 +216,7 @@ JWT issuer that is reachable independently of the protected Kubernetes API
 server. Avoid using a Kubernetes ServiceAccount token from the same protected
 cluster as the only credential source. If that API server is unavailable, the
 provider might not be able to refresh the token during recovery. See [Security: Auth
-Model](/security/auth-model/) for the trust-boundary discussion.
+Model](/docs/security/auth-model/) for the trust-boundary discussion.
 
 ## Step 6: Verify
 
@@ -233,7 +231,7 @@ After installing the provider, `bao-kms-provider doctor` validates the OpenBao s
 - The key type and flags match the recommended profile.
 - `disable_upsert` is enabled on the Transit mount.
 
-Doctor failures during initial setup are usually policy-related. See [Operations: Troubleshooting](/operations/troubleshooting/) for common cases.
+Doctor failures during initial setup are usually policy-related. See [Operations: Troubleshooting](/docs/operations/troubleshooting/) for common cases.
 
 Before wiring Kubernetes encryption, run the focused key check as well:
 
@@ -251,6 +249,6 @@ and API server wiring problems.
 
 ## Read Next
 
-1. [Install](/getting-started/install/) to fetch the provider binary and verify the local environment.
-2. [Deployment: Choosing A Model](/deployment/choosing-a-model/) to run the provider on every control-plane node.
-3. [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) once the provider runs and exposes its Unix socket.
+1. [Install](/docs/getting-started/install/) to fetch the provider binary and verify the local environment.
+2. [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) to run the provider on every control-plane node.
+3. [Kubernetes Encryption Config](/docs/getting-started/kubernetes-encryption-config/) once the provider runs and exposes its Unix socket.

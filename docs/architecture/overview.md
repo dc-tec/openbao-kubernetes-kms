@@ -4,9 +4,7 @@ description: "Component model, data flow, trust boundaries, deployment shape, in
 weight: 10
 ---
 
-# Overview
-
-This maintainer-facing overview describes the `bao-kms-provider` components, data flows, trust boundaries, and deployment shape. For the upstream protocol and Transit concepts, see [Background](/architecture/background/). For the Vault Transit KMS plugin work that informed the design, see [Related Work](/architecture/related-work/).
+This maintainer-facing overview describes the `bao-kms-provider` components, data flows, trust boundaries, and deployment shape. For the upstream protocol and Transit concepts, see [Background](/docs/architecture/background/). For the Vault Transit KMS plugin work that informed the design, see [Related Work](/docs/architecture/related-work/).
 
 ## Purpose
 
@@ -170,7 +168,7 @@ The provider sits across these boundaries:
 - Local host filesystem boundary for configuration, auth material, CA bundle, socket, and registry state.
 - etcd persistence boundary for ciphertext and KMS annotations.
 
-The provider sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog, see [Threat Model](/security/threat-model/).
+The provider sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog, see [Threat Model](/docs/security/threat-model/).
 
 ## Internal Active Key Model
 
@@ -198,7 +196,7 @@ and Transit metadata when possible.
 
 A small local key registry state file with strict permissions persists rotation
 decisions across restarts. See [Reference: Key ID And AAD: Local Registry
-State](/reference/key-id-and-aad/#local-registry-state).
+State](/docs/reference/key-id-and-aad/#local-registry-state).
 
 ## Implementation Guardrails
 
@@ -221,7 +219,7 @@ Semgrep owns security and dangerous-API rules:
 - no runtime subprocess execution,
 - no sensitive log field names.
 
-For the supporting policy see [Development: Code Quality](/development/code-quality/).
+For the supporting policy see [Development: Code Quality](/docs/development/code-quality/).
 
 ## Startup Sequence
 
@@ -264,9 +262,9 @@ flowchart TD
 Static-pod ordering must be tested because kubelet does not provide a strong
 dependency graph between static pods. The API server may start before the
 provider socket exists. It must retry while the provider completes bootstrap.
-See [Deployment: Choosing A Model](/deployment/choosing-a-model/) for the model
+See [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) for the model
 selection rationale and [Deployment: Static Pod
-Deployment](/deployment/static-pod/) for the manifest and bootstrap risks.
+Deployment](/docs/deployment/static-pod/) for the manifest and bootstrap risks.
 
 ## Multi-Control-Plane Operation
 
@@ -287,7 +285,7 @@ Instances may have different auth credentials and OpenBao client tokens.
 
 Each instance also owns a local registry state file. The active `key_id` converges across the files. Pending or recovered snapshots can differ temporarily during failover or rotation recovery.
 
-Promotion of a new Transit key version is stable across all control-plane nodes. If one node promotes early and another does not, API server behavior can become inconsistent. The activation delay and stable observation count reduce this risk; operational monitoring still checks for `key_id` convergence. See [Architecture: Rotation Model](/architecture/rotation-model/).
+Promotion of a new Transit key version is stable across all control-plane nodes. If one node promotes early and another does not, API server behavior can become inconsistent. The activation delay and stable observation count reduce this risk; operational monitoring still checks for `key_id` convergence. See [Architecture: Rotation Model](/docs/architecture/rotation-model/).
 
 ## OpenBao Placement
 

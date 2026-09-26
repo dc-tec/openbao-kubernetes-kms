@@ -4,8 +4,6 @@ description: "Runnable E2E lanes, label routing, suite manifest, environment var
 weight: 40
 ---
 
-# E2E Framework
-
 The end-to-end (E2E) framework is the command reference for integration and E2E
 validation. It uses Ginkgo and Gomega specs, label-based routing, a suite
 manifest, pinned versions from `.ci/versions.yaml`, and machine-readable JUnit

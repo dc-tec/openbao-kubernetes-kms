@@ -4,8 +4,6 @@ description: "Release channels, versioning, artifact families, and verification 
 weight: 100
 ---
 
-# Release Policy
-
 This policy defines when `bao-kms-provider` publishes releases, what each
 channel means, and which artifacts users must verify before deployment.
 
@@ -17,7 +15,7 @@ checksums, signatures, software bills of materials (SBOMs), and provenance
 attestations needed to verify them.
 
 The current public release line is a preview line unless the release notes and
-[Support Policy](/reference/support-policy/) explicitly say otherwise.
+[Support Policy](/docs/reference/support-policy/) explicitly say otherwise.
 
 ## Cadence
 
@@ -53,7 +51,7 @@ publication.
 
 Preview releases ship only after the required test, packaging, signing, and
 verification steps pass. See
-[Development: CI And Supply Chain](/development/ci-supply-chain/) for the
+[Development: CI And Supply Chain](/docs/development/ci-supply-chain/) for the
 maintainer-side workflow details.
 
 A preview release is suitable for validating:
@@ -107,7 +105,7 @@ Before beta:
 
 After beta:
 
-- `key_id`, annotation, and AAD compatibility are treated as stable API surfaces. See [Reference: Compatibility: Compatibility Promises](/reference/compatibility/#compatibility-promises).
+- `key_id`, annotation, and AAD compatibility are treated as stable API surfaces. See [Reference: Compatibility: Compatibility Promises](/docs/reference/compatibility/#compatibility-promises).
 
 ## Binary Artifacts
 
@@ -181,4 +179,4 @@ image, binary, and package artifacts:
 - `provenance-index.json`,
 - release notes.
 
-For the full supply-chain controls see [Development: CI And Supply Chain](/development/ci-supply-chain/).
+For the full supply-chain controls see [Development: CI And Supply Chain](/docs/development/ci-supply-chain/).

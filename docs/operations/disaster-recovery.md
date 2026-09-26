@@ -4,8 +4,6 @@ description: "Recover compatible OpenBao, etcd, provider state, auth, and API se
 weight: 20
 ---
 
-# Disaster Recovery
-
 OpenBao Transit key material and Kubernetes etcd data must be recoverable as a compatible pair.
 
 If etcd contains objects encrypted with a Transit key version that no longer
@@ -13,7 +11,7 @@ exists or is no longer decryptable, Kubernetes may be unable to read those
 objects. Adding `identity` fallback to the API server
 `EncryptionConfiguration` does not decrypt existing KMS ciphertext.
 
-For the design view of the failure modes addressed by this runbook, see [Architecture: Failure Modes](/architecture/failure-modes/).
+For the design view of the failure modes addressed by this runbook, see [Architecture: Failure Modes](/docs/architecture/failure-modes/).
 
 ## Preview Boundary
 
@@ -203,7 +201,7 @@ Do not accept a recreated key as compatible with data encrypted under the previo
 ## Provider Configuration Loss
 
 1. Restore configuration from configuration management.
-2. Verify the identity-bearing fields match the previous values; see [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+2. Verify the identity-bearing fields match the previous values; see [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
 3. Restore the local key registry state and its checkpoint when available.
 4. Restore the CA bundle and selected auth material.
 5. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.

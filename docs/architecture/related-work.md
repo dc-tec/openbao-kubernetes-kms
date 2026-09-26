@@ -4,8 +4,6 @@ description: "Existing Vault Transit Kubernetes KMS plugin work that informed ba
 weight: 60
 ---
 
-# Related Work
-
 The closest existing project in this space is [`FalcoSuessgott/vault-kubernetes-kms`](https://github.com/FalcoSuessgott/vault-kubernetes-kms), a Kubernetes KMS plugin that integrates with HashiCorp Vault Transit. It is useful related work for this project because it demonstrates that a Transit-backed KMS plugin can operate in real Kubernetes control-plane deployments.
 
 The surrounding ecosystem influenced this design, but project constraints led to a separate OpenBao-native implementation. This record identifies that lineage and explains the project's release boundary.

@@ -1,0 +1,10 @@
+"0.1.x":
+  label: "0.1.x"
+  release: "0.1.0-preview.2"
+  state: "Preview"
+  showNotice: true
+  sourceRef: "HEAD"
+  editRef: "main"
+  contentRoot: ""
+  editable: true
+  notice: "Preview release line. Use it for labs, staging, and evaluation; do not protect production control planes with it."

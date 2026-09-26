@@ -1,0 +1,13 @@
+{{- /* Publish redirect pages for retired routes listed in data/redirects.yaml.
+     Spell out every build option: an incomplete build map disables rendering. */ -}}
+{{- range hugo.Data.redirects -}}
+  {{- $.AddPage (dict
+    "path" .from
+    "kind" "page"
+    "title" "Redirect"
+    "layout" "redirect"
+    "params" (dict "redirectTo" .to "searchExclude" true)
+    "build" (dict "list" "never" "render" "always" "publishResources" false)
+    "sitemap" (dict "disable" true)
+  ) -}}
+{{- end -}}

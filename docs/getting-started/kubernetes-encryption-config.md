@@ -4,9 +4,7 @@ description: "Wire bao-kms-provider into the Kubernetes API server through Encry
 weight: 40
 ---
 
-# Kubernetes Encryption Config
-
-Complete [Install](/getting-started/install/) and confirm that
+Complete [Install](/docs/getting-started/install/) and confirm that
 `bao-kms-provider doctor` succeeds on every control-plane node. Then configure
 the API server to consume `EncryptionConfiguration` and migrate existing
 resources to KMS-encrypted storage.
@@ -16,7 +14,7 @@ resources to KMS-encrypted storage.
 - The provider is running on every control-plane node and exposes its Unix socket at the path documented in the provider configuration file.
 - `bao-kms-provider doctor` succeeds with the active configuration.
 - The Kubernetes API server has read access to its `EncryptionConfiguration` file.
-- The API server runtime user can connect to the provider socket through the `openbao-kms-socket` group (see [Deployment: Linux Identity Model](/deployment/linux-identity-model/)).
+- The API server runtime user can connect to the provider socket through the `openbao-kms-socket` group (see [Deployment: Linux Identity Model](/docs/deployment/linux-identity-model/)).
 
 ## Write The EncryptionConfiguration
 
@@ -46,7 +44,7 @@ Required values:
 | `providers[].kms.apiVersion` | Always `v2`. KMS v1 is not implemented. |
 | `name` | Identity-bearing. Must match `transit.keyIdScope.providerName` in the provider configuration. Do not change after encryption begins. |
 | `endpoint` | Must use the `unix://` scheme and match `server.socketPath` in the provider configuration. |
-| `timeout` | Start with `3s`. Tighten this value only after benchmark and failure-mode testing; see [Reference: EncryptionConfiguration](/reference/encryption-config/). |
+| `timeout` | Start with `3s`. Tighten this value only after benchmark and failure-mode testing; see [Reference: EncryptionConfiguration](/docs/reference/encryption-config/). |
 | `resources` | Start narrow (`secrets`). Common second step is to add `configmaps`. |
 
 Custom resource definitions (CRDs) can be encrypted with the same provider.
@@ -94,7 +92,7 @@ After the API server has the new configuration:
 
 End-to-end encryption verification, including etcd inspection, `key_id`
 stability, and additional authenticated data (AAD) shape, belongs to the next
-page. See [First Encrypt](/getting-started/first-encrypt/).
+page. See [First Encrypt](/docs/getting-started/first-encrypt/).
 
 ## Migrate Existing Resources
 
@@ -115,7 +113,7 @@ After rewriting:
 
 1. Restart `kube-apiserver` on one control-plane node and confirm reads still succeed.
 2. Repeat across the remaining control-plane nodes.
-3. Verify a sample of objects in etcd to confirm payloads no longer contain plaintext. The [First Encrypt](/getting-started/first-encrypt/) page describes the etcd inspection technique.
+3. Verify a sample of objects in etcd to confirm payloads no longer contain plaintext. The [First Encrypt](/docs/getting-started/first-encrypt/) page describes the etcd inspection technique.
 
 ## Remove The Identity Fallback
 
@@ -136,5 +134,5 @@ Do not remove the fallback before the migration verification on the previous ste
 
 ## Read Next
 
-1. [First Encrypt](/getting-started/first-encrypt/) for the end-to-end smoke test.
-2. [Operations: Rotation](/operations/rotation/) once encryption is live and the cluster is in steady state.
+1. [First Encrypt](/docs/getting-started/first-encrypt/) for the end-to-end smoke test.
+2. [Operations: Rotation](/docs/operations/rotation/) once encryption is live and the cluster is in steady state.

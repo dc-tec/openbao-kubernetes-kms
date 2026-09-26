@@ -4,8 +4,6 @@ description: "What bao-kms-provider does, what it does not do, the trust boundar
 weight: 10
 ---
 
-# Overview
-
 `bao-kms-provider` is a Kubernetes Key Management Service (KMS) v2 provider
 plugin. It terminates the KMS v2 gRPC protocol on a local Unix domain socket
 and uses OpenBao Transit over HTTPS to wrap and unwrap Kubernetes storage keys.
@@ -48,7 +46,7 @@ The provider does not encrypt:
 - node filesystems or container layers,
 - arbitrary Kubernetes API traffic.
 
-For threats outside this scope, see [Threat Model](/security/threat-model/).
+For threats outside this scope, see [Threat Model](/docs/security/threat-model/).
 
 <a id="why-this-plugin-exists"></a>
 
@@ -80,7 +78,7 @@ the only supported Kubernetes KMS API; KMS v1 is not implemented.
 
 The current OpenBao validation target is OpenBao `2.6.0` with the Transit
 secrets engine using `aes256-gcm96` keys. See
-[Compatibility](/reference/compatibility/) for the full supported version
+[Compatibility](/docs/reference/compatibility/) for the full supported version
 envelope and upgrade rules for this matrix.
 
 ## Defaults And Boundaries
@@ -115,7 +113,7 @@ Use these defaults unless your platform has a documented reason to diverge:
 - Pin binaries, packages, images, checksums, and verified release artifacts. Do not use floating `latest` inputs.
 
 Current performance validation keeps the simpler direct decrypt path. See
-[Development: Performance Evidence](/development/benchmark-results/) for the
+[Development: Performance Evidence](/docs/development/benchmark-results/) for the
 captured results.
 
 ## Out Of Scope
@@ -134,8 +132,8 @@ The current release line does not include:
 
 ## Read Next
 
-1. [OpenBao Setup](/getting-started/openbao-setup/) to provision the Transit mount, key, policy, and provider authentication.
-2. [Install](/getting-started/install/) to fetch a verified provider binary.
-3. [Deployment: Choosing A Model](/deployment/choosing-a-model/) to run the provider on every control-plane node.
-4. [Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/) to write the `EncryptionConfiguration` consumed by the API server.
-5. [First Encrypt](/getting-started/first-encrypt/) to verify the path end-to-end.
+1. [OpenBao Setup](/docs/getting-started/openbao-setup/) to provision the Transit mount, key, policy, and provider authentication.
+2. [Install](/docs/getting-started/install/) to fetch a verified provider binary.
+3. [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) to run the provider on every control-plane node.
+4. [Kubernetes Encryption Config](/docs/getting-started/kubernetes-encryption-config/) to write the `EncryptionConfiguration` consumed by the API server.
+5. [First Encrypt](/docs/getting-started/first-encrypt/) to verify the path end-to-end.

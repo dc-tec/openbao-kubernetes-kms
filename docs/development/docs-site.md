@@ -4,16 +4,15 @@ description: "How the Hugo documentation site is organized, built, checked, and 
 weight: 80
 ---
 
-# Docs Site
-
 The published documentation is a Hugo site built from the Markdown files under
 `docs/` and the site assets under `website/`. For writing guidance, see
-[Docs Style Guide](/development/docs-style-guide/).
+[Docs Style Guide](/docs/development/docs-style-guide/).
 
 ## Source Layout
 
 ```text
 docs/
+  _index.md           documentation landing page (/docs/)
   getting-started/    first-success path for operators
   deployment/         systemd, static-pod, identity, observability
   operations/         rotation, upgrade, recovery, troubleshooting
@@ -22,39 +21,49 @@ docs/
   architecture/       design rationale and tradeoffs
   development/        contributor and maintainer documentation
 website/
-  content/            homepage, search, and error pages
-  layouts/            Hugo templates
+  content/            homepage and the legacy redirect adapter
+  data/               navigation, version line, and redirect ledger
+  layouts/            Hugo templates and shortcodes
   assets/             CSS and JavaScript sources
-  static/             brand assets, fonts, vendored Mermaid
-hugo.toml             site configuration and module mounts
+  static/             brand assets and vendored Mermaid
+  scripts/            rendered-site checks
+hugo.toml             site configuration, theme strings, and module mounts
 ```
 
 The live docs must describe the current project. Older plans and design notes
 remain available through repository history.
 
+The theme follows the OpenBao Operator documentation site. Layouts read
+project-specific copy from `[params]` in `hugo.toml` so the same templates can
+move into a shared theme module later. Keep new project strings in `hugo.toml`
+instead of hardcoding them in templates.
+
 ## Hugo Mounts
 
-`hugo.toml` mounts each docs section into Hugo's `content/` tree. This keeps the
-documentation source in `docs/` while letting Hugo render normal sections.
-
-Example:
-
-```toml
-[[module.mounts]]
-  source = "website/content"
-  target = "content"
-
-[[module.mounts]]
-  source = "docs/getting-started"
-  target = "content/getting-started"
-```
+`hugo.toml` mounts `docs/` at `content/docs/`, so every page renders under
+`/docs/`. The mount excludes internal planning material (`adr/`,
+`workstreams/`, `research-notes.md`).
 
 To add a new top-level docs section:
 
 1. Create `docs/<section>/_index.md` with front matter.
-2. Add a mount entry in `hugo.toml`.
-3. Link the section from `website/layouts/index.html` if it belongs on the
-   homepage.
+2. Add the section and its pages to `website/data/navigation.yaml`.
+3. Add the section to the link grid in `docs/_index.md`.
+
+## Navigation
+
+`website/data/navigation.yaml` defines the sidebar. The `primary` list holds
+the documentation sections. The first group is the linear getting-started path,
+and the page template adds Previous and Next links across its items. Section
+landing pages list their child pages by `weight` unless they set
+`hideChildren: true`.
+
+## Retired Routes
+
+`website/data/redirects.yaml` lists retired routes and their canonical targets.
+The content adapter in `website/content/_content.gotmpl` publishes a redirect
+page for each entry. When a page moves, add a ledger entry for the old route in
+the same change.
 
 ## Local Builds
 
@@ -63,8 +72,8 @@ install is not required.
 
 ```sh
 make docs-deps    # install pinned Hugo into GOBIN once
-make docs-build   # build into public/
-make docs-serve   # serve locally on http://localhost:1313/
+make docs-build   # build into public/ and check the rendered site
+make docs-serve   # serve on http://localhost:1313/openbao-kubernetes-kms/
 ```
 
 The Hugo version is pinned in `.hugo-version` and `.ci/versions.yaml`. Update
@@ -81,8 +90,11 @@ make docs-build
 ```
 
 `make docs-check` scans tracked first-party prose for configured text and
-typography issues. A successful `make docs-build` run renders the site without
-warnings.
+typography issues. `make docs-build` fails on any Hugo warning, then runs
+`website/scripts/check-rendered-site.py`. The check rejects broken internal
+links and fragments, duplicate element IDs, encoding damage, malformed
+Kubernetes YAML in code blocks, and published pages that are missing from the
+navigation.
 
 ## Templates
 
@@ -90,20 +102,30 @@ warnings.
 
 ```text
 website/layouts/
-  index.html
-  _default/baseof.html
-  _default/list.html
-  _default/single.html
-  _default/error.html
-  _markup/render-link.html
+  home.html                     homepage
+  404.html                      not-found page
+  index.json                    search index
+  _default/baseof.html          page shell
+  _default/single.html          content page
+  _default/list.html            section landing page
+  _default/redirect.html        retired-route redirect
+  _markup/render-link.html      site and repository link rewriting
+  _markup/render-codeblock.html copyable code blocks
   _markup/render-codeblock-mermaid.html
-  partials/
-  search/single.html
+  partials/                     header, sidebar, TOC, search, footer
+  shortcodes/                   callout, command, checklist
 ```
 
-The homepage workflow is defined in `website/layouts/index.html`. When the
-operator path changes, update the homepage and the matching section pages
-together.
+Fenced code blocks render as copyable blocks. Keep commands in plain Markdown
+fences: `test/deployment/systemd-install.sh` extracts and runs the fenced
+blocks that follow its marker comments in the install guide.
+
+Shortcodes:
+
+- `callout` with `type` set to `note`, `warning`, or `tip`, and an optional
+  `title`.
+- `checklist` with an optional `title`.
+- `command` with optional `title` and `label` for a titled command block.
 
 ## Mermaid
 

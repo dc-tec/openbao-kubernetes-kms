@@ -4,21 +4,19 @@ description: "Rotate the OpenBao Transit key version, observe provider promotion
 weight: 10
 ---
 
-# Rotation
-
 OpenBao Transit key rotation and Kubernetes storage migration are separate
 operations. The provider observes Transit key versions and exposes a new
 Kubernetes `key_id` only after the rotation state machine determines that the
 new version is stable. Operators then rewrite Kubernetes resources to update
 data encrypted with old versions.
 
-For the design rationale behind the rotation state machine, including the flip-flop guards and observation thresholds, see [Architecture: Rotation Model](/architecture/rotation-model/).
+For the design rationale behind the rotation state machine, including the flip-flop guards and observation thresholds, see [Architecture: Rotation Model](/docs/architecture/rotation-model/).
 
 Rotation changes the active Transit version under an existing Transit key. It
 must not change the provider name, cluster ID, OpenBao instance ID, Transit
 mount ID, key lineage ID, mount path, or key name. These fields are
 identity-bearing. Changing one requires a migration plan; see [Configuration:
-Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
+Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
 
 ## Preview Boundary
 
@@ -62,7 +60,7 @@ bao write -f transit/keys/k8s-workload-a-etcd/rotate
 
 The provider token must not have rotate permission. The provisioned policy
 excludes this capability by design; see [Reference: Transit Policy
-Examples](/reference/transit-policy-examples/).
+Examples](/docs/reference/transit-policy-examples/).
 
 ## Observe Promotion
 
@@ -157,7 +155,7 @@ Then collect independent verification:
   or no longer need them,
 - inspect etcd in a controlled environment if required.
 
-For the metric and log catalog used during these checks see [Reference: Observability](/reference/observability/).
+For the metric and log catalog used during these checks see [Reference: Observability](/docs/reference/observability/).
 
 ## min_decryption_version
 
@@ -239,16 +237,16 @@ If new encrypt or decrypt behavior fails before migration completes:
 2. Keep old Transit key versions decryptable. Do not raise `min_decryption_version`.
 3. If the failure is provider-related, verify the previous binary preserves all
    required decrypt identities before restoring it. Follow the
-   [rotation compatibility guidance](/reference/compatibility/#unreleased-rotation-corrections).
+   [rotation compatibility guidance](/docs/reference/compatibility/#unreleased-rotation-corrections).
 4. Do not delete the new Transit version.
 5. Do not recreate the Transit key.
-6. Use `doctor`, `rotation-plan`, and the metric catalog in [Reference: Observability](/reference/observability/) to identify the failing layer.
+6. Use `doctor`, `rotation-plan`, and the metric catalog in [Reference: Observability](/docs/reference/observability/) to identify the failing layer.
 
 If objects have already been rewritten with the new version, rollback still requires the new Transit version to remain decryptable.
 
 ## Stop Rotation If
 
-Abort rotation and consult [Operations: Troubleshooting](/operations/troubleshooting/) when:
+Abort rotation and consult [Operations: Troubleshooting](/docs/operations/troubleshooting/) when:
 
 - nodes report different active `key_id` hashes,
 - Status flips old to new to old,

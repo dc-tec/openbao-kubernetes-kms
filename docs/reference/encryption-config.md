@@ -4,9 +4,7 @@ description: "Authoritative reference for the Kubernetes API server EncryptionCo
 weight: 50
 ---
 
-# EncryptionConfiguration
-
-This reference defines the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Getting Started: Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/).
+This reference defines the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Getting Started: Kubernetes Encryption Config](/docs/getting-started/kubernetes-encryption-config/).
 
 ## Minimal Shape
 
@@ -42,13 +40,13 @@ Use `v2` for the `bao-kms-provider` entry. This provider does not implement KMS 
 Identity-bearing. The value:
 
 - must match `transit.keyIdScope.providerName` in the provider configuration,
-- participates in `key_id` derivation; see [Reference: Key ID And AAD](/reference/key-id-and-aad/#recommended-format),
-- participates in additional authenticated data (AAD) envelope construction; see [Reference: Key ID And AAD](/reference/key-id-and-aad/#aad-envelope),
+- participates in `key_id` derivation; see [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/#recommended-format),
+- participates in additional authenticated data (AAD) envelope construction; see [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/#aad-envelope),
 - must not change after encryption begins without a documented migration plan.
 
 `doctor` requires an entry with the configured provider name. It validates every
 entry with that name against the local KMS v2 API and socket configuration; see
-[Reference: CLI: doctor](/reference/cli/#doctor).
+[Reference: CLI: doctor](/docs/reference/cli/#doctor).
 
 ### `endpoint`
 
@@ -68,7 +66,7 @@ can still produce tail latency that approaches the timeout. Set the timeout
 against measured p99 of `openbao_kms_grpc_duration_seconds` plus a safety
 margin, not against the steady-state median.
 
-A timeout that is too short surfaces as `timeout` errors in the [error class catalog](/reference/observability/#error-classes) and may block writes to encrypted resources.
+A timeout that is too short surfaces as `timeout` errors in the [error class catalog](/docs/reference/observability/#error-classes) and may block writes to encrypted resources.
 
 ### `resources`
 
@@ -83,7 +81,7 @@ resources:
 
 Common second step is to add `configmaps`. CRDs can be encrypted with the same provider once the operator has assessed size, read and write volume, and recovery impact.
 
-The `resources` set is not retroactive. Adding a resource type after encryption begins requires a storage migration; see [Getting Started: Migrate Existing Resources](/getting-started/kubernetes-encryption-config/#migrate-existing-resources).
+The `resources` set is not retroactive. Adding a resource type after encryption begins requires a storage migration; see [Getting Started: Migrate Existing Resources](/docs/getting-started/kubernetes-encryption-config/#migrate-existing-resources).
 
 ### `identity` Fallback
 
@@ -93,7 +91,7 @@ The `identity` provider is the API server's no-op fallback. With it last in the 
 - existing plaintext objects remain readable,
 - `kms` failures do not silently fall back to plaintext writes (Kubernetes does not silently downgrade between providers when `kms` is first).
 
-Remove `identity` after every targeted resource has been rewritten through `kms`. Leaving it in place indefinitely increases the chance that future misconfiguration produces plaintext writes; removing it too early breaks reads of plaintext objects that were not migrated. See [Getting Started: Remove The Identity Fallback](/getting-started/kubernetes-encryption-config/#remove-the-identity-fallback).
+Remove `identity` after every targeted resource has been rewritten through `kms`. Leaving it in place indefinitely increases the chance that future misconfiguration produces plaintext writes; removing it too early breaks reads of plaintext objects that were not migrated. See [Getting Started: Remove The Identity Fallback](/docs/getting-started/kubernetes-encryption-config/#remove-the-identity-fallback).
 
 ## Migration Files
 
