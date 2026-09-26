@@ -1,258 +1,109 @@
 ---
 title: E2E framework
-description: "Runnable E2E lanes, label routing, suite manifest, environment variables, reports, and artifacts for bao-kms-provider."
+description: "Every end-to-end lane and its make target, how labels and the suite manifest select lanes, the environment variables, and where reports land."
 eyebrow: Contribute
 weight: 40
+verifiedBy:
+  - test/e2e/suites.yaml
+  - mk/e2e.mk
+  - hack/tools/e2e_release_gate
 ---
 
-The end-to-end (E2E) framework is the command reference for integration and E2E
-validation. It uses Ginkgo and Gomega specs, label-based routing, a suite
-manifest, pinned versions from `.ci/versions.yaml`, and machine-readable JUnit
-and Ginkgo JSON reports. The lanes cover the Kubernetes Key Management Service
-(KMS) v2 protocol and continuous integration (CI) environments.
+End-to-end (E2E) lanes run Ginkgo specs against real OpenBao, the provider
+container, Kind, and `kube-apiserver`, with versions pinned in
+`.ci/versions.yaml`. Unit and hermetic integration tests never use external
+services. Every lane needs a Docker-compatible runtime; Kind lanes also need
+Kind and kubectl.
 
-Unit tests and hermetic integration tests must not use external services. E2E
-lanes test real OpenBao, provider container, Kind, and Kubernetes API server
-behavior.
+## Lanes
 
-## Command matrix
+| Lane | Command | Proves |
+|---|---|---|
+| OpenBao | `make test-e2e-openbao-ci` | Transit, JWT auth, least-privilege policy, and OpenBao `2.6.0` behavior. |
+| OpenBao cert auth | `make test-e2e-cert-auth-openbao-ci` | TLS cert auth with a URI SAN role binding, login, and Transit access. |
+| PKCS#11 source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | SoftHSM token, PKCS#11 signer, cert login, and KMS v2 through the provider. |
+| Certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | The supported PKCS#11 source lane. |
+| SPIRE source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Local implementation check only; not in CI or the release gate. |
+| Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, Unix socket, KMS v2 client, Transit, and auth. |
+| Provider CLI | `make test-e2e-provider-cli-openbao-ci` | CLI diagnostics and hardening failures against real OpenBao and state. |
+| Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, token revocation and recovery, bad policy, bad auth material, missing key, stale Status, and stale sockets. |
+| OpenBao HA | `make test-e2e-provider-ha-openbao-ci` | Raft active-node failover with old decrypts and new operations. |
+| Decrypt storm | `make test-e2e-provider-decrypt-storm-openbao-ci` | Concurrent decrypts through the provider. |
+| Decrypt soak | `make test-e2e-provider-decrypt-soak-openbao-ci` | Sustained decrypt latency, errors, memory, and process growth. |
+| Load soak | `make test-e2e-provider-load-soak-openbao-ci` | Sustained Status, Encrypt, and Decrypt with resource checks. |
+| OpenBao restore | `make test-e2e-provider-restore-openbao-ci` | Backend replacement and raft snapshot restore with old ciphertext readback. |
+| Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Two-node promotion, pending decrypt and discovery, minimum versions, retirement, writer lock, and rollback rejection. |
+| Upgrade and rollback | `make test-e2e-provider-upgrade-rollback-openbao-ci` | Old and new images over one state volume. |
+| Kind smoke | `make test-e2e-kind-smoke` | Real API server encryption, raw etcd envelopes, restart, and readback. |
+| Kind convergence | `make test-e2e-kind-convergence` | Three API servers converge through node-local providers. |
+| Kind upgrade | `make test-e2e-kind-upgrade-rollback` | Static pod upgrade and rollback with old Secret readback. |
+| Kind DR runbook | `make test-e2e-kind-dr-runbook` | Raft restore, provider state rehydration, API server restart, and readback. |
 
-| Lane | Command | Proves | External dependency |
-|---|---|---|---|
-| Full enabled E2E suite | `make test-e2e` | Runs the enabled Ginkgo E2E specs selected by labels. | Depends on selected labels |
-| Preview release OpenBao gate | `make test-e2e-release-preview-openbao` | Runs the manifest-defined OpenBao release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime |
-| Preview release Kind gate | `make test-e2e-release-preview-kind` | Runs the manifest-defined Kind release gate group from `test/e2e/suites.yaml`. | Docker-compatible runtime, Kind, kubectl |
-| OpenBao CI | `make test-e2e-openbao-ci` | Transit, provider auth, least-privilege policy, and OpenBao `2.6.0` behavior. | Docker-compatible runtime |
-| OpenBao certificate auth | `make test-e2e-cert-auth-openbao-ci` | OpenBao Transport Layer Security (TLS) certificate auth method, listener client-certificate request, URI subject alternative name (SAN) role binding, certificate login, and Transit access with the issued token. | Docker-compatible runtime |
-| Provider SPIRE certificate source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Implementation check for a real SPIFFE Runtime Environment (SPIRE) server and agent, Workload API socket, X.509 SPIFFE Verifiable Identity Document (SVID) selection, and provider-local SPIFFE certificate validation. This lane is not wired into CI or the preview release gate. | Docker-compatible runtime |
-| Provider PKCS#11 SoftHSM certificate source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | Real SoftHSM token, PKCS#11 signer, provider image, OpenBao cert login, KMS v2 socket client, and Transit access. | Docker-compatible runtime |
-| Provider certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | Runs the supported PKCS#11 SoftHSM source lane. SPIRE remains explicit local implementation coverage only. | Docker-compatible runtime |
-| Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, real Unix socket, KMS v2 client, OpenBao Transit, and provider auth. | Docker-compatible runtime |
-| Provider CLI | `make test-e2e-provider-cli-openbao-ci` | Provider image CLI commands against real OpenBao/config/state, including diagnostics and hardening failures. | Docker-compatible runtime |
-| Provider failure | `make test-e2e-provider-failure-openbao-ci` | OpenBao down or sealed, token revocation and recovery, bad policy, expired or identity-drifted auth material, missing Transit key, Status staleness, and stale socket cleanup. | Docker-compatible runtime |
-| OpenBao high-availability failover | `make test-e2e-provider-ha-openbao-ci` | Integrated-raft active node failover while preserving old decrypt and new KMS operations. | Docker-compatible runtime |
-| Decrypt storm smoke | `make test-e2e-provider-decrypt-storm-openbao-ci` | Concurrent KMS v2 decrypts through the provider and real OpenBao. | Docker-compatible runtime |
-| Sustained direct decrypt soak | `make test-e2e-provider-decrypt-soak-openbao-ci` | Direct decrypt latency, error bounds, memory growth, and process ID (PID) growth. | Docker-compatible runtime |
-| Provider load soak | `make test-e2e-provider-load-soak-openbao-ci` | Sustained Status, Encrypt, and Decrypt traffic with latency and resource checks. | Docker-compatible runtime |
-| OpenBao restore | `make test-e2e-provider-restore-openbao-ci` | Backend replacement and integrated-raft snapshot restore with old ciphertext readback. | Docker-compatible runtime |
-| Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Promotion across two nodes, pending-key decrypt and unknown-key discovery, encryption minimum during activation delay, historical decryptability enforcement, guarded retirement, writer exclusion, missing-state rejection, and rollback rejection. | Docker-compatible runtime |
-| Provider upgrade and rollback | `make test-e2e-provider-upgrade-rollback-openbao-ci` | Old and new provider images over the same state volume preserve decrypt compatibility. | Docker-compatible runtime |
-| Kind smoke | `make test-e2e-kind-smoke` | Real API server KMS v2 encryption, raw etcd envelope storage, API server restart, and readback. | Docker-compatible runtime, Kind, kubectl |
-| Kind convergence | `make test-e2e-kind-convergence` | Three control-plane API servers decrypt through node-local providers and converge on KMS state. | Docker-compatible runtime, Kind, kubectl |
-| Kind static-pod upgrade | `make test-e2e-kind-upgrade-rollback` | Static-pod provider manifest upgrade and rollback preserves old Secret readback. | Docker-compatible runtime, Kind, kubectl |
-| Kind disaster-recovery runbook | `make test-e2e-kind-dr-runbook` | OpenBao raft restore, provider state and config rehydration, API server restart, and Secret readback. | Docker-compatible runtime, Kind, kubectl |
-
-The OpenBao HA lane uses the pinned OpenBao version's default Autopilot health
-and stabilization thresholds. It waits for all three nodes to become Raft voters
-before stopping the active node. Voter readiness timeouts include Autopilot state
-and container logs to help diagnose membership and health failures.
-
-Local kubeadm virtual machine (VM) validation is a release-candidate gate, not
-part of public CI. It
-exercises host boot ordering, systemd, static-pod behavior, node reboot, paired
-restore, and multi-control-plane recovery in a VM substrate. Infrastructure-specific
-maintainer notes live next to the local harness implementation.
+`make test-e2e` runs every enabled spec selected by labels. Soak lanes are
+evidence for the pinned CI environment, not capacity or SLO claims. kubeadm VM
+validation of boot ordering, reboots, paired restore, and multi-control-plane
+recovery is a release-candidate gate outside public CI.
 
 ## Labels
 
-Labels are the routing API. Prefer small composable labels:
-
-```go
-Label("openbao", "transit", "ci")
-Label("openbao", "certauth", "ci")
-Label("openbao", "kmsv2", "failure", "ci")
-Label("openbao", "kmsv2", "ha", "ci")
-Label("openbao", "kmsv2", "restore", "ci")
-Label("openbao", "kmsv2", "rotation", "ci")
-Label("openbao", "kmsv2", "soak", "ci")
-Label("openbao", "kmsv2", "upgrade", "rollback", "ci")
-Label("kind", "kmsv2", "smoke")
-Label("kind", "kmsv2", "convergence")
-Label("kind", "kmsv2", "restore", "dr")
-Label("kind", "kmsv2", "upgrade", "rollback")
-```
-
-Use stable `case:<id>` labels when a spec becomes release evidence or a known
-regression target.
-
-Run a label-filtered suite when Ginkgo is installed:
+Labels route specs to lanes. Keep them small and composable, such as
+`Label("openbao", "kmsv2", "rotation", "ci")` or `Label("kind", "kmsv2", "smoke")`,
+and add a stable `case:<id>` label when a spec becomes release evidence or a
+regression target:
 
 ```sh
 make test-e2e E2E_LABEL_FILTER='openbao && transit && ci'
 ```
 
-## Suite manifest
+## Suite manifest and release gate
 
-`test/e2e/suites.yaml` describes E2E lanes, run selectors, timeouts, required
-environment, reports, and the preview release gate groups. It does not own
-concrete OpenBao or Kubernetes versions. Those remain in `.ci/versions.yaml`,
-and lanes reference the relevant fields through `versionRefs`.
+`test/e2e/suites.yaml` defines each lane's selectors, timeout, environment,
+reports, and the preview release gate groups. Versions stay in
+`.ci/versions.yaml` and are referenced through `versionRefs`.
 
-The release workflow calls only the aggregate preview gate targets:
+The release workflow runs only the aggregate gates:
 
 ```sh
 make test-e2e-release-preview-openbao
 make test-e2e-release-preview-kind
 ```
 
-Those targets prepare the required local images once, then the release-gate
-runner reads `releaseGate.preview.groups` from the suite manifest and executes
-the listed lanes directly. The per-lane `makeTarget` values remain supported
-operator/developer entrypoints, but release evidence must come from the
-manifest-defined groups, run selectors, timeouts, and environment. Ginkgo
-label lanes constrain Go's test entrypoint to `TestE2E`; plain `testing` lanes
-must be selected explicitly with manifest `runRegex`.
-
-The Kind aggregate also reads `validation.kubernetes.previewMatrix` from
-`.ci/versions.yaml`. By default it runs the Kind lane group once for every
-matrix entry with `releaseGate: true`. Set `E2E_KUBERNETES_LINE=1.34` or
-`E2E_KUBERNETES_LINE=1.35` to run one validated line locally. Kubernetes
-`1.36` is tracked as the intended next validation line until a digest-pinned
-Kind node image is available.
-
-For focused release-gate diagnosis after the required images are available, run
-a single lane through the same runner:
+They build the images once, then run the lanes listed under
+`releaseGate.preview.groups`. The Kind gate runs once per
+`validation.kubernetes.previewMatrix` entry with `releaseGate: true`; set
+`E2E_KUBERNETES_LINE=1.34` to run one line. To debug one lane through the
+same runner:
 
 ```sh
 E2E_PROVIDER_IMAGE=ghcr.io/dc-tec/bao-kms-provider:e2e-local \
   go run ./hack/tools/e2e_release_gate -group openbao -lane openbao-ha-ci
 ```
 
-Soak lanes are release evidence for the pinned CI environment only. They are not
-a service-level objective (SLO), capacity claim, or production performance
-claim.
-
-The SPIRE certificate-source lane is not part of the CI or preview release gate.
-It remains an explicit implementation check only. It does not make
-`auth.cert.source: spiffe` a supported user configuration until the supported
-OpenBao version can derive cert-auth identity aliases from Uniform Resource
-Identifier (URI) subject alternative names (SANs) and release evidence covers
-that login path.
-
-Current lane IDs:
-
-| Lane ID | Status |
-|---|---|
-| `openbao-ci` | active |
-| `openbao-provider-openbao-ci` | active |
-| `openbao-cert-auth-ci` | active |
-| `openbao-provider-certauth-spiffe-source-ci` | planned |
-| `openbao-provider-certauth-pkcs11-source-ci` | active |
-| `openbao-failure-ci` | active |
-| `openbao-provider-cli-ci` | active |
-| `openbao-ha-ci` | active |
-| `openbao-decrypt-storm-ci` | active |
-| `openbao-decrypt-soak-ci` | active |
-| `openbao-load-soak-ci` | active |
-| `openbao-restore-ci` | active |
-| `openbao-rotation-ci` | active |
-| `openbao-provider-upgrade-rollback-ci` | active |
-| `kind-smoke` | active |
-| `kind-convergence` | active |
-| `kind-upgrade-rollback` | active |
-| `kind-dr-runbook` | active |
-
-Manifest validation:
-
-```sh
-make verify-e2e-manifest
-```
-
-The validation checks schema shape, required fields, lane IDs, status values,
-release-gate references, release workflow wiring, Make target availability, and
-the absence of floating `latest` references.
-
-## Layout
-
-```text
-test/e2e/
-  e2e_suite_test.go
-  kind_dr_test.go
-  kind_smoke_test.go
-  openbao_transit_test.go
-  openbao_cert_auth_test.go
-  provider_cli_test.go
-  provider_container_test.go
-  provider_failure_test.go
-  provider_ha_test.go
-  provider_load_test.go
-  provider_restore_test.go
-  provider_rotation_test.go
-  provider_upgrade_test.go
-  suites.yaml
-  suites_manifest_test.go
-  kmsclient/
-    main.go
-  framework/
-    artifacts.go
-    env.go
-    labels.go
-    openbao_environment.go
-    openbao_ha_environment.go
-```
-
-The root `test/e2e` package is the primary suite package. New Ginkgo E2E specs
-are added to this package unless there is a concrete reason to split binaries.
-Container-only helpers, such as the KMS v2 socket client, live under
-`test/e2e`.
-
-Shared helpers live under `test/e2e/framework`. Helpers stay small and explicit;
-broad harness abstractions wait until multiple specs need them.
+`make verify-e2e-manifest` checks the manifest schema, lane IDs, release gate
+references and workflow wiring, make targets, and floating `latest` references.
 
 ## Environment
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `E2E_OPENBAO_CI` | set by `make test-e2e-openbao-ci` | Enables the PR-capable OpenBao CI spec. |
-| `E2E_OPENBAO_IMAGE` | `validation.openbao.image` from `.ci/versions.yaml` | Digest-pinned OpenBao image used by CI E2E environments. |
-| `E2E_KUBERNETES_LINE` | unset | Optional release-gate selector for one Kubernetes preview matrix line. |
-| `E2E_KIND_NODE_IMAGE` | `validation.kubernetes.kindNodeImage` from `.ci/versions.yaml` | Kind node image used by individual Kubernetes lanes. The Kind release gate overrides this from `validation.kubernetes.previewMatrix`. |
-| `E2E_PROVIDER_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-<commit>` | Provider image loaded into Kind or run in Docker full-stack tests. |
-| `E2E_PROVIDER_OLD_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-upgrade-old-<commit>` | Old provider image used by upgrade and rollback tests. |
-| `E2E_PROVIDER_NEW_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-upgrade-new-<commit>` | New provider image used by upgrade and rollback tests. |
-| `E2E_PROVIDER_BUILD` | `true` | Set to `false` to use a prebuilt provider image. |
-| `DOCKER` | `docker` | Container runtime CLI compatible with Docker commands. |
-| `E2E_SKIP_CLEANUP` | `false` | Keeps generated OpenBao TLS files and containers for debugging. |
+| `E2E_OPENBAO_IMAGE` | `validation.openbao.image` | Digest-pinned OpenBao image. |
+| `E2E_KIND_NODE_IMAGE` | `validation.kubernetes.kindNodeImage` | Kind node image; the Kind gate sets it per matrix line. |
+| `E2E_KUBERNETES_LINE` | unset | Run the Kind gate for one Kubernetes line. |
+| `E2E_PROVIDER_IMAGE` | `ghcr.io/dc-tec/bao-kms-provider:e2e-<commit>` | Provider image under test. |
+| `E2E_PROVIDER_OLD_IMAGE`, `E2E_PROVIDER_NEW_IMAGE` | `…:e2e-upgrade-old-<commit>`, `…:e2e-upgrade-new-<commit>` | Images for upgrade and rollback lanes. |
+| `E2E_PROVIDER_BUILD` | `true` | `false` reuses prebuilt images. |
+| `DOCKER` | `docker` | Container runtime CLI. |
+| `E2E_SKIP_CLEANUP` | `false` | Keep containers and TLS files for debugging. |
+| `E2E_TIMEOUT`, `E2E_PARALLEL_NODES` | `30m`, `1` | Suite timeout and Ginkgo parallelism. Raise parallelism only for lanes with isolated environments. |
 
-Individual provider lanes build their required image by default. The preview
-release aggregate targets prebuild the required images once, then run the
-manifest-defined lanes with `E2E_PROVIDER_BUILD=false` so the same image tags
-are reused across the release gate. Use `E2E_PROVIDER_BUILD=false` directly only
-when the referenced images are already built and available to the selected
-runtime.
+## Reports
 
-CI builds the default provider image and PKCS#11 validation image once in the
-`e2e-provider-images` job, uploads Docker archives, and has the image scan,
-OpenBao E2E, and Kind E2E jobs load those exact images with
-`E2E_PROVIDER_BUILD=false`. The release workflow pulls the digest produced by
-the release build job, tags it locally as `E2E_PROVIDER_IMAGE`, and runs the
-preview gate against that immutable build output. OpenBao release validation
-still builds local PKCS#11 and upgrade/rollback images because those are
-validation-only variants, not public release images.
+Generic runs write `artifacts/e2e/junit.xml` and `artifacts/e2e/ginkgo.json`
+(`E2E_ARTIFACT_DIR`, `E2E_JUNIT_REPORT`, `E2E_JSON_REPORT`). Release gate lanes
+write to `artifacts/e2e/<group>/<lane-id>/`, or
+`artifacts/e2e/kind/<kubernetes-line>/<lane-id>/` for Kind, with a
+`console.log` and, for Ginkgo lanes, JUnit and JSON reports. Artifacts never
+contain tokens, JWTs, plaintext, or full ciphertext.
 
-## Reports and artifacts
-
-| Variable | Default |
-|---|---|
-| `E2E_ARTIFACT_DIR` | `artifacts/e2e` |
-| `E2E_JUNIT_REPORT` | `artifacts/e2e/junit.xml` |
-| `E2E_JSON_REPORT` | `artifacts/e2e/ginkgo.json` |
-| `E2E_TIMEOUT` | `30m` |
-| `E2E_PARALLEL_NODES` | `1` |
-
-Preview release gates write per-lane artifacts under
-`artifacts/e2e/<group>/<lane-id>/` for OpenBao lanes and
-`artifacts/e2e/kind/<kubernetes-line>/<lane-id>/` for Kind lanes. Every lane
-writes `console.log`. Ginkgo-spec lanes also write `junit.xml` and
-`ginkgo.json`; plain `testing` lanes are selected through manifest `runRegex`
-and keep their evidence in `console.log`. The shared `E2E_JUNIT_REPORT` and
-`E2E_JSON_REPORT` variables apply to the generic `make test-e2e` entrypoint.
-
-E2E logs are redacted. The framework never writes OpenBao tokens, JSON Web
-Tokens (JWTs), plaintext, or full ciphertext to artifacts.
-
-## Parallelism
-
-Default parallelism is one node. Increase `E2E_PARALLEL_NODES` only for lanes
-whose environments are isolated per process. Shared socket paths and single Kind
-clusters remain single-node until the environment code proves isolation.
+New specs go in the `test/e2e` package, and shared helpers in
+`test/e2e/framework`, kept small until several specs need them.

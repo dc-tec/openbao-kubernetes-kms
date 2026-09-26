@@ -1,138 +1,75 @@
 ---
 title: Testing
-description: "Testing strategy for bao-kms-provider: protocol correctness, fail-closed behavior, rotation, recovery, performance, and release evidence."
+description: "What the test suite must prove, the test layers that prove it, the install regression check, and how to run longer fuzz campaigns."
 eyebrow: Contribute
 weight: 30
+verifiedBy:
+  - mk/checks.mk
+  - mk/deployment.mk
+  - test/kmsconformance
+  - test/deployment/systemd-install.sh
 ---
 
-A Kubernetes Key Management Service (KMS) provider plugin failure can prevent
-the API server from starting or make encrypted Kubernetes resources unreadable.
-The test strategy therefore prioritizes negative paths, rotation, and recovery
-over a single happy-path encrypt and decrypt check.
+A provider failure can stop the API server from starting or make cluster data
+unreadable, so tests favor negative paths, rotation, and recovery over a single
+happy-path round trip. For the runnable lanes, see
+[E2E framework](/contribute/e2e-framework/); for CI stages and release
+evidence, see [CI and supply chain](/contribute/ci-supply-chain/).
 
-The following sections define what the test system must prove. For runnable
-end-to-end (E2E) lanes and
-Make targets, see [E2E framework](/contribute/e2e-framework/). For continuous
-integration (CI) lanes
-and release evidence requirements, see [CI and supply chain](/contribute/ci-supply-chain/).
-For captured load and cold-start evidence, see [Performance evidence](/contribute/benchmark-results/).
+## What tests must prove
 
-## Test priorities
-
-| Priority | What must be proven |
+| Priority | Proof |
 |---|---|
-| KMS v2 protocol correctness | Kubernetes accepts `Status`, `Encrypt`, and `Decrypt` responses and the provider preserves the `Status.key_id == EncryptResponse.key_id` invariant. |
-| `key_id` stability | Rotation, rollback rejection, and decrypt lookup depend on deterministic, non-reused `key_id` values. |
-| Decrypt compatibility | Data written before restart, upgrade, rollback, and Transit rotation remains readable. |
-| Fail-closed behavior | OpenBao, auth material, socket, policy, and Transit key failures do not lead to plaintext exposure or unsafe fallback. |
-| API server startup | The provider is available early enough for kube-apiserver restart and recovery paths. |
-| Deployment behavior | systemd and static-pod modes have different boot, socket, filesystem, and rollback failure modes. |
-| Disaster recovery | OpenBao, provider state, and etcd restore procedures preserve decryptability only when the correct backup pair is restored. |
-| Observability and redaction | Logs, metrics, reports, and diagnostics never expose plaintext, JSON Web Tokens (JWTs), OpenBao tokens, full ciphertext, or raw Transit key material. |
+| KMS v2 correctness | Kubernetes accepts Status, Encrypt, and Decrypt, and `Status.key_id == EncryptResponse.key_id` always holds. |
+| `key_id` stability | `key_id` values are deterministic, never reused, and never roll back. |
+| Decrypt compatibility | Data stays readable across restarts, upgrades, rollbacks, and rotations. |
+| Fail-closed behavior | OpenBao, auth, socket, policy, and key failures never expose plaintext or fall back. |
+| Startup and deployment | The provider is ready for API server restarts, with the distinct boot and socket behavior of systemd and static pods. |
+| Recovery | Restores keep data readable only with a matching backup pair. |
+| Redaction | Logs, metrics, reports, and artifacts never contain plaintext, JWTs, tokens, full ciphertext, or key material. |
+
+Every negative test asserts both the error behavior and the absence of
+sensitive values in logs, metrics, and artifacts. Negative cases cover OpenBao
+outages, failover, and old restores, expired, rotated, or mismatched
+credentials, missing, recreated, or restricted keys, unknown or rolled-back
+`key_id` values, tampered or foreign AAD, unsafe sockets, and host failures
+during restarts.
 
 ## Test layers
 
-| Layer | Purpose | Canonical location |
+| Layer | Covers | Where |
 |---|---|---|
-| Unit and golden tests | Validate key registry decisions, additional authenticated data (AAD) construction, config validation, socket handling, logging redaction, and stable wire-format fixtures. | `go test ./...`, golden fixtures under `testdata/` |
-| KMS v2 conformance | Start the real Unix-socket server path with fake OpenBao behavior and exercise Kubernetes KMS v2 protobuf requests. | fast local and PR checks |
-| OpenBao client integration | Verify Transit, auth login, Transport Layer Security (TLS), policy diagnostics, and OpenBao error handling without external credentials. | hermetic integration tests and OpenBao CI E2E |
-| Operator CLI E2E | Run provider image command-line interface (CLI) diagnostics against real OpenBao/config/state and assert redacted hardening failures. | provider CLI E2E |
-| Kubernetes API server E2E | Prove real API server encryption, raw etcd envelope storage, restart readback, and multi-control-plane convergence. | Kind lanes and local kubeadm virtual machine (VM) validation |
-| Rotation and compatibility | Prove Transit version promotion, old ciphertext readback, new ciphertext write path, historical decryptability guards, missing-state fail-closed behavior, and rollback rejection. | OpenBao rotation E2E |
-| Failure injection | Exercise OpenBao outage, sealed state, failover, revoked tokens, bad policy, expired or identity-drifted auth material, missing Transit key, stale socket, and startup failures. | provider failure and high-availability E2E lanes |
-| Performance and load | Bound Status, Encrypt, Decrypt, direct decrypt soak, startup decrypt, and resource growth behavior. | provider load lanes and performance evidence |
-| Security and supply chain | Run redaction checks, fuzz targets, static analysis, vulnerability scan, license check, software bill of materials (SBOM), and vendor verification. | `make ci-core`, security CI, release workflow |
-| Disaster recovery | Validate OpenBao raft restore, provider state rehydration, etcd restore pairing, and Kubernetes readback after replacement. | Kind DR, OpenBao restore, and local VM validation |
+| Unit and golden | Registry decisions, AAD, configuration, sockets, redaction, wire-format fixtures | `go test ./...`, `testdata/` |
+| KMS v2 conformance | The real socket server with fake OpenBao and KMS v2 protobuf requests | `test/kmsconformance`, every pull request |
+| OpenBao integration | Transit, auth, TLS, policy diagnostics, error handling | Hermetic integration tests and the OpenBao lane |
+| CLI | Diagnostics and hardening failures against real OpenBao | Provider CLI lane |
+| API server | Real encryption, raw etcd envelopes, restarts, multi-node convergence | Kind lanes and kubeadm VM validation |
+| Rotation and compatibility | Promotion, old readback, retirement, missing state, rollback rejection | Rotation and upgrade lanes |
+| Failure injection | Outages, sealing, failover, revoked tokens, bad policy or auth, missing keys, stale sockets | Failure and HA lanes |
+| Performance | Status, Encrypt, and Decrypt latency, soak, startup decrypt, resource growth | Load lanes; targets in [KMS v2 contract](/docs/reference/kms-v2-contract/#validation-thresholds) |
+| Security and supply chain | Redaction, fuzzing, static analysis, vulnerability and license scans, SBOM, vendor verification | `make ci-core`, security CI, release workflow |
+| Recovery | Raft restore, state rehydration, etcd pairing, readback after replacement | Kind DR, restore lane, VM validation |
 
-## Installation regression check
+## Install regression check
 
-Run `make systemd-install-check` with Docker available. It uses the pinned
-Go builder image with Debian systemd tools to build a systemd bundle and
-execute the install guide's shell blocks in a disposable Linux container.
-The test image build requires network access to install those tools; the
-installation check itself runs without network access. It checks service-user
-file access, separation from the socket group, unit syntax, and preservation
-of configuration and state when the install commands run again.
+`make systemd-install-check` builds a systemd bundle and runs the shell blocks
+from [Run with systemd](/docs/get-started/systemd/) in a disposable Linux
+container, using the pinned Go builder image with Debian systemd tools. It
+checks service-user file access, socket group separation, unit syntax, and that
+re-running the install keeps configuration and state. Building the test image
+needs network access; the check itself does not.
 
-The Deployment Samples CI job runs this check for installation documentation,
-packaging, bundle builder, and deployment test changes. This check does not
-start systemd, authenticate to OpenBao, or prove Kubernetes boot and recovery
-behavior. Use the VM and E2E lanes for those checks.
+The Deployment Samples CI job runs it when installation docs, packaging, the
+bundle builder, or deployment tests change. It does not start systemd, log in
+to OpenBao, or test Kubernetes boot; the VM and E2E lanes do.
 
-## Negative path bias
+## Fuzzing
 
-Encrypt and decrypt working once is not enough. The test suite must prove that
-the provider fails safely when:
-
-- OpenBao is down, sealed, unavailable during failover, or restored from an old backend,
-- the JWT expires, rotates, has the wrong claims, or cannot be read,
-- the certificate is expired, identity-drifted, unavailable from a PKCS#11
-  token or SPIFFE workload identity source, or cannot be validated,
-- the Transit key is missing, soft-deleted, recreated under the same name, or has unsafe version bounds,
-- `key_id` values are unknown, malformed, rolled back, or associated with changed identity scope,
-- AAD annotations are missing, modified, or from another provider or cluster,
-- the Unix socket is stale, has the wrong ownership, or points at an unsafe filesystem object,
-- systemd, kubelet, static pods, images, and host paths fail during API server restart or node recovery.
-
-Every negative test must assert both the returned error behavior and the
-absence of sensitive values in logs, metrics, and artifacts.
-
-## Performance model
-
-Performance targets reflect Kubernetes behavior and the provider's role in API
-server startup:
-
-| Path | Initial target | Reason |
-|---|---:|---|
-| `Status` | p99 under 5 ms and no OpenBao call | kube-apiserver polls Status frequently. |
-| `Encrypt` | p95 under 100 ms, p99 under 250 ms | writes call OpenBao Transit and must tolerate network reality. |
-| `Decrypt` | p95 under 10 ms, p99 under 50 ms | API server startup can perform many decrypts. |
-| Startup storm | bounded memory and goroutines | recovery paths must not deadlock or leak resources. |
-
-These are test targets, not published service-level guarantees. The release
-evidence can adjust thresholds when OpenBao or network behavior justifies it,
-but the trade-off must remain explicit.
-
-Decrypt micro-batching is not implemented in the provider runtime. The current
-direct-path evidence did not show provider or OpenBao decrypt fan-out
-proportional to Kubernetes object count. Add a production coalescer to the
-release scope only if sustained direct decrypt soak or local kubeadm VM
-cold-start evidence shows a release-blocking need.
-
-## Release evidence
-
-Release evidence is assembled from the test layers above and the supply-chain
-controls documented in [CI and supply chain](/contribute/ci-supply-chain/).
-In summary:
-
-- every pull request proves deterministic logic, conformance, redaction,
-  formatting, static analysis, vendor integrity, and fast parser fuzz smoke;
-- main and nightly lanes add OpenBao, Kind, rotation, failure injection, restore,
-  load, and supply-chain checks;
-- release candidates add exact-pinned version matrices, local kubeadm VM
-  validation, recovery evidence, and release artifact evidence.
-
-The exact Kubernetes patch versions, Kind node images, OpenBao image, and tool
-versions live in `.ci/versions.yaml`. Kubernetes `1.36` is tracked as the
-intended next validation line until a digest-pinned Kind node image exists.
-Additional Kubernetes or OpenBao versions remain candidates until exact-pinned
-lanes and release evidence exist. See [Reference: Compatibility](/docs/reference/compatibility/)
-for the support boundary.
-
-## Local fuzz campaigns
-
-`make ci-core` runs short fuzz smoke campaigns with `FUZZTIME=10s` by default.
-To spend more time on the curated parser and preflight targets without changing
-CI defaults, run:
+`make ci-core` runs short fuzz smoke campaigns (`FUZZTIME=10s`). To run longer
+campaigns locally:
 
 ```sh
 FUZZTIME=1m make fuzz
-```
-
-For a single target, use Go's native fuzz command, for example:
-
-```sh
 go test ./internal/keyregistry -run '^$' -fuzz '^FuzzStateFileDecode$' -fuzztime=5m
 go test ./internal/aad -run '^$' -fuzz '^FuzzPrepareDecrypt$' -fuzztime=5m
 ```
