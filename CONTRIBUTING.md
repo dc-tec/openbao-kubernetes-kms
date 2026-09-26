@@ -56,7 +56,7 @@ devenv tasks run kms:docs
 ```
 
 For focused end-to-end or deployment validation, use the targets documented in
-[Testing](docs/development/testing.md) and
-[E2E Framework](docs/development/e2e-framework.md).
+[Testing](docs/contribute/testing.md) and
+[E2E Framework](docs/contribute/e2e-framework.md).
 
-See [Code Quality](docs/development/code-quality.md) and [Contributing](docs/development/contributing.md) for the full contributor rules.
+See [Code Quality](docs/contribute/code-quality.md) and [Contributing](docs/contribute/contributing.md) for the full contributor rules.

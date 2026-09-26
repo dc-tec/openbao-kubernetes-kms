@@ -1,127 +1,82 @@
 ---
-title: "Threat Model"
-description: "Assets, trust boundaries, attacker capabilities, threats and controls, security properties provided and not provided by bao-kms-provider."
+title: Threat model
+description: "The assets, trust boundaries, and attackers the provider is designed around, the control for each threat, and what it does not protect."
+eyebrow: Security · Fundamentals
 weight: 10
+verifiedBy:
+  - internal/kmsv2
+  - internal/aad
+  - internal/socket
+  - internal/logging
 ---
-
-# Threat Model
-
-This threat model defines the assets, trust boundaries, attacker capabilities, and security properties considered by `bao-kms-provider`.
 
 ## Assets
 
 | Asset | Sensitivity |
 |---|---|
-| Kubernetes resource plaintext | High |
-| KMS v2 plaintext request and response material | High |
-| OpenBao Transit key material | Critical |
-| OpenBao client token | High |
-| Provider auth material | High |
+| OpenBao Transit key material and OpenBao backups | Critical |
+| Kubernetes resource plaintext and KMS request and response material | High |
+| OpenBao client token and provider auth material | High |
+| KMS Unix socket | High (local control-plane access) |
+| etcd backups | High |
 | Provider configuration | Medium to high |
 | Provider local state | Medium, security-relevant |
-| KMS Unix socket | High local control-plane access |
-| Kubernetes `key_id` values | Non-secret, security-relevant |
-| KMS annotations | Non-secret, security-relevant |
+| Kubernetes `key_id` values and KMS annotations | Non-secret, security-relevant |
 | OpenBao audit logs | Sensitive metadata |
-| etcd backups | High |
-| OpenBao backups | Critical |
 
-## Trust Boundaries
+## Trust boundaries
 
-- `kube-apiserver` to the local Unix socket.
-- Provider process to the OpenBao HTTPS endpoint.
-- OpenBao auth method to the external JSON Web Token (JWT) issuer or certificate authority.
-- Provider local filesystem to host users.
-- Provider runtime directory to the API server identity.
-- OpenBao Transit policy to OpenBao administrators.
-- etcd backup storage to backup operators.
-- OpenBao backup storage to backup operators.
+- `kube-apiserver` to the local Unix socket, and the runtime directory to the
+  API server identity.
+- The provider to the OpenBao HTTPS endpoint.
+- OpenBao auth to the external JWT issuer or certificate authority.
+- The provider's local files to other host users.
+- The Transit policy to OpenBao administrators.
+- etcd and OpenBao backup storage to backup operators.
 
-## Expected Attacker Capabilities
+## Attackers
 
-The design considers attackers who can:
+The design considers attackers who can read etcd snapshots and Kubernetes
+backups, observe provider logs and metrics, read control-plane files as a
+low-privilege user, send malformed KMS requests through a compromised local API
+server path, cause OpenBao or network outages, steal stale credentials if
+controls fail, or modify configuration when file permissions are wrong.
 
-- read etcd snapshots,
-- read Kubernetes backups,
-- observe provider logs and metrics,
-- access control-plane node files as a low-privilege user,
-- submit malformed KMS requests through a compromised local API server path,
-- cause OpenBao outages or network failures,
-- steal stale JWTs, certificate PIN files, or OpenBao tokens if controls fail,
-- modify configuration files when file permissions are wrong.
-
-The design does not defend against every action by:
-
-- a fully compromised `kube-apiserver` process,
-- a malicious provider binary,
-- an OpenBao administrator with destructive authority,
-- an attacker with valid Transit decrypt permission,
-- loss of all Transit key backups.
-
-## Threats And Controls
+## Threats and controls
 
 | Threat | Control |
 |---|---|
-| Offline etcd snapshot theft | Encrypt selected API resources before persistence. |
-| Local key exposure | Use remote OpenBao Transit instead of static local encryption keys. |
-| OpenBao token theft | Memory-only token storage, short TTLs, explicit renewal increment, no token logs. |
-| Auth material theft | File permissions, short JWT and certificate lifetimes, claim or certificate identity binding, and an external issuer where feasible. |
-| Transit key deletion | `deletion_allowed=false`, no delete permission for the provider token, tested backups. |
-| Accidental key creation | Runtime verification of `disable_upsert=true` at the Transit mount, no create permission for the provider token. |
-| Key recreation with same name | Key lineage ID, decrypt validation, DR checks. |
-| Registry state rollback | State hash chain, adjacent checkpoint, monotonic generation checks, and fail-closed startup when the checkpoint survives. |
-| Ciphertext replay across clusters | Additional authenticated data (AAD) binds provider, cluster, OpenBao instance, key lineage, and key version. OpenBao exposes AAD through `associated_data`. |
-| `key_id` spoofing | Strict local key registry and decrypt rejection before Transit. |
-| Annotation tampering | Canonical AAD reconstruction and annotation hash checks. |
-| KMS socket path replacement | Provider-owned, non-group-writable runtime directory; filesystem socket permissions; live-socket collision checks; verified-dead stale socket cleanup only. |
-| Provider downgrade to plaintext | Remove `identity` fallback after migration; audit `EncryptionConfiguration`. |
-| Protected API server dependency loop | Use provider auth without TokenReview and keep OpenBao outside the protected API-server dependency path. |
-| OpenBao MITM | TLS CA validation and server name verification. |
-| Credentials or KMS material forwarded by HTTP redirects | Reject all redirects before sending a request to the redirect destination. |
-| Oversized OpenBao response | Per-operation HTTP response-body limits and redacted `openbao_unavailable` errors. |
-| KMS request flood | Separate active Status, Encrypt, and Decrypt limits, immediate `ResourceExhausted` rejection, and no internal request queue. |
-| OpenBao outage | Cached Status with staleness limits, fail closed, bootstrap grace, jittered auth retry backoff, alerting. |
-| Malicious or compromised provider binary | Host hardening, pinned release artifacts, signing, reproducibility reports, and attestations. Defense is limited because the provider sees KMS plaintext material in flight. |
-| Log leakage | Redaction rules and tests for plaintext, JWT, tokens, and ciphertext. |
-| Metrics leakage | Hashed `key_id` values; raw OpenBao paths and high-cardinality labels excluded. |
-| Static pod API dependency | Static pod manifests avoid ConfigMaps, Secrets, ServiceAccounts, and mounted service account tokens. |
+| Offline etcd snapshot theft | Encrypt selected resources before they reach etcd. |
+| Local key exposure | Keep keys in OpenBao Transit, never on the host. |
+| OpenBao token theft | Token kept in memory only, short TTLs, bounded renewal, never logged. |
+| Auth material theft | File permissions, short credential lifetimes, identity-bound roles, an external issuer. |
+| Transit key deletion | `deletion_allowed=false`, no delete permission for the provider, tested backups. |
+| Accidental key creation | `disable_upsert=true` verified at runtime, no create permission for the provider. |
+| Key recreated with the same name | Key lineage ID in AAD and decrypt validation. |
+| Registry state rollback | State hash chain, adjacent checkpoint, monotonic generation, fail-closed startup. |
+| Ciphertext replay across clusters, lineages, or providers | AAD binds provider, cluster, OpenBao instance, mount, lineage, and key version. |
+| `key_id` spoofing or annotation tampering | Strict local registry and canonical AAD checks before any Transit call. |
+| Socket path replacement | Provider-owned, non-group-writable runtime directory; stale sockets removed only when verified dead. |
+| Downgrade to plaintext | Remove the `identity` fallback after migration and audit the `EncryptionConfiguration`. |
+| Dependency on the protected API server | Auth without TokenReview; OpenBao outside the protected cluster's dependency path. |
+| OpenBao impersonation | Pinned CA and server name verification. |
+| Credentials forwarded by redirects | Every HTTP redirect is rejected before it is followed. |
+| Oversized OpenBao responses | Per-operation response size limits. |
+| KMS request flood | Separate concurrency limits for Status, Encrypt, and Decrypt; excess requests are rejected, never queued. |
+| OpenBao outage | Cached Status with a staleness limit, fail-closed operations, bootstrap grace, jittered retries. |
+| Compromised provider binary | Pinned, signed, attested, reproducible release artifacts and host hardening. Limited, because the provider sees plaintext in flight. |
+| Log or metric leakage | Redaction rules with tests; hashed `key_id` labels; no raw paths or high-cardinality labels. |
+| Static pod dependency on the API server | No ConfigMaps, Secrets, ServiceAccounts, or mounted tokens. |
 
-## Security Properties Provided
+## What the provider does not protect
 
-The design provides:
-
-- confidentiality against offline etcd readers without OpenBao decrypt access,
-- stronger rotation correctness through explicit Transit key version selection on every encrypt,
-- deterministic, scoped, non-secret Kubernetes `key_id` values,
-- metadata binding through Transit associated data; see [AAD And Decrypt Validation](/security/aad-and-decrypt-validation/),
-- auditable OpenBao Transit operations,
-- narrowed provider permissions,
-- reduced Kubernetes API circular dependency through provider authentication that avoids TokenReview; see [Auth Model](/security/auth-model/).
-
-## Security Properties Not Provided
-
-The design does not provide:
-
-- protection from plaintext visible inside `kube-apiserver` during legitimate operation,
-- protection from a compromised provider process,
-- tamper-proof rollback protection if a host-level attacker can replace both local registry state and checkpoint,
-- protection from an attacker with Transit decrypt permission,
-- protection from an OpenBao administrator with destructive access,
-- recovery after Transit key material is permanently lost,
-- automatic encryption of all Kubernetes resources,
-- encryption of etcd disk blocks, application volumes, or node filesystems.
-
-## Review Requirements
-
-Before any public release:
-
-- security review of `key_id` derivation,
-- security review of AAD canonicalization,
-- review of OpenBao policy,
-- review of socket handling,
-- review of auth material handling,
-- review of log and metric redaction,
-- failure-mode validation for key deletion, recreated keys, and premature `min_decryption_version`.
-
-Stable releases require a completed security review of the listed areas and
-release notes that describe any material security limitations.
+- Plaintext inside `kube-apiserver` during normal operation, or a fully
+  compromised API server.
+- A compromised provider process or binary.
+- Data from anyone who holds Transit decrypt permission, or from an OpenBao
+  administrator with destructive authority.
+- Rollback by a host administrator who replaces both the registry state and its
+  checkpoint.
+- Data after the Transit key material and all its backups are lost.
+- Resources not listed in the `EncryptionConfiguration`, etcd disk blocks,
+  application volumes, or node filesystems.

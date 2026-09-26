@@ -38,10 +38,10 @@
   {{- else if or (hasPrefix $pathPart "./") (hasPrefix $pathPart "../") -}}
     {{- $repoBaseDir := "" -}}
     {{- if and .Page .Page.File -}}
-      {{- $repoBaseDir = path.Dir (path.Join "docs" .Page.File.Path) -}}
+      {{- $repoBaseDir = path.Dir .Page.File.Path -}}
     {{- end -}}
     {{- $resolved := path.Clean (path.Join $repoBaseDir $pathPart) -}}
-    {{- with site.Params.repoURL -}}
+    {{- with site.Params.repository -}}
       {{- if in . "github.com" -}}
         {{- $href = printf "%s/blob/%s/%s" . site.Params.defaultBranch $resolved -}}
       {{- else -}}

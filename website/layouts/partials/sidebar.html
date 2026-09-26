@@ -1,0 +1,48 @@
+<aside class="sidebar" id="site-sidebar" data-sidebar>
+  {{- $defaultSite := hugo.Sites.Default -}}
+  <div class="sidebar-head">
+    <p>Documentation</p>
+    <div class="sidebar-head-actions">
+      {{ if gt (len hugo.Sites) 1 }}{{ partial "version-switcher.html" . }}{{ end }}
+      <button class="sidebar-collapse" type="button" aria-controls="site-sidebar" aria-expanded="true" title="Collapse sidebar" data-sidebar-collapse>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg>
+        <span class="sr-only" data-sidebar-collapse-label>Collapse sidebar</span>
+      </button>
+    </div>
+  </div>
+  <nav aria-label="Documentation">
+    {{ range hugo.Data.navigation.primary }}
+      {{- $group := . -}}
+      {{- with $.Site.GetPage (printf "/%s" .url) -}}
+      {{- $targetURL := .RelPermalink -}}
+      {{- $active := hasPrefix $.RelPermalink $targetURL -}}
+      <div class="nav-group{{ if $active }} is-active{{ end }}">
+        <a class="nav-group-link" href="{{ $targetURL }}"{{ if eq $.RelPermalink $targetURL }} aria-current="page"{{ end }}>
+          <span>{{ $group.title }}</span>
+        </a>
+        {{ if and $group.items $active }}
+          {{ partial "sidebar-items.html" (dict "current" $ "site" $.Site "items" $group.items) }}
+        {{ end }}
+      </div>
+      {{- end -}}
+    {{ end }}
+    <div class="nav-divider"></div>
+    {{ range hugo.Data.navigation.secondary }}
+      {{- $group := . -}}
+      {{- $targetSite := $defaultSite -}}
+      {{- if hasPrefix .url "docs/" }}{{ $targetSite = $.Site }}{{ end -}}
+      {{- with $targetSite.GetPage (printf "/%s" .url) -}}
+      {{- $targetURL := .RelPermalink -}}
+      {{- $active := hasPrefix $.RelPermalink $targetURL -}}
+      {{ if $group.items }}
+        <details class="nav-secondary-group"{{ if $active }} open{{ end }}>
+          <summary class="nav-secondary">{{ $group.title }}</summary>
+          {{ partial "sidebar-items.html" (dict "current" $ "site" $targetSite "items" $group.items) }}
+        </details>
+      {{ else }}
+        <a class="nav-secondary{{ if $active }} is-current{{ end }}" href="{{ $targetURL }}"{{ if eq $.RelPermalink $targetURL }} aria-current="page"{{ end }}>{{ $group.title }}</a>
+      {{ end }}
+      {{- end -}}
+    {{ end }}
+  </nav>
+</aside>

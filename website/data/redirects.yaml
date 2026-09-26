@@ -1,0 +1,157 @@
+# Legacy route ledger. Each entry publishes a redirect page at `from` that
+# points at the canonical `to` route. Keep entries until the routes they
+# protect are no longer linked from releases, READMEs, or external sites.
+# website/scripts/check-rendered-site.py verifies every target exists.
+- from: search
+  to: docs/
+  reason: The search page became the site-wide search dialog.
+- from: architecture
+  to: docs/architecture/
+  reason: Documentation moved under /docs/.
+- from: architecture/background
+  to: docs/architecture/background/
+  reason: Documentation moved under /docs/.
+- from: architecture/failure-modes
+  to: docs/architecture/failure-modes/
+  reason: Documentation moved under /docs/.
+- from: architecture/overview
+  to: docs/architecture/overview/
+  reason: Documentation moved under /docs/.
+- from: architecture/related-work
+  to: docs/architecture/related-work/
+  reason: Documentation moved under /docs/.
+- from: architecture/rotation-model
+  to: docs/architecture/rotation-model/
+  reason: Documentation moved under /docs/.
+- from: architecture/transit-key-model
+  to: docs/architecture/transit-key-model/
+  reason: Documentation moved under /docs/.
+- from: deployment
+  to: docs/get-started/deployment-model/
+  reason: Page moved in the documentation restructure.
+- from: deployment/choosing-a-model
+  to: docs/get-started/deployment-model/
+  reason: Page moved in the documentation restructure.
+- from: deployment/linux-identity-model
+  to: docs/security/linux-identity-model/
+  reason: Page moved in the documentation restructure.
+- from: deployment/observability
+  to: docs/configure/monitor/
+  reason: Page moved in the documentation restructure.
+- from: deployment/static-pod
+  to: docs/get-started/static-pod/
+  reason: Page moved in the documentation restructure.
+- from: deployment/systemd
+  to: docs/get-started/systemd/
+  reason: Page moved in the documentation restructure.
+- from: development
+  to: contribute/
+  reason: Page moved in the documentation restructure.
+- from: development/benchmark-results
+  to: contribute/benchmark-results/
+  reason: Page moved in the documentation restructure.
+- from: development/ci-supply-chain
+  to: contribute/ci-supply-chain/
+  reason: Page moved in the documentation restructure.
+- from: development/code-quality
+  to: contribute/code-quality/
+  reason: Page moved in the documentation restructure.
+- from: development/contributing
+  to: contribute/contributing/
+  reason: Page moved in the documentation restructure.
+- from: development/docs-site
+  to: contribute/docs-site/
+  reason: Page moved in the documentation restructure.
+- from: development/docs-style-guide
+  to: contribute/docs-style-guide/
+  reason: Page moved in the documentation restructure.
+- from: development/e2e-framework
+  to: contribute/e2e-framework/
+  reason: Page moved in the documentation restructure.
+- from: development/testing
+  to: contribute/testing/
+  reason: Page moved in the documentation restructure.
+- from: getting-started
+  to: docs/get-started/
+  reason: Page moved in the documentation restructure.
+- from: getting-started/first-encrypt
+  to: docs/get-started/verify/
+  reason: Page moved in the documentation restructure.
+- from: getting-started/install
+  to: docs/get-started/download/
+  reason: Page moved in the documentation restructure.
+- from: getting-started/kubernetes-encryption-config
+  to: docs/get-started/enable-encryption/
+  reason: Page moved in the documentation restructure.
+- from: getting-started/openbao-setup
+  to: docs/get-started/openbao/
+  reason: Page moved in the documentation restructure.
+- from: getting-started/overview
+  to: docs/get-started/overview/
+  reason: Page moved in the documentation restructure.
+- from: operations
+  to: docs/operate/
+  reason: Page moved in the documentation restructure.
+- from: operations/disaster-recovery
+  to: docs/operate/disaster-recovery/
+  reason: Page moved in the documentation restructure.
+- from: operations/rotation
+  to: docs/operate/rotation/
+  reason: Page moved in the documentation restructure.
+- from: operations/troubleshooting
+  to: docs/operate/troubleshooting/
+  reason: Page moved in the documentation restructure.
+- from: operations/upgrade
+  to: docs/operate/upgrade/
+  reason: Page moved in the documentation restructure.
+- from: reference
+  to: docs/reference/
+  reason: Documentation moved under /docs/.
+- from: reference/cli
+  to: docs/reference/cli/
+  reason: Documentation moved under /docs/.
+- from: reference/compatibility
+  to: docs/reference/compatibility/
+  reason: Documentation moved under /docs/.
+- from: reference/configuration
+  to: docs/reference/configuration/
+  reason: Documentation moved under /docs/.
+- from: reference/encryption-config
+  to: docs/reference/encryption-config/
+  reason: Documentation moved under /docs/.
+- from: reference/key-id-and-aad
+  to: docs/reference/key-id-and-aad/
+  reason: Documentation moved under /docs/.
+- from: reference/kms-v2-contract
+  to: docs/reference/kms-v2-contract/
+  reason: Documentation moved under /docs/.
+- from: reference/metrics
+  to: docs/reference/observability/
+  reason: Documentation moved under /docs/.
+- from: reference/observability
+  to: docs/reference/observability/
+  reason: Documentation moved under /docs/.
+- from: reference/release-policy
+  to: docs/reference/release-lifecycle/
+  reason: Documentation moved under /docs/.
+- from: reference/support-policy
+  to: docs/reference/release-lifecycle/
+  reason: Documentation moved under /docs/.
+- from: reference/transit-policy-examples
+  to: docs/configure/openbao-auth/
+  reason: Page moved in the documentation restructure.
+- from: security
+  to: docs/security/
+  reason: Documentation moved under /docs/.
+- from: security/aad-and-decrypt-validation
+  to: docs/security/aad-and-decrypt-validation/
+  reason: Documentation moved under /docs/.
+- from: security/auth-model
+  to: docs/security/auth-model/
+  reason: Documentation moved under /docs/.
+- from: security/hardening
+  to: docs/security/hardening/
+  reason: Documentation moved under /docs/.
+- from: security/threat-model
+  to: docs/security/threat-model/
+  reason: Documentation moved under /docs/.

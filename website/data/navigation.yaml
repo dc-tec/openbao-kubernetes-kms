@@ -1,0 +1,147 @@
+# Sidebar navigation. Every published docs page must appear here;
+# website/scripts/check-rendered-site.py fails the build otherwise.
+#
+# Items with a `step` form the Previous and Next path of their group. Items
+# that share a step are alternatives: the path skips from the step before
+# them to each alternative and from each alternative to the step after them.
+primary:
+  - title: Get started
+    description: "Choose a deployment model, plan identity values, prepare OpenBao, install the provider, and enable encryption."
+    url: docs/get-started/
+    items:
+      - title: Start here
+        url: docs/get-started/
+        step: 0
+      - title: What the provider does
+        url: docs/get-started/overview/
+        step: 1
+      - title: Choose a deployment model
+        url: docs/get-started/deployment-model/
+        step: 2
+      - title: Plan identity values
+        url: docs/get-started/plan-values/
+        step: 3
+      - title: Prepare OpenBao
+        url: docs/get-started/openbao/
+        step: 4
+      - title: Download the release
+        url: docs/get-started/download/
+        step: 5
+      - title: Run with systemd
+        url: docs/get-started/systemd/
+        step: 6
+      - title: Run as a static pod
+        url: docs/get-started/static-pod/
+        step: 6
+      - title: Enable encryption
+        url: docs/get-started/enable-encryption/
+        step: 7
+      - title: Verify encryption
+        url: docs/get-started/verify/
+        step: 8
+  - title: Configure
+    description: "Set up OpenBao authentication and policy variants, and monitor the provider."
+    url: docs/configure/
+    items:
+      - title: Overview
+        url: docs/configure/
+      - title: OpenBao auth and policy
+        url: docs/configure/openbao-auth/
+      - title: Monitor the provider
+        url: docs/configure/monitor/
+  - title: Operate
+    description: "Rotate keys, upgrade, recover from disasters, and troubleshoot a running provider."
+    url: docs/operate/
+    items:
+      - title: Overview
+        url: docs/operate/
+      - title: Rotation
+        url: docs/operate/rotation/
+      - title: Disaster recovery
+        url: docs/operate/disaster-recovery/
+      - title: Upgrade
+        url: docs/operate/upgrade/
+      - title: Troubleshooting
+        url: docs/operate/troubleshooting/
+  - title: Security
+    description: "Threat model, hardening, authentication, host identity, and decrypt validation."
+    url: docs/security/
+    items:
+      - title: Overview
+        url: docs/security/
+      - title: Threat model
+        url: docs/security/threat-model/
+      - title: Hardening
+        url: docs/security/hardening/
+      - title: Auth model
+        url: docs/security/auth-model/
+      - title: Linux identity model
+        url: docs/security/linux-identity-model/
+      - title: Verify release artifacts
+        url: docs/security/verify-release-artifacts/
+      - title: AAD and decrypt validation
+        url: docs/security/aad-and-decrypt-validation/
+  - title: Reference
+    description: "Exact CLI, configuration, protocol, key_id and AAD, observability, compatibility, and release contracts."
+    url: docs/reference/
+    items:
+      - title: Overview
+        url: docs/reference/
+      - title: CLI
+        url: docs/reference/cli/
+      - title: Configuration
+        url: docs/reference/configuration/
+      - title: EncryptionConfiguration
+        url: docs/reference/encryption-config/
+      - title: Observability
+        url: docs/reference/observability/
+      - title: KMS v2 contract
+        url: docs/reference/kms-v2-contract/
+      - title: Key ID and AAD
+        url: docs/reference/key-id-and-aad/
+      - title: Compatibility
+        url: docs/reference/compatibility/
+      - title: Release and support lifecycle
+        url: docs/reference/release-lifecycle/
+  - title: Architecture
+    description: "Design rationale: components, KMS v2 and Transit background, key and rotation models, failure modes, and prior art."
+    url: docs/architecture/
+    items:
+      - title: Overview
+        url: docs/architecture/
+      - title: Components and data flow
+        url: docs/architecture/overview/
+      - title: Background
+        url: docs/architecture/background/
+      - title: Transit key model
+        url: docs/architecture/transit-key-model/
+      - title: Rotation model
+        url: docs/architecture/rotation-model/
+      - title: Failure modes
+        url: docs/architecture/failure-modes/
+      - title: Related work
+        url: docs/architecture/related-work/
+secondary:
+  - title: Contribute
+    url: contribute/
+    items:
+      - title: Overview
+        url: contribute/
+      - title: Contributing
+        url: contribute/contributing/
+      - title: Local lab
+        url: contribute/local-lab/
+      - title: Code quality
+        url: contribute/code-quality/
+      - title: Testing
+        url: contribute/testing/
+      - title: E2E framework
+        url: contribute/e2e-framework/
+      - title: Performance evidence
+        url: contribute/benchmark-results/
+      - title: CI and supply chain
+        url: contribute/ci-supply-chain/
+      - title: Docs style guide
+        url: contribute/docs-style-guide/
+      - title: Docs site
+        url: contribute/docs-site/

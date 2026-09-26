@@ -1,0 +1,20 @@
+{{- /* One side of the journey navigation: nothing, one link, or a choice. */ -}}
+{{- $items := .items -}}
+{{- $home := .home -}}
+{{- if eq (len $items) 0 -}}
+  <span></span>
+{{- else if eq (len $items) 1 -}}
+  {{- with index $items 0 -}}
+    <a href="{{ printf "%s%s" $home .url }}">
+      <span>{{ $.label }}</span>
+      <strong>{{ .title }}</strong>
+    </a>
+  {{- end -}}
+{{- else -}}
+  <div class="journey-choice {{ .class }}">
+    <span>{{ .label }}, choose one</span>
+    {{- range $items -}}
+      <a href="{{ printf "%s%s" $home .url }}"><strong>{{ .title }}</strong></a>
+    {{- end -}}
+  </div>
+{{- end -}}

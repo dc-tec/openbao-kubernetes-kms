@@ -1,70 +1,77 @@
-baseURL = "/"
+baseURL = "https://dc-tec.github.io/openbao-kubernetes-kms/"
 locale = "en-US"
-title = "OpenBao Kubernetes KMS Provider Docs"
+title = "OpenBao Kubernetes KMS"
+enableGitInfo = true
 enableRobotsTXT = true
 disableKinds = ["taxonomy", "term", "RSS"]
+defaultContentVersion = "0.1.x"
+defaultContentVersionInSubdir = false
 
 [params]
-  repoURL = "https://github.com/dc-tec/openbao-kubernetes-kms"
-  defaultBranch = "main"
-  repoLabel = "GitHub"
-  productName = "bao-kms-provider"
-  footerBlurb = "OpenBao Kubernetes KMS provider documentation, published with Hugo."
-  logoPath = "brand/openbao-text-color.svg"
-  logoAlt = "OpenBao"
-  heroMarkPath = "brand/openbao-color.svg"
-  faviconPath = "brand/openbao-single-color-square.svg"
+description = "Encrypt Kubernetes API resources at rest with OpenBao Transit through a node-local KMS v2 provider."
+repository = "https://github.com/dc-tec/openbao-kubernetes-kms"
+repository_api = "https://api.github.com/repos/dc-tec/openbao-kubernetes-kms"
+defaultBranch = "main"
+# Theme strings. Keep project-specific copy here so the layouts stay reusable
+# across OpenBao project sites.
+brandPrefix = "OpenBao"
+brandSuffix = "KMS"
+tagline = "Encrypt Kubernetes API resources in etcd with OpenBao Transit."
+footerNote = "OpenBao Kubernetes KMS is an independent open source project."
+searchPlaceholder = "Search the KMS provider docs…"
+searchHint = "Try “doctor”, “rotation”, or “key_id”."
+releasesURL = "https://github.com/dc-tec/openbao-kubernetes-kms/releases"
+contributeURL = "contribute/"
+
+[versions."0.1.x"]
+weight = 1
+
+[[module.mounts]]
+source = "website/content"
+target = "content"
+
+# Hand-written documentation stays under docs/ so repository tests and links
+# keep addressing the same files. Internal planning material is never published.
+[[module.mounts]]
+source = "docs"
+target = "content/docs"
+files = ["! adr/**", "! workstreams/**", "! research-notes.md", "! contribute/**"]
+
+# Contributor guides publish as a global section at /contribute/.
+[[module.mounts]]
+source = "docs/contribute"
+target = "content/contribute"
+
+[[module.mounts]]
+source = "website/layouts"
+target = "layouts"
+
+[[module.mounts]]
+source = "website/assets"
+target = "assets"
+
+[[module.mounts]]
+source = "website/static"
+target = "static"
+
+[[module.mounts]]
+source = "website/data"
+target = "data"
+
+[outputs]
+home = ["HTML", "JSON"]
 
 [markup]
   [markup.goldmark]
     [markup.goldmark.renderer]
       unsafe = true
+  [markup.highlight]
+    noClasses = false
+    lineNos = false
   [markup.tableOfContents]
     startLevel = 2
     endLevel = 3
     ordered = false
 
-[module]
-  [[module.mounts]]
-    source = "website/content"
-    target = "content"
-
-  [[module.mounts]]
-    source = "docs/getting-started"
-    target = "content/getting-started"
-
-  [[module.mounts]]
-    source = "docs/deployment"
-    target = "content/deployment"
-
-  [[module.mounts]]
-    source = "docs/operations"
-    target = "content/operations"
-
-  [[module.mounts]]
-    source = "docs/reference"
-    target = "content/reference"
-
-  [[module.mounts]]
-    source = "docs/security"
-    target = "content/security"
-
-  [[module.mounts]]
-    source = "docs/architecture"
-    target = "content/architecture"
-
-  [[module.mounts]]
-    source = "docs/development"
-    target = "content/development"
-
-  [[module.mounts]]
-    source = "website/layouts"
-    target = "layouts"
-
-  [[module.mounts]]
-    source = "website/assets"
-    target = "assets"
-
-  [[module.mounts]]
-    source = "website/static"
-    target = "static"
+[minify]
+minifyOutput = true

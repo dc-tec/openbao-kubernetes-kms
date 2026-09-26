@@ -1,204 +1,125 @@
 ---
-title: "CLI"
-description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, retire-versions, config, policy openbao, completion, exit codes."
+title: CLI
+description: "Every bao-kms-provider command, what doctor and verify-key check, the rotation reports, common flags, and exit codes."
+eyebrow: Reference
 weight: 10
+verifiedBy:
+  - cmd/bao-kms-provider
+  - internal/cli/exit.go
 ---
 
-# CLI
-
-This reference documents the provider-owned operational commands, the Cobra-generated
-shell completion entry point, and the provider flags supported by
-`bao-kms-provider`. Commands print stable text or JSON output where documented
-and use stable exit codes. They never print plaintext, JSON Web Tokens (JWTs), OpenBao tokens, or
-full ciphertext.
+Commands never print plaintext, JSON Web Tokens (JWTs), OpenBao tokens, or full
+ciphertext. Report-style commands (`doctor`, `verify-key`, `rotation-plan`,
+`verify-rotation`, `retire-versions`) take `--output text|json`; `text` is the
+default and the JSON shape is stable.
 
 ## serve
 
-Start the KMS provider.
-
 ```sh
-bao-kms-provider serve \
-  --config /etc/openbao-kms/config.yaml
+bao-kms-provider serve --config /etc/openbao-kms/config.yaml
 ```
 
-Responsibilities:
-
-- validate config,
-- authenticate to OpenBao,
-- initialize the active key snapshot,
-- create the Unix socket safely,
-- serve KMS v2 gRPC,
-- start background probes,
-- expose health endpoints when configured.
-
-Prometheus metrics are served on `server.metricsAddress` at `/metrics`. Health endpoints are served on `server.healthAddress`.
+Validates the configuration, logs in to OpenBao, loads the active key snapshot,
+creates the Unix socket, serves KMS v2 gRPC, and runs the background probes.
+Metrics are served on `server.metricsAddress` and health endpoints on
+`server.healthAddress`.
 
 ## doctor
 
-Run preflight checks before promoting the binary or before changing the API server `EncryptionConfiguration`.
+Run before promoting a binary or changing the API server
+`EncryptionConfiguration`.
 
 ```sh
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
-  --encryption-config /etc/kubernetes/encryption-config.yaml \
-  --output json
+  --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
 
-Checks:
-
-| Check | Required behavior |
+| Check | Passes when |
 |---|---|
-| OpenBao reachable | HTTPS connection succeeds with configured CA and SNI. |
-| TLS valid | Certificate chain and server name validate. |
-| Local auth material | For JWT auth, the JWT file exists, permissions are safe, content parses, expiry is acceptable, and configured claims match. For cert auth, the configured certificate source must be reachable, the current certificate must be locally valid, and the signer must match the certificate and accept a non-secret probe. |
-| OpenBao auth login | The configured OpenBao auth method login succeeds. |
-| Token policy | Token can read Transit metadata and perform encrypt and decrypt. The checked paths do not grant key management, export, backup, restore, rewrap, or mount configuration writes. |
-| Transit key exists | Metadata read succeeds. |
-| Key type | Matches allowed key types. |
-| Key export | `exportable=false`. |
-| Plaintext backup | `allow_plaintext_backup=false`. |
-| Key deletion | `deletion_allowed=false`. |
-| Upsert | Transit mount has `disable_upsert=true` where configured. |
-| Encryption/decryption | Test encrypt and decrypt of random non-secret probe data succeed. |
-| Key ID generation | Deterministic across repeated runs. |
-| Status/encrypt consistency | Local in-process test verifies `Status.key_id` equals `EncryptResponse.key_id`. |
-| Socket path | Directory exists, has safe permissions, no unsafe stale path. |
-| EncryptionConfiguration | Contains the configured provider name with KMS v2 and the matching socket. Other KMS and local encryption providers are allowed during migration. |
-| Fallback | Warns if `identity` fallback remains enabled after migration. |
+| OpenBao reachable, TLS valid | HTTPS succeeds with the configured CA, and the chain and server name validate. |
+| Local auth material | JWT: the file exists with safe permissions, parses, is not near expiry, and matches the configured claims. Certificate: the source is reachable, the certificate is valid, and the signer matches it and signs a probe. |
+| OpenBao auth login | Login with the configured method and role succeeds. |
+| Token policy | The token can read Transit metadata, encrypt, and decrypt, and the checked paths grant no key management, export, backup, restore, rewrap, or mount configuration writes. |
+| Transit key | The key exists with an allowed type, `exportable=false`, `allow_plaintext_backup=false`, and `deletion_allowed=false`. |
+| Upsert | The mount has `disable_upsert=true`. |
+| Encrypt and decrypt | A random, non-secret probe round-trips. |
+| Key ID | Derivation is deterministic, and `Status.key_id` equals `EncryptResponse.key_id`. |
+| Socket path | The directory exists with safe permissions and no unsafe stale path. |
+| EncryptionConfiguration | With `--encryption-config`: the file contains the configured provider name with KMS v2 and the matching socket. Other providers are allowed during migration. |
+| Fallback | Warns while an `identity` fallback remains. |
 
-`doctor` prints a report with stable check IDs and exits non-zero when any
-check fails. Use `--output text` for the default human-readable report or
-`--output json` for automation.
+`doctor` exits non-zero when any check fails and prints stable check IDs.
 
-The `transit.capabilities` check queries effective capabilities for the configured
-Transit key. It includes key configuration, trim, rotate, export, backup,
-rewrap, named and unnamed restore, and mount configuration paths. It rejects
-incomplete capability responses. This check does not audit the token's entire
-policy or permissions on other keys. See [Transit policy examples](/reference/transit-policy-examples/#capabilities-to-avoid).
+The `transit.capabilities` check queries the token's effective capabilities on
+the configured key's configuration, trim, rotate, export, backup, rewrap, and
+restore paths, and on the mount configuration. It rejects incomplete answers.
+It does not audit the whole policy or permissions on other keys; see
+[Configure: OpenBao auth and policy](/docs/configure/openbao-auth/#policy).
 
-The `kubernetes.encryption_config` check accepts migration files with `aescbc`,
-`aesgcm`, `secretbox`, `identity`, and additional KMS providers. It checks the
-configured provider wherever it appears in the provider list. A passing check
-does not prove that this provider encrypts new writes or that migration is
-complete. See [EncryptionConfiguration](/reference/encryption-config/#migration-files).
-
-Transit profile failures include an impact prefix. `cryptographic_safety`
-findings protect the validated encryption and additional authenticated data
-(AAD) contract. `api_server_availability`
-findings identify settings that can make Kubernetes reads or writes fail even
-though they may not weaken ciphertext confidentiality directly.
+The `kubernetes.encryption_config` check accepts migration files that also list
+`aescbc`, `aesgcm`, `secretbox`, `identity`, or other KMS providers, and finds
+the configured provider wherever it appears. Passing does not prove the
+provider encrypts new writes or that migration is complete; see
+[EncryptionConfiguration: Migration files](/docs/reference/encryption-config/#migration-files).
+Transit profile findings carry the `cryptographic_safety` or
+`api_server_availability` impact class described in
+[Compatibility](/docs/reference/compatibility/#required-openbao-features).
 
 ## verify-key
 
-Verify Transit key suitability against the recommended profile.
-
 ```sh
-bao-kms-provider verify-key \
-  --config /etc/openbao-kms/config.yaml \
-  --output json
+bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
 ```
 
-Checks:
-
-- key exists,
-- key type allowed,
-- derived and convergent settings match policy,
-- deletion disabled,
-- export disabled,
-- plaintext backup disabled,
-- latest Transit version is usable,
-- `min_encryption_version` does not block the active version,
-- `min_decryption_version` does not block required historical versions.
-
-## benchmark
-
-Measure performance of the encrypt and decrypt path.
-
-```sh
-bao-kms-provider benchmark \
-  --config /etc/openbao-kms/config.yaml \
-  --iterations 5
-```
-
-Measures:
-
-- Transit encrypt latency,
-- Transit decrypt latency,
-- non-secret Transit round-trip smoke behavior.
-
-Benchmark output redacts sensitive data. Expanded local KMS gRPC, decrypt storm, token lifecycle, and micro-batching comparisons are release-validation work.
+Checks the Transit key alone: it exists with an allowed type, derived and
+convergent settings, deletion, export, and plaintext backup match the profile,
+the latest version is usable, and neither `min_encryption_version` nor
+`min_decryption_version` blocks a version the provider needs.
 
 ## rotation-plan
 
-Report rotation state without performing rotation.
-
 ```sh
-bao-kms-provider rotation-plan \
-  --config /etc/openbao-kms/config.yaml \
-  --output json
+bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml
 ```
 
-Reports:
+Reports rotation state without changing it: the live metadata check
+(`transitMetadataStatus`, with a redacted `transitMetadataError` on failure),
+whether local registry state loaded, its generation and state hash, the checkpoint status, the active and
+latest observed Transit versions, the active `key_id` hash, and any pending
+promotion with its expected time.
 
-- live metadata check status (`transitMetadataStatus`) and a redacted error on failure (`transitMetadataError`),
-- whether local registry state was loaded,
-- registry generation and state hash when available,
-- registry checkpoint status, generation, and hash when available,
-- state bootstrap eligibility and reason when local registry state is absent,
-- current active Transit version,
-- current Kubernetes `key_id` hash,
-- latest observed Transit version,
-- pending promotion status,
-- estimated promotion time when a pending version has become stable.
+| Checkpoint status | Meaning |
+|---|---|
+| `current` | The checkpoint matches the loaded state. |
+| `behind` | The checkpoint accepts a newer state generation. |
+| `missing` | State exists but the checkpoint does not. |
+| `absent` | Neither exists. |
 
-Checkpoint status values:
+Without local state, the command reports initial state only for an unrotated
+key, and otherwise fails with the reason bootstrap is denied, such as an
+advanced `latest_version`, `min_available_version`, or `min_decryption_version`.
+A checkpoint without a matching state file makes it fail closed.
 
-- `current`: checkpoint exists and matches the loaded state generation/hash,
-- `behind`: checkpoint exists and accepts a newer state generation,
-- `missing`: state exists but the checkpoint is absent,
-- `absent`: neither state nor checkpoint exists.
-
-If local registry state is missing, `rotation-plan` only synthesizes initial
-bootstrap state from initial Transit metadata. It fails instead of reporting an
-active key hash from live Transit metadata after rotation. If a checkpoint is
-present but the state file is missing or rolled back, the command fails closed.
-When local state is absent and OpenBao metadata is readable, the command reports
-or returns the exact auto-bootstrap reason, such as an advanced
-`latest_version`, `min_available_version`, or `min_decryption_version`.
-
-If OpenBao authentication or the live Transit metadata read fails, the command
-exits with code `4`. It still prints available local evidence, with
-`transitMetadataStatus: fail`. The partial report does not establish current
-OpenBao state. On success, `transitMetadataStatus` is `pass`.
+If OpenBao authentication or the metadata read fails, the command exits with
+`4` and reports `transitMetadataStatus: fail` next to whatever local state it
+could read. That partial report does not describe the current OpenBao state.
 
 ## verify-rotation
 
-Report local rotation preflight state.
-
 ```sh
-bao-kms-provider verify-rotation \
-  --config /etc/openbao-kms/config.yaml \
-  --output json
+bao-kms-provider verify-rotation --config /etc/openbao-kms/config.yaml
 ```
 
-The command reports the same local registry and Transit metadata view as
-`rotation-plan`, plus `confidence: limited` and a `limitations` field. It does
-not scan Kubernetes resources, inspect etcd, prove that every encrypted resource
-or retained backup has been rewritten, or recommend raising OpenBao
-`min_decryption_version`.
-
-Like `rotation-plan`, this command exits with code `4` when the live metadata
-check fails, even if local registry state is available.
-
-Treat it as a local preflight signal. The operator still owns independent
-migration records, backup-retention records, and any change to
-`min_decryption_version`.
+Reports the same view as `rotation-plan`, with `confidence: limited` and a
+`limitations` field. It does not scan Kubernetes resources, etcd, or backups,
+and it never recommends raising `min_decryption_version`. Like
+`rotation-plan`, it exits with `4` when the metadata check fails.
 
 ## retire-versions
 
-Plan or apply operator-authorized removal of historical keys from local decrypt
-lookup. See the required evidence and node-by-node procedure in
-[Operations: Rotation](/operations/rotation/#retire-local-versions-before-raising-the-minimum).
+Plans or applies the removal of old versions from local decryption. Follow the
+procedure in [Operate: Rotation](/docs/operate/rotation/#retire-old-versions).
 
 ```sh
 bao-kms-provider retire-versions \
@@ -208,116 +129,73 @@ bao-kms-provider retire-versions \
 
 | Flag | Meaning |
 |---|---|
-| `--before-version N` | Remove historical versions below `N`. `N` must exceed `1` and must not exceed the local active version. |
-| `--apply` | Persist the reviewed transition. Without this flag, the command only reports a plan. |
-| `--expected-state-hash HASH` | Required with `--apply`. Must match the current state's `stateHash` from the reviewed plan. |
-| `--output text\|json` | Report format. Default: `text`. |
+| `--before-version N` | Remove versions below `N`. `N` is greater than `1` and at most the local active version. |
+| `--apply` | Save the transition. Without it, the command only reports a plan. |
+| `--expected-state-hash HASH` | Required with `--apply`; the `stateHash` from the reviewed plan. |
 
-The report contains `applied`, `beforeVersion`, `stateHash`, `nextStateHash`,
-`nextGeneration`, `activeKeyIdHash`, `removedVersions` (Transit versions and key
-ID hashes), and `limitations`. No eligible versions means no new generation.
+The report lists `applied`, `beforeVersion`, `stateHash`, `nextStateHash`,
+`nextGeneration`, `activeKeyIdHash`, `removedVersions`, and `limitations`. The
+command needs existing local state and valid live metadata, and rejects a
+pending rotation or an active version that differs from Transit
+`latest_version`. `--apply` also needs the provider stopped and the state
+directory owned by the invoking user. It exits with `4` when a check or the
+save fails. Removed identities stay in the state as hashed `removed` records;
+OpenBao is not changed.
 
-The command requires readable, valid live OpenBao metadata and existing local
-state. It rejects pending rotation, a local active version different from
-Transit `latest_version`, and metadata that makes a retained key unusable.
-Apply also requires the provider to be stopped and the state directory to be
-owned by the invoking user. It returns exit code `4` when these checks or state
-saving fail, and `2` for invalid command options.
+## benchmark
 
-Removed identities remain in hashed state as `removed` records. The command
-does not change OpenBao policy or key metadata and does not prove migration or
-backup completeness.
+```sh
+bao-kms-provider benchmark --config /etc/openbao-kms/config.yaml --iterations 5
+```
+
+Measures Transit encrypt and decrypt latency with non-secret data.
 
 ## config
 
-Inspect the typed configuration after defaults, file config, environment overrides, and supported root flag overrides have been applied.
-
 ```sh
-bao-kms-provider config \
-  --config /etc/openbao-kms/config.yaml
-```
-
-The output includes the derived identity fingerprint when all identity-bearing fields are present. See [Configuration: Identity-Bearing Fields](/reference/configuration/#identity-bearing-fields).
-
-## config schema
-
-Print the configuration JSON Schema for documentation and tooling.
-
-```sh
+bao-kms-provider config --config /etc/openbao-kms/config.yaml
 bao-kms-provider config schema
 ```
 
-The schema rejects unknown top-level and nested fields and reserves `configVersion: v1alpha1`.
-
-## version
-
-Print build metadata for the running binary.
-
-```sh
-bao-kms-provider version
-```
-
-Output fields:
-
-- `version`
-- `commit`
-- `buildDate`
-- `dirty`
-
-Use this command when comparing control-plane nodes during upgrades, rollback checks, and incident response.
-
-## completion
-
-Generate shell completion scripts through Cobra's standard completion command:
-
-```sh
-bao-kms-provider completion zsh
-```
-
-Supported shells are `bash`, `fish`, `powershell`, and `zsh`. Use
-`bao-kms-provider completion <shell> --help` for shell-specific installation
-text. Cobra also provides the standard `help` command for local command help.
+`config` prints the resolved configuration after defaults, the file,
+environment overrides, and flags, including the identity fingerprint when all
+identity-bearing values are set. `config schema` prints the JSON Schema, which
+rejects unknown fields and requires `configVersion: v1alpha1`.
 
 ## policy openbao
 
-Generate the least-privilege OpenBao policy for the configured Transit mount and key.
-
 ```sh
-bao-kms-provider policy openbao \
-  --config /etc/openbao-kms/config.yaml
+bao-kms-provider policy openbao --config /etc/openbao-kms/config.yaml
 ```
 
-The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy. See [Reference: Transit Policy Examples](/reference/transit-policy-examples/) for variants and rationale.
+Prints the least-privilege policy for the configured mount and key: metadata
+read, encrypt, decrypt, `disable_upsert` inspection, and
+`sys/capabilities-self`. Add `auth/token/renew-self` when the role disables the
+default policy; see [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
 
-## Common Flags
+## version and completion
 
-Common flags supported across commands:
+`bao-kms-provider version` prints `version`, `commit`, `buildDate`, and `dirty`;
+use it to compare nodes during upgrades and incidents.
+`bao-kms-provider completion bash|fish|powershell|zsh` prints a shell
+completion script.
 
-```text
---config <path>
---log-level trace|debug|info|warn|error
---metrics-address <host:port>
---health-address <host:port>
-```
+## Common flags
 
-`--config` selects the provider configuration file. The other common flags override the corresponding configuration values for the current invocation.
+| Flag | Effect |
+|---|---|
+| `--config <path>` | Configuration file. |
+| `--log-level trace\|debug\|info\|warn\|error` | Overrides `logging.level`. |
+| `--metrics-address <host:port>` | Overrides `server.metricsAddress`. |
+| `--health-address <host:port>` | Overrides `server.healthAddress`. |
 
-Report-style commands also support:
-
-```text
---output text|json
-```
-
-`doctor`, `verify-key`, `rotation-plan`, `verify-rotation`, and `retire-versions` support stable
-JSON reports for automation consumers. `text` remains the default.
-
-## Exit Codes
+## Exit codes
 
 | Code | Meaning |
 |---:|---|
-| 0 | success |
-| 1 | unclassified command error |
-| 2 | command usage error emitted by command validation |
-| 3 | configuration load or validation error |
-| 4 | diagnostic or check failure |
-| 5 | provider runtime failure |
+| 0 | Success |
+| 1 | Unclassified error |
+| 2 | Invalid command usage |
+| 3 | Configuration load or validation error |
+| 4 | A diagnostic check failed |
+| 5 | Provider runtime failure |

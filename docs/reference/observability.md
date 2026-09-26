@@ -1,146 +1,136 @@
 ---
-title: "Observability"
-description: "Principles, error classes, health endpoints, alerts, log shape, and debug correlation for bao-kms-provider."
-weight: 30
+title: Observability
+description: "Health endpoints, every Prometheus metric, stable log fields, error classes, recommended alerts, and incident-only debug correlation."
+eyebrow: Reference · Observability
+weight: 40
+verifiedBy:
+  - internal/metrics/collectors.go
+  - internal/kmsv2/observability.go
+  - internal/health/handler.go
+  - internal/logging
+  - deploy/prometheus/rules/openbao-kms.rules.yaml
 ---
 
-# Observability
+KMS v2 Status is the health signal `kube-apiserver` uses. The HTTP endpoints,
+metrics, and logs on this page serve node-local operations and monitoring. None
+of them carry secrets, and `key_id` values appear only as hashes. For scrape
+setup and the dashboard, see [Configure: Monitor the provider](/docs/configure/monitor/).
 
-The `bao-kms-provider` observability surface includes structured logs, error classes, health endpoints, alerts, and debug correlation. For the metric and log-field reference, see [Reference: Metrics](/reference/metrics/).
+## Endpoints
 
-## Principles
+| Path | Address | Reports |
+|---|---|---|
+| `/live` | `server.healthAddress`, default `127.0.0.1:8082` | The process, gRPC server, and socket listener are up. |
+| `/ready` | `server.healthAddress` | OpenBao is reachable, auth is valid, Transit metadata is fresh, an active key snapshot exists, the last deep probe succeeded, and cached KMS Status is fresh. |
+| `/metrics` | `server.metricsAddress`, default `127.0.0.1:8081` | Prometheus metrics. |
 
-- KMS Status is the API server's primary health signal. HTTP health endpoints exist for node-local operations and monitoring.
-- Metrics avoid secrets and high-cardinality labels.
-- Logs are structured JSON and redacted by default.
-- Key IDs may be public; metrics and logs export hashes rather than raw IDs.
+`/ready` can fail while API server reads still succeed from its cache, which
+makes it the earliest warning.
+
+## Metrics
+
+Labels hold only bounded values. `key_id` values are exported as
+`base64url-sha256` hashes. Raw OpenBao paths, key names, Kubernetes object
+names, request UIDs, and error strings never appear as labels.
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `openbao_kms_grpc_requests_total` | counter | `method`, `status` | KMS v2 calls (`status`, `encrypt`, `decrypt`) by outcome. |
+| `openbao_kms_grpc_duration_seconds` | histogram | `method` | KMS v2 handler latency. |
+| `openbao_kms_grpc_in_flight` | gauge | `method` | Active handlers per method. |
+| `openbao_kms_grpc_concurrency_rejections_total` | counter | `method` | Calls rejected at the method's concurrency limit. |
+| `openbao_kms_openbao_requests_total` | counter | `operation`, `status` | OpenBao calls by operation and outcome. |
+| `openbao_kms_openbao_duration_seconds` | histogram | `operation` | OpenBao call latency. |
+| `openbao_kms_auth_login_total` | counter | `status` | Login attempts by outcome. |
+| `openbao_kms_auth_renewal_total` | counter | `status` | Token renewals by outcome. |
+| `openbao_kms_auth_method_info` | gauge | `method` | `1` for the configured method: `jwt`, `cert`, or `unknown`. |
+| `openbao_kms_certificate_source_info` | gauge | `source` | `1` for the certificate source: `pkcs11`, `spiffe`, `none`, or `unknown`. |
+| `openbao_kms_token_ttl_seconds` | gauge | none | Remaining OpenBao token TTL. |
+| `openbao_kms_certificate_ttl_seconds` | gauge | none | Remaining client certificate TTL; `0` without certificate auth. |
+| `openbao_kms_status_key_id_hash` | gauge | `hash` | `1` for the active `key_id` hash. Must match on every node. |
+| `openbao_kms_key_version` | gauge | none | Transit key version used for new encryptions. |
+| `openbao_kms_status_cache_age_seconds` | gauge | none | Age of the cached KMS Status response. |
+| `openbao_kms_transit_metadata_observation_total` | counter | `status` | Background Transit metadata probes by outcome. |
+| `openbao_kms_rotation_state` | gauge | `state` | `1` for `active`, `pending`, or `unknown`; see `rotation-plan` for detail. |
+| `openbao_kms_aad_validation_errors_total` | counter | `reason` | AAD validation failures during decryption. |
+| `openbao_kms_decrypt_key_id_errors_total` | counter | `reason` | Decryptions rejected for an unknown, malformed, or disallowed `key_id`. |
+| `openbao_kms_circuit_breaker_state` | gauge | none | OpenBao client circuit breaker state. |
+| `openbao_kms_panic_recoveries_total` | counter | `method` | Recovered handler panics. |
+| `openbao_kms_socket_restarts_total` | counter | none | Socket reclaims after a stale socket was detected. |
+
+The `operation` label takes `jwt_login`, `cert_login`, `token_renew_self`,
+`transit_metadata_read`, `transit_disable_upsert_read`, `transit_encrypt`,
+`transit_decrypt`, `transit_batch_decrypt`, or `capabilities_self`. Logs use the
+same names with spaces instead of underscores.
 
 ## Logs
 
-The provider emits structured JSON logs. `bao-kms-provider serve` defaults to `logging.format: json`. Successful high-frequency KMS and OpenBao request logs are emitted at debug level; failures are warning-level events.
+`serve` writes structured JSON (`logging.format: json`). Successful
+high-frequency KMS and OpenBao requests log at debug level; failures log as
+warnings. These fields are stable across preview patch releases:
 
-Example log entry:
+| Field | Meaning |
+|---|---|
+| `ts`, `level` | RFC 3339 timestamp and level (`debug`, `info`, `warn`, `error`). |
+| `message` | Event name: `kms.request`, `openbao.request`, `auth.login`, `auth.renewal`, `status.probe`, or `socket.stale_removed`. |
+| `operation` | `kms.encrypt`, `kms.decrypt`, `kms.status`, or the event name. |
+| `openbao_operation` | The OpenBao call for `openbao.request` events. |
+| `status`, `duration_ms` | Outcome (`ok`, `error`) and latency. |
+| `key_id_hash`, `transit_key_version` | Hash of the active `key_id` and the Transit version used. |
+| `error_class` | One of the [error classes](#error-classes). |
+| `probe_kind`, `healthz` | Probe kind (`metadata`, `deep`) and KMS Status health value. |
+| `panic_recovered`, `panic_type` | Present after a recovered panic; the panic value is never logged. |
+| `openbao_request_id`, `request_uid_hash`, `debug_correlation_incident`, `debug_correlation_expires_at` | Present only during [debug correlation](#debug-correlation). |
 
-```json
-{
-  "ts": "2026-05-08T12:00:00Z",
-  "level": "debug",
-  "message": "kms.request",
-  "operation": "kms.decrypt",
-  "status": "ok",
-  "duration_ms": 4.2,
-  "key_id_hash": "uK...",
-  "transit_key_version": 3,
-  "error_class": ""
-}
-```
+Logs never contain plaintext, JWTs, OpenBao tokens, full ciphertext, key
+material, full annotation maps, or, by default, raw OpenBao paths and key
+names.
 
-The provider must never log:
+## Error classes
 
-- plaintext,
-- JSON Web Tokens (JWTs),
-- OpenBao tokens,
-- full ciphertext,
-- raw Transit key material,
-- raw OpenBao paths by default,
-- raw key names by default,
-- full annotation maps.
+Every failed operation carries one stable `error_class`. Use them as alert
+routing keys and dashboard groups.
 
-For the full set of stable log fields see [Reference: Metrics](/reference/metrics/#log-fields).
+| Area | Classes |
+|---|---|
+| OpenBao and auth | `openbao_unavailable`, `openbao_sealed`, `openbao_rate_limited`, `auth_failed`, `transit_key_missing`, `transit_policy_denied` |
+| Decrypt validation | `key_id_unknown`, `key_id_malformed`, `key_metadata_refresh_failed`, `aad_missing`, `aad_mismatch`, `annotation_invalid` |
+| Request handling | `status_stale`, `protocol_limit`, `concurrency_limit`, `timeout`, `canceled`, `panic`, `unknown` |
 
-## Error Classes
-
-The provider tags every failed operation with one of these stable error classes. Use these as alert routing keys and dashboard groupings.
-
-- `config_invalid`
-- `socket_unavailable`
-- `auth_failed`
-- `auth_expired`
-- `openbao_rate_limited`
-- `openbao_sealed`
-- `openbao_unavailable`
-- `panic`
-- `transit_key_missing`
-- `transit_policy_denied`
-- `key_id_unknown`
-- `key_metadata_refresh_failed`
-- `key_id_malformed`
-- `aad_missing`
-- `aad_mismatch`
-- `annotation_invalid`
-- `protocol_limit`
-- `status_stale`
-- `timeout`
-- `canceled`
-- `concurrency_limit`
-- `unknown`
-
-Token acquisition errors preserve their cause. Local credential validation and
-rejected auth logins use `auth_failed`; unavailable, sealed, rate-limited,
-canceled, and timed-out auth operations keep their corresponding classes.
-Persistent Transit `403` responses use `transit_policy_denied` after the bounded
-recovery attempt, or while recovery is throttled. OpenBao does not distinguish
-revoked tokens from policy denials in every `403` response. OpenBao request
-metrics include both the rejected attempt and any retry.
-
-## Health Endpoints
-
-```text
-/live      process alive, gRPC server initialized, socket listener initialized
-/ready     OpenBao reachable, auth valid, Transit metadata fresh,
-           active key snapshot available, latest deep probe successful,
-           cached KMS Status fresh
-/metrics   Prometheus metrics
-```
-
-`/live` and `/ready` are served on `server.healthAddress`. `/metrics` is served on `server.metricsAddress`. Both default to `127.0.0.1` so neither is exposed on a routable interface without explicit configuration.
-
-`/ready` is the first signal that something is wrong even when API server reads continue to succeed against the API server cache. KMS v2 Status is the canonical health signal consumed by `kube-apiserver`.
+Token errors keep their cause: local credential failures and rejected logins
+are `auth_failed`, while unavailable, sealed, rate-limited, canceled, and
+timed-out auth calls keep those classes. A Transit `403` that persists after the
+single recovery attempt, or while recovery is throttled, is
+`transit_policy_denied`, because OpenBao does not always tell a revoked token
+from a policy denial. OpenBao request metrics count both the rejected attempt
+and the retry.
 
 ## Alerts
 
-Recommended alert conditions:
+Alert on: KMS Status unhealthy, stale Status cache, OpenBao error rate, login or
+renewal failures, low token TTL, different `key_id` hashes across nodes, a
+rotation stuck pending, AAD or unknown `key_id` errors, encrypt or decrypt
+latency, rising concurrency rejections, restart loops, and stale socket
+reclaims.
 
-- KMS Status unhealthy.
-- Status cache age exceeds threshold.
-- OpenBao request error rate above threshold.
-- Auth login or renewal failures.
-- Token TTL below threshold.
-- `key_id` hash differs across control-plane nodes.
-- Rotation state stuck pending.
-- Additional authenticated data (AAD) validation errors.
-- Unknown `key_id` errors.
-- Latency threshold breach for encrypt or decrypt.
-- Increase in `openbao_kms_grpc_concurrency_rejections_total`.
-- Provider restart loop.
-- Socket restart or stale socket detection.
+Starting rules ship in `deploy/prometheus/rules/openbao-kms.rules.yaml`. Tune
+their thresholds to your OpenBao latency, probe cadence, token TTLs, and scrape
+topology before paging on them.
 
-Example Prometheus alerting rules ship at `deploy/prometheus/rules/openbao-kms.rules.yaml`. Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
+## Debug correlation
 
-An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Deployment: Observability](/deployment/observability/) for scrape and import guidance.
+Debug correlation temporarily adds `request_uid_hash`, `openbao_request_id`,
+and the incident fields to debug logs so you can match provider logs with
+`kube-apiserver` and OpenBao audit records. It is off by default and turns on
+only when all of these hold:
 
-## Correlation With OpenBao
+- `logging.level: debug` and `logging.logOpenBaoRequestIDs: true`,
+- `logging.debugCorrelation.incidentId` is set,
+- `logging.debugCorrelation.ttl` is positive and at most one hour.
 
-OpenBao request IDs may be logged when available and safe. They must not be stored in KMS annotations by default.
-
-Debug correlation mode is disabled by default. When enabled, it temporarily adds safe correlation fields to debug logs:
-
-- `request_uid_hash` on KMS request logs,
-- `openbao_request_id` on OpenBao request logs when OpenBao returned a safe request ID,
-- `debug_correlation_incident`,
-- `debug_correlation_expires_at`.
-
-The mode has strict guardrails:
-
-- disabled by default,
-- requires `logging.level: debug`,
-- requires `logging.logOpenBaoRequestIDs: true`,
-- requires `logging.debugCorrelation.incidentId`,
-- requires a positive `logging.debugCorrelation.ttl` no greater than one hour,
-- expires automatically without restart after the configured TTL,
-- still does not log plaintext, JWTs, OpenBao tokens, full ciphertext, raw Transit key material, raw OpenBao paths, or raw key names.
-
-Example incident-only configuration:
+It switches itself off when the TTL expires, without a restart, and never
+relaxes the logging rules above. OpenBao request IDs are never stored in KMS
+annotations.
 
 ```yaml
 logging:
@@ -151,5 +141,3 @@ logging:
     ttl: 15m
     incidentId: INC-12345
 ```
-
-For the configuration field reference see [Configuration: Debug Correlation](/reference/configuration/#debug-correlation).

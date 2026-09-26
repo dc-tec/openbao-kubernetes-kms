@@ -1,260 +1,85 @@
 ---
-title: "Configuration"
-description: "Authoritative reference for the bao-kms-provider configuration file: example, defaults, validation rules, identity-bearing fields, and unsafe options."
+title: Configuration
+description: "Every provider configuration field with its default and meaning, the identity-bearing fields, validation rules, and environment overrides."
+eyebrow: Reference
 weight: 20
+verifiedBy:
+  - internal/config/config.go
+  - internal/config/validation.go
+  - internal/config/schema.go
+  - deploy/config/provider-systemd.yaml
 ---
 
-# Configuration
+The provider reads one YAML file, `/etc/openbao-kms/config.yaml` by default.
+Start from `deploy/config/provider-systemd.yaml` or
+`deploy/config/provider-static-pod.yaml`, and see
+[Plan identity values](/docs/get-started/plan-values/#provider-configuration)
+for the fields every deployment changes. `bao-kms-provider config schema`
+prints the JSON Schema, which rejects unknown fields.
 
-This reference defines the `bao-kms-provider` configuration file. Identity-bearing fields and default values are stable across preview patch releases.
+String fields need YAML strings: quote values YAML would read as numbers or
+booleans, such as `keyName: "0123"` or `socketGroup: "1234"`. Durations need a
+unit, such as `120s`; a bare `120` is rejected.
 
-## Value Types
+## Fields
 
-String fields require YAML strings. Quote values that YAML would otherwise
-interpret as numbers or booleans. For example, use `keyName: "0123"`,
-`mountPath: "1e3"`, and `socketGroup: "1234"`. The provider rejects numeric or
-boolean values in string fields instead of converting them.
+Fields marked **required** have no usable default.
 
-Duration fields require duration strings, such as `30s`, `"2m"`, or `0s` where
-zero is allowed. Bare numbers such as `activationDelay: 120` are rejected. Use
-`activationDelay: 120s` to specify two minutes.
+### server
 
-## Example
+| Field | Default | Meaning |
+|---|---|---|
+| `configVersion` | `v1alpha1` | Required. The only accepted version. |
+| `server.socketPath` | `/run/openbao-kms/kms.sock` | Required. Unix socket for the API server; must sit in a safe runtime directory. |
+| `server.socketMode` | `"0660"` | Required. Socket mode; broader modes are rejected. |
+| `server.socketGroup` | none | Required. Socket group, as a name (systemd) or decimal GID (static pod). |
+| `server.metricsAddress` | `127.0.0.1:8081` | Prometheus listener. |
+| `server.healthAddress` | `127.0.0.1:8082` | `/live` and `/ready` listener. |
+| `server.maxConcurrentStatus`, `maxConcurrentEncrypt`, `maxConcurrentDecrypt` | `16`, `32`, `64` | Active handlers per KMS method, `1` to `1024`. Excess calls fail immediately with `ResourceExhausted`; there is no queue. |
 
-```yaml
-configVersion: v1alpha1
-server:
-  socketPath: /run/openbao-kms/kms.sock
-  socketMode: "0660"
-  socketGroup: openbao-kms-socket
-  metricsAddress: "127.0.0.1:8081"
-  healthAddress: "127.0.0.1:8082"
-  maxConcurrentStatus: 16
-  maxConcurrentEncrypt: 32
-  maxConcurrentDecrypt: 64
+### openbao
 
-openbao:
-  address: https://bao.example.internal:8200
-  namespace: ""
-  caCertFile: /etc/openbao-kms/tls/ca.crt
-  tlsServerName: bao.example.internal
-  timeout: 2s
-  instanceId: bao-prod-a
+| Field | Default | Meaning |
+|---|---|---|
+| `openbao.address` | none | Required. HTTPS endpoint that serves requests directly. Every HTTP redirect is rejected, so for HA use server-side request forwarding or route to the active node. |
+| `openbao.caCertFile` | none | Required. CA bundle for OpenBao TLS. |
+| `openbao.tlsServerName` | none | Required. Expected server name in the OpenBao certificate. |
+| `openbao.instanceId` | none | Required, identity-bearing. |
+| `openbao.namespace` | empty | Identity-bearing. A relative namespace such as `admin/workload-a`, sent as `X-Vault-Namespace`. Mount paths stay relative to it. |
+| `openbao.timeout` | `2s` | Deadline for one OpenBao request. Dial, TLS, and header timeouts are fixed. |
 
-auth:
-  method: jwt
-  loginBeforeTokenExpiry: 5m
-  tokenRenewalIncrement: 1h
-  loginTimeout: 0s
-  jwt:
-    mountPath: auth/k8s-workload-a-jwt
-    role: openbao-kms-control-plane
-    jwtFile: /var/lib/openbao-kms/identity.jwt
-    minRemainingTtl: 2m
-    clockSkewLeeway: 30s
-    expectedIssuer: ""
-    expectedAudience: []
-    expectedSubject: ""
+### auth
 
-transit:
-  mountPath: transit
-  keyName: k8s-workload-a-etcd
-  keyIdScope:
-    providerName: openbao-kms-workload-a
-    clusterId: workload-a
-    transitMountId: transit-prod-primary
-    keyLineageId: "01HXEXAMPLEKEYLINEAGEID"
+| Field | Default | Meaning |
+|---|---|---|
+| `auth.method` | `jwt` | `jwt`, or `cert` in certificate-auth builds; see [Compatibility](/docs/reference/compatibility/#auth-methods). |
+| `auth.loginBeforeTokenExpiry` | `5m` | Inside this window before expiry, a request starts one shared renewal or login while others keep using the valid token. |
+| `auth.tokenRenewalIncrement` | `1h` | TTL requested on renewal. Keep it above `loginBeforeTokenExpiry` and within the role's maximum TTL. |
+| `auth.loginTimeout` | `0s` | Deadline for one shared renewal or login, including recovery after a rejected token, independent of the request deadline. `0s` means `max(openbao.timeout, 5s)`. |
+| `auth.jwt.mountPath`, `auth.jwt.role` | none | Required for `jwt`. Mount path including `auth/`, and role name. |
+| `auth.jwt.jwtFile` | none | Required for `jwt`. Re-read before every login. |
+| `auth.jwt.minRemainingTtl` | `2m` | Minimum JWT lifetime left for a login. |
+| `auth.jwt.clockSkewLeeway` | `30s` | Leeway for `nbf`, `iat`, and `exp`. |
+| `auth.jwt.expectedIssuer`, `expectedAudience`, `expectedSubject` | empty | Local claim checks before login. |
+| `auth.cert.mountPath`, `auth.cert.source` | none | Required for `cert`. `source` must be `pkcs11`. |
+| `auth.cert.name` | empty | OpenBao cert role name; empty lets OpenBao try every role. |
+| `auth.cert.minRemainingTtl` | `24h` | Minimum certificate lifetime left for a login. |
+| `auth.cert.clockSkewLeeway` | `30s` | Leeway for certificate validity. |
+| `auth.cert.pkcs11.certificateFile`, `modulePath`, `tokenLabel`, `keyLabel`, `pinFile` | none | Required for `pkcs11`. The certificate file holds only PEM `CERTIFICATE` blocks; the PIN file is an absolute, regular, provider-only file with one line. |
+| `auth.cert.pkcs11.maxSessions` | none | At least `2` for `pkcs11`. |
 
-bootstrap:
-  graceTimeout: 60s
-  retryInterval: 5s
+After a `401` or `403`, the provider logs in again and retries the request
+once, at most once every five seconds and with exponential backoff for failed
+logins; see [Security: Auth model](/docs/security/auth-model/#plugin-authentication-lifecycle).
 
-status:
-  probeInterval: 30s
-  deepProbeInterval: 5m
-  statusMaxStaleness: 2m
-
-state:
-  path: /var/lib/openbao-kms/state/key-registry.json
-
-rotation:
-  mode: observed
-  activationDelay: 2m
-  requireStableObservationCount: 3
-  rejectVersionRollback: true
-
-logging:
-  level: info
-  format: json
-  logOpenBaoRequestIDs: true
-  debugCorrelation:
-    enabled: false
-    ttl: 15m
-    incidentId: ""
-```
-
-## Required Fields
-
-The following fields must be set explicitly:
-
-- `configVersion`
-- `server.socketPath`
-- `server.socketMode`
-- `server.socketGroup`
-- `openbao.address`
-- `openbao.caCertFile`
-- `openbao.tlsServerName`
-- `openbao.instanceId`
-- `auth.method`
-- when `auth.method` is `jwt`:
-  - `auth.jwt.mountPath`
-  - `auth.jwt.role`
-  - `auth.jwt.jwtFile`
-- when `auth.method` is `cert`:
-  - `auth.cert.mountPath`
-  - `auth.cert.source`
-  - for `auth.cert.source: pkcs11`:
-    - `auth.cert.pkcs11.certificateFile`
-    - `auth.cert.pkcs11.modulePath`
-    - `auth.cert.pkcs11.tokenLabel`
-    - `auth.cert.pkcs11.keyLabel`
-    - `auth.cert.pkcs11.pinFile`
-- `transit.mountPath`
-- `transit.keyName`
-- `transit.keyIdScope.providerName`
-- `transit.keyIdScope.clusterId`
-- `transit.keyIdScope.transitMountId`
-- `transit.keyIdScope.keyLineageId`
-
-`transit.keyName` is treated as one OpenBao path segment. Configuration
-validation rejects `/` and `%` in the key name so the provider, diagnostics,
-and generated policy paths all address the same Transit key.
-
-`openbao.namespace` is optional. Leave it empty for the root namespace. When
-set, it is sent as `X-Vault-Namespace` on OpenBao auth and Transit requests and
-is treated as identity-bearing provider scope.
-
-## Defaults
-
-| Field | Default |
-|---|---|
-| `configVersion` | `v1alpha1` |
-| `server.socketPath` | `/run/openbao-kms/kms.sock` |
-| `server.socketMode` | `"0660"` |
-| `server.metricsAddress` | `127.0.0.1:8081` |
-| `server.healthAddress` | `127.0.0.1:8082` |
-| `server.maxConcurrentStatus` | `16` |
-| `server.maxConcurrentEncrypt` | `32` |
-| `server.maxConcurrentDecrypt` | `64` |
-| `openbao.timeout` | `2s` |
-| `auth.method` | `jwt` |
-| `auth.loginBeforeTokenExpiry` | `5m` |
-| `auth.tokenRenewalIncrement` | `1h` |
-| `auth.loginTimeout` | `max(openbao.timeout, 5s)` when unset or `0s` |
-| `auth.jwt.minRemainingTtl` | `2m` |
-| `auth.jwt.clockSkewLeeway` | `30s` |
-| `auth.jwt.expectedIssuer` | empty |
-| `auth.jwt.expectedAudience` | empty |
-| `auth.jwt.expectedSubject` | empty |
-| `auth.cert.minRemainingTtl` | `24h` |
-| `auth.cert.clockSkewLeeway` | `30s` |
-| `auth.cert.name` | empty, which lets OpenBao try every configured certificate role |
-| `auth.cert.pkcs11.maxSessions` | unset, but validation requires at least `2` when the PKCS#11 hardware or software token source is used |
-| `bootstrap.graceTimeout` | `60s` |
-| `bootstrap.retryInterval` | `5s` |
-| `status.probeInterval` | `30s` |
-| `status.deepProbeInterval` | `5m` |
-| `status.statusMaxStaleness` | `2m` |
-| `state.path` | `/var/lib/openbao-kms/state/key-registry.json` |
-| `rotation.mode` | `observed` |
-| `rotation.activationDelay` | `2m` |
-| `rotation.requireStableObservationCount` | `3` |
-| `rotation.rejectVersionRollback` | `true` |
-| `logging.level` | `info` |
-| `logging.format` | `json` |
-| `logging.logOpenBaoRequestIDs` | `true` |
-| `logging.debugCorrelation.enabled` | `false` |
-| `logging.debugCorrelation.ttl` | `15m` |
-| `logging.debugCorrelation.incidentId` | empty |
-
-## Decrypt Discovery Timing
-
-Unknown-key decrypt discovery uses `status.probeInterval` as its per-process
-retry interval. It shares `openbao.timeout` with the decrypt request and does
-not advance rotation observations or promotion.
-
-## Auth Timing
-
-`auth.method` selects how the provider obtains its OpenBao token. The default
-preview release artifacts support only JSON Web Token (JWT) auth and use `jwt`.
-The `cert` method is available only in binaries built with a certificate-auth
-build tag. Certificate auth backed by a PKCS#11 hardware or software token is a
-supported preview path only when the selected release
-publishes matching opt-in artifacts and marks that path as tested.
-
-`auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. A request within
-this window starts a shared renewal or login. Requests continue with the
-unexpired token while that attempt runs. Requests without a usable token wait
-for the shared attempt, subject to their own deadlines.
-
-`auth.tokenRenewalIncrement` is the requested TTL increment sent to OpenBao during `auth/token/renew-self`. Keep it larger than the refresh-ahead threshold and within the auth role's maximum token TTL.
-
-`auth.loginTimeout` sets the deadline for one shared auth attempt, including renewal and any
-fallback login. It is independent of the initiating request deadline. Set it to
-`0s` to derive `max(openbao.timeout, 5s)`. Provider shutdown cancels the attempt.
-
-Token rejection recovery uses the same auth timeout. The provider retries a
-request once after re-login on `401` or `403`. Recovery logins have a fixed
-five-second cooldown; failed logins also use exponential backoff. See
-[Provider Authentication Lifecycle](/security/auth-model/#plugin-authentication-lifecycle).
-
-`openbao.timeout` is the operator-facing deadline for one OpenBao request. The
-HTTP transport also uses fixed control-plane defaults for dial, TLS handshake,
-response-header, and idle-connection timeouts so failed or stalled connections
-are bounded in addition to the overall request deadline. These transport defaults
-are not configurable in the preview line.
-
-OpenBao clients reject all HTTP redirects, including HTTPS and same-origin
-redirects. A redirect returns an `unavailable` error without forwarding tokens,
-login material, or Transit request bodies. Set `openbao.address` to an HTTPS
-endpoint that serves requests directly. For HA, use OpenBao server-side request
-forwarding or route the endpoint to the active node. HTTP redirect-based routing
-is not supported.
-
-`server.maxConcurrentStatus`, `server.maxConcurrentEncrypt`, and
-`server.maxConcurrentDecrypt` limit active KMS handlers. The provider uses
-separate limits so one method cannot consume another method's capacity. A
-request above its method limit fails immediately with gRPC `ResourceExhausted`.
-The provider does not keep an internal request queue. Each value must be from 1
-through 1024.
-
-`auth.jwt.minRemainingTtl` controls how much JWT lifetime must remain before the provider will use a JWT for login. The JWT file is re-read before each re-login.
-
-`auth.cert.minRemainingTtl` controls how much client certificate lifetime must remain before the provider will attempt OpenBao cert auth. The provider validates the certificate locally before login and records the observed certificate TTL for metrics.
-
-`bootstrap.graceTimeout` controls how long startup retries the initial metadata and deep probes before the process exits. It exists to handle boot races such as auth material projection, DNS or routing settling, OpenBao restart, and clock synchronization.
-
-## Certificate Auth
-
-Certificate auth logs in through the OpenBao TLS Certificate auth method. It
-sends `POST /v1/<auth.cert.mountPath>/login` over a TLS connection that presents
-the configured client certificate. `auth.cert.name` maps to OpenBao's optional
-cert role `name` request field. Leave it empty only when the mount is configured
-so that one matching role is unambiguous.
-
-PKCS#11-backed certificate auth:
+A full certificate-auth configuration:
 
 ```yaml
 auth:
   method: cert
-  loginBeforeTokenExpiry: 5m
-  tokenRenewalIncrement: 1h
-  loginTimeout: 0s
   cert:
     mountPath: auth/k8s-workload-a-cert
     name: openbao-kms-control-plane
-    minRemainingTtl: 24h
-    clockSkewLeeway: 30s
     source: pkcs11
     pkcs11:
       certificateFile: /etc/openbao-kms/client/client-chain.pem
@@ -265,167 +90,66 @@ auth:
       maxSessions: 4
 ```
 
-This is the only certificate source covered by the current preview line when
-the selected release publishes the matching PKCS#11 artifact and marks that
-path as tested.
+### transit, state, and runtime behavior
 
-OpenBao must request TLS client certificates on the listener used by the
-provider. In OpenBao listener terms, do not set `tls_disable` or
-`tls_disable_client_certs` to true for that listener. Role constraints must bind
-certificate identity, for example through `allowed_uri_sans` for URI
-identities. Keep cert auth binding enabled during token renewal. When the role
-uses Online Certificate Status Protocol (OCSP) checks, keep
-`ocsp_fail_open=false`.
+| Field | Default | Meaning |
+|---|---|---|
+| `transit.mountPath`, `transit.keyName` | none | Required, identity-bearing. The key name is one path segment without `/` or `%`. |
+| `transit.keyIdScope.providerName`, `clusterId`, `transitMountId`, `keyLineageId` | none | Required, identity-bearing. |
+| `state.path` | `/var/lib/openbao-kms/state/key-registry.json` | Absolute path of the local registry state; the checkpoint and lock sit next to it. |
+| `bootstrap.graceTimeout`, `bootstrap.retryInterval` | `60s`, `5s` | How long and how often startup retries its first probes before exiting. |
+| `status.probeInterval` | `30s` | Metadata probe interval, also the per-process limit for unknown-`key_id` discovery. |
+| `status.deepProbeInterval` | `5m` | Encrypt and decrypt probe interval. |
+| `status.statusMaxStaleness` | `2m` | Oldest cached Status that still counts as healthy. |
+| `rotation.mode` | `observed` | Promotion follows observed Transit versions. |
+| `rotation.activationDelay` | `2m` | Wait after stable observation before promotion. |
+| `rotation.requireStableObservationCount` | `3` | Successful observations needed before promotion. |
+| `rotation.rejectVersionRollback` | `true` | Reject a Transit `latest_version` that moves backwards. |
+| `logging.level`, `logging.format` | `info`, `json` | Log level and format. |
+| `logging.logOpenBaoRequestIDs` | `true` | Log safe OpenBao request IDs. |
+| `logging.debugCorrelation.enabled`, `ttl`, `incidentId` | `false`, `15m`, empty | Incident-only correlation; see [Observability](/docs/reference/observability/#debug-correlation). |
 
-For the PKCS#11 source, `auth.cert.pkcs11.certificateFile` must be a PEM chain
-containing only `CERTIFICATE` blocks. Do not place a PEM private key in that
-file; the private key must remain behind the PKCS#11 module. The PIN file must
-be an absolute, regular, tightly permissioned file containing one PIN line, with
-only an optional trailing newline.
+## Identity-bearing fields
 
-PKCS#11 certificate auth is tested with SoftHSM and OpenBao when the matching
-artifact is part of the selected release. `auth.cert.source: spiffe` is not a
-supported preview user configuration.
-
-## Debug Correlation
-
-`logging.debugCorrelation` is an incident-response mode for short-window troubleshooting. Do not enable it for steady-state operation.
-
-It only validates when:
-
-- `logging.level` is `debug`,
-- `logging.logOpenBaoRequestIDs` is `true`,
-- `logging.debugCorrelation.incidentId` is set,
-- `logging.debugCorrelation.ttl` is positive and no greater than one hour.
-
-While active, logs may include safe request UID hashes and safe OpenBao request IDs for correlation with kube-apiserver and OpenBao audit records. The mode expires automatically after the configured TTL and still must not log plaintext, JWTs, OpenBao tokens, full ciphertext, raw OpenBao paths, or raw key names.
-
-## Identity-Bearing Fields
-
-Changing these fields after encryption begins can make existing data unreadable or force Kubernetes to treat data as encrypted with a different provider:
-
-- `transit.keyIdScope.providerName`
-- `transit.keyIdScope.clusterId`
-- `openbao.instanceId`
-- `openbao.namespace`
-- `transit.keyIdScope.transitMountId`
-- `transit.keyIdScope.keyLineageId`
-- `transit.keyName`
-- `transit.mountPath`
-- Kubernetes `EncryptionConfiguration` provider name
-
-Treat these values as immutable. Any change requires a documented migration plan; see [Operations: Disaster Recovery](/operations/disaster-recovery/) for the procedure.
-
-Use `openbao.namespace` when one OpenBao cluster serves multiple Kubernetes
-clusters through separate namespaces. The namespace must be a relative OpenBao
-namespace path such as `admin/workload-a`; validation rejects leading slashes,
-empty segments, dot segments, surrounding whitespace, control characters, and
-percent encoding. Auth and Transit mount paths remain relative to that
-namespace and must not include the namespace prefix.
-
-The implementation exposes an identity fingerprint for these fields. Record it during rollout and compare it during troubleshooting without exposing raw cluster, OpenBao, or Transit topology values.
+`transit.keyIdScope.providerName`, `clusterId`, `transitMountId`, and
+`keyLineageId`, `openbao.instanceId`, `openbao.namespace`, `transit.mountPath`,
+`transit.keyName`, and the `EncryptionConfiguration` provider name feed every
+`key_id` and AAD. Changing one after encryption begins can make existing data
+unreadable, so treat them as immutable; a change needs a migration plan.
+`bao-kms-provider config` prints an identity fingerprint over them to compare
+across nodes without exposing the values.
 
 ## Validation
 
-Startup fails closed when any of the following conditions hold:
+Startup fails closed when:
 
-- config file permissions are unsafe,
-- socket path is outside an approved runtime directory,
-- socket parent directory is unsafe,
-- socket path is a symlink or regular file,
-- state path is not absolute,
-- JWT auth is selected and the JWT file is unreadable,
-- JWT auth is selected and the JWT is expired or too close to expiry,
-- JWT auth is selected and the JWT `nbf` or `iat` claims are outside the configured clock-skew leeway,
-- cert auth is selected without a cert-auth build variant,
-- cert auth is selected and the configured certificate source is unavailable,
-- cert auth is selected and the client certificate is expired, not yet valid, too close to expiry, missing client-auth usage, weakly signed, or mismatched with its signer,
-- PKCS#11 cert auth is selected and the certificate file, module path, token label, key label, PIN file, or session count is unsafe,
-- unsupported SPIFFE cert auth is selected,
-- CA file is missing,
-- OpenBao address is invalid or includes user info, query, or fragment data,
-- TLS server name is empty,
-- auth role or identity fields contain surrounding whitespace or control characters,
-- provider name is empty,
-- cluster ID is empty,
-- OpenBao instance ID is empty,
-- OpenBao namespace is malformed,
-- Transit mount ID is empty,
-- key lineage ID is empty,
-- Transit mount or key names are empty,
-- required additional authenticated data (AAD) scope inputs are missing,
-- socket mode is broader than configured policy allows,
+- the configuration file permissions are unsafe,
+- the socket path, its parent directory, or its mode is unsafe, or the path is
+  a symlink or regular file,
+- the state path is not absolute,
+- the CA file is missing, the OpenBao address is invalid or carries user info,
+  a query, or a fragment, or the TLS server name is empty,
+- a required or identity-bearing field is empty, contains surrounding
+  whitespace or control characters, or the namespace is malformed,
+- the JWT is unreadable, expired, too close to expiry, or has `nbf` or `iat`
+  outside the leeway,
+- `cert` auth is selected in a build without it, the certificate source is
+  unavailable, the certificate is invalid, too close to expiry, lacks
+  client-auth usage, is weakly signed, or does not match its signer, or a
+  PKCS#11 setting is unsafe,
+- the SPIFFE certificate source is selected.
 
-## Permissions
+There is no setting to disable AAD, enable debug endpoints, enable decrypt
+micro-batching, or log raw OpenBao paths.
 
-Recommended local permissions:
+## Environment overrides
 
-```text
-/etc/openbao-kms/config.yaml        root:openbao-kms                0640
-/etc/openbao-kms/tls/ca.crt         root:root                       0644
-/var/lib/openbao-kms/identity.jwt   root:openbao-kms                0640
-/etc/openbao-kms/client/client-chain.pem root:openbao-kms           0640
-/etc/openbao-kms/pkcs11/pin         root:openbao-kms                0640
-/var/lib/openbao-kms/state          openbao-kms:openbao-kms         0750
-/run/openbao-kms                    openbao-kms:openbao-kms-socket  2750
-/run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
-```
+Only these settings can come from the environment. Secrets and
+identity-bearing fields cannot.
 
-JWT files, certificate chain files, and PKCS#11 PIN files should be readable
-only by the provider process. The socket should be readable and writable only
-by the provider and the local API server identity. The socket directory should
-be writable only by the provider identity.
-
-`server.socketGroup` accepts a local group name or a decimal numeric GID. Use a group name for systemd or host-binary deployments. Use a numeric GID in static pod mode so the distroless non-root container does not depend on host group names being present inside the image.
-
-For the full identity model and rationale see [Deployment: Linux Identity Model](/deployment/linux-identity-model/).
-
-## Unsafe Options
-
-The provider intentionally does not expose runtime switches for unsupported
-release-boundary behavior. In particular, there is no config field to:
-
-- enable unsafe debug endpoints,
-- disable Transit associated data,
-- enable KMS decrypt micro-batching,
-- select alternate AAD read modes,
-- log raw OpenBao paths.
-
-Broad socket permissions remain rejected by validation.
-
-## Environment Variables
-
-The primary configuration source is the config file. Environment variables may be supported for container deployment ergonomics. Secrets must not be required through environment variables.
-
-Allowed environment overrides are limited to:
-
-- config path: `BAO_KMS_PROVIDER_CONFIG` or `BAO_KMS_PROVIDER_CONFIG_PATH`,
-- log level: `BAO_KMS_PROVIDER_LOG_LEVEL` or `BAO_KMS_PROVIDER_LOGGING_LEVEL`,
-- metrics listen address: `BAO_KMS_PROVIDER_SERVER_METRICS_ADDRESS` or `BAO_KMS_PROVIDER_SERVER_METRICSADDRESS`,
-- health listen address: `BAO_KMS_PROVIDER_SERVER_HEALTH_ADDRESS` or `BAO_KMS_PROVIDER_SERVER_HEALTHADDRESS`,
-- feature flags used only in tests.
-
-Identity-bearing fields such as `openbao.namespace`, `auth.jwt.expectedIssuer`,
-`auth.jwt.expectedAudience`, `auth.jwt.expectedSubject`, `auth.cert.name`,
-`transit.keyName`, `transit.mountPath`, and `transit.keyIdScope.*` are not
-environment overrides. Keep them in the reviewed config file so deployment
-environments cannot silently drift the KMS identity contract.
-
-## Schema Export
-
-The CLI prints the JSON Schema used by documentation and tooling:
-
-```sh
-bao-kms-provider config schema
-```
-
-The schema rejects unknown top-level and nested fields, reserves `configVersion: v1alpha1`, and documents the supported configuration surface.
-
-## Source References
-
-- [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
-- [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
-- [OpenBao JWT and OpenID Connect (OIDC) auth API](https://openbao.org/api-docs/auth/jwt/)
-- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
-- [OpenBao TCP listener configuration](https://openbao.org/docs/configuration/listener/tcp/)
-- [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)
+| Variable | Setting |
+|---|---|
+| `BAO_KMS_PROVIDER_CONFIG`, `BAO_KMS_PROVIDER_CONFIG_PATH` | Configuration file path |
+| `BAO_KMS_PROVIDER_LOG_LEVEL`, `BAO_KMS_PROVIDER_LOGGING_LEVEL` | `logging.level` |
+| `BAO_KMS_PROVIDER_SERVER_METRICS_ADDRESS`, `BAO_KMS_PROVIDER_SERVER_METRICSADDRESS` | `server.metricsAddress` |
+| `BAO_KMS_PROVIDER_SERVER_HEALTH_ADDRESS`, `BAO_KMS_PROVIDER_SERVER_HEALTHADDRESS` | `server.healthAddress` |

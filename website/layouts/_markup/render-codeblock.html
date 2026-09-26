@@ -1,0 +1,11 @@
+{{- /* Render fenced code as the same copyable block the command shortcode uses.
+     Keep plain Markdown fences in source: repository tests extract them. */ -}}
+{{- $labels := dict "sh" "terminal" "bash" "terminal" "console" "terminal" -}}
+{{- $label := index $labels .Type | default .Type | default "text" -}}
+<div class="command-block">
+  <div class="command-head">
+    <div><span>{{ $label }}</span></div>
+    <button type="button" data-copy-button>Copy</button>
+  </div>
+  <pre><code{{ with .Type }} class="language-{{ . }}"{{ end }}>{{ .Inner | htmlEscape | safeHTML }}</code></pre>
+</div>

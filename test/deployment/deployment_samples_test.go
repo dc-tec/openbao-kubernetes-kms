@@ -317,10 +317,10 @@ func TestDockerfileUsesPinnedDistrolessNonRootRuntime(t *testing.T) {
 func TestPublicDeploymentSurfacesAvoidFloatingInputs(t *testing.T) {
 	publicSurfaces := []string{
 		"README.md",
-		"docs/getting-started/install.md",
-		"docs/deployment/choosing-a-model.md",
-		"docs/deployment/static-pod.md",
-		"docs/deployment/systemd.md",
+		"docs/get-started/download.md",
+		"docs/get-started/deployment-model.md",
+		"docs/get-started/static-pod.md",
+		"docs/get-started/systemd.md",
 		"deploy/README.md",
 		"deploy/package/bundles/static-pod/README.md",
 		"deploy/package/bundles/systemd/README.md",
@@ -343,8 +343,8 @@ func TestPublicDeploymentSurfacesAvoidFloatingInputs(t *testing.T) {
 
 func TestProviderImageReferencesAreDigestAddressed(t *testing.T) {
 	for _, path := range []string{
-		"docs/getting-started/install.md",
-		"docs/deployment/static-pod.md",
+		"docs/get-started/download.md",
+		"docs/get-started/static-pod.md",
 		"deploy/static-pod/bao-kms-provider.yaml",
 	} {
 		content := readSample(t, path)

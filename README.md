@@ -13,7 +13,7 @@ selected Kubernetes API resources in etcd without calling OpenBao directly.
 > `bao-kms-provider` is currently a preview release. Use it for labs, staging,
 > and evaluation of the deployment model. Do not use preview releases for
 > production control planes, and treat only the versions and configurations in
-> the [compatibility matrix](https://dc-tec.github.io/openbao-kubernetes-kms/reference/compatibility/)
+> the [compatibility matrix](https://dc-tec.github.io/openbao-kubernetes-kms/docs/reference/compatibility/)
 > as tested.
 
 ## Architecture
@@ -32,7 +32,7 @@ flowchart LR
 ```
 
 The provider runs on each control-plane host and is part of the API server boot
-path. See the [architecture overview](https://dc-tec.github.io/openbao-kubernetes-kms/architecture/overview/)
+path. See the [architecture overview](https://dc-tec.github.io/openbao-kubernetes-kms/docs/architecture/overview/)
 for the data flows, trust boundaries, and failure model.
 
 ## Documentation
@@ -40,15 +40,15 @@ for the data flows, trust boundaries, and failure model.
 The [documentation site](https://dc-tec.github.io/openbao-kubernetes-kms/)
 contains the project contract and operator guidance:
 
-- [Start Here](https://dc-tec.github.io/openbao-kubernetes-kms/getting-started/)
-  for setup and first-use verification.
-- [Deployment](https://dc-tec.github.io/openbao-kubernetes-kms/deployment/)
-  for systemd and static-pod models.
-- [Operations](https://dc-tec.github.io/openbao-kubernetes-kms/operations/)
+- [Get started](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/)
+  to choose a deployment model, install the provider, and verify encryption.
+- [Configure](https://dc-tec.github.io/openbao-kubernetes-kms/docs/configure/)
+  for OpenBao auth and policy variants and monitoring.
+- [Operate](https://dc-tec.github.io/openbao-kubernetes-kms/docs/operate/)
   for rotation, recovery, upgrades, and troubleshooting.
-- [Reference](https://dc-tec.github.io/openbao-kubernetes-kms/reference/)
+- [Reference](https://dc-tec.github.io/openbao-kubernetes-kms/docs/reference/)
   for configuration, compatibility, protocol behavior, and release policy.
-- [Security](https://dc-tec.github.io/openbao-kubernetes-kms/security/)
+- [Security](https://dc-tec.github.io/openbao-kubernetes-kms/docs/security/)
   for the threat model, hardening requirements, and authentication boundaries.
 
 ## Development
@@ -61,7 +61,7 @@ make ci-core
 
 For repository layout, focused tests, and contribution rules, see
 [Contributing](CONTRIBUTING.md) and the
-[development documentation](https://dc-tec.github.io/openbao-kubernetes-kms/development/).
+[contributor documentation](https://dc-tec.github.io/openbao-kubernetes-kms/contribute/).
 
 ## Security
 

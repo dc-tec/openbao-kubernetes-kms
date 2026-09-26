@@ -1,14 +1,17 @@
 ---
-title: "EncryptionConfiguration"
-description: "Authoritative reference for the Kubernetes API server EncryptionConfiguration shape used with bao-kms-provider: required fields, semantics, automatic reload caveats, and resource selection."
-weight: 50
+title: EncryptionConfiguration
+description: "Each EncryptionConfiguration field as the provider uses it, how automatic reload behaves, and what widening the resource list costs."
+eyebrow: Reference
+weight: 30
+verifiedBy:
+  - deploy/kubernetes/encryption-config.yaml
+  - cmd/bao-kms-provider/diagnostics.go
 ---
 
-# EncryptionConfiguration
-
-This reference defines the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Getting Started: Kubernetes Encryption Config](/getting-started/kubernetes-encryption-config/).
-
-## Minimal Shape
+The API server reads this file from `--encryption-provider-config`. The
+maintained sample is `deploy/kubernetes/encryption-config.yaml`, and
+[Enable encryption](/docs/get-started/enable-encryption/) walks through
+installing it.
 
 ```yaml
 apiVersion: apiserver.config.k8s.io/v1
@@ -25,125 +28,56 @@ resources:
       - identity: {}
 ```
 
-A maintained sample lives at `deploy/kubernetes/encryption-config.yaml` in the repository.
+## Fields
 
-## Field Reference
+| Field | Rule |
+|---|---|
+| `apiVersion` | `apiserver.config.k8s.io/v1`. |
+| `providers[].kms.apiVersion` | `v2` for the `bao-kms-provider` entry. The provider does not implement v1. |
+| `providers[].kms.name` | Equal to `transit.keyIdScope.providerName`. Identity-bearing: it feeds the [`key_id`](/docs/reference/key-id-and-aad/#key_id-format) and the [AAD envelope](/docs/reference/key-id-and-aad/#aad-envelope), and never changes after encryption begins. |
+| `providers[].kms.endpoint` | `unix://` plus `server.socketPath`. Each API server connects to the provider on its own node. |
+| `providers[].kms.timeout` | How long the API server waits for any KMS call. Start with `3s`, and lower it only to the measured p99 of `openbao_kms_grpc_duration_seconds` plus a margin, because startup decrypt storms and OpenBao failover raise tail latency. Too short a timeout blocks writes with `timeout` errors. |
+| `resources[].resources` | The resource types encrypted on write. Start with `secrets`. |
+| `identity: {}` | Keeps existing plaintext readable during migration. With `kms` first, writes never fall back to plaintext. |
 
-### Top-Level `apiVersion`
+`doctor --encryption-config` requires an entry with the configured provider name
+and checks every such entry against the local KMS v2 API and socket. It warns
+while `identity` remains.
 
-Always `apiserver.config.k8s.io/v1`; this is the Kubernetes API server configuration object version.
+## Migration files
 
-### `providers[].kms.apiVersion`
+`doctor` accepts files that combine this provider with `aescbc`, `aesgcm`,
+`secretbox`, `identity`, or other KMS providers with their own names and
+sockets. The parser also reads legacy KMS v1 entries, including `cachesize`,
+without adding KMS v1 support to the provider.
 
-Use `v2` for the `bao-kms-provider` entry. This provider does not implement KMS v1.
+During a staged migration the provider can follow an older one, but Kubernetes
+writes with the first provider. Passing `doctor` shows the entry matches, not
+that it comes first or that data has been migrated. The check rejects unknown
+fields, entries with more than one provider type, a missing target provider,
+and identity or endpoint mismatches. Local encryption keys need names and
+secrets, whose values are redacted from errors. `doctor` does not check key
+lengths or replace the API server's own validation.
 
-### `name`
+## Remove the identity fallback
 
-Identity-bearing. The value:
+Remove `identity` once every targeted object has been rewritten through `kms`.
+Left in place, it lets a future misconfiguration write plaintext; removed too
+early, it leaves unmigrated plaintext objects unreadable. See
+[Verify encryption](/docs/get-started/verify/#step-4-remove-the-identity-fallback).
 
-- must match `transit.keyIdScope.providerName` in the provider configuration,
-- participates in `key_id` derivation; see [Reference: Key ID And AAD](/reference/key-id-and-aad/#recommended-format),
-- participates in additional authenticated data (AAD) envelope construction; see [Reference: Key ID And AAD](/reference/key-id-and-aad/#aad-envelope),
-- must not change after encryption begins without a documented migration plan.
+## Automatic reload
 
-`doctor` requires an entry with the configured provider name. It validates every
-entry with that name against the local KMS v2 API and socket configuration; see
-[Reference: CLI: doctor](/reference/cli/#doctor).
+With `--encryption-provider-config-automatic-reload=true`, the API server
+applies a changed file immediately and keeps using it until the next valid
+file. A mistyped provider name or an unreachable socket shows up only as KMS
+Status failures and encrypt or decrypt errors on live traffic. Treat a reload
+as a restart, not a safety check.
 
-### `endpoint`
+## Choose resources
 
-The endpoint must use the `unix://` scheme and must match `server.socketPath` in the provider configuration. Other endpoint forms are rejected.
-
-Every control-plane node must have a local provider instance serving the same endpoint path. The API server does not connect across hosts.
-
-### `timeout`
-
-The duration the API server waits for any KMS gRPC call before treating it as failed.
-
-Initial recommendation: `3s`.
-
-Tighten this value only after benchmark and failure-mode testing. The provider
-targets much lower normal latency. Startup decrypt storms and OpenBao failover
-can still produce tail latency that approaches the timeout. Set the timeout
-against measured p99 of `openbao_kms_grpc_duration_seconds` plus a safety
-margin, not against the steady-state median.
-
-A timeout that is too short surfaces as `timeout` errors in the [error class catalog](/reference/observability/#error-classes) and may block writes to encrypted resources.
-
-### `resources`
-
-The list of API resources the provider encrypts at write time. Resources outside this list remain unencrypted in etcd.
-
-Recommended starting point:
-
-```yaml
-resources:
-  - secrets
-```
-
-Common second step is to add `configmaps`. CRDs can be encrypted with the same provider once the operator has assessed size, read and write volume, and recovery impact.
-
-The `resources` set is not retroactive. Adding a resource type after encryption begins requires a storage migration; see [Getting Started: Migrate Existing Resources](/getting-started/kubernetes-encryption-config/#migrate-existing-resources).
-
-### `identity` Fallback
-
-The `identity` provider is the API server's no-op fallback. With it last in the `providers` list:
-
-- new writes go through `kms`,
-- existing plaintext objects remain readable,
-- `kms` failures do not silently fall back to plaintext writes (Kubernetes does not silently downgrade between providers when `kms` is first).
-
-Remove `identity` after every targeted resource has been rewritten through `kms`. Leaving it in place indefinitely increases the chance that future misconfiguration produces plaintext writes; removing it too early breaks reads of plaintext objects that were not migrated. See [Getting Started: Remove The Identity Fallback](/getting-started/kubernetes-encryption-config/#remove-the-identity-fallback).
-
-## Migration Files
-
-`doctor --encryption-config` accepts files that combine this provider with
-`aescbc`, `aesgcm`, `secretbox`, `identity`, or other KMS providers. Additional
-KMS providers can have different names and Unix socket paths. The parser also
-accepts legacy KMS v1 entries, including `cachesize`; this does not add KMS v1
-support to `bao-kms-provider` or establish support in your Kubernetes version.
-
-The configured provider can appear after an old provider during a staged
-migration. Kubernetes uses the first provider for new writes. A passing doctor
-check establishes that the configured provider entry matches, not that it is
-first or that stored data has been migrated.
-
-The check rejects unknown fields, multiple provider types in one entry, missing
-target providers, and target identity or endpoint mismatches. Local encryption
-keys must have names and secrets. Their values are redacted from parse errors
-and diagnostic formatting. The check does not validate their cryptographic
-lengths or replace Kubernetes configuration validation.
-
-## Automatic Reload
-
-Kubernetes supports automatic reload of the encryption provider configuration when `kube-apiserver` is started with:
-
-```text
---encryption-provider-config-automatic-reload=true
-```
-
-Reload caveats:
-
-- The API server applies the new configuration immediately and surfaces any errors at the next encrypt or decrypt call rather than during validation.
-- Provider name typos, unreachable sockets, or socket permission changes surface as KMS Status failures and ultimately as encrypt or decrypt errors against live traffic.
-- A failed reload does not roll back to the previous configuration. Once a configuration is applied, the API server uses it until the next valid configuration is seen.
-
-Treat reload as a faster restart, not a safety check.
-
-## Resource Selection Trade-Offs
-
-Adding a resource type to the `resources` list increases:
-
-- KMS provider request volume during writes,
-- decrypt traffic during reads (mitigated by API server caches),
-- migration scope when rotating keys,
-- recovery scope when restoring from backup,
-- latency impact during startup decrypt storms,
-- audit and compliance scope.
-
-Plan the resource set deliberately. Encrypting all resources is rarely the right starting point.
-
-## Source References
-
-- [Kubernetes encryption at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
-- [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
+Encryption is not retroactive: a resource type added later needs its objects
+rewritten. Each added type raises KMS traffic on writes and cold reads, the
+rewrite scope of every rotation, restore scope, startup decrypt load, and audit
+scope. Add types one at a time, commonly `configmaps` next, and assess size and
+traffic before encrypting custom resources.

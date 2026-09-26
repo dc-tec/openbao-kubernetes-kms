@@ -1,0 +1,30 @@
+{{- /* Previous and next links along the stepped items of the current page's
+     navigation group. Items that share a step are alternatives: the path never
+     links one alternative to another, and a neighbouring step with
+     alternatives lists all of them. Items without a step get no path links. */ -}}
+{{- if eq .Section "docs" -}}
+  {{- $home := .Site.Home.RelPermalink -}}
+  {{- range hugo.Data.navigation.primary -}}
+    {{- $group := . -}}
+    {{- $steps := where $group.items "step" "!=" nil -}}
+    {{- range $steps -}}
+      {{- if eq $.RelPermalink (printf "%s%s" $home .url) -}}
+        {{- $step := .step -}}
+        {{- $previous := slice -}}
+        {{- with last 1 (where $steps "step" "<" $step) -}}
+          {{- $previous = where $steps "step" (index . 0).step -}}
+        {{- end -}}
+        {{- $next := slice -}}
+        {{- with first 1 (where $steps "step" ">" $step) -}}
+          {{- $next = where $steps "step" (index . 0).step -}}
+        {{- end -}}
+        <nav class="journey-nav" aria-label="{{ $group.title }} path">
+          {{- partial "journey-side.html" (dict "items" $previous "label" "Previous" "home" $home) -}}
+          {{- if $next -}}
+            {{- partial "journey-side.html" (dict "items" $next "label" "Next" "home" $home "class" "journey-next") -}}
+          {{- end -}}
+        </nav>
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}

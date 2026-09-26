@@ -9,9 +9,8 @@ DOCS_PROSE_PATHS := \
 	':(glob)test/**/*.md' \
 	hack/harvester/README.md \
 	':(glob)website/content/**/*.md' \
-	website/layouts/index.html \
-	website/layouts/_default/list.html \
-	website/layouts/search/single.html \
+	':(glob)website/layouts/**/*.html' \
+	':(glob)website/data/*.yaml' \
 	':(glob).github/ISSUE_TEMPLATE/*.md' \
 	.github/PULL_REQUEST_TEMPLATE.md
 
@@ -28,8 +27,9 @@ docs-deps: ## Install the pinned Hugo binary locally.
 
 .PHONY: docs-build
 docs-build: ## Build the Hugo docs site into public/.
-	@$(HUGO_RUN) --source . --baseURL "$(DOCS_BASE_URL)" --destination "$(DOCS_OUT)" --cleanDestinationDir --gc --minify
+	@$(HUGO_RUN) --source . --baseURL "$(DOCS_BASE_URL)" --destination "$(DOCS_OUT)" --cleanDestinationDir --gc --minify --panicOnWarning
+	@python3 website/scripts/check-rendered-site.py "$(DOCS_OUT)" "$(DOCS_BASE_URL)"
 
 .PHONY: docs-serve
-docs-serve: ## Serve the docs site locally on http://localhost:1313/.
-	@$(HUGO_RUN) server --source . --baseURL http://localhost:1313/
+docs-serve: ## Serve the docs site locally on http://localhost:1313/openbao-kubernetes-kms/.
+	@$(HUGO_RUN) server --source . --baseURL http://localhost:1313/openbao-kubernetes-kms/
