@@ -192,11 +192,21 @@ build tag. Certificate auth backed by a PKCS#11 hardware or software token is a
 supported preview path only when the selected release
 publishes matching opt-in artifacts and marks that path as tested.
 
-`auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. Once the remaining OpenBao token TTL drops below this value, the provider renews or re-logs in before the next request.
+`auth.loginBeforeTokenExpiry` is the refresh-ahead threshold. A request within
+this window starts a shared renewal or login. Requests continue with the
+unexpired token while that attempt runs. Requests without a usable token wait
+for the shared attempt, subject to their own deadlines.
 
 `auth.tokenRenewalIncrement` is the requested TTL increment sent to OpenBao during `auth/token/renew-self`. Keep it larger than the refresh-ahead threshold and within the auth role's maximum token TTL.
 
-`auth.loginTimeout` can be left at `0s` to derive `max(openbao.timeout, 5s)`.
+`auth.loginTimeout` sets the deadline for one shared auth attempt, including renewal and any
+fallback login. It is independent of the initiating request deadline. Set it to
+`0s` to derive `max(openbao.timeout, 5s)`. Provider shutdown cancels the attempt.
+
+Token rejection recovery uses the same auth timeout. The provider retries a
+request once after re-login on `401` or `403`. Recovery logins have a fixed
+five-second cooldown; failed logins also use exponential backoff. See
+[Provider Authentication Lifecycle](/security/auth-model/#plugin-authentication-lifecycle).
 
 `openbao.timeout` is the operator-facing deadline for one OpenBao request. The
 HTTP transport also uses fixed control-plane defaults for dial, TLS handshake,

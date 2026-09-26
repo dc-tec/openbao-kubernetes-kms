@@ -4,6 +4,11 @@
 
 ### Bug Fixes
 
+- **auth:** Recover rejected OpenBao tokens with a shared, rate-limited login
+  and one request retry. Keep valid tokens usable during early refresh, isolate
+  refresh from caller cancellation, and apply `auth.loginTimeout` to shared
+  work. Preserve redacted auth error causes and KMS error classifications.
+
 - **rotation:** Decrypt peer ciphertext through validated pending snapshots.
   Discover unknown key IDs with bounded metadata refresh without advancing
   promotion. Retain pending identities across later rotations and reject

@@ -75,6 +75,14 @@ The provider tags every failed operation with one of these stable error classes.
 - `concurrency_limit`
 - `unknown`
 
+Token acquisition errors preserve their cause. Local credential validation and
+rejected auth logins use `auth_failed`; unavailable, sealed, rate-limited,
+canceled, and timed-out auth operations keep their corresponding classes.
+Persistent Transit `403` responses use `transit_policy_denied` after the bounded
+recovery attempt, or while recovery is throttled. OpenBao does not distinguish
+revoked tokens from policy denials in every `403` response. OpenBao request
+metrics include both the rejected attempt and any retry.
+
 ## Health Endpoints
 
 ```text
