@@ -197,7 +197,7 @@ lanes:
     makeTarget: test-e2e-provider-cli-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && cli && ci
-    runRegex: ^TestProviderCLI(HappyPath|JWTClaimDriftRedacted|UnsupportedTransitKeyTypeFails|RotationMissingStateFailsClosed)E2E$
+    runRegex: ^TestProviderCLI(HappyPath|JWTClaimDriftRedacted|UnsupportedTransitKeyTypeFails|RotationMissingStateFailsClosed|ManagementCapabilitiesFail|MigrationEncryptionConfig|RotationRemoteFailure)E2E$
     prScope: main
     environment: local-openbao
     isolation: local-container

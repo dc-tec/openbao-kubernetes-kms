@@ -81,6 +81,13 @@ Watch the rotation state from the CLI:
 bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml
 ```
 
+Require exit code `0` and `transitMetadataStatus: pass` before interpreting the
+live Transit version. If authentication or the metadata read fails,
+`rotation-plan` and `verify-rotation` exit with code `4` and mark the metadata
+check as failed. Any local state in that partial report does not establish the
+current OpenBao state. Restore connectivity or permissions, then run the
+command again.
+
 Watch the metric on each control-plane node:
 
 ```sh

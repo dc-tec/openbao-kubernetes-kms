@@ -222,11 +222,15 @@ func commandTestProfile(mutate func(*openbao.KeyProfile)) openbao.KeyProfile {
 
 func hotPathCapabilities(cfg config.Config) openbao.CapabilitiesResult {
 	paths := transitCapabilityPaths(cfg)
-	return openbao.CapabilitiesResult{ByPath: map[string][]string{
-		paths.metadata: {capabilityRead},
-		paths.encrypt:  {capabilityUpdate},
-		paths.decrypt:  {capabilityUpdate},
-	}}
+	caps := openbao.CapabilitiesResult{ByPath: make(map[string][]string)}
+	for _, checkedPath := range paths.all() {
+		caps.ByPath[checkedPath] = []string{"deny"}
+	}
+	caps.ByPath[paths.metadata] = []string{capabilityRead}
+	caps.ByPath[paths.mountConfig] = []string{capabilityRead}
+	caps.ByPath[paths.encrypt] = []string{capabilityUpdate}
+	caps.ByPath[paths.decrypt] = []string{capabilityUpdate}
+	return caps
 }
 
 func reportContains(report cli.Report, want string) bool {

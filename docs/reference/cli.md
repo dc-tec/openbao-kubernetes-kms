@@ -52,7 +52,7 @@ Checks:
 | TLS valid | Certificate chain and server name validate. |
 | Local auth material | For JWT auth, the JWT file exists, permissions are safe, content parses, expiry is acceptable, and configured claims match. For cert auth, the configured certificate source must be reachable, the current certificate must be locally valid, and the signer must match the certificate and accept a non-secret probe. |
 | OpenBao auth login | The configured OpenBao auth method login succeeds. |
-| Token policy | Token can read Transit metadata and perform encrypt and decrypt. |
+| Token policy | Token can read Transit metadata and perform encrypt and decrypt. The checked paths do not grant key management, export, backup, restore, rewrap, or mount configuration writes. |
 | Transit key exists | Metadata read succeeds. |
 | Key type | Matches allowed key types. |
 | Key export | `exportable=false`. |
@@ -63,12 +63,24 @@ Checks:
 | Key ID generation | Deterministic across repeated runs. |
 | Status/encrypt consistency | Local in-process test verifies `Status.key_id` equals `EncryptResponse.key_id`. |
 | Socket path | Directory exists, has safe permissions, no unsafe stale path. |
-| EncryptionConfiguration | Points to the socket, uses KMS v2, and the provider name matches. |
+| EncryptionConfiguration | Contains the configured provider name with KMS v2 and the matching socket. Other KMS and local encryption providers are allowed during migration. |
 | Fallback | Warns if `identity` fallback remains enabled after migration. |
 
 `doctor` prints a report with stable check IDs and exits non-zero when any
 check fails. Use `--output text` for the default human-readable report or
 `--output json` for automation.
+
+The `transit.capabilities` check queries effective capabilities for the configured
+Transit key. It includes key configuration, trim, rotate, export, backup,
+rewrap, named and unnamed restore, and mount configuration paths. It rejects
+incomplete capability responses. This check does not audit the token's entire
+policy or permissions on other keys. See [Transit policy examples](/reference/transit-policy-examples/#capabilities-to-avoid).
+
+The `kubernetes.encryption_config` check accepts migration files with `aescbc`,
+`aesgcm`, `secretbox`, `identity`, and additional KMS providers. It checks the
+configured provider wherever it appears in the provider list. A passing check
+does not prove that this provider encrypts new writes or that migration is
+complete. See [EncryptionConfiguration](/reference/encryption-config/#migration-files).
 
 Transit profile failures include an impact prefix. `cryptographic_safety`
 findings protect the validated encryption and additional authenticated data
@@ -128,6 +140,7 @@ bao-kms-provider rotation-plan \
 
 Reports:
 
+- live metadata check status (`transitMetadataStatus`) and a redacted error on failure (`transitMetadataError`),
 - whether local registry state was loaded,
 - registry generation and state hash when available,
 - registry checkpoint status, generation, and hash when available,
@@ -153,6 +166,11 @@ When local state is absent and OpenBao metadata is readable, the command reports
 or returns the exact auto-bootstrap reason, such as an advanced
 `latest_version`, `min_available_version`, or `min_decryption_version`.
 
+If OpenBao authentication or the live Transit metadata read fails, the command
+exits with code `4`. It still prints available local evidence, with
+`transitMetadataStatus: fail`. The partial report does not establish current
+OpenBao state. On success, `transitMetadataStatus` is `pass`.
+
 ## verify-rotation
 
 Report local rotation preflight state.
@@ -168,6 +186,9 @@ The command reports the same local registry and Transit metadata view as
 not scan Kubernetes resources, inspect etcd, prove that every encrypted resource
 or retained backup has been rewritten, or recommend raising OpenBao
 `min_decryption_version`.
+
+Like `rotation-plan`, this command exits with code `4` when the live metadata
+check fails, even if local registry state is available.
 
 Treat it as a local preflight signal. The operator still owns independent
 migration records, backup-retention records, and any change to

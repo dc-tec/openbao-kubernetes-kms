@@ -35,7 +35,7 @@ Always `apiserver.config.k8s.io/v1`; this is the Kubernetes API server configura
 
 ### `providers[].kms.apiVersion`
 
-Always `v2`. KMS v1 is not implemented in this provider; configuring `v1` results in a Kubernetes API server error.
+Use `v2` for the `bao-kms-provider` entry. This provider does not implement KMS v1.
 
 ### `name`
 
@@ -46,7 +46,9 @@ Identity-bearing. The value:
 - participates in additional authenticated data (AAD) envelope construction; see [Reference: Key ID And AAD](/reference/key-id-and-aad/#aad-envelope),
 - must not change after encryption begins without a documented migration plan.
 
-`doctor` validates that the API server `EncryptionConfiguration` provider name matches the provider configuration; see [Reference: CLI: doctor](/reference/cli/#doctor).
+`doctor` requires an entry with the configured provider name. It validates every
+entry with that name against the local KMS v2 API and socket configuration; see
+[Reference: CLI: doctor](/reference/cli/#doctor).
 
 ### `endpoint`
 
@@ -92,6 +94,25 @@ The `identity` provider is the API server's no-op fallback. With it last in the 
 - `kms` failures do not silently fall back to plaintext writes (Kubernetes does not silently downgrade between providers when `kms` is first).
 
 Remove `identity` after every targeted resource has been rewritten through `kms`. Leaving it in place indefinitely increases the chance that future misconfiguration produces plaintext writes; removing it too early breaks reads of plaintext objects that were not migrated. See [Getting Started: Remove The Identity Fallback](/getting-started/kubernetes-encryption-config/#remove-the-identity-fallback).
+
+## Migration Files
+
+`doctor --encryption-config` accepts files that combine this provider with
+`aescbc`, `aesgcm`, `secretbox`, `identity`, or other KMS providers. Additional
+KMS providers can have different names and Unix socket paths. The parser also
+accepts legacy KMS v1 entries, including `cachesize`; this does not add KMS v1
+support to `bao-kms-provider` or establish support in your Kubernetes version.
+
+The configured provider can appear after an old provider during a staged
+migration. Kubernetes uses the first provider for new writes. A passing doctor
+check establishes that the configured provider entry matches, not that it is
+first or that stored data has been migrated.
+
+The check rejects unknown fields, multiple provider types in one entry, missing
+target providers, and target identity or endpoint mismatches. Local encryption
+keys must have names and secrets. Their values are redacted from parse errors
+and diagnostic formatting. The check does not validate their cryptographic
+lengths or replace Kubernetes configuration validation.
 
 ## Automatic Reload
 
