@@ -156,7 +156,7 @@ binaries that do not recognize this state reject it. Upgrade every provider
 before retirement. After applying retirement, do not downgrade to such a binary
 or erase the removal records. Recovery requires a reviewed restoration of a
 matching state/checkpoint pair and the required Transit versions. See
-[Operate: Rotation](/docs/operate/rotation/#retire-local-versions-before-raising-the-minimum)
+[Operate: Rotation](/docs/operate/rotation/#retire-old-versions)
 for the migration procedure and
 [Architecture: Rotation model](/docs/architecture/rotation-model/#operator-controlled-retirement)
 for the design decision.

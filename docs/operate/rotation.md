@@ -1,190 +1,134 @@
 ---
 title: Rotation
-description: "Rotate the OpenBao Transit key version, observe provider promotion, migrate existing API resources, and preserve recovery records."
+description: "Rotate the Transit key version, wait for every provider to promote it, rewrite existing resources, and retire old versions only when backups no longer need them."
 eyebrow: Operate · Key lifecycle
 weight: 10
+verifiedBy:
+  - internal/keyregistry
+  - cmd/bao-kms-provider/rotation.go
+  - test/e2e/provider_rotation_test.go
 ---
 
-OpenBao Transit key rotation and Kubernetes storage migration are separate
-operations. The provider observes Transit key versions and exposes a new
-Kubernetes `key_id` only after the rotation state machine determines that the
-new version is stable. Operators then rewrite Kubernetes resources to update
-data encrypted with old versions.
+Rotation adds a new version to the existing Transit key. The provider promotes
+it only after it has observed the version as stable, and Kubernetes data
+written with older versions stays readable until you rewrite it. Rotation never
+changes identity-bearing values; see
+[Reference: Configuration](/docs/reference/configuration/#identity-bearing-fields).
+For why promotion works this way, see
+[Architecture: Rotation model](/docs/architecture/rotation-model/).
 
-For the design rationale behind the rotation state machine, including the flip-flop guards and observation thresholds, see [Architecture: Rotation model](/docs/architecture/rotation-model/).
+## Before you begin
 
-Rotation changes the active Transit version under an existing Transit key. It
-must not change the provider name, cluster ID, OpenBao instance ID, Transit
-mount ID, key lineage ID, mount path, or key name. These fields are
-identity-bearing. Changing one requires a migration plan; see [Configuration:
-Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
+- Take current OpenBao and etcd backups.
+- Run `doctor` with `--encryption-config` on every control-plane node; it must
+  pass, and every node must report the same `openbao_kms_status_key_id_hash`.
+- Confirm OpenBao `min_decryption_version` still allows every version present
+  in etcd and in retained backups.
+- Record the current `key_id` hash, Transit key version, backup IDs, provider
+  version, and control-plane node list.
 
-## Preview boundary
+## Step 1: Rotate the Transit key
 
-Current preview tooling reports local registry state and OpenBao Transit metadata.
-It does not enumerate Kubernetes resources, inspect etcd, prove that every
-targeted object was rewritten, or prove that retained backups no longer require
-old Transit versions.
-
-Treat `verify-rotation` as a local preflight signal. Rewrite proof,
-backup-retention proof, and any recommendation to raise `min_decryption_version`
-remain operator-controlled until a proof-producing command exists.
-
-## Before rotation
-
-Verify:
-
-- OpenBao backup is current.
-- etcd backup is current.
-- The provider is healthy on every control-plane node.
-- All nodes report the same active `key_id` hash.
-- `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml` passes on every control-plane node.
-- No `identity` fallback remains unexpectedly in the API server `EncryptionConfiguration`.
-- OpenBao `min_decryption_version` allows every version still present in etcd and backups.
-
-Record:
-
-- the current Kubernetes `key_id` hash,
-- the current Transit key version,
-- the OpenBao backup ID,
-- the etcd backup ID,
-- the provider version,
-- the control-plane node list.
-
-## Rotate the Transit key
-
-Rotation is performed by an operator with OpenBao administrative rights:
+As an OpenBao administrator, using the values from
+[Plan identity values](/docs/get-started/plan-values/):
 
 ```sh
-bao write -f transit/keys/k8s-workload-a-etcd/rotate
+bao write -f "${TRANSIT_MOUNT}/keys/${KEY_NAME}/rotate"
 ```
 
-The provider token must not have rotate permission. The provisioned policy
-excludes this capability by design; see [Configure: Transit Policy
-Examples](/docs/configure/openbao-auth/).
+The provider's own token cannot rotate the key; its policy leaves out that
+capability.
 
-## Observe promotion
+## Step 2: Wait for promotion on every node
 
-After rotation:
+Each provider observes the new version, waits for
+`rotation.requireStableObservationCount` successful observations and then
+`rotation.activationDelay`, and promotes it. From then on, KMS
+`Status.key_id` changes and new encryptions use the new version. Older
+versions stay decryptable.
 
-1. The provider background probe observes the new Transit latest version.
-2. The provider waits for `rotation.requireStableObservationCount` successful observations.
-3. The provider waits `rotation.activationDelay`.
-4. The provider promotes a new active key snapshot.
-5. KMS `Status.key_id` changes.
-6. New encrypt operations use the explicit Transit `key_version` for the new version.
-
-Watch the rotation state from the CLI:
+Follow the state on each control-plane node:
 
 ```sh
 bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml
-```
-
-Require exit code `0` and `transitMetadataStatus: pass` before interpreting the
-live Transit version. If authentication or the metadata read fails,
-`rotation-plan` and `verify-rotation` exit with code `4` and mark the metadata
-check as failed. Any local state in that partial report does not establish the
-current OpenBao state. Restore connectivity or permissions, then run the
-command again.
-
-Watch the metric on each control-plane node:
-
-```sh
-curl -sf http://127.0.0.1:8081/metrics \
+curl -fsS http://127.0.0.1:8081/metrics \
   | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_key_version|openbao_kms_rotation_state'
 ```
 
-Expected state:
+Trust a `rotation-plan` report only when it exits with `0` and shows
+`transitMetadataStatus: pass`. If authentication or the metadata read fails,
+it exits with `4`, and any local state it still prints says nothing about the
+current OpenBao state; fix connectivity or permissions and run it again.
 
-- the old version remains decryptable,
-- metadata-validated pending versions decrypt peer ciphertext before promotion,
-- the new version becomes active once the stability window passes,
-- every control-plane node converges to the same `key_id` hash,
-- no node flips back to the old `key_id`.
+Promotion is complete when every node reports the same new `key_id` hash and
+`openbao_kms_rotation_state{state="active"}`. `rotation-plan` shows the reason
+and timing while a version is pending.
 
-If `latest_version` jumps over one or more Transit versions, the provider
-requires OpenBao to report creation metadata for every skipped version. Complete
-metadata lets the provider retain skipped versions as decrypt-only historical
-snapshots. Missing intermediate metadata fails closed because another
-control-plane node may have already encrypted data under a skipped version.
+Stop rotating and go to [Troubleshooting](/docs/operate/troubleshooting/) if:
 
-The rotation metric is intentionally bounded to `state="active"`, `state="pending"`, and `state="unknown"`. Use `rotation-plan` for the detailed promotion reason and timing.
+- nodes report different `key_id` hashes, or a node flips back to the old one,
+- another Transit rotation happens before every node has converged,
+- unknown `key_id` or AAD mismatch errors appear,
+- OpenBao is missing creation metadata for an intermediate version,
+- an API server cannot restart cleanly.
 
-An unknown decrypt ID can trigger metadata discovery at most once per
-`status.probeInterval` on each provider. Discovery does not promote a key.
-If `min_encryption_version` blocks the old active key during the delay,
-Status and readiness become unhealthy and Encrypt stops. Observations continue;
-health recovers after promotion and a successful deep probe. Wait for all nodes
-to converge before raising the encryption minimum to avoid this interruption.
+If `latest_version` skips versions, the provider needs OpenBao's creation
+metadata for each skipped version and fails closed without it, because another
+node might already have encrypted with one of them. If you raise
+`min_encryption_version` before every node has promoted, Status and readiness
+turn unhealthy and encryption stops until promotion completes; raise it only
+after convergence.
 
-## Migrate Kubernetes data
+## Step 3: Rewrite existing resources
 
-Rewrite targeted resources after Status exposes the new `key_id`. Define the
-complete resource list from the API server `EncryptionConfiguration` before
-starting migration, and keep the command output, timestamps, and resource list
-for recovery records.
-
-For Secrets:
+After every node reports the new `key_id`, rewrite each resource type listed
+in the `EncryptionConfiguration`. For Secrets:
 
 ```sh
 kubectl get secrets --all-namespaces -o json | kubectl replace -f -
 ```
 
-Repeat for each configured resource type. The pattern is `kubectl get <resource> --all-namespaces -o json | kubectl replace -f -`.
+Keep the resource list, command output, and timestamps with the rotation
+record.
 
-## Verify rotation
+## Step 4: Verify
 
 ```sh
 bao-kms-provider verify-rotation --config /etc/openbao-kms/config.yaml
 ```
 
-This command confirms the provider's local registry and Transit metadata view.
-When it succeeds, it still reports limited confidence because it does not scan
-Kubernetes resources, inspect etcd, or evaluate retained backups.
+`verify-rotation` checks only the provider's local registry against Transit
+metadata, and like `rotation-plan` exits with `4` when the metadata check
+fails. It does not scan Kubernetes objects, etcd, or backups, so also:
 
-Then collect independent verification:
+- restart one API server and confirm reads succeed,
+- confirm new writes carry the new `key_id` and every resource type was
+  rewritten,
+- compare `openbao_kms_status_key_id_hash` and the decrypt-error metrics on
+  every node, and check the OpenBao decrypt error rate,
+- confirm retained backups either still have their Transit versions available
+  or no longer need them.
 
-- run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml`,
-- restart one API server and verify reads succeed,
-- verify new writes carry the new `key_id`,
-- verify every configured resource type was included in the rewrite procedure,
-- check the provider decrypt-error metrics on every control-plane node,
-- check the OpenBao decrypt error rate,
-- check API server encryption metrics where available,
-- compare `openbao_kms_status_key_id_hash` across all control-plane nodes,
-- confirm retained backup sets either still have old Transit versions available
-  or no longer need them,
-- inspect etcd in a controlled environment if required.
+For the metrics and logs, see [Reference: Observability](/docs/reference/observability/).
 
-For the metric and log catalog used during these checks see [Reference: Observability](/docs/reference/observability/).
+## Retire old versions
 
-## min_decryption_version
+Raising OpenBao `min_decryption_version` makes older data permanently
+unreadable once no rewritten copy exists. Do it only when:
 
-Do not raise OpenBao `min_decryption_version` until:
+- every targeted object has been rewritten,
+- every backup that needs the old versions has expired,
+- a restore test proves the remaining backups decrypt,
+- a reviewed change record names the versions that stay and the rollback plan.
 
-- every targeted live object has been rewritten,
-- old backups have expired or are known not to need the old version,
-- restore testing has proved that the remaining backup set can decrypt,
-- a human-reviewed change record identifies the exact Transit versions that
-  remain required and the rollback plan.
+No command proves these conditions for you; the decision stays with you.
 
-`verify-rotation` is not a recommendation engine for this setting. It cannot
-prove that old ciphertext no longer exists in Kubernetes, etcd snapshots, or
-retained backups.
+Before raising the minimum, retire the old versions from every provider's
+local registry. This example keeps version `2` and later.
 
-Raising `min_decryption_version` too early can make old Kubernetes data
-unreadable even when the Transit key still exists. Lowering the value may help
-only when the old key version still exists and policy allows it. Treat this as
-an emergency recovery step, not a rollback plan.
-
-### Retire local versions before raising the minimum
-
-After collecting the evidence above, retire the obsolete versions in each
-node's provider registry. For example, to retain version `2` and later:
-
-1. Verify that every provider has promoted version `2` or later and no rotation
-   is pending. Keep Transit rotation paused during this procedure.
-2. Run a plan on each node as the provider's OS user:
+1. Confirm every provider has promoted version `2` or later with no rotation
+   pending, and pause Transit rotation.
+2. On each node, generate a plan as the provider's OS user:
 
    ```sh
    bao-kms-provider retire-versions \
@@ -192,13 +136,12 @@ node's provider registry. For example, to retain version `2` and later:
      --before-version 2 --output json
    ```
 
-3. Review `removedVersions`, the unchanged `activeKeyIdHash`, and the proposed
-   `nextStateHash`. Keep the output with the migration and backup evidence.
-4. On one node at a time, stop the provider through its deployment manager.
-   For a static pod, suspend kubelet's management of that manifest so it cannot
-   restart the provider during maintenance. Account for the local API server's
-   dependence on the provider while it is stopped.
-5. Apply the reviewed plan as the same OS user that runs the provider:
+3. Review `removedVersions`, the unchanged `activeKeyIdHash`, and
+   `nextStateHash`, and keep the output with the change record.
+4. On one node at a time, stop the provider. For a static pod, stop kubelet
+   from restarting it. The local API server cannot decrypt while the provider
+   is stopped.
+5. Apply the reviewed plan as the same OS user:
 
    ```sh
    bao-kms-provider retire-versions \
@@ -207,54 +150,40 @@ node's provider registry. For example, to retain version `2` and later:
      --expected-state-hash '<stateHash from this node’s reviewed plan>'
    ```
 
-6. Restart that provider and verify readiness, active `key_id`, and reads and
-   writes. Repeat steps 4–6 on the remaining nodes. If the state hash changed,
-   generate and review a new plan before applying it.
-7. Back up the updated state/checkpoint pairs. After every node has completed
-   retirement, raise OpenBao `min_decryption_version` through the platform's
-   change-control procedure. Verify readiness and reads and writes again.
+6. Start the provider, confirm readiness, the active `key_id`, and reads and
+   writes, then continue with the next node. If the state hash changed,
+   generate and review a new plan first.
+7. Back up each node's state and checkpoint files. Then raise
+   `min_decryption_version` through your change process and check readiness,
+   reads, and writes again.
 
-Retirement immediately prevents that node from decrypting the removed versions,
-even while OpenBao still permits them. The command neither deletes Transit key
-material nor changes OpenBao minimum versions. Lowering an OpenBao minimum does
-not reverse local retirement. There is no automatic undo command.
+{{< callout type="warning" title="Retirement has no undo" >}}
+A retired version stops decrypting on that node immediately, even while
+OpenBao still allows it, and lowering the OpenBao minimum does not bring it
+back. The command does not delete Transit key material or change OpenBao
+settings.
+{{< /callout >}}
 
-`serve` and `retire-versions --apply` share `<state.path>.lock`. Do not delete or
-replace this file while either process runs. The state directory must be owned
-by the provider's OS user and must not be group or world writable.
+`serve` and `retire-versions --apply` share the lock file
+`<state.path>.lock`; never delete it while either runs. If saving fails, inspect
+the state before retrying. Never restore one file of the state and checkpoint
+pair alone, and never edit either by hand.
 
-If saving reports an error, inspect the state before retrying. The state file
-can have reached the new generation before checkpoint saving failed. Startup
-repairs a checkpoint that is behind a valid state; an older reviewed hash then
-fails. Do not restore one file from the pair or edit either file by hand.
+## Roll back
 
-## Rollback
+If encryption or decryption fails before the rewrite completes:
 
-If new encrypt or decrypt behavior fails before migration completes:
+1. Stop further rotations, and compare active and pending identities on all
+   nodes. A peer might already encrypt with a version that is still pending
+   locally.
+2. Keep every Transit version decryptable. Do not raise
+   `min_decryption_version`, delete the new version, or recreate the key.
+3. Before restoring a previous provider binary, confirm it can decrypt every
+   version in use; see
+   [Reference: Compatibility](/docs/reference/compatibility/#unreleased-rotation-corrections).
+4. Use `doctor`, `rotation-plan`, and
+   [Reference: Observability](/docs/reference/observability/) to find the
+   failing layer.
 
-1. Stop further Transit rotations. Compare active and pending identities on all
-   nodes before changing provider versions. A peer might already use a version
-   that is pending locally.
-2. Keep old Transit key versions decryptable. Do not raise `min_decryption_version`.
-3. If the failure is provider-related, verify the previous binary preserves all
-   required decrypt identities before restoring it. Follow the
-   [rotation compatibility guidance](/docs/reference/compatibility/#unreleased-rotation-corrections).
-4. Do not delete the new Transit version.
-5. Do not recreate the Transit key.
-6. Use `doctor`, `rotation-plan`, and the metric catalog in [Reference: Observability](/docs/reference/observability/) to identify the failing layer.
-
-If objects have already been rewritten with the new version, rollback still requires the new Transit version to remain decryptable.
-
-## Stop rotation if
-
-Abort rotation and consult [Operate: Troubleshooting](/docs/operate/troubleshooting/) when:
-
-- nodes report different active `key_id` hashes,
-- Status flips old to new to old,
-- a back-to-back Transit rotation occurs before every node converges,
-- unknown `key_id` decrypt errors appear in metrics or logs,
-- additional authenticated data (AAD) mismatch errors appear,
-- OpenBao metadata reads are inconsistent or missing intermediate Transit
-  version creation metadata,
-- `min_decryption_version` was changed unexpectedly,
-- any control-plane API server cannot restart cleanly.
+Objects already rewritten with the new version always need that version to
+stay decryptable.

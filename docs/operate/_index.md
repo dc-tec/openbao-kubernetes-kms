@@ -1,34 +1,16 @@
 ---
 title: Operate
-description: "Task-focused operator guidance for rotation, disaster recovery, upgrade, and troubleshooting."
+description: "Rotate keys, upgrade, recover, and troubleshoot a provider that already encrypts cluster data."
 eyebrow: Operate
 weight: 30
 ---
 
-These pages answer task-based operator questions. Use them when you already know where you are in the lifecycle and need the next safe step.
-
-The runbooks assume that `bao-kms-provider` is installed on each control-plane
-node, OpenBao Transit is provisioned, and the Kubernetes API server uses a
-matching `EncryptionConfiguration`. Before changing rotation, recovery, or
-upgrade state, run:
+These runbooks assume the provider runs on every control-plane node and the
+API server encrypts through it. Before you change rotation, recovery, or
+upgrade state, confirm `doctor` passes on every node:
 
 ```sh
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
   --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
-
-The command must exit with status `0` and must not report a `[fail]` check.
-
-## Workflows
-
-1. [Rotation](/docs/operate/rotation/) to rotate the OpenBao Transit key version, observe provider promotion, migrate Kubernetes resources, and keep old versions decryptable until migration and backup-retention records allow retirement.
-2. [Disaster recovery](/docs/operate/disaster-recovery/) to restore OpenBao, etcd, provider state, auth material, and control-plane nodes as compatible sets.
-3. [Upgrade](/docs/operate/upgrade/) to upgrade the provider binary or container image one control-plane node at a time with a documented rollback step.
-4. [Troubleshooting](/docs/operate/troubleshooting/) for symptom-driven checks and the fastest safe recovery path.
-
-## Use another section if
-
-- the question is about CLI flags, configuration fields, or KMS v2 protocol behavior: go to [Reference](/docs/reference/).
-- the question is about token scope, trust boundaries, or sensitive artifact handling: go to [Security](/docs/security/).
-- the question is about why the system behaves a given way: go to [Architecture](/docs/architecture/).

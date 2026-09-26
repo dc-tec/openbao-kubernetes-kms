@@ -1,407 +1,226 @@
 ---
 title: Troubleshooting
-description: "Symptom-driven recovery for common bao-kms-provider failures: socket connectivity, OpenBao auth, Transit key issues, key_id and additional authenticated data validation, identity fallback, static pod problems."
+description: "Find the failing layer first, then apply the recovery for that symptom: socket, OpenBao, auth, Transit key, key_id and AAD validation, fallback, or static pod."
 eyebrow: Operate · Diagnosis
 weight: 40
+verifiedBy:
+  - cmd/bao-kms-provider/diagnostics.go
+  - internal/health/handler.go
+  - internal/metrics/collectors.go
 ---
 
-Use the symptom sections below to identify the failing layer before changing
-configuration or recovery state. For the full failure-mode catalog, detection
-signals, mitigations, and impact analysis, see [Architecture: Failure
-Modes](/docs/architecture/failure-modes/).
-
-Start with the least destructive checks:
+Find the failing layer before you change configuration or recovery state.
+Start with the checks that change nothing:
 
 ```sh
-curl -sf http://127.0.0.1:8082/live
-curl -sf http://127.0.0.1:8082/ready
-curl -sf http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_status_cache_age_seconds'
+curl -fsS http://127.0.0.1:8082/live
+curl -fsS http://127.0.0.1:8082/ready
+curl -fsS http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_status_cache_age_seconds'
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
   --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
 
-In a healthy baseline, each `curl` command exits with status `0`, the metric
-query returns the active `key_id` hash and cache age, and `doctor` does not
-report a `[fail]` check.
-
-Do not change identity-bearing fields, recreate Transit keys, or change Kubernetes encryption configuration until the failing layer is known.
+On a healthy node both endpoints return HTTP 200, the metrics show the active
+`key_id` hash and cache age, and `doctor` reports no `[fail]` check. The rules
+in [Disaster recovery: During an incident](/docs/operate/disaster-recovery/#during-an-incident)
+apply to every fix below. For the full catalog of failure modes, see
+[Architecture: Failure modes](/docs/architecture/failure-modes/).
 
 ## API server cannot connect to KMS
 
-Symptoms:
+**Signs:** the API server log reports a KMS connection failure, or
+`/run/openbao-kms/kms.sock` is missing.
 
-- `kube-apiserver` logs mention KMS endpoint connection failure,
-- `/run/openbao-kms/kms.sock` is missing,
-- the provider service or static pod is not running.
+**Check** the service (`systemctl status bao-kms-provider.service`) or the
+static pod (`crictl ps --name bao-kms-provider`, `journalctl -u kubelet`), then
+`ls -l /run/openbao-kms`.
 
-Check:
-
-```sh
-systemctl status bao-kms-provider.service
-journalctl -u kubelet --since -10m
-crictl ps --name bao-kms-provider
-ls -l /run/openbao-kms
-bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
-```
-
-Use the systemd command for host-service deployments. Use kubelet and container-runtime tooling for static-pod deployments.
-
-Recovery:
+**Fix:**
 
 1. Start or restart the provider.
-2. Fix socket directory ownership and mode (see [Security: Linux identity model](/docs/security/linux-identity-model/)).
-3. Confirm the API server endpoint path matches `server.socketPath` in the provider configuration.
+2. Correct the socket directory owner and mode; see
+   [Security: Linux identity model](/docs/security/linux-identity-model/).
+3. Confirm the `EncryptionConfiguration` endpoint matches `server.socketPath`.
 4. Restart `kube-apiserver` if it does not reconnect.
 
 ## Socket permission denied
 
-Symptoms:
+**Signs:** the socket exists, but the API server or provider log reports
+permission denied.
 
-- the socket exists,
-- `kube-apiserver` cannot connect,
-- permission denied errors appear in API server or provider logs.
+**Check:** `ls -ld /run/openbao-kms`, `ls -l /run/openbao-kms/kms.sock`, and
+`getent group openbao-kms-socket`.
 
-Check:
-
-```sh
-ls -ld /run/openbao-kms
-ls -l /run/openbao-kms/kms.sock
-getent group openbao-kms-socket
-```
-
-Recovery:
-
-1. Ensure the API server runtime identity is a member of `openbao-kms-socket`.
-2. Set the runtime directory group to `openbao-kms-socket` and mode `2750`.
-3. In static-pod mode, ensure the numeric socket group ID (GID) matches `spec.securityContext.supplementalGroups` and `server.socketGroup`.
-4. Set the socket mode to `0660`.
-5. Restart the provider.
-6. Restart `kube-apiserver` if it does not reconnect.
+**Fix:** the API server identity must be in `openbao-kms-socket`, the directory
+must be group `openbao-kms-socket` with mode `2750`, and the socket mode
+`0660`. For static pods, the socket GID must equal both `supplementalGroups`
+and `server.socketGroup`. Restart the provider, then the API server if needed.
 
 ## OpenBao unavailable or sealed
 
-Symptoms:
+**Signs:** `/ready` fails, KMS Status is unhealthy, and OpenBao request errors
+or timeouts appear in metrics.
 
-- provider `/ready` returns non-200,
-- KMS Status is unhealthy,
-- OpenBao request errors appear in metrics,
-- decrypt or encrypt operations time out.
+**Check:** `bao status`, `/ready`, and `doctor`.
 
-Check:
-
-```sh
-bao status
-curl -sf http://127.0.0.1:8082/ready
-bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
-```
-
-Recovery:
-
-1. Restore OpenBao reachability.
-2. Unseal or repair OpenBao.
-3. Verify TLS and DNS.
-4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
-5. Restart the provider only if it does not recover on its own after OpenBao is healthy.
+**Fix:** restore OpenBao reachability, unseal or repair it, and check TLS and
+DNS. Run `verify-key`. The provider recovers on its own once OpenBao is
+healthy; restart it only if it does not.
 
 ## Transit profile fails closed
 
-Symptoms:
+**Signs:** `/ready` fails and `doctor` or `verify-key` reports a
+`transit.profile` failure. Writes fail while cached reads might still work.
 
-- provider `/ready` returns non-200,
-- KMS Status is unhealthy,
-- `doctor` or `verify-key` reports `transit.profile` failure,
-- API server writes fail while existing reads may continue from cache.
-
-Check:
-
-```sh
-bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
-bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
-```
-
-Recovery:
-
-1. Read the finding impact prefix.
-2. For `cryptographic_safety`, restore the validated Transit profile before
-   routing Kubernetes writes through the provider.
-3. For `api_server_availability`, repair the setting that prevents required
-   encrypt or decrypt operations, such as key deletion, unsupported operations,
-   or version restrictions.
-4. Re-run `verify-key`.
-5. Confirm `/ready` and KMS Status return healthy before restarting or reloading
-   `kube-apiserver`.
-
-Fail-closed behavior prevents new encryption under unvalidated settings, but it
-can also make API server writes unavailable until OpenBao metadata is repaired.
+**Fix:** read each finding's impact prefix. For `cryptographic_safety`, restore
+the validated key profile before routing writes through the provider. For
+`api_server_availability`, repair the setting that blocks encryption or
+decryption, such as key deletion or version restrictions. Re-run `verify-key`,
+and wait for `/ready` before restarting the API server.
 
 ## Auth login fails
 
-Symptoms:
+**Signs:** OpenBao auth errors in the provider log, `/ready` fails, or token
+refresh fails.
 
-- OpenBao auth errors appear in provider logs,
-- provider `/ready` returns non-200,
-- token refresh failures.
+**Check:**
 
-Check:
+- JWT: the file is readable by the provider, `exp` is not close, `iss`, `aud`,
+  and `sub` match the OpenBao role, and OpenBao has the issuer's current
+  signing keys.
+- Certificate: the OpenBao listener requests client certificates, and the
+  certificate is valid, has client-auth usage, and matches the role.
+- PKCS#11: the module path, token label, key label, and PIN file are correct.
+- Host, OpenBao, issuer, and CA clocks agree.
 
-- for JSON Web Token (JWT) auth, the JWT file exists and is readable by the provider process,
-- for JWT auth, the JWT `exp` claim is not near expiry,
-- for JWT auth, `iss`, `aud`, and `sub` claims match the OpenBao role configuration,
-- for JWT auth, OpenBao has the current signing keys through a JSON Web Key Set (JWKS), OpenID Connect (OIDC) discovery, or pinned public keys,
-- for certificate auth, the OpenBao listener requests client certificates,
-- for certificate auth, the certificate is not expired, has client-auth usage, and matches the configured role constraints,
-- for PKCS#11 auth, the module path, token label, key label, and PIN file are correct,
-- host, OpenBao, issuer, and CA clocks are synchronized.
+**Fix:** replace the auth material or correct the role, the issuer
+reachability, or the CA, then confirm the next request or background probe
+logs in. The provider re-reads auth material before each login and backs off
+after failures, so it needs no restart.
 
-Recovery:
-
-1. Replace or restore the configured auth material.
-2. Fix OpenBao auth role constraints if they are wrong.
-3. Fix issuer, JWKS, OIDC discovery, certificate authority, or PKCS#11 reachability.
-4. Check that login succeeds on a subsequent request or background probe. The
-   provider re-reads auth material before re-login and backs off after failures.
-
-After token revocation or an OpenBao restore, the provider attempts re-login on
-`401` or `403` and retries the rejected request once. It does not wait for the
-recorded token TTL to expire. Recovery starts at most once every five seconds;
-failed logins also use exponential backoff. OpenBao uses `403` for both invalid
-tokens and policy denials. If `403` persists after successful login, check the
-role's token policies and the required Transit capabilities.
-
-Local credential validation and rejected logins produce `auth_failed` KMS
-errors. OpenBao availability, sealed-state, rate-limit, and context errors
-retain their corresponding classifications.
+After a token revocation or an OpenBao restore, the provider logs in again on a
+`401` or `403` and retries the rejected request once, without waiting for the
+token TTL. Recovery starts at most once every five seconds, with exponential
+backoff for failed logins. OpenBao returns `403` for both invalid tokens and
+policy denials, so a `403` that persists after a successful login points at the
+role's policies or the Transit capabilities. Local credential failures and
+rejected logins surface as `auth_failed`; see
+[Observability: Error classes](/docs/reference/observability/#error-classes).
 
 ## Transit key missing
 
-Symptoms:
+**Signs:** `verify-key` fails with not found, and encryption and decryption
+fail.
 
-- `verify-key` fails,
-- OpenBao metadata read returns not found,
-- decrypt or encrypt operations fail.
-
-Recovery:
-
-1. Confirm the Transit mount path and key name match the provider configuration.
-2. Confirm the OpenBao namespace if applicable.
-3. Confirm the token policy grants metadata read on the configured key path.
-4. If the key was deleted, restore the OpenBao backup containing the original key. See [Disaster recovery: Transit key loss](/docs/operate/disaster-recovery/#transit-key-loss).
-
-Do not recreate the key with the same name and expect old data to decrypt. Recreated keys produce a new lineage; old ciphertext is bound to the previous lineage.
+**Fix:** confirm the Transit mount path, key name, and OpenBao namespace match
+the configuration, and that the policy grants read on the key path. If the key
+was deleted, restore it from an OpenBao backup; see
+[Disaster recovery: Transit key loss](/docs/operate/disaster-recovery/#transit-key-loss).
+A recreated key with the same name never decrypts old data.
 
 ## Unknown key ID
 
-Symptoms:
+**Signs:** decryption is rejected before any Transit call,
+`openbao_kms_decrypt_key_id_errors_total` increases, and old objects fail to
+read after a configuration change.
 
-- decrypt is rejected before the Transit call,
-- the metric `openbao_kms_decrypt_key_id_errors_total` increases,
-- old Kubernetes objects fail to read after a configuration change.
+**Causes:** a changed identity-bearing value, a missing, corrupted, or
+rolled-back registry state or checkpoint, or data from a different provider.
 
-Likely causes:
-
-- provider name changed,
-- cluster ID changed,
-- OpenBao instance ID changed,
-- Transit mount ID changed,
-- key lineage ID changed,
-- the local key registry state or checkpoint is missing, corrupted, or rolled back,
-- the object was encrypted by a different provider.
-
-Recovery:
-
-1. Restore the original identity-bearing configuration; see [Configuration: Identity-bearing fields](/docs/reference/configuration/#identity-bearing-fields).
-2. Restore the key registry state file and checkpoint if they were lost.
-3. Verify active and historical key snapshots are present.
-4. Restart the provider.
-5. Retry the Kubernetes read.
-
-After Transit rotation, current preview releases do not support synthesizing
-replacement registry state. Restore the state/checkpoint pair from backup or a
-known-good peer with matching identity scope; otherwise the provider fails
-closed.
+**Fix:** restore the original identity-bearing values and the registry state
+file and checkpoint, confirm the active and historical key snapshots are
+present, then restart the provider and retry the read. After a rotation, state
+must come from backup or a healthy peer; see
+[Disaster recovery: Local registry state](/docs/operate/disaster-recovery/#local-registry-state).
 
 ## Transit allows implicit key creation
 
-Symptoms:
+**Signs:** KMS Status is unhealthy without a `key_id`, and probes report
+`disable_upsert` as false or unreadable.
 
-- KMS Status is unhealthy and does not publish a `key_id`,
-- metadata probes report that `disable_upsert` is false or unreadable.
-
-Recovery:
-
-1. Set `disable_upsert=true` on the configured Transit mount.
-2. Confirm that the provider token can read `<mount>/config/keys`.
-3. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
-4. Wait for the next metadata probe and confirm that Status becomes healthy.
+**Fix:** set `disable_upsert=true` on the Transit mount, confirm the provider
+token can read `<mount>/config/keys`, run `doctor`, and wait for the next
+metadata probe to report healthy.
 
 ## Transit version creation time changed
 
-Symptoms:
+**Signs:** `/ready`, `doctor`, or `verify-key` reports a changed creation time
+and KMS Status has no `key_id`, typically after an OpenBao restore or import.
 
-- `/ready`, `doctor`, or `verify-key` reports that Transit version creation time changed,
-- KMS Status is unhealthy and does not publish a `key_id`,
-- OpenBao was restored, imported, or modified before the failure.
+The provider records each version's first observed creation time, to the
+second, and treats a different second as identity drift.
 
-The provider stores the first observed Transit version creation time in local
-state and compares it with live OpenBao metadata after Unix-second
-normalization. Sub-second precision differences are tolerated, but a different
-Unix second is treated as identity drift.
-
-Recovery:
-
-1. Confirm the OpenBao backup contains the original Transit key material and
-   metadata.
-2. Restore the matching provider state file and checkpoint.
-3. Confirm the configured Transit key lineage ID still identifies the restored
-   key lineage.
-4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
-5. Keep the provider stopped if the original metadata cannot be restored.
-
-Do not edit `key_id`, creation timestamps, or local state by hand to force a
-match. That can make Kubernetes objects reference a key epoch that cannot
-decrypt them.
+**Fix:** restore an OpenBao backup with the original key and metadata, and the
+matching provider state and checkpoint. Confirm the lineage ID still matches,
+then run `verify-key`. Keep the provider stopped if the original metadata
+cannot be restored. Never edit timestamps, `key_id` values, or state by hand.
 
 ## Intermediate Transit version metadata missing
 
-Symptoms:
+**Signs:** `rotation-plan`, `verify-rotation`, `/ready`, or startup reports
+invalid metadata after `latest_version` skipped versions, and Status has no
+`key_id`. Causes are back-to-back rotations before convergence, or a restore
+that dropped a version's creation time.
 
-- `rotation-plan`, `verify-rotation`, `/ready`, or startup reports invalid
-  Transit metadata,
-- the reported Transit `latest_version` jumped over one or more versions,
-- KMS Status is unhealthy and does not publish a `key_id`.
+**Fix:**
 
-Likely causes:
-
-- multiple Transit rotations happened before every control-plane node converged,
-- OpenBao restore or import omitted an intermediate version creation timestamp,
-- Transit metadata is temporarily inconsistent during restore.
-
-Recovery:
-
-1. Stop further Transit rotations.
-2. Keep all existing Transit versions decryptable.
-3. Restore compatible OpenBao metadata that includes every intermediate version
-   creation timestamp at Unix-second precision.
-4. Restore the provider state file and checkpoint from backup or a known-good
-   peer if local state was lost.
-5. Run `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`
-   on every control-plane node.
-6. Resume only after every node reports a healthy, converged active `key_id`
-   hash.
-
-Do not synthesize intermediate snapshots by hand. If the provider cannot prove
-the skipped version identities from OpenBao metadata and local state, it fails
-closed to avoid advertising a registry that might not decrypt Kubernetes data.
+1. Stop rotations and keep every Transit version decryptable.
+2. Restore OpenBao metadata that includes each intermediate version's creation
+   time, and restore provider state from backup or a healthy peer if it was
+   lost.
+3. Run `rotation-plan` on every node, and resume only after all nodes report
+   the same healthy `key_id` hash.
 
 ## AAD mismatch
 
-AAD means additional authenticated data in this runbook.
+**Signs:** decryption rejects an object with an additional authenticated data
+(AAD) error, or Transit returns an authentication failure.
 
-Symptoms:
+**Causes:** modified or corrupted annotations, a changed provider, cluster, or
+key scope, or a serialization bug.
 
-- decrypt rejects the object with an AAD error,
-- the Transit decrypt call returns an authentication failure if validation reaches Transit.
-
-Likely causes:
-
-- annotations were modified or corrupted,
-- provider, cluster, or key scope changed,
-- a bug in canonical AAD serialization.
-
-Recovery:
-
-1. Do not disable AAD globally.
-2. Compare object annotations with the expected key snapshot hashes.
-3. Restore the correct configuration.
-4. Do not modify code or local state to bypass AAD; that is unsafe as an incident response.
-5. File a bug if canonical serialization changed unexpectedly.
+**Fix:** compare the object's annotations with the expected key snapshot
+hashes and restore the correct configuration. Never disable or bypass AAD. File
+a bug if canonical serialization changed.
 
 ## Status key ID differs from encrypt key ID
 
-Symptoms:
+**Signs:** the API server marks the provider unhealthy and discards encrypt
+responses.
 
-- the API server marks the provider unhealthy,
-- encrypt responses are discarded by the API server,
-- KMS v2 conformance tests fail.
+**Causes:** nodes with inconsistent configuration or provider versions, an
+inconsistent Transit metadata read, or a promotion bug.
 
-Likely causes:
-
-- a race in active key snapshot handling,
-- a rotation promotion bug,
-- multiple provider instances running with inconsistent configuration,
-- Transit metadata observed inconsistently between probes.
-
-Recovery:
-
-1. Stop any in-progress rotation; see [Operate: Rotation](/docs/operate/rotation/).
-2. Compare configuration on every control-plane node.
-3. Compare provider versions across nodes.
-4. Restart the affected provider instance.
-5. Roll back the provider only if the older version supports the current `key_id` and AAD formats.
+**Fix:** stop any rotation, compare configuration and provider versions on
+every node, and restart the affected provider. Roll back only as allowed in
+[Upgrade: Roll back](/docs/operate/upgrade/#roll-back).
 
 ## min_decryption_version raised too early
 
-Symptoms:
+**Signs:** old objects fail to decrypt after a rotation, and OpenBao returns
+version restriction errors.
 
-- old objects fail to decrypt,
-- old `key_id` references fail after rotation,
-- OpenBao decrypt returns version restriction errors.
-
-Recovery:
-
-1. Lower `min_decryption_version` if the old key version still exists and policy allows it.
-2. Restore an OpenBao backup if the old key version no longer exists.
-3. Rerun storage migration only after reads through the KMS path are healthy; see [Operate: Rotation](/docs/operate/rotation/#migrate-kubernetes-data).
-4. Verify old backups are either expired or still decryptable.
-
-If old key material no longer exists, restore the OpenBao backup. See [Disaster recovery: Transit key loss](/docs/operate/disaster-recovery/#transit-key-loss).
-
-Do not treat `verify-rotation` as proof that raising
-`min_decryption_version` was safe. It reports local registry and Transit
-metadata only.
+**Fix:** lower `min_decryption_version` if the old version still exists and
+policy allows it; otherwise restore an OpenBao backup that holds it. Rewrite
+the affected resources once reads through the provider work again, and confirm
+retained backups are expired or still decryptable.
 
 ## Static pod image missing
 
-Symptoms:
+**Signs:** kubelet cannot start the provider, reports image pull errors, and
+the socket is missing.
 
-- kubelet cannot start the provider static pod,
-- image pull errors appear in kubelet logs,
-- the socket is missing.
-
-Recovery:
-
-1. Load the image on the node.
-2. Use the immutable digest already present locally.
-3. Set image pull policy appropriately for air-gapped environments.
-4. Restart kubelet if needed.
-
-See [Get started: Run as a static pod](/docs/get-started/static-pod/) for the image preload and digest-pinning rules.
+**Fix:** import the verified image digest on the node, and restart kubelet if
+needed. See [Run as a static pod: Preload the image](/docs/get-started/static-pod/#step-3-preload-the-image).
 
 ## Identity fallback issues
 
-If `identity` fallback remains enabled too long:
+An `identity` fallback left in place makes plaintext writes possible after a
+future misconfiguration. Removed too early, it leaves unmigrated plaintext
+objects unreadable.
 
-- plaintext writes become more likely after future misconfiguration,
-- audits may miss resources that were never migrated.
-
-If `identity` fallback is removed too early:
-
-- old plaintext objects may become unreadable depending on the provider set and migration state.
-
-Recovery:
-
-1. Restore the last known-good `EncryptionConfiguration`.
-2. Restart or reload `kube-apiserver`.
-3. Complete resource migration; see [Enable encryption: Migrate existing resources](/docs/get-started/enable-encryption/#step-5-rewrite-existing-secrets).
-4. Remove the fallback after migration verification.
-
-## Do not do this during incidents
-
-- Do not delete encrypted etcd data.
-- Do not recreate Transit keys with the same name.
-- Do not change the provider name to clear errors.
-- Do not raise `min_decryption_version`.
-- Do not hand-edit or invent key registry state after rotation.
-- Do not log plaintext or full ciphertext.
-- Do not disable AAD globally.
+**Fix:** restore the last known-good `EncryptionConfiguration` and restart or
+reload the API server. Rewrite the remaining resources as in
+[Enable encryption](/docs/get-started/enable-encryption/#step-5-rewrite-existing-secrets),
+verify, then remove the fallback.

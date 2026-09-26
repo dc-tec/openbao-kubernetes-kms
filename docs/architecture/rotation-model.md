@@ -137,7 +137,7 @@ coordinate cluster-wide retirement, change OpenBao settings, or provide an
 automatic reversal. Restoring an older state/checkpoint pair is a separate
 disaster-recovery operation and requires matching backup and Transit evidence.
 
-The operator runbook for raising `min_decryption_version` lives at [Operate: Rotation: min_decryption_version](/docs/operate/rotation/#min_decryption_version).
+The operator runbook for raising `min_decryption_version` lives at [Operate: Rotation: min_decryption_version](/docs/operate/rotation/#retire-old-versions).
 
 ## Transit rewrap
 
@@ -153,7 +153,7 @@ that nodes promote the new version at materially different times, but they do
 not eliminate it. Operators verify cross-node convergence by comparing the
 `openbao_kms_status_key_id_hash` metric across nodes during and after rotation.
 See [Operate: Rotation: Observe
-Promotion](/docs/operate/rotation/#observe-promotion).
+Promotion](/docs/operate/rotation/#step-2-wait-for-promotion-on-every-node).
 
 A node can decrypt a peer's new ciphertext before local promotion once it has
 validated the version's metadata. If a well-formed `key_id` is unknown, Decrypt

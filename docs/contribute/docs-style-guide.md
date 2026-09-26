@@ -71,6 +71,23 @@ Avoid:
 The docs check rejects em dash characters in tracked first-party prose. Use a
 comma, period, parentheses, or rewrite the sentence.
 
+## Say it once
+
+- State each caveat, version matrix, or list of values on the page that owns
+  it, and link to that page elsewhere. Support caveats belong to
+  [Compatibility](/docs/reference/compatibility/), identity-bearing values to
+  [Plan identity values](/docs/get-started/plan-values/), and incident rules to
+  [Disaster recovery](/docs/operate/disaster-recovery/#during-an-incident).
+- Do not open a page by restating its description. The template already shows
+  it as the lede.
+- Use at most one "see also" sentence at the top of a page.
+- Do not end pages with "Read next" or "Use another section if" lists. The
+  sidebar, section pages, and Previous and Next links cover navigation.
+- Drop plans for future releases unless they change the current contract.
+- Aim for about 800 words on task and runbook pages and under 150 words on
+  section landing pages. Reference pages can be as long as the contract
+  requires, without narrative.
+
 ## Write complete procedures
 
 Use numbered steps for ordered work. Start each step with an imperative and

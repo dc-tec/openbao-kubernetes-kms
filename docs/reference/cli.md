@@ -197,7 +197,7 @@ migration records, backup-retention records, and any change to
 
 Plan or apply operator-authorized removal of historical keys from local decrypt
 lookup. See the required evidence and node-by-node procedure in
-[Operate: Rotation](/docs/operate/rotation/#retire-local-versions-before-raising-the-minimum).
+[Operate: Rotation](/docs/operate/rotation/#retire-old-versions).
 
 ```sh
 bao-kms-provider retire-versions \
