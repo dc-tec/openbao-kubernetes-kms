@@ -17,6 +17,6 @@ These pages explain why the provider is shaped the way it is. They are maintaine
 
 ## Use Another Section If
 
-- the question is about how to install, wire, or operate the provider: go to [Start Here](/docs/getting-started/) or [Operations](/docs/operations/).
+- the question is about how to install, wire, or operate the provider: go to [Get Started](/docs/get-started/) or [Operate](/docs/operate/).
 - the question is about exact behavior or contract detail: go to [Reference](/docs/reference/).
-- the question is about contributing or local development: go to [Development](/docs/development/).
+- the question is about contributing or local development: go to [Contribute](/contribute/).

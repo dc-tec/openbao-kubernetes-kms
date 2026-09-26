@@ -113,7 +113,7 @@ Use these defaults unless your platform has a documented reason to diverge:
 - Pin binaries, packages, images, checksums, and verified release artifacts. Do not use floating `latest` inputs.
 
 Current performance validation keeps the simpler direct decrypt path. See
-[Development: Performance Evidence](/docs/development/benchmark-results/) for the
+[Contribute: Performance Evidence](/contribute/benchmark-results/) for the
 captured results.
 
 ## Out Of Scope
@@ -132,8 +132,8 @@ The current release line does not include:
 
 ## Read Next
 
-1. [OpenBao Setup](/docs/getting-started/openbao-setup/) to provision the Transit mount, key, policy, and provider authentication.
-2. [Install](/docs/getting-started/install/) to fetch a verified provider binary.
-3. [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) to run the provider on every control-plane node.
-4. [Kubernetes Encryption Config](/docs/getting-started/kubernetes-encryption-config/) to write the `EncryptionConfiguration` consumed by the API server.
-5. [First Encrypt](/docs/getting-started/first-encrypt/) to verify the path end-to-end.
+1. [OpenBao Setup](/docs/get-started/openbao/) to provision the Transit mount, key, policy, and provider authentication.
+2. [Install](/docs/get-started/install/) to fetch a verified provider binary.
+3. [Get Started: Choosing A Model](/docs/get-started/deployment-model/) to run the provider on every control-plane node.
+4. [Kubernetes Encryption Config](/docs/get-started/enable-encryption/) to write the `EncryptionConfiguration` consumed by the API server.
+5. [First Encrypt](/docs/get-started/verify/) to verify the path end-to-end.

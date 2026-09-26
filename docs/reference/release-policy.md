@@ -51,7 +51,7 @@ publication.
 
 Preview releases ship only after the required test, packaging, signing, and
 verification steps pass. See
-[Development: CI And Supply Chain](/docs/development/ci-supply-chain/) for the
+[Contribute: CI And Supply Chain](/contribute/ci-supply-chain/) for the
 maintainer-side workflow details.
 
 A preview release is suitable for validating:
@@ -179,4 +179,4 @@ image, binary, and package artifacts:
 - `provenance-index.json`,
 - release notes.
 
-For the full supply-chain controls see [Development: CI And Supply Chain](/docs/development/ci-supply-chain/).
+For the full supply-chain controls see [Contribute: CI And Supply Chain](/contribute/ci-supply-chain/).

@@ -196,7 +196,7 @@ migration records, backup-retention records, and any change to
 
 Plan or apply operator-authorized removal of historical keys from local decrypt
 lookup. See the required evidence and node-by-node procedure in
-[Operations: Rotation](/docs/operations/rotation/#retire-local-versions-before-raising-the-minimum).
+[Operate: Rotation](/docs/operate/rotation/#retire-local-versions-before-raising-the-minimum).
 
 ```sh
 bao-kms-provider retire-versions \
@@ -285,7 +285,7 @@ bao-kms-provider policy openbao \
   --config /etc/openbao-kms/config.yaml
 ```
 
-The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy. See [Reference: Transit Policy Examples](/docs/reference/transit-policy-examples/) for variants and rationale.
+The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy. See [Configure: Transit Policy Examples](/docs/configure/openbao-auth/) for variants and rationale.
 
 ## Common Flags
 

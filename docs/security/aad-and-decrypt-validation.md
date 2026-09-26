@@ -54,7 +54,7 @@ Disabling AAD globally as an incident response is unsafe. Specifically:
 - accepting an AAD-disabled state re-enables the cross-cluster replay class of threats that AAD prevents,
 - future compatibility read modes must require explicit retained historical state before they are introduced.
 
-If decrypt is failing during an incident, follow [Operations: Troubleshooting: AAD Mismatch](/docs/operations/troubleshooting/#aad-mismatch) instead of disabling AAD.
+If decrypt is failing during an incident, follow [Operate: Troubleshooting: AAD Mismatch](/docs/operate/troubleshooting/#aad-mismatch) instead of disabling AAD.
 
 ## Threats Not Addressed Here
 
@@ -62,6 +62,6 @@ AAD and decrypt validation do not protect against:
 
 - A compromised provider binary. The provider sees plaintext on the way through, before AAD is reconstructed and after it is verified.
 - An attacker with valid Transit decrypt permission. Transit will decrypt any ciphertext encrypted under the key, AAD or not, and the attacker can supply matching AAD if they have read access to the configuration.
-- Loss of Transit key material. AAD validates ciphertext authenticity; it does not recover lost keys. See [Operations: Disaster Recovery](/docs/operations/disaster-recovery/).
+- Loss of Transit key material. AAD validates ciphertext authenticity; it does not recover lost keys. See [Operate: Disaster Recovery](/docs/operate/disaster-recovery/).
 
 For the full asset and threat catalog see [Threat Model](/docs/security/threat-model/).

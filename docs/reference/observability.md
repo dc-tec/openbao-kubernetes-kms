@@ -115,7 +115,7 @@ Recommended alert conditions:
 
 Example Prometheus alerting rules ship at `deploy/prometheus/rules/openbao-kms.rules.yaml`. Treat the rules as starting points and tune thresholds to local OpenBao latency, probe cadence, token TTLs, and control-plane scrape topology before using them for paging.
 
-An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Deployment: Observability](/docs/deployment/observability/) for scrape and import guidance.
+An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Configure: Observability](/docs/configure/monitor/) for scrape and import guidance.
 
 ## Correlation With OpenBao
 

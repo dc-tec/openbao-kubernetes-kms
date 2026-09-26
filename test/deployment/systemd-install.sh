@@ -28,11 +28,11 @@ extract_commands() {
   ' "$file"
 }
 
-extract_commands "$repo/docs/getting-started/install.md" systemd-bundle-install > "$work/install.sh"
+extract_commands "$repo/docs/get-started/install.md" systemd-bundle-install > "$work/install.sh"
 extract_commands "$repo/deploy/package/bundles/systemd/README.md" systemd-bundle-install > "$work/readme-install.sh"
 cmp "$work/install.sh" "$work/readme-install.sh"
-extract_commands "$repo/docs/getting-started/install.md" systemd-bundle-extract > "$work/extract.sh"
-extract_commands "$repo/docs/getting-started/install.md" systemd-runtime-files > "$work/runtime.sh"
+extract_commands "$repo/docs/get-started/install.md" systemd-bundle-extract > "$work/extract.sh"
+extract_commands "$repo/docs/get-started/install.md" systemd-runtime-files > "$work/runtime.sh"
 
 if [[ -n "${BUNDLE_ARCHIVE:-}" ]]; then
   archive=$(basename "$BUNDLE_ARCHIVE")
@@ -54,7 +54,7 @@ cd "$work"
 source "$work/extract.sh"
 bash "$work/install.sh"
 if [[ "${APPLY_PREVIEW_FIX:-false}" == true ]]; then
-  extract_commands "$repo/docs/getting-started/install.md" systemd-preview-permissions > "$work/permissions.sh"
+  extract_commands "$repo/docs/get-started/install.md" systemd-preview-permissions > "$work/permissions.sh"
   bash "$work/permissions.sh"
 fi
 

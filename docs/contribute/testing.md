@@ -11,10 +11,10 @@ over a single happy-path encrypt and decrypt check.
 
 The following sections define what the test system must prove. For runnable
 end-to-end (E2E) lanes and
-Make targets, see [E2E Framework](/docs/development/e2e-framework/). For continuous
+Make targets, see [E2E Framework](/contribute/e2e-framework/). For continuous
 integration (CI) lanes
-and release evidence requirements, see [CI And Supply Chain](/docs/development/ci-supply-chain/).
-For captured load and cold-start evidence, see [Performance Evidence](/docs/development/benchmark-results/).
+and release evidence requirements, see [CI And Supply Chain](/contribute/ci-supply-chain/).
+For captured load and cold-start evidence, see [Performance Evidence](/contribute/benchmark-results/).
 
 ## Test Priorities
 
@@ -102,7 +102,7 @@ cold-start evidence shows a release-blocking need.
 ## Release Evidence
 
 Release evidence is assembled from the test layers above and the supply-chain
-controls documented in [CI And Supply Chain](/docs/development/ci-supply-chain/).
+controls documented in [CI And Supply Chain](/contribute/ci-supply-chain/).
 In summary:
 
 - every pull request proves deterministic logic, conformance, redaction,

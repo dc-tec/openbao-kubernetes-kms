@@ -1,7 +1,7 @@
 ---
 title: "Choosing A Model"
 description: "Compare systemd and static-pod deployment for bao-kms-provider against control-plane lifecycle, bootstrap dependencies, and operational constraints."
-weight: 10
+weight: 20
 ---
 
 The tested preview deployment models are a hardened systemd unit on the
@@ -96,7 +96,7 @@ The 10,000 and 50,000 Secret cold-start validation runs showed that large
 Kubernetes object lists drive API server and etcd load. Provider and OpenBao
 decrypt counter deltas stayed low, which supports the direct decrypt path. The
 provider must still be available before API server startup. See [Development:
-Performance Evidence](/docs/development/benchmark-results/).
+Performance Evidence](/contribute/benchmark-results/).
 
 ## DaemonSet Is Not Supported
 
@@ -135,6 +135,6 @@ flowchart TD
 
 ## Read Next
 
-1. [systemd Deployment](/docs/deployment/systemd/) for the unit file, directory setup, and start procedure.
-2. [Static Pod Deployment](/docs/deployment/static-pod/) for the manifest, image preload, and host preparation.
-3. [Linux Identity Model](/docs/deployment/linux-identity-model/) for the user, group, and permission model both deployments share.
+1. [systemd Deployment](/docs/get-started/systemd/) for the unit file, directory setup, and start procedure.
+2. [Static Pod Deployment](/docs/get-started/static-pod/) for the manifest, image preload, and host preparation.
+3. [Linux Identity Model](/docs/security/linux-identity-model/) for the user, group, and permission model both deployments share.

@@ -1,11 +1,11 @@
 ---
 title: "First Encrypt"
 description: "Verify end-to-end encryption: create a probe Secret, confirm storage in etcd is ciphertext, and read the provider's health and metric signals."
-weight: 50
+weight: 80
 ---
 
 Run this end-to-end validation after the provider is running, [Kubernetes
-Encryption Config](/docs/getting-started/kubernetes-encryption-config/) is complete,
+Encryption Config](/docs/get-started/enable-encryption/) is complete,
 and the API server has reloaded or restarted. The checks confirm that the API
 server encrypts selected resources through the provider, stores ciphertext in
 etcd, and receives healthy provider signals.
@@ -121,6 +121,6 @@ After this page:
 
 ## Read Next
 
-1. [Operations: Rotation](/docs/operations/rotation/) once the encryption layer is in steady state.
-2. [Operations: Disaster Recovery](/docs/operations/disaster-recovery/) to plan recovery posture before relying on the provider in production.
+1. [Operate: Rotation](/docs/operate/rotation/) once the encryption layer is in steady state.
+2. [Operate: Disaster Recovery](/docs/operate/disaster-recovery/) to plan recovery posture before relying on the provider in production.
 3. [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/) for the full `key_id` format and additional authenticated data (AAD) envelope.

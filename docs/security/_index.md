@@ -9,7 +9,7 @@ These pages cover trust boundaries, authentication, hardening, and the security 
 The security section documents the intended hardened posture for
 `bao-kms-provider`. For the current maturity statement see
 [Reference: Support Policy](/docs/reference/support-policy/), and for artifact
-verification see [Getting Started: Install](/docs/getting-started/install/#verify-release-artifacts).
+verification see [Getting Started: Install](/docs/get-started/install/#verify-release-artifacts).
 
 ## Topics
 
@@ -21,5 +21,5 @@ verification see [Getting Started: Install](/docs/getting-started/install/#verif
 ## Use Another Section If
 
 - the question is about CLI, config, or KMS v2 protocol behavior: go to [Reference](/docs/reference/).
-- the question is about an operational runbook or incident response: go to [Operations](/docs/operations/).
+- the question is about an operational runbook or incident response: go to [Operate](/docs/operate/).
 - the question is about how the design satisfies these properties: go to [Architecture](/docs/architecture/).

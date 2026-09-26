@@ -59,8 +59,8 @@ bao write -f transit/keys/k8s-workload-a-etcd/rotate
 ```
 
 The provider token must not have rotate permission. The provisioned policy
-excludes this capability by design; see [Reference: Transit Policy
-Examples](/docs/reference/transit-policy-examples/).
+excludes this capability by design; see [Configure: Transit Policy
+Examples](/docs/configure/openbao-auth/).
 
 ## Observe Promotion
 
@@ -246,7 +246,7 @@ If objects have already been rewritten with the new version, rollback still requ
 
 ## Stop Rotation If
 
-Abort rotation and consult [Operations: Troubleshooting](/docs/operations/troubleshooting/) when:
+Abort rotation and consult [Operate: Troubleshooting](/docs/operate/troubleshooting/) when:
 
 - nodes report different active `key_id` hashes,
 - Status flips old to new to old,

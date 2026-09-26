@@ -1,7 +1,7 @@
 ---
 title: "Observability Deployment"
 description: "Deploy the Prometheus scrape, alert rules, and Grafana dashboard samples for bao-kms-provider."
-weight: 50
+weight: 20
 ---
 
 `bao-kms-provider` exposes Prometheus metrics on `server.metricsAddress` at

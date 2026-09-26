@@ -1,7 +1,7 @@
 ---
 title: "Linux Identity Model"
 description: "User, group, file ownership, and runtime directory creation model for running bao-kms-provider in systemd or static pod mode."
-weight: 40
+weight: 35
 ---
 
 The systemd and static-pod deployments share one user, group, file ownership,

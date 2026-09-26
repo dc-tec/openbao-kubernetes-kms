@@ -21,7 +21,7 @@ footerNote = "OpenBao Kubernetes KMS is an independent open source project."
 searchPlaceholder = "Search the KMS provider docs…"
 searchHint = "Try “doctor”, “rotation”, or “key_id”."
 releasesURL = "https://github.com/dc-tec/openbao-kubernetes-kms/releases"
-contributeURL = "docs/development/"
+contributeURL = "contribute/"
 
 [versions."0.1.x"]
 weight = 1
@@ -35,7 +35,12 @@ target = "content"
 [[module.mounts]]
 source = "docs"
 target = "content/docs"
-files = ["! adr/**", "! workstreams/**", "! research-notes.md"]
+files = ["! adr/**", "! workstreams/**", "! research-notes.md", "! contribute/**"]
+
+# Contributor guides publish as a global section at /contribute/.
+[[module.mounts]]
+source = "docs/contribute"
+target = "content/contribute"
 
 [[module.mounts]]
 source = "website/layouts"

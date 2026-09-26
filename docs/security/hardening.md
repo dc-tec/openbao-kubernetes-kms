@@ -7,7 +7,7 @@ weight: 20
 These requirements define the hardened deployment posture. Preview releases
 still need staging validation before production use. For the threat coverage see
 [Threat Model](/docs/security/threat-model/). For the file ownership and group model
-the host-side requirements rely on, see [Deployment: Linux Identity Model](/docs/deployment/linux-identity-model/).
+the host-side requirements rely on, see [Security: Linux Identity Model](/docs/security/linux-identity-model/).
 
 ## OpenBao
 
@@ -70,7 +70,7 @@ Recommended:
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
 ```
 
-For the rationale and runtime directory creation pattern see [Deployment: Linux Identity Model](/docs/deployment/linux-identity-model/).
+For the rationale and runtime directory creation pattern see [Security: Linux Identity Model](/docs/security/linux-identity-model/).
 
 ## Auth Material
 

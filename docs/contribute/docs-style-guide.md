@@ -14,13 +14,13 @@ Write each page for the reader who is most likely to use it:
 
 | Section | Primary reader | Page style |
 |---|---|---|
-| `getting-started/` | First-time operator | Sequential tutorial with one recommended path. |
-| `deployment/` | Operator choosing or applying a runtime model | Model comparison, then concrete setup. |
-| `operations/` | Operator maintaining a deployed provider | Task runbooks with checks and recovery notes. |
+| `get-started/` | First-time operator | Sequential path from model choice to verified encryption, with one recommended route per deployment model. |
+| `configure/` | Operator adapting the default setup | Task pages for auth, policy, and monitoring variants. |
+| `operate/` | Operator maintaining a deployed provider | Task runbooks with checks and recovery notes. |
 | `reference/` | Operator or maintainer looking up exact behavior | Precise lookup material. |
 | `security/` | Security reviewer or platform owner | Trust boundaries, controls, and limitations. |
 | `architecture/` | Maintainer or reviewer | Design rationale and tradeoffs. |
-| `development/` | Contributor or reviewer | Local workflow, CI, tests, release process, and docs maintenance. |
+| `contribute/` | Contributor or reviewer | Local workflow, CI, tests, release process, and docs maintenance. |
 
 If a page starts serving two different readers, split it or move part of the
 content to the section where that reader would naturally look.
@@ -35,7 +35,7 @@ Prefer direct, concrete prose:
 - Keep warnings tied to a real operational consequence.
 - Prefer "tested matrix", "preview release", and "verified artifact" in
   user-facing docs.
-- Keep detailed CI and release mechanics in `development/` unless operators
+- Keep detailed CI and release mechanics in `contribute/` unless operators
   need them for installation or verification.
 - Use OpenBao terminology. Mention Vault only for related work or compatibility
   context.
@@ -59,22 +59,23 @@ comma, period, parentheses, or rewrite the sentence.
 
 Use the shape that matches the section:
 
-- Getting-started pages should have a clear beginning, ordered steps, and a
-  visible end state.
-- Deployment pages should separate model selection from model-specific setup.
-- Operations pages can branch by symptom or condition, but should keep recovery
+- Get started pages should have a clear beginning, ordered steps, and a
+  visible end state. Keep model selection separate from model-specific setup.
+- Configure pages should start from the default path and describe one variant
+  each.
+- Operate pages can branch by symptom or condition, but should keep recovery
   steps ordered.
 - Reference pages should be stable lookup material, not narrative.
 - Security pages should describe scope, trust, controls, and limits.
 - Architecture pages can explain why the system works the way it does.
-- Development pages can include contributor-only details and CI mechanics.
+- Contribute pages can include contributor-only details and CI mechanics.
 
 ## Links
 
 Link to the canonical page for a topic instead of repeating the same detail in
 several places.
 
-- Use absolute site paths such as `/docs/operations/rotation/`.
+- Use absolute site paths such as `/docs/operate/rotation/`.
 - Avoid `.md` links from published docs.
 - Section landing pages should help readers move to the right section if they
   arrived in the wrong place.

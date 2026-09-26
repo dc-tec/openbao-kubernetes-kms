@@ -6,20 +6,20 @@ weight: 80
 
 The published documentation is a Hugo site built from the Markdown files under
 `docs/` and the site assets under `website/`. For writing guidance, see
-[Docs Style Guide](/docs/development/docs-style-guide/).
+[Docs Style Guide](/contribute/docs-style-guide/).
 
 ## Source Layout
 
 ```text
 docs/
   _index.md           documentation landing page (/docs/)
-  getting-started/    first-success path for operators
-  deployment/         systemd, static-pod, identity, observability
-  operations/         rotation, upgrade, recovery, troubleshooting
+  get-started/        model choice, OpenBao setup, install, enable, verify
+  configure/          auth and policy variants, monitoring
+  operate/            rotation, upgrade, recovery, troubleshooting
   reference/          CLI, config, protocol, metrics, compatibility
   security/           threat model, hardening, auth, decrypt validation
   architecture/       design rationale and tradeoffs
-  development/        contributor and maintainer documentation
+  contribute/         contributor guides, published at /contribute/
 website/
   content/            homepage and the legacy redirect adapter
   data/               navigation, version line, and redirect ledger
@@ -42,7 +42,9 @@ instead of hardcoding them in templates.
 
 `hugo.toml` mounts `docs/` at `content/docs/`, so every page renders under
 `/docs/`. The mount excludes internal planning material (`adr/`,
-`workstreams/`, `research-notes.md`).
+`workstreams/`, `research-notes.md`). `docs/contribute/` mounts separately at
+`content/contribute/`, so contributor guides render under `/contribute/` with
+their own section navigation, like the OpenBao Operator site.
 
 To add a new top-level docs section:
 
@@ -53,10 +55,12 @@ To add a new top-level docs section:
 ## Navigation
 
 `website/data/navigation.yaml` defines the sidebar. The `primary` list holds
-the documentation sections. The first group is the linear getting-started path,
-and the page template adds Previous and Next links across its items. Section
-landing pages list their child pages by `weight` unless they set
-`hideChildren: true`.
+the documentation sections, and the `secondary` list holds global guides such
+as Contribute. Items with a `step` field form the Previous and Next path of
+their group. Items that share a step are alternatives, such as the systemd and
+static-pod pages: the path leads from the step before them to each alternative
+and from each alternative to the step after them. Section landing pages list
+their child pages by `weight` unless they set `hideChildren: true`.
 
 ## Retired Routes
 

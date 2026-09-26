@@ -1,7 +1,6 @@
 {{- $docsURL := printf "%sdocs/" .Site.Home.RelPermalink -}}
 {{- $brand := printf "%s %s" site.Params.brandPrefix site.Params.brandSuffix -}}
 {{- $contributeURL := site.Params.contributeURL | relURL -}}
-{{- $inContribute := hasPrefix .RelPermalink $contributeURL -}}
 {{- $hasDocsSidebar := and (not .IsHome) (eq .Section "docs") -}}
 {{- $navTarget := cond $hasDocsSidebar "site-sidebar" "primary-navigation" -}}
 <header class="site-header">
@@ -14,9 +13,9 @@
       <span class="brand-name">{{ site.Params.brandPrefix }} <b>{{ site.Params.brandSuffix }}</b></span>
     </a>
     <nav class="top-nav" id="primary-navigation" aria-label="Primary">
-      <a href="{{ $docsURL }}"{{ if and (eq .Section "docs") (not $inContribute) }} aria-current="location"{{ end }}>Docs</a>
+      <a href="{{ $docsURL }}"{{ if eq .Section "docs" }} aria-current="location"{{ end }}>Docs</a>
       <a href="{{ site.Params.releasesURL }}">Releases</a>
-      <a href="{{ $contributeURL }}"{{ if $inContribute }} aria-current="location"{{ end }}>Contribute</a>
+      <a href="{{ $contributeURL }}"{{ if eq .Section "contribute" }} aria-current="location"{{ end }}>Contribute</a>
     </nav>
     <div class="header-actions">
       <button class="search-trigger" type="button" aria-haspopup="dialog" data-search-open>

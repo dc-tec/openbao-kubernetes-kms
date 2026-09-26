@@ -1,10 +1,10 @@
 ---
 title: "Transit Policy Examples"
 description: "Reference OpenBao policy, auth role, and Transit key configuration examples for bao-kms-provider, plus capabilities to avoid."
-weight: 110
+weight: 10
 ---
 
-These examples define the OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies them, see [Getting Started: OpenBao Setup](/docs/getting-started/openbao-setup/). Replace workload-specific identifiers such as the mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
+These examples define the OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies them, see [Getting Started: OpenBao Setup](/docs/get-started/openbao/). Replace workload-specific identifiers such as the mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
 
 <a id="plugin-hot-path-policy"></a>
 

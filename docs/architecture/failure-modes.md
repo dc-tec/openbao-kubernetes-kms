@@ -4,7 +4,7 @@ description: "Failure modes the design considers: cause, impact, detection signa
 weight: 50
 ---
 
-This catalog pairs each failure scenario with its detection signal, mitigation, and recovery action. For runbooks that act on these signals, see [Operations: Troubleshooting](/docs/operations/troubleshooting/) and [Operations: Disaster Recovery](/docs/operations/disaster-recovery/).
+This catalog pairs each failure scenario with its detection signal, mitigation, and recovery action. For runbooks that act on these signals, see [Operate: Troubleshooting](/docs/operate/troubleshooting/) and [Operate: Disaster Recovery](/docs/operate/disaster-recovery/).
 
 <a id="how-to-use-this-page"></a>
 

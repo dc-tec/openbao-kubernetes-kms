@@ -5,7 +5,7 @@ weight: 10
 ---
 
 Use this guide to contribute to `bao-kms-provider`. For operator procedures,
-start with [Start Here](/docs/getting-started/).
+start with [Get Started](/docs/get-started/).
 
 ## Project Layout
 
@@ -69,7 +69,7 @@ CI checks. Use `devenv shell` when you need an interactive shell. Use
 Run focused end-to-end (E2E) lanes when a change touches OpenBao, Kubernetes,
 deployment, rotation, failure injection, or release packaging behavior. The
 lane commands live in
-[Development: E2E Framework](/docs/development/e2e-framework/).
+[Contribute: E2E Framework](/contribute/e2e-framework/).
 
 For deployment sample or package metadata changes, run the focused deployment
 checks:
@@ -108,11 +108,11 @@ The OpenBao CI target starts real OpenBao, bootstraps provider auth, runs the
 provider, and exercises the Unix socket with the Kubernetes KMS v2 protobuf
 client.
 
-For the full E2E framework, label routing, suite manifest rules, and report artifacts see [Development: E2E Framework](/docs/development/e2e-framework/).
+For the full E2E framework, label routing, suite manifest rules, and report artifacts see [Contribute: E2E Framework](/contribute/e2e-framework/).
 
 ## Go Code Quality
 
-Implementation follows [Development: Code Quality](/docs/development/code-quality/). Key rules:
+Implementation follows [Contribute: Code Quality](/contribute/code-quality/). Key rules:
 
 - no `map[string]any` in production code,
 - no `map[string]interface{}` in production code,
@@ -183,4 +183,4 @@ When implementation changes behavior, update documentation in the same change:
 - support and version-envelope changes update [Reference: Compatibility](/docs/reference/compatibility/).
 
 For writing style, page structure, links, and docs verification, see
-[Development: Docs Style Guide](/docs/development/docs-style-guide/).
+[Contribute: Docs Style Guide](/contribute/docs-style-guide/).

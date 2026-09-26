@@ -76,7 +76,7 @@ ID and additional authenticated data (AAD) golden tests, configuration
 validation, redaction tests, and end-to-end (E2E) suite manifest validation.
 
 Run focused E2E lanes when a change touches runtime, OpenBao, Kubernetes, or
-deployment behavior. The canonical command list is [E2E Framework](/docs/development/e2e-framework/).
+deployment behavior. The canonical command list is [E2E Framework](/contribute/e2e-framework/).
 
 ## CI Lanes
 
@@ -258,4 +258,4 @@ Every public release publishes or retains:
 - `provenance-index.json`,
 - release notes.
 
-Install-time verification is documented in [Getting Started: Install](/docs/getting-started/install/#verify-release-artifacts).
+Install-time verification is documented in [Getting Started: Install](/docs/get-started/install/#verify-release-artifacts).

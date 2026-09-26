@@ -219,7 +219,7 @@ Semgrep owns security and dangerous-API rules:
 - no runtime subprocess execution,
 - no sensitive log field names.
 
-For the supporting policy see [Development: Code Quality](/docs/development/code-quality/).
+For the supporting policy see [Contribute: Code Quality](/contribute/code-quality/).
 
 ## Startup Sequence
 
@@ -262,9 +262,9 @@ flowchart TD
 Static-pod ordering must be tested because kubelet does not provide a strong
 dependency graph between static pods. The API server may start before the
 provider socket exists. It must retry while the provider completes bootstrap.
-See [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) for the model
-selection rationale and [Deployment: Static Pod
-Deployment](/docs/deployment/static-pod/) for the manifest and bootstrap risks.
+See [Get Started: Choosing A Model](/docs/get-started/deployment-model/) for the model
+selection rationale and [Get Started: Static Pod
+Deployment](/docs/get-started/static-pod/) for the manifest and bootstrap risks.
 
 ## Multi-Control-Plane Operation
 

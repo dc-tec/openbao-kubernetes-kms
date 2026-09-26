@@ -27,3 +27,23 @@
   color: var(--text);
   text-align: left;
 }
+
+/* Journey navigation step with alternatives, such as systemd or static pod. */
+.journey-choice {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  padding: 0.8rem 0;
+}
+
+.journey-choice.journey-next {
+  text-align: right;
+}
+
+.journey-nav .journey-choice a {
+  padding: 0;
+}
+
+.journey-nav .journey-choice a:last-child {
+  text-align: inherit;
+}

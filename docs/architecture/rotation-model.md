@@ -4,7 +4,7 @@ description: "Rotation invariants, state machine, flip-flop guards, and version 
 weight: 40
 ---
 
-This maintainer-facing description defines the rotation state machine and its invariants. For the operator runbook, see [Operations: Rotation](/docs/operations/rotation/).
+This maintainer-facing description defines the rotation state machine and its invariants. For the operator runbook, see [Operate: Rotation](/docs/operate/rotation/).
 
 ## Principles
 
@@ -136,7 +136,7 @@ coordinate cluster-wide retirement, change OpenBao settings, or provide an
 automatic reversal. Restoring an older state/checkpoint pair is a separate
 disaster-recovery operation and requires matching backup and Transit evidence.
 
-The operator runbook for raising `min_decryption_version` lives at [Operations: Rotation: min_decryption_version](/docs/operations/rotation/#min_decryption_version).
+The operator runbook for raising `min_decryption_version` lives at [Operate: Rotation: min_decryption_version](/docs/operate/rotation/#min_decryption_version).
 
 ## Transit Rewrap
 
@@ -151,8 +151,8 @@ snapshot. The activation delay and stable observation count reduce the chance
 that nodes promote the new version at materially different times, but they do
 not eliminate it. Operators verify cross-node convergence by comparing the
 `openbao_kms_status_key_id_hash` metric across nodes during and after rotation.
-See [Operations: Rotation: Observe
-Promotion](/docs/operations/rotation/#observe-promotion).
+See [Operate: Rotation: Observe
+Promotion](/docs/operate/rotation/#observe-promotion).
 
 A node can decrypt a peer's new ciphertext before local promotion once it has
 validated the version's metadata. If a well-formed `key_id` is unknown, Decrypt

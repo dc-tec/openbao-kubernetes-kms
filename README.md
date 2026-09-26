@@ -40,11 +40,11 @@ for the data flows, trust boundaries, and failure model.
 The [documentation site](https://dc-tec.github.io/openbao-kubernetes-kms/)
 contains the project contract and operator guidance:
 
-- [Start Here](https://dc-tec.github.io/openbao-kubernetes-kms/docs/getting-started/)
-  for setup and first-use verification.
-- [Deployment](https://dc-tec.github.io/openbao-kubernetes-kms/docs/deployment/)
-  for systemd and static-pod models.
-- [Operations](https://dc-tec.github.io/openbao-kubernetes-kms/docs/operations/)
+- [Get started](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/)
+  to choose a deployment model, install the provider, and verify encryption.
+- [Configure](https://dc-tec.github.io/openbao-kubernetes-kms/docs/configure/)
+  for OpenBao auth and policy variants and monitoring.
+- [Operate](https://dc-tec.github.io/openbao-kubernetes-kms/docs/operate/)
   for rotation, recovery, upgrades, and troubleshooting.
 - [Reference](https://dc-tec.github.io/openbao-kubernetes-kms/docs/reference/)
   for configuration, compatibility, protocol behavior, and release policy.
@@ -61,7 +61,7 @@ make ci-core
 
 For repository layout, focused tests, and contribution rules, see
 [Contributing](CONTRIBUTING.md) and the
-[development documentation](https://dc-tec.github.io/openbao-kubernetes-kms/docs/development/).
+[contributor documentation](https://dc-tec.github.io/openbao-kubernetes-kms/contribute/).
 
 ## Security
 

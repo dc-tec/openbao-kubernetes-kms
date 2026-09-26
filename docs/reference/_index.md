@@ -18,10 +18,10 @@ These pages answer behavior-specific questions. Use them when the workflow guida
 - [Compatibility](/docs/reference/compatibility/) for the supported Kubernetes and OpenBao version envelope.
 - [Support Policy](/docs/reference/support-policy/) for the supported configurations and version-pinning expectations.
 - [Release Policy](/docs/reference/release-policy/) for release channels, artifact policy, and verification materials.
-- [Transit Policy Examples](/docs/reference/transit-policy-examples/) for least-privilege OpenBao policies for the provider hot path.
+- [Transit Policy Examples](/docs/configure/openbao-auth/) for least-privilege OpenBao policies for the provider hot path.
 
 ## Use Another Section If
 
-- the question is about how to install or wire the provider: go to [Start Here](/docs/getting-started/).
-- the question is about an operational task or runbook: go to [Operations](/docs/operations/).
+- the question is about how to install or wire the provider: go to [Get Started](/docs/get-started/).
+- the question is about an operational task or runbook: go to [Operate](/docs/operate/).
 - the question is about why a given behavior is the way it is: go to [Architecture](/docs/architecture/).

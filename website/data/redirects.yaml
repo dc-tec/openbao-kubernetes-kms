@@ -27,83 +27,83 @@
   to: docs/architecture/transit-key-model/
   reason: Documentation moved under /docs/.
 - from: deployment
-  to: docs/deployment/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/deployment-model/
+  reason: Page moved in the documentation restructure.
 - from: deployment/choosing-a-model
-  to: docs/deployment/choosing-a-model/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/deployment-model/
+  reason: Page moved in the documentation restructure.
 - from: deployment/linux-identity-model
-  to: docs/deployment/linux-identity-model/
-  reason: Documentation moved under /docs/.
+  to: docs/security/linux-identity-model/
+  reason: Page moved in the documentation restructure.
 - from: deployment/observability
-  to: docs/deployment/observability/
-  reason: Documentation moved under /docs/.
+  to: docs/configure/monitor/
+  reason: Page moved in the documentation restructure.
 - from: deployment/static-pod
-  to: docs/deployment/static-pod/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/static-pod/
+  reason: Page moved in the documentation restructure.
 - from: deployment/systemd
-  to: docs/deployment/systemd/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/systemd/
+  reason: Page moved in the documentation restructure.
 - from: development
-  to: docs/development/
-  reason: Documentation moved under /docs/.
+  to: contribute/
+  reason: Page moved in the documentation restructure.
 - from: development/benchmark-results
-  to: docs/development/benchmark-results/
-  reason: Documentation moved under /docs/.
+  to: contribute/benchmark-results/
+  reason: Page moved in the documentation restructure.
 - from: development/ci-supply-chain
-  to: docs/development/ci-supply-chain/
-  reason: Documentation moved under /docs/.
+  to: contribute/ci-supply-chain/
+  reason: Page moved in the documentation restructure.
 - from: development/code-quality
-  to: docs/development/code-quality/
-  reason: Documentation moved under /docs/.
+  to: contribute/code-quality/
+  reason: Page moved in the documentation restructure.
 - from: development/contributing
-  to: docs/development/contributing/
-  reason: Documentation moved under /docs/.
+  to: contribute/contributing/
+  reason: Page moved in the documentation restructure.
 - from: development/docs-site
-  to: docs/development/docs-site/
-  reason: Documentation moved under /docs/.
+  to: contribute/docs-site/
+  reason: Page moved in the documentation restructure.
 - from: development/docs-style-guide
-  to: docs/development/docs-style-guide/
-  reason: Documentation moved under /docs/.
+  to: contribute/docs-style-guide/
+  reason: Page moved in the documentation restructure.
 - from: development/e2e-framework
-  to: docs/development/e2e-framework/
-  reason: Documentation moved under /docs/.
+  to: contribute/e2e-framework/
+  reason: Page moved in the documentation restructure.
 - from: development/testing
-  to: docs/development/testing/
-  reason: Documentation moved under /docs/.
+  to: contribute/testing/
+  reason: Page moved in the documentation restructure.
 - from: getting-started
-  to: docs/getting-started/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/
+  reason: Page moved in the documentation restructure.
 - from: getting-started/first-encrypt
-  to: docs/getting-started/first-encrypt/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/verify/
+  reason: Page moved in the documentation restructure.
 - from: getting-started/install
-  to: docs/getting-started/install/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/install/
+  reason: Page moved in the documentation restructure.
 - from: getting-started/kubernetes-encryption-config
-  to: docs/getting-started/kubernetes-encryption-config/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/enable-encryption/
+  reason: Page moved in the documentation restructure.
 - from: getting-started/openbao-setup
-  to: docs/getting-started/openbao-setup/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/openbao/
+  reason: Page moved in the documentation restructure.
 - from: getting-started/overview
-  to: docs/getting-started/overview/
-  reason: Documentation moved under /docs/.
+  to: docs/get-started/overview/
+  reason: Page moved in the documentation restructure.
 - from: operations
-  to: docs/operations/
-  reason: Documentation moved under /docs/.
+  to: docs/operate/
+  reason: Page moved in the documentation restructure.
 - from: operations/disaster-recovery
-  to: docs/operations/disaster-recovery/
-  reason: Documentation moved under /docs/.
+  to: docs/operate/disaster-recovery/
+  reason: Page moved in the documentation restructure.
 - from: operations/rotation
-  to: docs/operations/rotation/
-  reason: Documentation moved under /docs/.
+  to: docs/operate/rotation/
+  reason: Page moved in the documentation restructure.
 - from: operations/troubleshooting
-  to: docs/operations/troubleshooting/
-  reason: Documentation moved under /docs/.
+  to: docs/operate/troubleshooting/
+  reason: Page moved in the documentation restructure.
 - from: operations/upgrade
-  to: docs/operations/upgrade/
-  reason: Documentation moved under /docs/.
+  to: docs/operate/upgrade/
+  reason: Page moved in the documentation restructure.
 - from: reference
   to: docs/reference/
   reason: Documentation moved under /docs/.
@@ -138,8 +138,8 @@
   to: docs/reference/support-policy/
   reason: Documentation moved under /docs/.
 - from: reference/transit-policy-examples
-  to: docs/reference/transit-policy-examples/
-  reason: Documentation moved under /docs/.
+  to: docs/configure/openbao-auth/
+  reason: Page moved in the documentation restructure.
 - from: security
   to: docs/security/
   reason: Documentation moved under /docs/.

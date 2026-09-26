@@ -4,7 +4,7 @@ description: "Authoritative reference for the Kubernetes API server EncryptionCo
 weight: 50
 ---
 
-This reference defines the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Getting Started: Kubernetes Encryption Config](/docs/getting-started/kubernetes-encryption-config/).
+This reference defines the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Getting Started: Kubernetes Encryption Config](/docs/get-started/enable-encryption/).
 
 ## Minimal Shape
 
@@ -81,7 +81,7 @@ resources:
 
 Common second step is to add `configmaps`. CRDs can be encrypted with the same provider once the operator has assessed size, read and write volume, and recovery impact.
 
-The `resources` set is not retroactive. Adding a resource type after encryption begins requires a storage migration; see [Getting Started: Migrate Existing Resources](/docs/getting-started/kubernetes-encryption-config/#migrate-existing-resources).
+The `resources` set is not retroactive. Adding a resource type after encryption begins requires a storage migration; see [Getting Started: Migrate Existing Resources](/docs/get-started/enable-encryption/#migrate-existing-resources).
 
 ### `identity` Fallback
 
@@ -91,7 +91,7 @@ The `identity` provider is the API server's no-op fallback. With it last in the 
 - existing plaintext objects remain readable,
 - `kms` failures do not silently fall back to plaintext writes (Kubernetes does not silently downgrade between providers when `kms` is first).
 
-Remove `identity` after every targeted resource has been rewritten through `kms`. Leaving it in place indefinitely increases the chance that future misconfiguration produces plaintext writes; removing it too early breaks reads of plaintext objects that were not migrated. See [Getting Started: Remove The Identity Fallback](/docs/getting-started/kubernetes-encryption-config/#remove-the-identity-fallback).
+Remove `identity` after every targeted resource has been rewritten through `kms`. Leaving it in place indefinitely increases the chance that future misconfiguration produces plaintext writes; removing it too early breaks reads of plaintext objects that were not migrated. See [Getting Started: Remove The Identity Fallback](/docs/get-started/enable-encryption/#remove-the-identity-fallback).
 
 ## Migration Files
 

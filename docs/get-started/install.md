@@ -1,10 +1,10 @@
 ---
 title: "Install"
 description: "Fetch a verified provider binary or container image, place the runtime files, and validate the local environment with doctor."
-weight: 30
+weight: 40
 ---
 
-Complete [OpenBao Setup](/docs/getting-started/openbao-setup/) before installing the
+Complete [OpenBao Setup](/docs/get-started/openbao/) before installing the
 provider. Then fetch a verified `bao-kms-provider` artifact, place the runtime
 files, and validate the local environment before wiring the provider into
 Kubernetes.
@@ -59,7 +59,7 @@ Release artifacts distinguish these auth paths:
 | `bao-kms-provider-certauth-pkcs11` host artifacts | PKCS#11 certificate auth only when the release marks that path as tested. |
 | SPIFFE or combined cert-auth artifacts | Not a supported preview user configuration. |
 
-The choice between systemd and static-pod is made on a separate page. See [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) once the artifact is in place.
+The choice between systemd and static-pod is made on a separate page. See [Get Started: Choosing A Model](/docs/get-started/deployment-model/) once the artifact is in place.
 
 ## Verify Release Artifacts
 
@@ -155,7 +155,7 @@ artifact. Each signature and attestation command must exit with status `0` and
 identify the expected repository, workflow, source tag, and artifact digest.
 
 For the full supply-chain controls behind these artifacts, see
-[Development: CI And Supply Chain](/docs/development/ci-supply-chain/).
+[Contribute: CI And Supply Chain](/contribute/ci-supply-chain/).
 
 ## Install A Native Package
 
@@ -181,7 +181,7 @@ Use the systemd tarball when native packaging is not available for your host
 image. These commands require GNU `install`, `systemd-sysusers`, and
 `systemd-tmpfiles`. Hosts without these tools must provision the equivalent
 layout through configuration management. See [Linux Identity
-Model](/docs/deployment/linux-identity-model/).
+Model](/docs/security/linux-identity-model/).
 
 The archive contains a versioned directory. Extract it in the download
 directory, then enter it using the `VERSION` and `ARCH` selected above:
@@ -261,13 +261,13 @@ The bundle contains the static pod manifest, provider configuration sample, Kube
 - the OpenBao CA path,
 - the configured auth material paths.
 
-Preload the referenced image on every control-plane node before relying on it for recovery-sensitive boot. See [Deployment: Static Pod Deployment](/docs/deployment/static-pod/) for the host preparation and pod hardening details.
+Preload the referenced image on every control-plane node before relying on it for recovery-sensitive boot. See [Get Started: Static Pod Deployment](/docs/get-started/static-pod/) for the host preparation and pod hardening details.
 
 ## Place Runtime Files
 
 For systemd, prepare these files after installing the package or tarball.
 Static-pod deployments require the numeric ownership described in
-[Static Pod Deployment](/docs/deployment/static-pod/).
+[Static Pod Deployment](/docs/get-started/static-pod/).
 
 On a new systemd host, copy the installed example to a working file:
 
@@ -277,7 +277,7 @@ cp /usr/share/doc/bao-kms-provider/examples/provider-systemd.yaml provider.yaml
 
 Replace the OpenBao address, TLS server name, JWT claims and paths, Transit key, and
 `keyIdScope` values with the values from [OpenBao
-Setup](/docs/getting-started/openbao-setup/). Obtain the OpenBao CA bundle and JWT
+Setup](/docs/get-started/openbao/). Obtain the OpenBao CA bundle and JWT
 from your identity provisioning process. Do not use the sample values or a
 JWT that cannot be renewed independently of the protected API server.
 
@@ -295,7 +295,7 @@ install -o root -g openbao-kms -m 0640 identity.jwt /var/lib/openbao-kms/identit
 ```
 
 These commands are for initial setup. For an existing deployment, follow
-[Upgrade](/docs/operations/upgrade/) and preserve its identity and state.
+[Upgrade](/docs/operate/upgrade/) and preserve its identity and state.
 The default release uses JWT auth; certificate and PKCS#11 files are needed
 only for the corresponding opt-in build.
 
@@ -328,8 +328,8 @@ Recommended ownership:
 The provider runs as the non-root `openbao-kms` user. The Kubernetes API server
 connects to the socket through the supplementary `openbao-kms-socket` group.
 This group keeps API server socket access separate from access to provider auth
-material. For the full identity model and rationale, see [Deployment: Linux
-Identity Model](/docs/deployment/linux-identity-model/).
+material. For the full identity model and rationale, see [Security: Linux
+Identity Model](/docs/security/linux-identity-model/).
 
 For the configuration file shape and field reference, see [Configuration](/docs/reference/configuration/).
 
@@ -338,7 +338,7 @@ For the configuration file shape and field reference, see [Configuration](/docs/
 For systemd, run the checks as `openbao-kms` so unreadable files cause the same
 failure as they would in the service. For static pods, run diagnostics with the
 container identity and mounts described in [Static Pod
-Deployment](/docs/deployment/static-pod/).
+Deployment](/docs/get-started/static-pod/).
 
 Inspect the resolved configuration:
 
@@ -390,5 +390,5 @@ Run these checks with the new artifact on every control-plane node before promot
 
 ## Read Next
 
-1. [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) to decide between systemd and static pod.
-2. [Kubernetes Encryption Config](/docs/getting-started/kubernetes-encryption-config/) to wire the provider into the Kubernetes API server.
+1. [Get Started: Choosing A Model](/docs/get-started/deployment-model/) to decide between systemd and static pod.
+2. [Kubernetes Encryption Config](/docs/get-started/enable-encryption/) to wire the provider into the Kubernetes API server.

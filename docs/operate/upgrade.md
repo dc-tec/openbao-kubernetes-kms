@@ -14,7 +14,7 @@ For wire-format compatibility expectations and the upgrade-window history, see [
 
 Verify:
 
-- the new binary or image is fetched and verified per [Install: Verify Release Artifacts](/docs/getting-started/install/#verify-release-artifacts),
+- the new binary or image is fetched and verified per [Install: Verify Release Artifacts](/docs/get-started/install/#verify-release-artifacts),
 - the cluster is not mid-rotation (check `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`),
 - OpenBao is healthy and the configured auth credentials on every node are valid,
 - the existing provider reports a stable `key_id` hash on every control-plane node,
@@ -76,7 +76,7 @@ For each node:
 5. Verify Status and the `key_id` hash match the rest of the fleet.
 6. Restart the API server only if required.
 
-If rollback produces unknown-`key_id` errors, return to the newer version and investigate per [Operations: Troubleshooting](/docs/operations/troubleshooting/#unknown-key-id).
+If rollback produces unknown-`key_id` errors, return to the newer version and investigate per [Operate: Troubleshooting](/docs/operate/troubleshooting/#unknown-key-id).
 
 For systemd deployments, replace the host binary or package and restart
 `bao-kms-provider.service`. For static-pod deployments, restore the previous
