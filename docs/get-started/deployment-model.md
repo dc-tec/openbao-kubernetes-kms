@@ -1,6 +1,7 @@
 ---
-title: "Choosing A Model"
+title: Choose a deployment model
 description: "Compare systemd and static-pod deployment for bao-kms-provider against control-plane lifecycle, bootstrap dependencies, and operational constraints."
+eyebrow: Get started · Step 2
 weight: 20
 ---
 
@@ -18,7 +19,7 @@ A Kubernetes Deployment or DaemonSet running inside the protected cluster is
 not supported for protecting that cluster's API server. See [DaemonSet Is Not
 Supported](#daemonset-is-not-supported) for the bootstrap dependency.
 
-## At A Glance
+## At a glance
 
 | Property | systemd | Static pod |
 |---|---|---|
@@ -54,7 +55,7 @@ OpenBao instance ID, Transit mount ID, key lineage ID, and Transit key name. A
 difference in any identity-bearing value can make API servers disagree about
 active `key_id` state.
 
-## When systemd Is The Right Choice
+## When systemd is the right choice
 
 Use systemd when:
 
@@ -64,7 +65,7 @@ Use systemd when:
 - host-level sandboxing through systemd directives fits the existing hardening posture,
 - package upgrades and restarts can be coordinated with control-plane maintenance windows.
 
-## When Static Pod Is The Right Choice
+## When static pod is the right choice
 
 Use a static pod when:
 
@@ -74,7 +75,7 @@ Use a static pod when:
 - hostPath-mounted configuration and auth material are acceptable,
 - OpenBao is reachable independently of the protected API server.
 
-## Bootstrap Risk Comparison
+## Bootstrap risk comparison
 
 Both models put the provider on the API server boot path. The bootstrap risks differ.
 
@@ -98,7 +99,7 @@ decrypt counter deltas stayed low, which supports the direct decrypt path. The
 provider must still be available before API server startup. See [Development:
 Performance Evidence](/contribute/benchmark-results/).
 
-## DaemonSet Is Not Supported
+## DaemonSet is not supported
 
 A standard Kubernetes DaemonSet running in the protected cluster is not a
 supported deployment model for protecting that same cluster's API server.
@@ -108,7 +109,7 @@ the DaemonSet that runs the provider.
 
 A DaemonSet is acceptable for a different cluster (for example, a management cluster running the provider against its own OpenBao), or for non-boot-path diagnostics.
 
-## Decision Tree
+## Decision tree
 
 ```mermaid
 flowchart TD
@@ -133,8 +134,8 @@ flowchart TD
     SingleNode -->|no| UseStaticPod
 ```
 
-## Read Next
+## Read next
 
-1. [systemd Deployment](/docs/get-started/systemd/) for the unit file, directory setup, and start procedure.
-2. [Static Pod Deployment](/docs/get-started/static-pod/) for the manifest, image preload, and host preparation.
-3. [Linux Identity Model](/docs/security/linux-identity-model/) for the user, group, and permission model both deployments share.
+1. [Run with systemd](/docs/get-started/systemd/) for the unit file, directory setup, and start procedure.
+2. [Run as a static pod](/docs/get-started/static-pod/) for the manifest, image preload, and host preparation.
+3. [Linux identity model](/docs/security/linux-identity-model/) for the user, group, and permission model both deployments share.

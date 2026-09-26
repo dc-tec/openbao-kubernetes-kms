@@ -1,6 +1,7 @@
 ---
-title: "Static Pod Deployment"
+title: Run as a static pod
 description: "Static pod manifest, image preload, host preparation, and bootstrap risk profile for running bao-kms-provider as a kubelet-managed pod."
+eyebrow: Get started · Step 5
 weight: 60
 ---
 
@@ -9,7 +10,7 @@ image-based control-plane management. It keeps the provider under kubelet
 management alongside the API server. Kubelet, the container runtime, and local
 image availability are therefore part of the KMS provider boot path.
 
-For the model selection rationale see [Get Started: Choosing A Model](/docs/get-started/deployment-model/). For the user, group, and file ownership model see [Security: Linux Identity Model](/docs/security/linux-identity-model/).
+For the model selection rationale see [Get started: Choose a deployment model](/docs/get-started/deployment-model/). For the user, group, and file ownership model see [Security: Linux identity model](/docs/security/linux-identity-model/).
 
 ## Constraints
 
@@ -30,7 +31,7 @@ The provider acquires `<state.path>.lock` before bootstrap. Prepare the state
 directory with the pod's `runAsUser` as its owner and without group or world
 write permission. Keep the lock file in place across container restarts.
 
-## Example Manifest
+## Example manifest
 
 The maintained sample manifest lives at
 `deploy/static-pod/bao-kms-provider.yaml`. Replace the placeholder image digest
@@ -146,7 +147,7 @@ The final manifest depends on the host socket GID and the released
 image digest recorded for the selected release. The sample uses user ID (UID)
 and GID `65532:65532`, matching the distroless non-root image user.
 
-## Pod Hardening
+## Pod hardening
 
 | Setting | Purpose |
 |---|---|
@@ -162,7 +163,7 @@ and GID `65532:65532`, matching the distroless non-root image user.
 | startup probe | Defers liveness and readiness probes until the provider completes bootstrap. |
 | liveness and readiness probes | Lets kubelet report provider process and dependency health. |
 
-## Image Availability
+## Image availability
 
 For air-gapped or bootstrap-sensitive control planes, preload the image on every control-plane node:
 
@@ -173,7 +174,7 @@ For air-gapped or bootstrap-sensitive control planes, preload the image on every
 
 `imagePullPolicy: IfNotPresent` is appropriate only when the exact digest has already been imported or is reliably pullable during node recovery. Do not rely on tag movement for upgrade or rollback.
 
-## Host Preparation
+## Host preparation
 
 Every control-plane node must have:
 
@@ -205,7 +206,7 @@ Transit mount ID, key lineage ID, Transit mount path, and Transit key name.
 Multi-control-plane validation exercises this model with one node-local
 provider per API server.
 
-## kubeadm Placement
+## kubeadm placement
 
 Typical kubeadm static pod path:
 
@@ -215,7 +216,7 @@ Typical kubeadm static pod path:
 
 The kubelet watches this directory and starts the static pod.
 
-## Bootstrap Risks
+## Bootstrap risks
 
 Static pod mode depends on:
 
@@ -240,7 +241,7 @@ in-flight probes and listener setup. If you increase `bootstrap.graceTimeout`
 or authentication/request timeouts, increase the startup probe budget to cover
 them. Liveness and readiness probes start after the startup probe succeeds.
 
-For single-node control planes, systemd is usually safer. See [Get Started: Choosing A Model](/docs/get-started/deployment-model/).
+For single-node control planes, systemd is usually safer. See [Get started: Choose a deployment model](/docs/get-started/deployment-model/).
 
 ## Verification
 
@@ -264,7 +265,7 @@ Before enabling API server encryption, the pod is running, the socket exists
 with the configured owner and mode, and the API server can connect to it. The
 `doctor` command must exit with status `0` and must not report a `[fail]` check.
 
-## Source References
+## Source references
 
 - [Kubernetes startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#protect-slow-starting-containers-with-startup-probes)
 - [Kubernetes static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)

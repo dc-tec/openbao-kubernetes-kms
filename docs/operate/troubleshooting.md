@@ -1,6 +1,7 @@
 ---
-title: "Troubleshooting"
+title: Troubleshooting
 description: "Symptom-driven recovery for common bao-kms-provider failures: socket connectivity, OpenBao auth, Transit key issues, key_id and additional authenticated data validation, identity fallback, static pod problems."
+eyebrow: Operate · Diagnosis
 weight: 40
 ---
 
@@ -26,7 +27,7 @@ report a `[fail]` check.
 
 Do not change identity-bearing fields, recreate Transit keys, or change Kubernetes encryption configuration until the failing layer is known.
 
-## API Server Cannot Connect To KMS
+## API server cannot connect to KMS
 
 Symptoms:
 
@@ -49,11 +50,11 @@ Use the systemd command for host-service deployments. Use kubelet and container-
 Recovery:
 
 1. Start or restart the provider.
-2. Fix socket directory ownership and mode (see [Security: Linux Identity Model](/docs/security/linux-identity-model/)).
+2. Fix socket directory ownership and mode (see [Security: Linux identity model](/docs/security/linux-identity-model/)).
 3. Confirm the API server endpoint path matches `server.socketPath` in the provider configuration.
 4. Restart `kube-apiserver` if it does not reconnect.
 
-## Socket Permission Denied
+## Socket permission denied
 
 Symptoms:
 
@@ -78,7 +79,7 @@ Recovery:
 5. Restart the provider.
 6. Restart `kube-apiserver` if it does not reconnect.
 
-## OpenBao Unavailable Or Sealed
+## OpenBao unavailable or sealed
 
 Symptoms:
 
@@ -103,7 +104,7 @@ Recovery:
 4. Run `bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml`.
 5. Restart the provider only if it does not recover on its own after OpenBao is healthy.
 
-## Transit Profile Fails Closed
+## Transit profile fails closed
 
 Symptoms:
 
@@ -134,7 +135,7 @@ Recovery:
 Fail-closed behavior prevents new encryption under unvalidated settings, but it
 can also make API server writes unavailable until OpenBao metadata is repaired.
 
-## Auth Login Fails
+## Auth login fails
 
 Symptoms:
 
@@ -172,7 +173,7 @@ Local credential validation and rejected logins produce `auth_failed` KMS
 errors. OpenBao availability, sealed-state, rate-limit, and context errors
 retain their corresponding classifications.
 
-## Transit Key Missing
+## Transit key missing
 
 Symptoms:
 
@@ -185,11 +186,11 @@ Recovery:
 1. Confirm the Transit mount path and key name match the provider configuration.
 2. Confirm the OpenBao namespace if applicable.
 3. Confirm the token policy grants metadata read on the configured key path.
-4. If the key was deleted, restore the OpenBao backup containing the original key. See [Disaster Recovery: Transit Key Loss](/docs/operate/disaster-recovery/#transit-key-loss).
+4. If the key was deleted, restore the OpenBao backup containing the original key. See [Disaster recovery: Transit key loss](/docs/operate/disaster-recovery/#transit-key-loss).
 
 Do not recreate the key with the same name and expect old data to decrypt. Recreated keys produce a new lineage; old ciphertext is bound to the previous lineage.
 
-## Unknown Key ID
+## Unknown key ID
 
 Symptoms:
 
@@ -209,7 +210,7 @@ Likely causes:
 
 Recovery:
 
-1. Restore the original identity-bearing configuration; see [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
+1. Restore the original identity-bearing configuration; see [Configuration: Identity-bearing fields](/docs/reference/configuration/#identity-bearing-fields).
 2. Restore the key registry state file and checkpoint if they were lost.
 3. Verify active and historical key snapshots are present.
 4. Restart the provider.
@@ -220,7 +221,7 @@ replacement registry state. Restore the state/checkpoint pair from backup or a
 known-good peer with matching identity scope; otherwise the provider fails
 closed.
 
-## Transit Allows Implicit Key Creation
+## Transit allows implicit key creation
 
 Symptoms:
 
@@ -234,7 +235,7 @@ Recovery:
 3. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
 4. Wait for the next metadata probe and confirm that Status becomes healthy.
 
-## Transit Version Creation Time Changed
+## Transit version creation time changed
 
 Symptoms:
 
@@ -261,7 +262,7 @@ Do not edit `key_id`, creation timestamps, or local state by hand to force a
 match. That can make Kubernetes objects reference a key epoch that cannot
 decrypt them.
 
-## Intermediate Transit Version Metadata Missing
+## Intermediate Transit version metadata missing
 
 Symptoms:
 
@@ -293,7 +294,7 @@ Do not synthesize intermediate snapshots by hand. If the provider cannot prove
 the skipped version identities from OpenBao metadata and local state, it fails
 closed to avoid advertising a registry that might not decrypt Kubernetes data.
 
-## AAD Mismatch
+## AAD mismatch
 
 AAD means additional authenticated data in this runbook.
 
@@ -316,7 +317,7 @@ Recovery:
 4. Do not modify code or local state to bypass AAD; that is unsafe as an incident response.
 5. File a bug if canonical serialization changed unexpectedly.
 
-## Status Key ID Differs From Encrypt Key ID
+## Status key ID differs from encrypt key ID
 
 Symptoms:
 
@@ -339,7 +340,7 @@ Recovery:
 4. Restart the affected provider instance.
 5. Roll back the provider only if the older version supports the current `key_id` and AAD formats.
 
-## min_decryption_version Raised Too Early
+## min_decryption_version raised too early
 
 Symptoms:
 
@@ -354,13 +355,13 @@ Recovery:
 3. Rerun storage migration only after reads through the KMS path are healthy; see [Operate: Rotation](/docs/operate/rotation/#migrate-kubernetes-data).
 4. Verify old backups are either expired or still decryptable.
 
-If old key material no longer exists, restore the OpenBao backup. See [Disaster Recovery: Transit Key Loss](/docs/operate/disaster-recovery/#transit-key-loss).
+If old key material no longer exists, restore the OpenBao backup. See [Disaster recovery: Transit key loss](/docs/operate/disaster-recovery/#transit-key-loss).
 
 Do not treat `verify-rotation` as proof that raising
 `min_decryption_version` was safe. It reports local registry and Transit
 metadata only.
 
-## Static Pod Image Missing
+## Static pod image missing
 
 Symptoms:
 
@@ -375,9 +376,9 @@ Recovery:
 3. Set image pull policy appropriately for air-gapped environments.
 4. Restart kubelet if needed.
 
-See [Get Started: Static Pod Deployment](/docs/get-started/static-pod/) for the image preload and digest-pinning rules.
+See [Get started: Run as a static pod](/docs/get-started/static-pod/) for the image preload and digest-pinning rules.
 
-## Identity Fallback Issues
+## Identity fallback issues
 
 If `identity` fallback remains enabled too long:
 
@@ -392,10 +393,10 @@ Recovery:
 
 1. Restore the last known-good `EncryptionConfiguration`.
 2. Restart or reload `kube-apiserver`.
-3. Complete resource migration; see [Kubernetes Encryption Config: Migrate Existing Resources](/docs/get-started/enable-encryption/#migrate-existing-resources).
+3. Complete resource migration; see [Enable encryption: Migrate existing resources](/docs/get-started/enable-encryption/#migrate-existing-resources).
 4. Remove the fallback after migration verification.
 
-## Do Not Do This During Incidents
+## Do not do this during incidents
 
 - Do not delete encrypted etcd data.
 - Do not recreate Transit keys with the same name.

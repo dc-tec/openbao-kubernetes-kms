@@ -1,13 +1,14 @@
 ---
-title: "Hardening"
+title: Hardening
 description: "Required and recommended hardening for bao-kms-provider deployments: OpenBao, provider host, file permissions, auth material, logging, metrics, and Kubernetes-side."
+eyebrow: Security · Host
 weight: 20
 ---
 
 These requirements define the hardened deployment posture. Preview releases
 still need staging validation before production use. For the threat coverage see
-[Threat Model](/docs/security/threat-model/). For the file ownership and group model
-the host-side requirements rely on, see [Security: Linux Identity Model](/docs/security/linux-identity-model/).
+[Threat model](/docs/security/threat-model/). For the file ownership and group model
+the host-side requirements rely on, see [Security: Linux identity model](/docs/security/linux-identity-model/).
 
 ## OpenBao
 
@@ -34,7 +35,7 @@ Recommended:
 
 <a id="plugin-host"></a>
 
-## Provider Host
+## Provider host
 
 Required:
 
@@ -55,7 +56,7 @@ Recommended:
 - host audit for configuration and auth material changes,
 - one-node-at-a-time upgrades.
 
-## File Permissions
+## File permissions
 
 Recommended:
 
@@ -70,9 +71,9 @@ Recommended:
 /run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
 ```
 
-For the rationale and runtime directory creation pattern see [Security: Linux Identity Model](/docs/security/linux-identity-model/).
+For the rationale and runtime directory creation pattern see [Security: Linux identity model](/docs/security/linux-identity-model/).
 
-## Auth Material
+## Auth material
 
 The default authentication path uses a JSON Web Token (JWT). The optional
 certificate path can use a PKCS#11 hardware or software token.
@@ -119,7 +120,7 @@ The portable OpenBao/provider end-to-end lanes exercise bound-claim rejection
 and pinned public-key rollover. Validate issuer-specific JSON Web Key Set
 (JWKS) or OpenID Connect (OIDC) discovery behavior during issuer integration.
 
-For the trust-boundary discussion see [Auth Model](/docs/security/auth-model/).
+For the trust-boundary discussion see [Auth model](/docs/security/auth-model/).
 
 ## Logging
 
@@ -165,7 +166,7 @@ Recommended:
 - API server restart tested after enabling encryption,
 - etcd plaintext inspection performed in a controlled environment.
 
-## Static Pod Specific
+## Static pod specific
 
 - Do not reference ConfigMaps, Secrets, or ServiceAccounts.
 - Set `automountServiceAccountToken: false`.
@@ -179,7 +180,7 @@ Recommended:
 - Set `readOnlyRootFilesystem: true`.
 - Keep the previous image available for rollback.
 
-## systemd Specific
+## systemd specific
 
 Recommended hardening directives:
 
@@ -201,7 +202,7 @@ Recommended hardening directives:
 
 Verify hardening does not prevent access to the configuration file, selected auth material, CA bundle, socket directory, or the optional state file.
 
-## Validate Hardening
+## Validate hardening
 
 Run these checks before enabling the provider in an API server:
 

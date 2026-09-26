@@ -1,6 +1,7 @@
 ---
-title: "Operate"
+title: Operate
 description: "Task-focused operator guidance for rotation, disaster recovery, upgrade, and troubleshooting."
+eyebrow: Operate
 weight: 30
 ---
 
@@ -22,11 +23,11 @@ The command must exit with status `0` and must not report a `[fail]` check.
 ## Workflows
 
 1. [Rotation](/docs/operate/rotation/) to rotate the OpenBao Transit key version, observe provider promotion, migrate Kubernetes resources, and keep old versions decryptable until migration and backup-retention records allow retirement.
-2. [Disaster Recovery](/docs/operate/disaster-recovery/) to restore OpenBao, etcd, provider state, auth material, and control-plane nodes as compatible sets.
+2. [Disaster recovery](/docs/operate/disaster-recovery/) to restore OpenBao, etcd, provider state, auth material, and control-plane nodes as compatible sets.
 3. [Upgrade](/docs/operate/upgrade/) to upgrade the provider binary or container image one control-plane node at a time with a documented rollback step.
 4. [Troubleshooting](/docs/operate/troubleshooting/) for symptom-driven checks and the fastest safe recovery path.
 
-## Use Another Section If
+## Use another section if
 
 - the question is about CLI flags, configuration fields, or KMS v2 protocol behavior: go to [Reference](/docs/reference/).
 - the question is about token scope, trust boundaries, or sensitive artifact handling: go to [Security](/docs/security/).

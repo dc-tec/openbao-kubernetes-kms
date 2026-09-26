@@ -1,6 +1,7 @@
 ---
-title: "Performance Evidence"
+title: Performance evidence
 description: "Captured load, decrypt warmup, and kubeadm cold-start evidence used for release decisions."
+eyebrow: Contribute
 weight: 57
 ---
 
@@ -10,7 +11,7 @@ guarantees, service-level objectives, or capacity claims. Use them to review
 observed behavior, the micro-batching decision, and the validation work that
 remains before production claims.
 
-## Current Conclusion
+## Current conclusion
 
 The captured runs do not show a release-blocking need for decrypt
 micro-batching in the current release line. Direct provider decrypt paths are
@@ -23,7 +24,7 @@ list latency while provider and OpenBao decrypt counter deltas stayed small.
 The bottleneck observed in the 50,000 Secret validation run was Kubernetes object
 creation and large Secret list handling. It was not provider decrypt fan-out.
 
-## Validation Environment
+## Validation environment
 
 | Field | Value |
 |---|---|
@@ -40,7 +41,7 @@ under cold-start load.
 
 ## Summary
 
-### Automated Release Soak
+### Automated release soak
 
 The release gate runs two local OpenBao soak lanes from
 `test/e2e/suites.yaml`:
@@ -55,7 +56,7 @@ They are useful for catching regressions in request cancellation, latency, and
 resource growth, but they do not establish production throughput, capacity, or
 availability guarantees.
 
-### Kubeadm VM Runs
+### kubeadm VM runs
 
 | Run | Date | Secret corpus | API endpoints | Object reads | Errors | 95th percentile (p95) | Max | Provider decrypt delta | Transit decrypt delta | Result |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
@@ -78,20 +79,20 @@ Provider decrypt deltas were calculated from provider Prometheus metrics before
 and after the restart window. Transit decrypt deltas were calculated from
 OpenBao Transit metrics over the same window.
 
-## Kubeadm VM Cold Start
+## kubeadm VM cold start
 
 The cold-start validation prepares or reuses an encrypted Secret corpus,
 verifies representative raw etcd envelopes, captures provider metrics, restarts
 all selected kube-apiserver instances, lists the full corpus once through each
 API server, and captures provider metrics again.
 
-### 10,000 Secret Run
+### 10,000 Secret run
 
 This run read 30,000 Secret objects across three API server endpoints after
 parallel kube-apiserver restart. The provider recorded 21 successful decrypt
 RPCs and zero decrypt errors.
 
-### 50,000 Secret Run
+### 50,000 Secret run
 
 This run read 150,000 Secret objects across three API server endpoints after
 parallel kube-apiserver restart. The provider recorded the same successful
@@ -103,7 +104,7 @@ serial seeding and large Kubernetes deletes were slow enough that the helper
 now supports corpus reuse, non-blocking deletes with count polling, chunk
 progress output, and configurable seed workers.
 
-## Kubeadm VM Sustained Warmup
+## kubeadm VM sustained warmup
 
 The sustained warmup validation repeatedly lists the encrypted Secret corpus
 for a fixed duration. It is useful for exercising Kubernetes object read
@@ -115,7 +116,7 @@ OpenBao service were healthy. Provider decrypt counters were not proportional to
 the `secret_objects_read` value, which is consistent with the cold-start
 results.
 
-## Micro-Batching Decision
+## Micro-batching decision
 
 Decrypt micro-batching is not implemented in the provider runtime.
 The evidence so far points to these conclusions:

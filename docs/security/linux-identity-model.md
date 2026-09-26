@@ -1,6 +1,7 @@
 ---
-title: "Linux Identity Model"
+title: Linux identity model
 description: "User, group, file ownership, and runtime directory creation model for running bao-kms-provider in systemd or static pod mode."
+eyebrow: Security · Host
 weight: 35
 ---
 
@@ -18,7 +19,7 @@ material or writable provider state.
 - Avoid making the provider primary group equal to the `kube-apiserver` group.
 - Keep the model workable for kubeadm static-pod API servers and host-service API servers.
 
-## Selected Model
+## Selected model
 
 ```text
 user:         openbao-kms
@@ -82,7 +83,7 @@ getent group openbao-kms-socket
 
 The third field in the output is the value used in both the pod manifest and static-pod provider configuration.
 
-## Runtime Directory Creation
+## Runtime directory creation
 
 `RuntimeDirectory=` alone may create `/run/openbao-kms` with the service primary
 group rather than the socket access group. Prefer one of these packaging
@@ -106,7 +107,7 @@ The socket itself is `0660`, so members of `openbao-kms-socket` can connect to t
 
 ## Tradeoffs
 
-### Separate Socket Group
+### Separate socket group
 
 Pros:
 
@@ -122,7 +123,7 @@ Cons:
 - `kube-apiserver` group membership varies by distribution,
 - static pod deployments need host group mapping or root access.
 
-### Primary Group Equals kube-apiserver Group
+### Primary group equals kube-apiserver group
 
 Pros:
 
@@ -135,7 +136,7 @@ Cons:
 - weaker privilege separation,
 - distribution-specific `kube-apiserver` group naming leaks into provider packaging.
 
-### Root-Owned Socket Directory
+### Root-owned socket directory
 
 Pros:
 

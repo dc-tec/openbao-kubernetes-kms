@@ -1,6 +1,7 @@
 ---
-title: "Threat Model"
+title: Threat model
 description: "Assets, trust boundaries, attacker capabilities, threats and controls, security properties provided and not provided by bao-kms-provider."
+eyebrow: Security · Fundamentals
 weight: 10
 ---
 
@@ -24,7 +25,7 @@ This threat model defines the assets, trust boundaries, attacker capabilities, a
 | etcd backups | High |
 | OpenBao backups | Critical |
 
-## Trust Boundaries
+## Trust boundaries
 
 - `kube-apiserver` to the local Unix socket.
 - Provider process to the OpenBao HTTPS endpoint.
@@ -35,7 +36,7 @@ This threat model defines the assets, trust boundaries, attacker capabilities, a
 - etcd backup storage to backup operators.
 - OpenBao backup storage to backup operators.
 
-## Expected Attacker Capabilities
+## Expected attacker capabilities
 
 The design considers attackers who can:
 
@@ -56,7 +57,7 @@ The design does not defend against every action by:
 - an attacker with valid Transit decrypt permission,
 - loss of all Transit key backups.
 
-## Threats And Controls
+## Threats and controls
 
 | Threat | Control |
 |---|---|
@@ -84,19 +85,19 @@ The design does not defend against every action by:
 | Metrics leakage | Hashed `key_id` values; raw OpenBao paths and high-cardinality labels excluded. |
 | Static pod API dependency | Static pod manifests avoid ConfigMaps, Secrets, ServiceAccounts, and mounted service account tokens. |
 
-## Security Properties Provided
+## Security properties provided
 
 The design provides:
 
 - confidentiality against offline etcd readers without OpenBao decrypt access,
 - stronger rotation correctness through explicit Transit key version selection on every encrypt,
 - deterministic, scoped, non-secret Kubernetes `key_id` values,
-- metadata binding through Transit associated data; see [AAD And Decrypt Validation](/docs/security/aad-and-decrypt-validation/),
+- metadata binding through Transit associated data; see [AAD and decrypt validation](/docs/security/aad-and-decrypt-validation/),
 - auditable OpenBao Transit operations,
 - narrowed provider permissions,
-- reduced Kubernetes API circular dependency through provider authentication that avoids TokenReview; see [Auth Model](/docs/security/auth-model/).
+- reduced Kubernetes API circular dependency through provider authentication that avoids TokenReview; see [Auth model](/docs/security/auth-model/).
 
-## Security Properties Not Provided
+## Security properties not provided
 
 The design does not provide:
 
@@ -109,7 +110,7 @@ The design does not provide:
 - automatic encryption of all Kubernetes resources,
 - encryption of etcd disk blocks, application volumes, or node filesystems.
 
-## Review Requirements
+## Review requirements
 
 Before any public release:
 

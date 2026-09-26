@@ -1,12 +1,13 @@
 ---
-title: "EncryptionConfiguration"
+title: EncryptionConfiguration
 description: "Authoritative reference for the Kubernetes API server EncryptionConfiguration shape used with bao-kms-provider: required fields, semantics, automatic reload caveats, and resource selection."
+eyebrow: Reference
 weight: 50
 ---
 
-This reference defines the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Getting Started: Kubernetes Encryption Config](/docs/get-started/enable-encryption/).
+This reference defines the Kubernetes API server `EncryptionConfiguration` shape used with `bao-kms-provider`. For the bring-up tutorial, see [Get started: Enable encryption](/docs/get-started/enable-encryption/).
 
-## Minimal Shape
+## Minimal shape
 
 ```yaml
 apiVersion: apiserver.config.k8s.io/v1
@@ -25,9 +26,9 @@ resources:
 
 A maintained sample lives at `deploy/kubernetes/encryption-config.yaml` in the repository.
 
-## Field Reference
+## Field reference
 
-### Top-Level `apiVersion`
+### Top-level `apiVersion`
 
 Always `apiserver.config.k8s.io/v1`; this is the Kubernetes API server configuration object version.
 
@@ -40,8 +41,8 @@ Use `v2` for the `bao-kms-provider` entry. This provider does not implement KMS 
 Identity-bearing. The value:
 
 - must match `transit.keyIdScope.providerName` in the provider configuration,
-- participates in `key_id` derivation; see [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/#recommended-format),
-- participates in additional authenticated data (AAD) envelope construction; see [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/#aad-envelope),
+- participates in `key_id` derivation; see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/#recommended-format),
+- participates in additional authenticated data (AAD) envelope construction; see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/#aad-envelope),
 - must not change after encryption begins without a documented migration plan.
 
 `doctor` requires an entry with the configured provider name. It validates every
@@ -83,7 +84,7 @@ Common second step is to add `configmaps`. CRDs can be encrypted with the same p
 
 The `resources` set is not retroactive. Adding a resource type after encryption begins requires a storage migration; see [Getting Started: Migrate Existing Resources](/docs/get-started/enable-encryption/#migrate-existing-resources).
 
-### `identity` Fallback
+### `identity` fallback
 
 The `identity` provider is the API server's no-op fallback. With it last in the `providers` list:
 
@@ -91,9 +92,9 @@ The `identity` provider is the API server's no-op fallback. With it last in the 
 - existing plaintext objects remain readable,
 - `kms` failures do not silently fall back to plaintext writes (Kubernetes does not silently downgrade between providers when `kms` is first).
 
-Remove `identity` after every targeted resource has been rewritten through `kms`. Leaving it in place indefinitely increases the chance that future misconfiguration produces plaintext writes; removing it too early breaks reads of plaintext objects that were not migrated. See [Getting Started: Remove The Identity Fallback](/docs/get-started/enable-encryption/#remove-the-identity-fallback).
+Remove `identity` after every targeted resource has been rewritten through `kms`. Leaving it in place indefinitely increases the chance that future misconfiguration produces plaintext writes; removing it too early breaks reads of plaintext objects that were not migrated. See [Enable encryption: Remove the identity fallback](/docs/get-started/enable-encryption/#remove-the-identity-fallback).
 
-## Migration Files
+## Migration files
 
 `doctor --encryption-config` accepts files that combine this provider with
 `aescbc`, `aesgcm`, `secretbox`, `identity`, or other KMS providers. Additional
@@ -112,7 +113,7 @@ keys must have names and secrets. Their values are redacted from parse errors
 and diagnostic formatting. The check does not validate their cryptographic
 lengths or replace Kubernetes configuration validation.
 
-## Automatic Reload
+## Automatic reload
 
 Kubernetes supports automatic reload of the encryption provider configuration when `kube-apiserver` is started with:
 
@@ -128,7 +129,7 @@ Reload caveats:
 
 Treat reload as a faster restart, not a safety check.
 
-## Resource Selection Trade-Offs
+## Resource selection trade-offs
 
 Adding a resource type to the `resources` list increases:
 
@@ -141,7 +142,7 @@ Adding a resource type to the `resources` list increases:
 
 Plan the resource set deliberately. Encrypting all resources is rarely the right starting point.
 
-## Source References
+## Source references
 
 - [Kubernetes encryption at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)

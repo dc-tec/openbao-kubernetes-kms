@@ -1,6 +1,7 @@
 ---
-title: "Upgrade"
+title: Upgrade
 description: "Upgrade the bao-kms-provider binary or image one control-plane node at a time, verify the KMS path stays healthy, and roll back safely if needed."
+eyebrow: Operate · Change management
 weight: 30
 ---
 
@@ -8,13 +9,13 @@ Upgrade `bao-kms-provider` one control-plane node at a time. Each provider is
 on the API server boot path, so verify the KMS path before continuing to the
 next node.
 
-For wire-format compatibility expectations and the upgrade-window history, see [Reference: Release Policy](/docs/reference/release-policy/) and [Reference: Compatibility](/docs/reference/compatibility/).
+For wire-format compatibility expectations and the upgrade-window history, see [Reference: Release policy](/docs/reference/release-policy/) and [Reference: Compatibility](/docs/reference/compatibility/).
 
-## Before You Start
+## Before you start
 
 Verify:
 
-- the new binary or image is fetched and verified per [Install: Verify Release Artifacts](/docs/get-started/install/#verify-release-artifacts),
+- the new binary or image is fetched and verified per [Install the provider: Verify release artifacts](/docs/get-started/install/#verify-release-artifacts),
 - the cluster is not mid-rotation (check `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`),
 - OpenBao is healthy and the configured auth credentials on every node are valid,
 - the existing provider reports a stable `key_id` hash on every control-plane node,
@@ -28,7 +29,7 @@ Record:
 - current Transit key version,
 - wire-format expectations from the new release notes.
 
-## Upgrade Procedure
+## Upgrade procedure
 
 Upgrade one control-plane node at a time. Do not upgrade all provider instances
 simultaneously unless the cluster is in a controlled maintenance window and
@@ -83,7 +84,7 @@ For systemd deployments, replace the host binary or package and restart
 image digest in the manifest. Confirm that the image is present or pullable on
 the node.
 
-## When Not To Upgrade
+## When not to upgrade
 
 Defer the upgrade if:
 
@@ -92,7 +93,7 @@ Defer the upgrade if:
 - the new release notes call out wire-format changes and storage migration has not been planned,
 - backup and restore drills have not been completed for the current release.
 
-## When Not To Roll Back
+## When not to roll back
 
 A rollback is unsafe and must not be attempted if:
 

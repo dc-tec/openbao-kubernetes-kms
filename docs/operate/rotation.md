@@ -1,6 +1,7 @@
 ---
-title: "Rotation"
+title: Rotation
 description: "Rotate the OpenBao Transit key version, observe provider promotion, migrate existing API resources, and preserve recovery records."
+eyebrow: Operate · Key lifecycle
 weight: 10
 ---
 
@@ -10,7 +11,7 @@ Kubernetes `key_id` only after the rotation state machine determines that the
 new version is stable. Operators then rewrite Kubernetes resources to update
 data encrypted with old versions.
 
-For the design rationale behind the rotation state machine, including the flip-flop guards and observation thresholds, see [Architecture: Rotation Model](/docs/architecture/rotation-model/).
+For the design rationale behind the rotation state machine, including the flip-flop guards and observation thresholds, see [Architecture: Rotation model](/docs/architecture/rotation-model/).
 
 Rotation changes the active Transit version under an existing Transit key. It
 must not change the provider name, cluster ID, OpenBao instance ID, Transit
@@ -18,7 +19,7 @@ mount ID, key lineage ID, mount path, or key name. These fields are
 identity-bearing. Changing one requires a migration plan; see [Configuration:
 Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
 
-## Preview Boundary
+## Preview boundary
 
 Current preview tooling reports local registry state and OpenBao Transit metadata.
 It does not enumerate Kubernetes resources, inspect etcd, prove that every
@@ -29,7 +30,7 @@ Treat `verify-rotation` as a local preflight signal. Rewrite proof,
 backup-retention proof, and any recommendation to raise `min_decryption_version`
 remain operator-controlled until a proof-producing command exists.
 
-## Before Rotation
+## Before rotation
 
 Verify:
 
@@ -50,7 +51,7 @@ Record:
 - the provider version,
 - the control-plane node list.
 
-## Rotate The Transit Key
+## Rotate the Transit key
 
 Rotation is performed by an operator with OpenBao administrative rights:
 
@@ -62,7 +63,7 @@ The provider token must not have rotate permission. The provisioned policy
 excludes this capability by design; see [Configure: Transit Policy
 Examples](/docs/configure/openbao-auth/).
 
-## Observe Promotion
+## Observe promotion
 
 After rotation:
 
@@ -116,7 +117,7 @@ Status and readiness become unhealthy and Encrypt stops. Observations continue;
 health recovers after promotion and a successful deep probe. Wait for all nodes
 to converge before raising the encryption minimum to avoid this interruption.
 
-## Migrate Kubernetes Data
+## Migrate Kubernetes data
 
 Rewrite targeted resources after Status exposes the new `key_id`. Define the
 complete resource list from the API server `EncryptionConfiguration` before
@@ -131,7 +132,7 @@ kubectl get secrets --all-namespaces -o json | kubectl replace -f -
 
 Repeat for each configured resource type. The pattern is `kubectl get <resource> --all-namespaces -o json | kubectl replace -f -`.
 
-## Verify Rotation
+## Verify rotation
 
 ```sh
 bao-kms-provider verify-rotation --config /etc/openbao-kms/config.yaml
@@ -176,7 +177,7 @@ unreadable even when the Transit key still exists. Lowering the value may help
 only when the old key version still exists and policy allows it. Treat this as
 an emergency recovery step, not a rollback plan.
 
-### Retire Local Versions Before Raising the Minimum
+### Retire local versions before raising the minimum
 
 After collecting the evidence above, retire the obsolete versions in each
 node's provider registry. For example, to retain version `2` and later:
@@ -244,7 +245,7 @@ If new encrypt or decrypt behavior fails before migration completes:
 
 If objects have already been rewritten with the new version, rollback still requires the new Transit version to remain decryptable.
 
-## Stop Rotation If
+## Stop rotation if
 
 Abort rotation and consult [Operate: Troubleshooting](/docs/operate/troubleshooting/) when:
 

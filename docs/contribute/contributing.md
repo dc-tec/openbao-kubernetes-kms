@@ -1,13 +1,14 @@
 ---
-title: "Contributing"
+title: Contributing
 description: "Repository layout, local development setup, test expectations, code quality rules, wire compatibility commitments, and documentation update policy for bao-kms-provider contributors."
+eyebrow: Contribute
 weight: 10
 ---
 
 Use this guide to contribute to `bao-kms-provider`. For operator procedures,
-start with [Get Started](/docs/get-started/).
+start with [Get started](/docs/get-started/).
 
-## Project Layout
+## Project layout
 
 | Area | Value |
 |---|---|
@@ -43,7 +44,7 @@ test/kmsconformance
 test/deployment
 ```
 
-## Local Development
+## Local development
 
 Install Nix and devenv 2.1 or later. Enter the repository root, then verify the
 pinned toolchain and install the repository-managed tools:
@@ -69,7 +70,7 @@ CI checks. Use `devenv shell` when you need an interactive shell. Use
 Run focused end-to-end (E2E) lanes when a change touches OpenBao, Kubernetes,
 deployment, rotation, failure injection, or release packaging behavior. The
 lane commands live in
-[Contribute: E2E Framework](/contribute/e2e-framework/).
+[Contribute: E2E framework](/contribute/e2e-framework/).
 
 For deployment sample or package metadata changes, run the focused deployment
 checks:
@@ -84,7 +85,7 @@ make package-build-check
 pinned nFPM version from `.ci/versions.yaml`/`mk/config.mk` through `go run` and
 builds throwaway `.deb` and `.rpm` packages from a temporary placeholder binary.
 
-## OpenBao Integration Tests
+## OpenBao integration tests
 
 OpenBao integration tests use build tags and remain hermetic. They use in-process
 HTTPS fakes for OpenBao response shapes and do not require external OpenBao
@@ -94,7 +95,7 @@ credentials:
 go test -tags=integration ./internal/openbao -run TestOpenBaoTransitIntegration -count=1
 ```
 
-## OpenBao E2E Tests
+## OpenBao E2E tests
 
 OpenBao E2E validation uses the ephemeral continuous integration
 (CI) lane. E2E specs use the Ginkgo v2 and Gomega versions pinned in
@@ -108,11 +109,11 @@ The OpenBao CI target starts real OpenBao, bootstraps provider auth, runs the
 provider, and exercises the Unix socket with the Kubernetes KMS v2 protobuf
 client.
 
-For the full E2E framework, label routing, suite manifest rules, and report artifacts see [Contribute: E2E Framework](/contribute/e2e-framework/).
+For the full E2E framework, label routing, suite manifest rules, and report artifacts see [Contribute: E2E framework](/contribute/e2e-framework/).
 
-## Go Code Quality
+## Go code quality
 
-Implementation follows [Contribute: Code Quality](/contribute/code-quality/). Key rules:
+Implementation follows [Contribute: Code quality](/contribute/code-quality/). Key rules:
 
 - no `map[string]any` in production code,
 - no `map[string]interface{}` in production code,
@@ -124,7 +125,7 @@ Implementation follows [Contribute: Code Quality](/contribute/code-quality/). Ke
 - no free-form string state machines in internal logic,
 - no panics in request-path code.
 
-## Wire Compatibility
+## Wire compatibility
 
 The following surfaces are wire-format commitments:
 
@@ -142,7 +143,7 @@ Any change to these surfaces requires:
 - a release note,
 - a compatibility section in [Reference: Compatibility](/docs/reference/compatibility/).
 
-## Redaction Rules
+## Redaction rules
 
 Tests must prove these never appear in logs or command output:
 
@@ -154,7 +155,7 @@ Tests must prove these never appear in logs or command output:
 
 For the full redaction policy see [Reference: Observability: Logs](/docs/reference/observability/#logs) and [Security: Hardening: Logging](/docs/security/hardening/#logging).
 
-## Dependency Policy
+## Dependency policy
 
 Prefer:
 
@@ -172,15 +173,15 @@ Avoid:
 - dependencies that make Transport Layer Security (TLS) verification difficult
   to control.
 
-## Documentation Updates
+## Documentation updates
 
 When implementation changes behavior, update documentation in the same change:
 
 - configuration changes update [Reference: Configuration](/docs/reference/configuration/),
-- KMS protocol behavior updates [Reference: KMS v2 Contract](/docs/reference/kms-v2-contract/),
-- `key_id` or AAD changes update [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/),
+- KMS protocol behavior updates [Reference: KMS v2 contract](/docs/reference/kms-v2-contract/),
+- `key_id` or AAD changes update [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/),
 - operational changes update the relevant operations or deployment runbook,
 - support and version-envelope changes update [Reference: Compatibility](/docs/reference/compatibility/).
 
 For writing style, page structure, links, and docs verification, see
-[Contribute: Docs Style Guide](/contribute/docs-style-guide/).
+[Contribute: Docs style guide](/contribute/docs-style-guide/).

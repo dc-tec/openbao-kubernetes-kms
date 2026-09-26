@@ -1,120 +1,209 @@
 ---
-title: "Docs Style Guide"
-description: "Writing, structure, linking, and verification guidance for the published documentation."
+title: Docs style guide
+description: "The writing, structure, verification, and presentation standard for the published documentation."
+eyebrow: Contribute
 weight: 70
 ---
 
-The documentation should help operators make safe decisions without having to
-read the source code first. Contributor and architecture pages can go deeper,
-but public workflow pages should stay practical and easy to follow.
+The documentation describes supported behavior for people who deploy, secure,
+and operate `bao-kms-provider`. Write for the reader's task, and verify every
+product claim against the code, samples, or release it describes.
 
-## Audience
+This standard follows the OpenBao Operator documentation standard and Google's
+guidance for [clear technical writing](https://developers.google.com/tech-writing/one),
+[procedures](https://developers.google.com/style/procedures),
+[headings](https://developers.google.com/style/headings),
+[voice](https://developers.google.com/style/voice),
+[person](https://developers.google.com/style/person), and
+[prescriptive language](https://developers.google.com/style/prescriptive-documentation).
 
-Write each page for the reader who is most likely to use it:
+## Organize documentation by task
 
-| Section | Primary reader | Page style |
+Each section owns one kind of work:
+
+| Section | Owns | Primary reader |
 |---|---|---|
-| `get-started/` | First-time operator | Sequential path from model choice to verified encryption, with one recommended route per deployment model. |
-| `configure/` | Operator adapting the default setup | Task pages for auth, policy, and monitoring variants. |
-| `operate/` | Operator maintaining a deployed provider | Task runbooks with checks and recovery notes. |
-| `reference/` | Operator or maintainer looking up exact behavior | Precise lookup material. |
-| `security/` | Security reviewer or platform owner | Trust boundaries, controls, and limitations. |
-| `architecture/` | Maintainer or reviewer | Design rationale and tradeoffs. |
-| `contribute/` | Contributor or reviewer | Local workflow, CI, tests, release process, and docs maintenance. |
+| `get-started/` | The path from choosing a deployment model to verified encryption. | First-time operator |
+| `configure/` | Variants of the default setup: auth sources, policy, monitoring. | Operator adapting the default path |
+| `operate/` | Rotation, upgrade, recovery, and troubleshooting of a running provider. | Operator maintaining a deployment |
+| `security/` | Trust boundaries, controls, host identity, and their limits. | Security reviewer or platform owner |
+| `reference/` | Exact CLI, configuration, protocol, observability, and lifecycle contracts. | Operator or maintainer looking up behavior |
+| `architecture/` | Durable design rationale and tradeoffs. | Maintainer or reviewer |
+| `contribute/` | Local workflow, CI, tests, release process, and docs maintenance. Published at `/contribute/`, outside the operator task flow. | Contributor or reviewer |
 
-If a page starts serving two different readers, split it or move part of the
-content to the section where that reader would naturally look.
+Add a page only when it gives a task or contract a clear home. Extend an
+existing page when a new page would repeat prerequisites, warnings, or
+explanations that page already owns. When a page starts serving two readers,
+move each part to the section where that reader would look.
 
-## Voice
+## Write directly
 
-Prefer direct, concrete prose:
-
-- Say what the provider does, what the operator does, and what success looks
-  like.
-- Use short paragraphs and explicit headings.
-- Keep warnings tied to a real operational consequence.
-- Prefer "tested matrix", "preview release", and "verified artifact" in
-  user-facing docs.
-- Keep detailed CI and release mechanics in `contribute/` unless operators
-  need them for installation or verification.
+- State the outcome before background or rationale.
+- Use active voice, second person, present tense, and direct verbs.
+- Use sentence case for titles and headings. Keep product names, acronyms, and
+  identifiers such as `key_id` as written.
+- Start task headings with a base-form verb, such as "Rotate the Transit key".
+  Use noun phrases for concept and reference headings, such as "Failure modes".
+- Keep one idea in each sentence and one topic in each paragraph.
+- Put prerequisites before the procedure.
+- Present one recommended path first. Put genuine alternatives in a separate
+  section.
+- Use `must` for requirements, `can` for permission or capability, and `might`
+  for possibility.
 - Use OpenBao terminology. Mention Vault only for related work or compatibility
   context.
 - Use the binary name `bao-kms-provider` in prose.
+- Prefer "tested matrix", "preview release", and "verified artifact" in
+  operator-facing pages.
 
 Avoid:
 
-- marketing language,
+- slogans, marketing language, and commentary about the page itself,
 - filler openers such as "It is important to note",
 - words that understate operational cost, such as "simply", "just", or
   "obviously",
-- formulaic contrast such as "not X, but Y" when two plain sentences would be
+- formulaic contrast such as "not X, but Y" when two plain sentences are
   clearer,
 - internal shorthand such as "release gate", "support claim", or "evidence
-  bundle" in operator-facing pages.
+  bundle" in operator-facing pages,
+- implementation history that does not affect the current contract.
 
 The docs check rejects em dash characters in tracked first-party prose. Use a
 comma, period, parentheses, or rewrite the sentence.
 
-## Page Structure
+## Write complete procedures
 
-Use the shape that matches the section:
+Use numbered steps for ordered work. Start each step with an imperative and
+keep one primary action in each step. Introduce each command with the action
+and its expected effect, explain placeholders before the reader copies the
+command, and state the observable result afterward.
 
-- Get started pages should have a clear beginning, ordered steps, and a
-  visible end state. Keep model selection separate from model-specific setup.
-- Configure pages should start from the default path and describe one variant
-  each.
-- Operate pages can branch by symptom or condition, but should keep recovery
-  steps ordered.
-- Reference pages should be stable lookup material, not narrative.
-- Security pages should describe scope, trust, controls, and limits.
-- Architecture pages can explain why the system works the way it does.
-- Contribute pages can include contributor-only details and CI mechanics.
+Examples must be complete for the task they claim to perform. Label partial
+configuration, policy, or manifest examples as fragments. Do not present a
+passing configuration parse, a single health endpoint, or one metric as proof
+that authentication, encryption, or recovery works end to end.
 
-## Links
+Use explicit placeholders such as `<cluster-id>` and `<key-name>`. Keep shell
+examples safe to paste after substitution. Avoid commands that overwrite live
+configuration, expose credentials, or imply that a destructive operation is
+reversible.
 
-Link to the canonical page for a topic instead of repeating the same detail in
-several places.
+## Preserve operational boundaries
 
-- Use absolute site paths such as `/docs/operate/rotation/`.
-- Avoid `.md` links from published docs.
-- Section landing pages should help readers move to the right section if they
-  arrived in the wrong place.
-- When changing a heading that other pages link to, update the fragment links in
-  the same change.
+Keep requirements and warnings that protect security, data, availability, or
+access. A shorter page must not hide:
 
-## Front Matter
+- trust roots, credentials, or auth material custody,
+- destructive or irreversible effects, such as Transit key settings OpenBao
+  cannot revert,
+- identity-bearing values that must not change after encryption begins,
+- compatibility and version constraints,
+- required network paths and external dependencies, such as a JWT issuer that
+  runs independently of the protected API server,
+- backup, restore, and rollback prerequisites,
+- the difference between a started provider, a passing `doctor` run, and
+  verified encryption in etcd.
 
-Every page needs:
+Use a warning callout only when ignoring it can cause material harm. Use a
+note for scope, ownership, limitations, and other context. Do not use callouts
+as decoration.
+
+## Verify product claims
+
+Behavioral pages list the narrowest authoritative repository paths in the
+`verifiedBy` front matter field. Choose evidence in this order:
+
+1. Configuration fields and defaults: `internal/config` types, validation, and
+   the configuration schema.
+2. Commands and flags: `cmd/bao-kms-provider`.
+3. Runtime behavior: internal packages, unit tests, integration tests, and
+   end-to-end tests under `test/`.
+4. Deployment examples: `deploy/` samples, packaging inputs, and release
+   artifacts.
+5. Compatibility and release claims: `.ci/versions.yaml`, release tags, and
+   release automation.
+
+Do not copy a claim because an older page contained it. When code and
+documentation disagree, document the supported runtime behavior or resolve the
+product contract before publishing. Hugo does not render `verifiedBy`; it
+exists for review and maintenance.
+
+Keep tested snippets tested. `test/deployment/systemd-install.sh` extracts and
+runs the fenced `sh` block after each marker comment, such as
+`<!-- systemd-bundle-install -->`, in the install guide. Keep those blocks as
+plain Markdown fences and change the matching bundle README in the same commit.
+
+## Write front matter
 
 ```yaml
-title: "Page Title"
-description: "Short description used by search and previews."
+---
+title: Rotate the Transit key
+description: State the result and the important boundary in one sentence.
+eyebrow: Operate · Key lifecycle
 weight: 10
+verifiedBy:
+  - internal/keyregistry
+  - test/e2e/provider_rotation_test.go
+---
 ```
 
-Do not repeat the title as a `#` heading in the body. The page template
-renders `title` as the only H1 and `description` as the lede, so the body
-starts with the first paragraph or `##` section.
+- `title` matches the page's entry in `website/data/navigation.yaml`.
+- `description` renders as the page lede and in search results.
+- `eyebrow` names the section and, where useful, a topic or the Get started
+  step, such as `Get started · Step 4`.
+- `weight` orders the page on its section landing page.
 
-Add every new page to `website/data/navigation.yaml`. That file defines the
-sidebar and the Previous and Next links of the first group. The rendered-site
-check fails the build when a published page is missing from the navigation.
+Do not repeat the title as a `#` heading in the body. The page template renders
+`title` as the only H1, so the body starts with the first paragraph or `##`
+section.
 
-## Diagrams
+## Use the smallest useful presentation
+
+Prefer Markdown, short tables, and ordinary links. Use shortcodes only when
+their meaning improves scanning:
+
+- `callout` with `type` set to `warning`, `note`, or `tip` for a bounded
+  warning or note,
+- `checklist` for an exit or readiness checklist,
+- `command` for a titled command sequence.
+
+Plain fenced code blocks already render as copyable blocks. Give every fence a
+language, such as `sh`, `yaml`, or `text`.
 
 Use Mermaid when a sequence, dependency, boundary, or decision tree is clearer
-as a diagram than as prose. Keep diagrams small enough to read on the published
-site.
+as a diagram than as prose. Keep diagrams small enough to read on the
+published site.
 
-## Verification
+## Link and navigate
 
-Before merging a docs change, run:
+Link to the page that owns a topic instead of repeating its detail.
 
-```sh
-make docs-check
-make docs-build
-```
+- Use absolute site paths, such as `/docs/operate/rotation/` or
+  `/contribute/testing/`. Do not link to `.md` files from published pages.
+- Use the target page's title as link text, optionally prefixed with its
+  section, such as "Operate: Rotation".
+- When you change a heading that other pages link to, update the fragment links
+  in the same change.
 
-`make docs-check` catches configured text and typography checks. `make
-docs-build` runs the Hugo build, fails on any warning, and then checks the
-rendered site for broken links, missing fragments, and navigation gaps.
+Add every new page to `website/data/navigation.yaml`. Items with a `step`
+field form the Previous and Next path of their group; items that share a step
+are alternatives. When a page moves or is removed, add its old route to
+`website/data/redirects.yaml`. See [Docs site](/contribute/docs-site/) for
+both mechanisms.
+
+## Definition of done
+
+A documentation change is complete when:
+
+- the page has one clear task or contract,
+- behavioral claims cite current `verifiedBy` evidence,
+- examples are complete, safe, and match the configuration schema and CLI,
+- security, data, availability, access, and compatibility boundaries remain
+  explicit,
+- titles, navigation, links, anchors, and search work in the rendered site,
+- `make docs-check`, `make docs-build`, and the checks for any code or samples
+  the page describes pass.
+
+`make docs-check` scans tracked prose for configured text and typography
+issues. `make docs-build` fails on any Hugo warning, then checks the rendered
+site for broken links, missing fragments, and navigation gaps.

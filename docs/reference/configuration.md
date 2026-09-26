@@ -1,12 +1,13 @@
 ---
-title: "Configuration"
+title: Configuration
 description: "Authoritative reference for the bao-kms-provider configuration file: example, defaults, validation rules, identity-bearing fields, and unsafe options."
+eyebrow: Reference
 weight: 20
 ---
 
 This reference defines the `bao-kms-provider` configuration file. Identity-bearing fields and default values are stable across preview patch releases.
 
-## Value Types
+## Value types
 
 String fields require YAML strings. Quote values that YAML would otherwise
 interpret as numbers or booleans. For example, use `keyName: "0123"`,
@@ -91,7 +92,7 @@ logging:
     incidentId: ""
 ```
 
-## Required Fields
+## Required fields
 
 The following fields must be set explicitly:
 
@@ -175,13 +176,13 @@ is treated as identity-bearing provider scope.
 | `logging.debugCorrelation.ttl` | `15m` |
 | `logging.debugCorrelation.incidentId` | empty |
 
-## Decrypt Discovery Timing
+## Decrypt discovery timing
 
 Unknown-key decrypt discovery uses `status.probeInterval` as its per-process
 retry interval. It shares `openbao.timeout` with the decrypt request and does
 not advance rotation observations or promotion.
 
-## Auth Timing
+## Auth timing
 
 `auth.method` selects how the provider obtains its OpenBao token. The default
 preview release artifacts support only JSON Web Token (JWT) auth and use `jwt`.
@@ -232,7 +233,7 @@ through 1024.
 
 `bootstrap.graceTimeout` controls how long startup retries the initial metadata and deep probes before the process exits. It exists to handle boot races such as auth material projection, DNS or routing settling, OpenBao restart, and clock synchronization.
 
-## Certificate Auth
+## Certificate auth
 
 Certificate auth logs in through the OpenBao TLS Certificate auth method. It
 sends `POST /v1/<auth.cert.mountPath>/login` over a TLS connection that presents
@@ -285,7 +286,7 @@ PKCS#11 certificate auth is tested with SoftHSM and OpenBao when the matching
 artifact is part of the selected release. `auth.cert.source: spiffe` is not a
 supported preview user configuration.
 
-## Debug Correlation
+## Debug correlation
 
 `logging.debugCorrelation` is an incident-response mode for short-window troubleshooting. Do not enable it for steady-state operation.
 
@@ -298,7 +299,7 @@ It only validates when:
 
 While active, logs may include safe request UID hashes and safe OpenBao request IDs for correlation with kube-apiserver and OpenBao audit records. The mode expires automatically after the configured TTL and still must not log plaintext, JWTs, OpenBao tokens, full ciphertext, raw OpenBao paths, or raw key names.
 
-## Identity-Bearing Fields
+## Identity-bearing fields
 
 Changing these fields after encryption begins can make existing data unreadable or force Kubernetes to treat data as encrypted with a different provider:
 
@@ -312,7 +313,7 @@ Changing these fields after encryption begins can make existing data unreadable 
 - `transit.mountPath`
 - Kubernetes `EncryptionConfiguration` provider name
 
-Treat these values as immutable. Any change requires a documented migration plan; see [Operate: Disaster Recovery](/docs/operate/disaster-recovery/) for the procedure.
+Treat these values as immutable. Any change requires a documented migration plan; see [Operate: Disaster recovery](/docs/operate/disaster-recovery/) for the procedure.
 
 Use `openbao.namespace` when one OpenBao cluster serves multiple Kubernetes
 clusters through separate namespaces. The namespace must be a relative OpenBao
@@ -376,9 +377,9 @@ be writable only by the provider identity.
 
 `server.socketGroup` accepts a local group name or a decimal numeric GID. Use a group name for systemd or host-binary deployments. Use a numeric GID in static pod mode so the distroless non-root container does not depend on host group names being present inside the image.
 
-For the full identity model and rationale see [Security: Linux Identity Model](/docs/security/linux-identity-model/).
+For the full identity model and rationale see [Security: Linux identity model](/docs/security/linux-identity-model/).
 
-## Unsafe Options
+## Unsafe options
 
 The provider intentionally does not expose runtime switches for unsupported
 release-boundary behavior. In particular, there is no config field to:
@@ -391,7 +392,7 @@ release-boundary behavior. In particular, there is no config field to:
 
 Broad socket permissions remain rejected by validation.
 
-## Environment Variables
+## Environment variables
 
 The primary configuration source is the config file. Environment variables may be supported for container deployment ergonomics. Secrets must not be required through environment variables.
 
@@ -409,7 +410,7 @@ Identity-bearing fields such as `openbao.namespace`, `auth.jwt.expectedIssuer`,
 environment overrides. Keep them in the reviewed config file so deployment
 environments cannot silently drift the KMS identity contract.
 
-## Schema Export
+## Schema export
 
 The CLI prints the JSON Schema used by documentation and tooling:
 
@@ -419,7 +420,7 @@ bao-kms-provider config schema
 
 The schema rejects unknown top-level and nested fields, reserves `configVersion: v1alpha1`, and documents the supported configuration surface.
 
-## Source References
+## Source references
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)

@@ -1,6 +1,7 @@
 ---
-title: "Code Quality"
+title: Code quality
 description: "Strict typed Go conventions, ast-grep architecture rules, Semgrep security rules, package boundaries, and required quality gates for bao-kms-provider."
+eyebrow: Contribute
 weight: 20
 ---
 
@@ -11,7 +12,7 @@ key material at the Kubernetes Key Management Service (KMS) boundary. Loose
 typing, dynamic maps, implicit decoding, and unbounded error paths introduce
 implementation risk.
 
-## Core Rules
+## Core rules
 
 - Production code does not use `map[string]any`.
 - Production code does not use `map[string]interface{}`.
@@ -29,7 +30,7 @@ implementation risk.
 - `context.Context` propagates through OpenBao calls and KMS request handling.
 - Error messages are stable, classified, and redacted.
 
-## Boundary Exceptions
+## Boundary exceptions
 
 Dynamic input is unavoidable at narrow external boundaries. Acceptable patterns:
 
@@ -39,7 +40,7 @@ Dynamic input is unavoidable at narrow external boundaries. Acceptable patterns:
 
 Every exception is local, documented in code, covered by tests, and does not cross package boundaries as dynamic state.
 
-## Package Expectations
+## Package expectations
 
 | Package area | Quality expectation |
 |---|---|
@@ -51,7 +52,7 @@ Every exception is local, documented in code, covered by tests, and does not cro
 | `internal/logging` | Redaction helpers and bounded structured fields. |
 | `internal/socket` | Explicit Unix permission and file-type checks. |
 
-## Required Gates
+## Required gates
 
 Every implementation pull request passes:
 

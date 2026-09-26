@@ -1,12 +1,13 @@
 ---
-title: "Auth Model"
+title: Auth model
 description: "Authentication design for bao-kms-provider: JWT auth, certificate auth, token lifecycle, role constraints, local validation, and renewal considerations."
+eyebrow: Security · Authentication
 weight: 30
 ---
 
-`bao-kms-provider` authenticates to OpenBao with a JSON Web Token (JWT) or a client certificate. For the commands that provision OpenBao auth, see [OpenBao Setup: Step 5](/docs/get-started/openbao/#step-5-configure-jwt-auth). For the configuration fields, see [Configuration: Auth Timing](/docs/reference/configuration/#auth-timing).
+`bao-kms-provider` authenticates to OpenBao with a JSON Web Token (JWT) or a client certificate. For the commands that provision OpenBao auth, see [Prepare OpenBao: Step 5](/docs/get-started/openbao/#step-5-configure-jwt-auth). For the configuration fields, see [Configuration: Auth timing](/docs/reference/configuration/#auth-timing).
 
-## Supported Auth Methods
+## Supported auth methods
 
 | Method | Status | Use when |
 |---|---|---|
@@ -25,7 +26,7 @@ OpenBao JWT auth verifies JWTs cryptographically by using local keys, a JSON Web
 
 <a id="plugin-authentication-lifecycle"></a>
 
-## Provider Authentication Lifecycle
+## Provider authentication lifecycle
 
 ```mermaid
 stateDiagram-v2
@@ -109,7 +110,7 @@ auth:
 
 The provider keeps the OpenBao client token in memory only. File-backed JWTs and certificate chains are re-read before re-login.
 
-## JWT Source Options
+## JWT source options
 
 | Option | Recommendation | Analysis |
 |---|---|---|
@@ -117,7 +118,7 @@ The provider keeps the OpenBao client token in memory only. File-backed JWTs and
 | Kubernetes-issued ServiceAccount JWT from the protected cluster | Usable with recovery guardrails | Kubernetes ServiceAccount JWTs carry issuer, subject, audience, and expiry claims and validate offline through discovery. Offline validation does not prove that bound objects still exist. Renewal may depend on kubelet and API server behavior, so this must not be the only recovery credential. |
 | Long-lived static JWT on disk | Emergency or constrained environments only | Does not depend on a renewal service, but has weaker security. Use response wrapping for initial distribution where practical. Do not store OpenBao client tokens on disk. |
 
-## Certificate Source Options
+## Certificate source options
 
 | Source | Local validation | Operational notes |
 |---|---|---|
@@ -126,7 +127,7 @@ The provider keeps the OpenBao client token in memory only. File-backed JWTs and
 
 The provider does not accept a PEM private key file as a certificate source.
 
-## Recommended JWT Role Constraints
+## Recommended JWT role constraints
 
 The OpenBao JWT role should require:
 
@@ -147,7 +148,7 @@ The portable OpenBao/provider end-to-end (E2E) lanes exercise bound issuer,
 audience, and subject rejection plus pinned public-key rollover. Validate
 issuer-specific JWKS or OIDC discovery rotation during issuer integration.
 
-## Recommended Cert Role Constraints
+## Recommended cert role constraints
 
 The OpenBao cert role should require:
 
@@ -174,7 +175,7 @@ it cannot derive the identity alias from a URI SAN. For that reason,
 until the supported OpenBao version includes compatible cert-auth alias
 behavior.
 
-## Token Renewal Considerations
+## Token renewal considerations
 
 | Issue | Design response |
 |---|---|
@@ -189,11 +190,11 @@ behavior.
 | Revoked certificate | Use OpenBao certificate revocation list (CRL) or OCSP configuration for the cert auth mount. Prefer fail-closed OCSP behavior. |
 | API server down | Avoid TokenReview dependency. The external JWT issuer and PKCS#11 token must not depend on the protected API server. |
 
-## Response Wrapping
+## Response wrapping
 
 Response wrapping is not part of the provider runtime path. It is useful for initial delivery of a fallback static credential, for emergency recovery material, or for one-time bootstrap secret handoff. OpenBao response wrapping stores a response behind a single-use wrapping token with a TTL, which can detect mishandling during the handoff.
 
-## What This Auth Model Protects
+## What this auth model protects
 
 The auth model defends against:
 
@@ -211,7 +212,7 @@ It does not defend against:
 - OpenBao administrative actions that revoke or modify the role,
 - a compromised host that can read JWT files, certificate chains, PIN files, or process memory directly.
 
-## Source References
+## Source references
 
 - [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
 - [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)

@@ -1,6 +1,7 @@
 ---
-title: "KMS v2 Contract"
+title: KMS v2 contract
 description: "The Kubernetes KMS v2 gRPC behavior bao-kms-provider satisfies: endpoint, provider name, Status, Encrypt, Decrypt, annotations, error semantics, and conformance tests."
+eyebrow: Reference · Contract
 weight: 30
 ---
 
@@ -24,11 +25,11 @@ Default socket path:
 
 The implementation rejects unsafe socket paths, symlink targets, regular files at the socket path, and unsafe parent directories. It removes a stale socket only after verifying that no live listener owns it.
 
-## Provider Name
+## Provider name
 
 The Kubernetes provider name is identity-bearing. It appears in the API server `EncryptionConfiguration` and participates in `key_id` and additional authenticated data (AAD) scope. OpenBao exposes AAD through the `associated_data` field.
 
-Once encrypted data exists, changing the provider name requires a migration plan. The provider fails closed or warns loudly when local configuration does not match the Kubernetes encryption configuration that `doctor` validates. See [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
+Once encrypted data exists, changing the provider name requires a migration plan. The provider fails closed or warns loudly when local configuration does not match the Kubernetes encryption configuration that `doctor` validates. See [Configuration: Identity-bearing fields](/docs/reference/configuration/#identity-bearing-fields).
 
 ## Status
 
@@ -122,7 +123,7 @@ Required behavior:
 - never log full ciphertext.
 
 The provider requires valid AAD annotations. There is no supported mode that
-decrypts without AAD. See [Security: AAD And Decrypt Validation](/docs/security/aad-and-decrypt-validation/).
+decrypts without AAD. See [Security: AAD and decrypt validation](/docs/security/aad-and-decrypt-validation/).
 
 Metadata-validated pending snapshots can decrypt before local promotion. They
 cannot encrypt. Unknown-key discovery shares the request timeout, runs at most
@@ -131,7 +132,7 @@ returns `Unavailable` with `key_metadata_refresh_failed`; request cancellation
 and expiry retain their context status codes. A successful discovery that does
 not find the requested identity returns `NotFound`.
 
-## Protocol Limits
+## Protocol limits
 
 The provider enforces the Kubernetes KMS v2 field limits at the gRPC boundary:
 
@@ -194,9 +195,9 @@ Disallowed annotation content:
 - full ciphertext,
 - high-cardinality user-controlled values.
 
-For the full annotation schema and AAD envelope shape see [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/).
+For the full annotation schema and AAD envelope shape see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
 
-## Decrypt Micro-Batching
+## Decrypt micro-batching
 
 OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider
 does not implement KMS decrypt micro-batching in this release line because the
@@ -208,7 +209,7 @@ behavior, order preservation, fairness, and failure fan-out concerns. Do not add
 or enable it until benchmarks show it improves API server startup behavior
 without violating the validation thresholds below.
 
-## Error Semantics
+## Error semantics
 
 Errors map to stable classes in logs and metrics:
 
@@ -234,9 +235,9 @@ Errors map to stable classes in logs and metrics:
 - `canceled`
 - `unknown`
 
-Errors returned to Kubernetes are specific enough for diagnosis but contain no secrets, tokens, plaintext, full ciphertext, or raw sensitive paths. See [Reference: Observability: Error Classes](/docs/reference/observability/#error-classes).
+Errors returned to Kubernetes are specific enough for diagnosis but contain no secrets, tokens, plaintext, full ciphertext, or raw sensitive paths. See [Reference: Observability: Error classes](/docs/reference/observability/#error-classes).
 
-## Validation Thresholds
+## Validation thresholds
 
 Initial validation thresholds used by tests and examples:
 
@@ -256,7 +257,7 @@ These thresholds are not production SLOs. Validate alert thresholds against the
 operator's OpenBao deployment, network path, and Kubernetes API server behavior
 before using them for paging.
 
-## Conformance Tests
+## Conformance tests
 
 The implementation includes a protocol conformance suite that uses the real KMS v2 protobuf client against the Unix socket.
 
@@ -275,7 +276,7 @@ Blocking cases:
 - rotation does not produce `key_id` flip-flop,
 - Status becomes unhealthy when background probes go stale.
 
-## Source References
+## Source references
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [Kubernetes KMS v2 Go package](https://pkg.go.dev/k8s.io/kms/apis/v2)

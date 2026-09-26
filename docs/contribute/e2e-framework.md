@@ -1,6 +1,7 @@
 ---
-title: "E2E Framework"
+title: E2E framework
 description: "Runnable E2E lanes, label routing, suite manifest, environment variables, reports, and artifacts for bao-kms-provider."
+eyebrow: Contribute
 weight: 40
 ---
 
@@ -14,7 +15,7 @@ Unit tests and hermetic integration tests must not use external services. E2E
 lanes test real OpenBao, provider container, Kind, and Kubernetes API server
 behavior.
 
-## Command Matrix
+## Command matrix
 
 | Lane | Command | Proves | External dependency |
 |---|---|---|---|
@@ -80,7 +81,7 @@ Run a label-filtered suite when Ginkgo is installed:
 make test-e2e E2E_LABEL_FILTER='openbao && transit && ci'
 ```
 
-## Suite Manifest
+## Suite manifest
 
 `test/e2e/suites.yaml` describes E2E lanes, run selectors, timeouts, required
 environment, reports, and the preview release gate groups. It does not own
@@ -229,7 +230,7 @@ preview gate against that immutable build output. OpenBao release validation
 still builds local PKCS#11 and upgrade/rollback images because those are
 validation-only variants, not public release images.
 
-## Reports And Artifacts
+## Reports and artifacts
 
 | Variable | Default |
 |---|---|

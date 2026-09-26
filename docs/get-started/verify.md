@@ -1,6 +1,7 @@
 ---
-title: "First Encrypt"
+title: Verify encryption
 description: "Verify end-to-end encryption: create a probe Secret, confirm storage in etcd is ciphertext, and read the provider's health and metric signals."
+eyebrow: Get started · Step 7
 weight: 80
 ---
 
@@ -10,7 +11,7 @@ and the API server has reloaded or restarted. The checks confirm that the API
 server encrypts selected resources through the provider, stores ciphertext in
 etcd, and receives healthy provider signals.
 
-## Step 1: Create A Probe Secret
+## Step 1: Create a probe Secret
 
 Create a Secret with a value that is unique enough to identify in etcd output:
 
@@ -28,7 +29,7 @@ kubectl get secret openbao-kms-first-encrypt \
 
 Expected output: `probe-do-not-store-plaintext`. If the read fails, check the API server log for the encryption provider error class (see [Reference: Observability](/docs/reference/observability/) for the catalog).
 
-## Step 2: Confirm The Stored Value Is Encrypted
+## Step 2: Confirm the stored value is encrypted
 
 This step requires direct access to etcd on a control-plane node and the public
 key infrastructure (PKI) material that the API server uses to connect to etcd.
@@ -54,7 +55,7 @@ The provider name in the prefix must match the `name` field of the `EncryptionCo
 
 Do not store etcd output in logs or untrusted shells. Do not run this inspection from a developer workstation against production etcd.
 
-## Step 3: Confirm The Provider Signals Are Healthy
+## Step 3: Confirm the provider signals are healthy
 
 The provider exposes health endpoints and Prometheus metrics on the addresses
 configured in `config.yaml`. The commands below use the default addresses:
@@ -101,7 +102,7 @@ decrypt traffic to reach the provider.
 
 For the full metric and log catalog see [Reference: Observability](/docs/reference/observability/) and [Reference: Metrics](/docs/reference/metrics/).
 
-## Step 4: Clean Up
+## Step 4: Clean up
 
 Delete the probe Secret:
 
@@ -109,7 +110,7 @@ Delete the probe Secret:
 kubectl delete secret openbao-kms-first-encrypt
 ```
 
-## Validation Checklist
+## Validation checklist
 
 After this page:
 
@@ -119,8 +120,8 @@ After this page:
 - The provider's `/ready` endpoint returns HTTP 200.
 - The provider's encrypt counter increments on the probe write, and decrypt counters remain available for cold-cache or API server restart validation.
 
-## Read Next
+## Read next
 
 1. [Operate: Rotation](/docs/operate/rotation/) once the encryption layer is in steady state.
-2. [Operate: Disaster Recovery](/docs/operate/disaster-recovery/) to plan recovery posture before relying on the provider in production.
-3. [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/) for the full `key_id` format and additional authenticated data (AAD) envelope.
+2. [Operate: Disaster recovery](/docs/operate/disaster-recovery/) to plan recovery posture before relying on the provider in production.
+3. [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/) for the full `key_id` format and additional authenticated data (AAD) envelope.

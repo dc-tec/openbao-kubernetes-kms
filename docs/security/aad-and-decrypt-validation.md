@@ -1,12 +1,13 @@
 ---
-title: "AAD And Decrypt Validation"
+title: AAD and decrypt validation
 description: "What Transit associated_data binds, how decrypt validation rejects unknown or tampered ciphertext, and which compatibility-mode actions are unsafe."
+eyebrow: Security · Data integrity
 weight: 40
 ---
 
-The provider uses additional authenticated data (AAD) and local decrypt validation to reject ciphertext outside its expected scope. OpenBao exposes AAD through the `associated_data` field. For the exact `key_id` format, AAD envelope, annotation rules, and decrypt validation order, see [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/).
+The provider uses additional authenticated data (AAD) and local decrypt validation to reject ciphertext outside its expected scope. OpenBao exposes AAD through the `associated_data` field. For the exact `key_id` format, AAD envelope, annotation rules, and decrypt validation order, see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
 
-## What AAD Protects Against
+## What AAD protects against
 
 OpenBao Transit `associated_data` binds ciphertext to non-secret metadata for
 AEAD ciphers. Decrypt succeeds only when the caller supplies the same data. The
@@ -20,7 +21,7 @@ This addresses the following threats:
 - **Replay across providers.** A Transit ciphertext produced by a different application using the same Transit key cannot be decrypted by the Kubernetes KMS provider because the provider name is bound into the AAD.
 - **Annotation tampering.** Annotations that disagree with the active key snapshot are rejected before Transit is called, preventing maliciously edited ciphertext from reaching the cipher.
 
-## Decrypt Validation Order
+## Decrypt validation order
 
 The provider rejects ciphertext as early as possible to keep failure observable and to avoid spending Transit decrypt calls on doomed payloads. The validation pipeline is:
 
@@ -35,9 +36,9 @@ The provider rejects ciphertext as early as possible to keep failure observable 
 
 Unknown `key_id` values, mismatched snapshots, missing required annotations, and AAD reconstruction failures all fail before step 6. Operators see these as `key_id_unknown`, `key_id_malformed`, `aad_missing`, `aad_mismatch`, or `annotation_invalid` in the [error class catalog](/docs/reference/observability/#error-classes).
 
-For the exact field-by-field validation steps see [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/).
+For the exact field-by-field validation steps see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
 
-## Compatibility Modes
+## Compatibility modes
 
 | Mode | Behavior | Acceptable use |
 |---|---|---|
@@ -46,7 +47,7 @@ For the exact field-by-field validation steps see [Reference: Key ID And AAD](/d
 `aad.required` is the only supported mode. The provider does not expose a config
 switch to disable AAD, and state validation rejects non-required AAD modes.
 
-## Compatibility-Mode Misuse
+## Compatibility-mode misuse
 
 Disabling AAD globally as an incident response is unsafe. Specifically:
 
@@ -54,14 +55,14 @@ Disabling AAD globally as an incident response is unsafe. Specifically:
 - accepting an AAD-disabled state re-enables the cross-cluster replay class of threats that AAD prevents,
 - future compatibility read modes must require explicit retained historical state before they are introduced.
 
-If decrypt is failing during an incident, follow [Operate: Troubleshooting: AAD Mismatch](/docs/operate/troubleshooting/#aad-mismatch) instead of disabling AAD.
+If decrypt is failing during an incident, follow [Operate: Troubleshooting: AAD mismatch](/docs/operate/troubleshooting/#aad-mismatch) instead of disabling AAD.
 
-## Threats Not Addressed Here
+## Threats not addressed here
 
 AAD and decrypt validation do not protect against:
 
 - A compromised provider binary. The provider sees plaintext on the way through, before AAD is reconstructed and after it is verified.
 - An attacker with valid Transit decrypt permission. Transit will decrypt any ciphertext encrypted under the key, AAD or not, and the attacker can supply matching AAD if they have read access to the configuration.
-- Loss of Transit key material. AAD validates ciphertext authenticity; it does not recover lost keys. See [Operate: Disaster Recovery](/docs/operate/disaster-recovery/).
+- Loss of Transit key material. AAD validates ciphertext authenticity; it does not recover lost keys. See [Operate: Disaster recovery](/docs/operate/disaster-recovery/).
 
-For the full asset and threat catalog see [Threat Model](/docs/security/threat-model/).
+For the full asset and threat catalog see [Threat model](/docs/security/threat-model/).

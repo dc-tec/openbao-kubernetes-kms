@@ -1,10 +1,11 @@
 ---
-title: "Overview"
+title: Components and data flow
 description: "Component model, data flow, trust boundaries, deployment shape, internal active key model, startup sequence, and multi-control-plane operation for bao-kms-provider."
+eyebrow: Architecture
 weight: 10
 ---
 
-This maintainer-facing overview describes the `bao-kms-provider` components, data flows, trust boundaries, and deployment shape. For the upstream protocol and Transit concepts, see [Background](/docs/architecture/background/). For the Vault Transit KMS plugin work that informed the design, see [Related Work](/docs/architecture/related-work/).
+This maintainer-facing overview describes the `bao-kms-provider` components, data flows, trust boundaries, and deployment shape. For the upstream protocol and Transit concepts, see [Background](/docs/architecture/background/). For the Vault Transit KMS plugin work that informed the design, see [Related work](/docs/architecture/related-work/).
 
 ## Purpose
 
@@ -22,7 +23,7 @@ kube-apiserver
 
 The provider participates in Kubernetes envelope encryption for selected API resources. It does not encrypt raw etcd disk blocks or any workload storage outside the Kubernetes API resource persistence path.
 
-## Component Diagram
+## Component diagram
 
 ```mermaid
 flowchart LR
@@ -94,7 +95,7 @@ OpenBao provides:
 
 OpenBao must be available independently of the protected Kubernetes API server. Running OpenBao inside the protected cluster creates a bootstrap dependency during API server recovery.
 
-## Data Flow
+## Data flow
 
 ### Encrypt
 
@@ -158,7 +159,7 @@ sequenceDiagram
 
 Status reads from cached state populated by background probes; it does not perform a live Transit encrypt or decrypt on every call. The cache becomes healthy only after the metadata probe and the Transit encrypt/decrypt deep probe succeed. A successful probe does not clear a failure from the other probe type. Kubernetes polls Status regularly, and the Status `key_id` drives rotation behavior.
 
-## Trust Boundaries
+## Trust boundaries
 
 The provider sits across these boundaries:
 
@@ -168,9 +169,9 @@ The provider sits across these boundaries:
 - Local host filesystem boundary for configuration, auth material, CA bundle, socket, and registry state.
 - etcd persistence boundary for ciphertext and KMS annotations.
 
-The provider sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog, see [Threat Model](/docs/security/threat-model/).
+The provider sees plaintext material passing through KMS calls. Treat it as a control-plane critical component. For the full asset and threat catalog, see [Threat model](/docs/security/threat-model/).
 
-## Internal Active Key Model
+## Internal active key model
 
 ```go
 type KeySnapshot struct {
@@ -198,7 +199,7 @@ A small local key registry state file with strict permissions persists rotation
 decisions across restarts. See [Reference: Key ID And AAD: Local Registry
 State](/docs/reference/key-id-and-aad/#local-registry-state).
 
-## Implementation Guardrails
+## Implementation guardrails
 
 The implementation encodes design boundaries as local and CI checks before feature work begins.
 
@@ -219,9 +220,9 @@ Semgrep owns security and dangerous-API rules:
 - no runtime subprocess execution,
 - no sensitive log field names.
 
-For the supporting policy see [Contribute: Code Quality](/contribute/code-quality/).
+For the supporting policy see [Contribute: Code quality](/contribute/code-quality/).
 
-## Startup Sequence
+## Startup sequence
 
 `bao-kms-provider` completes one successful metadata probe and one successful deep probe before it binds the Unix socket. Startup fails closed rather than exposing a socket without a verified active data path.
 
@@ -262,11 +263,11 @@ flowchart TD
 Static-pod ordering must be tested because kubelet does not provide a strong
 dependency graph between static pods. The API server may start before the
 provider socket exists. It must retry while the provider completes bootstrap.
-See [Get Started: Choosing A Model](/docs/get-started/deployment-model/) for the model
+See [Get started: Choose a deployment model](/docs/get-started/deployment-model/) for the model
 selection rationale and [Get Started: Static Pod
 Deployment](/docs/get-started/static-pod/) for the manifest and bootstrap risks.
 
-## Multi-Control-Plane Operation
+## Multi-control-plane operation
 
 Each control-plane node runs its own local provider instance.
 
@@ -285,15 +286,15 @@ Instances may have different auth credentials and OpenBao client tokens.
 
 Each instance also owns a local registry state file. The active `key_id` converges across the files. Pending or recovered snapshots can differ temporarily during failover or rotation recovery.
 
-Promotion of a new Transit key version is stable across all control-plane nodes. If one node promotes early and another does not, API server behavior can become inconsistent. The activation delay and stable observation count reduce this risk; operational monitoring still checks for `key_id` convergence. See [Architecture: Rotation Model](/docs/architecture/rotation-model/).
+Promotion of a new Transit key version is stable across all control-plane nodes. If one node promotes early and another does not, API server behavior can become inconsistent. The activation delay and stable observation count reduce this risk; operational monitoring still checks for `key_id` convergence. See [Architecture: Rotation model](/docs/architecture/rotation-model/).
 
-## OpenBao Placement
+## OpenBao placement
 
 Recommended placement is an external management plane or otherwise independent OpenBao deployment that does not depend on the protected Kubernetes API server.
 
 Avoid running OpenBao inside the same protected cluster for this use case. If the API server requires the KMS provider plugin to start and the provider requires OpenBao, then OpenBao must be reachable before the protected API server is healthy. A same-cluster OpenBao deployment introduces a circular dependency.
 
-## Source References
+## Source references
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [Kubernetes encryption at rest documentation](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)

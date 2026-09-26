@@ -1,10 +1,11 @@
 ---
-title: "Kubernetes Encryption Config"
+title: Enable encryption
 description: "Wire bao-kms-provider into the Kubernetes API server through EncryptionConfiguration, restart or reload the API server, and migrate existing API resources."
+eyebrow: Get started · Step 6
 weight: 70
 ---
 
-Complete [Install](/docs/get-started/install/) and confirm that
+Complete [Install the provider](/docs/get-started/install/) and confirm that
 `bao-kms-provider doctor` succeeds on every control-plane node. Then configure
 the API server to consume `EncryptionConfiguration` and migrate existing
 resources to KMS-encrypted storage.
@@ -14,9 +15,9 @@ resources to KMS-encrypted storage.
 - The provider is running on every control-plane node and exposes its Unix socket at the path documented in the provider configuration file.
 - `bao-kms-provider doctor` succeeds with the active configuration.
 - The Kubernetes API server has read access to its `EncryptionConfiguration` file.
-- The API server runtime user can connect to the provider socket through the `openbao-kms-socket` group (see [Security: Linux Identity Model](/docs/security/linux-identity-model/)).
+- The API server runtime user can connect to the provider socket through the `openbao-kms-socket` group (see [Security: Linux identity model](/docs/security/linux-identity-model/)).
 
-## Write The EncryptionConfiguration
+## Write the EncryptionConfiguration
 
 The minimal `EncryptionConfiguration` for a fresh enablement keeps the `identity` provider as a fallback so existing plaintext data remains readable during migration:
 
@@ -51,7 +52,7 @@ Custom resource definitions (CRDs) can be encrypted with the same provider.
 Plan resource selection deliberately. Size, read and write volume, and recovery
 impact all change as the encrypted set grows.
 
-## Configure The Kubernetes API Server
+## Configure the Kubernetes API server
 
 Place the file on every control-plane node, then point `kube-apiserver` at it:
 
@@ -71,7 +72,7 @@ failures and then encrypt or decrypt errors. Treat reload as a faster restart.
 The API server applies the new configuration immediately. It reports errors on
 the next encrypt or decrypt call, not while validating the file.
 
-## Restart Or Reload The API Server
+## Restart or reload the API server
 
 If `--encryption-provider-config-automatic-reload=true` is set, the API server picks up changes to the configuration file in place. Otherwise, restart `kube-apiserver` once on each control-plane node.
 
@@ -92,9 +93,9 @@ After the API server has the new configuration:
 
 End-to-end encryption verification, including etcd inspection, `key_id`
 stability, and additional authenticated data (AAD) shape, belongs to the next
-page. See [First Encrypt](/docs/get-started/verify/).
+page. See [Verify encryption](/docs/get-started/verify/).
 
-## Migrate Existing Resources
+## Migrate existing resources
 
 Kubernetes encryption applies on write. Existing objects are not rewritten when
 the configuration changes. When enabling the provider on an existing cluster,
@@ -113,9 +114,9 @@ After rewriting:
 
 1. Restart `kube-apiserver` on one control-plane node and confirm reads still succeed.
 2. Repeat across the remaining control-plane nodes.
-3. Verify a sample of objects in etcd to confirm payloads no longer contain plaintext. The [First Encrypt](/docs/get-started/verify/) page describes the etcd inspection technique.
+3. Verify a sample of objects in etcd to confirm payloads no longer contain plaintext. The [Verify encryption](/docs/get-started/verify/) page describes the etcd inspection technique.
 
-## Remove The Identity Fallback
+## Remove the identity fallback
 
 Once every targeted resource has been rewritten and verified, remove the `identity` provider from the configuration:
 
@@ -132,7 +133,7 @@ Reload or restart the API server. After this point, any object targeted by the c
 
 Do not remove the fallback before the migration verification on the previous step has completed. Removing it too early breaks reads of plaintext objects that were not migrated.
 
-## Read Next
+## Read next
 
-1. [First Encrypt](/docs/get-started/verify/) for the end-to-end smoke test.
+1. [Verify encryption](/docs/get-started/verify/) for the end-to-end smoke test.
 2. [Operate: Rotation](/docs/operate/rotation/) once encryption is live and the cluster is in steady state.

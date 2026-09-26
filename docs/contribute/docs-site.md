@@ -1,14 +1,15 @@
 ---
-title: "Docs Site"
+title: Docs site
 description: "How the Hugo documentation site is organized, built, checked, and published."
+eyebrow: Contribute
 weight: 80
 ---
 
 The published documentation is a Hugo site built from the Markdown files under
 `docs/` and the site assets under `website/`. For writing guidance, see
-[Docs Style Guide](/contribute/docs-style-guide/).
+[Docs style guide](/contribute/docs-style-guide/).
 
-## Source Layout
+## Source layout
 
 ```text
 docs/
@@ -38,7 +39,7 @@ project-specific copy from `[params]` in `hugo.toml` so the same templates can
 move into a shared theme module later. Keep new project strings in `hugo.toml`
 instead of hardcoding them in templates.
 
-## Hugo Mounts
+## Hugo mounts
 
 `hugo.toml` mounts `docs/` at `content/docs/`, so every page renders under
 `/docs/`. The mount excludes internal planning material (`adr/`,
@@ -62,14 +63,14 @@ static-pod pages: the path leads from the step before them to each alternative
 and from each alternative to the step after them. Section landing pages list
 their child pages by `weight` unless they set `hideChildren: true`.
 
-## Retired Routes
+## Retired routes
 
 `website/data/redirects.yaml` lists retired routes and their canonical targets.
 The content adapter in `website/content/_content.gotmpl` publishes a redirect
 page for each entry. When a page moves, add a ledger entry for the old route in
 the same change.
 
-## Local Builds
+## Local builds
 
 The Makefile runs a pinned Hugo version through `go run`, so a global Hugo
 install is not required.

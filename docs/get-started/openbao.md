@@ -1,6 +1,7 @@
 ---
-title: "OpenBao Setup"
+title: Prepare OpenBao
 description: "Provision the Transit mount, key, least-privilege policy, and OpenBao authentication required by bao-kms-provider."
+eyebrow: Get started · Step 3
 weight: 30
 ---
 
@@ -20,9 +21,9 @@ the bootstrap path before the provider binary and configuration file exist.
 - A stable OpenBao instance ID and Transit mount ID for provider configuration. These are non-secret identity values used in Kubernetes `key_id` and additional authenticated data (AAD) derivation.
 - Optional: an OpenBao namespace for this Kubernetes cluster when a single OpenBao cluster serves multiple Kubernetes clusters. Configure it as `openbao.namespace`; auth and Transit paths in this guide remain relative to that namespace.
 
-For background on why each choice is made, see [Architecture: Transit Key Model](/docs/architecture/transit-key-model/) and [Security: Auth Model](/docs/security/auth-model/).
+For background on why each choice is made, see [Architecture: Transit key model](/docs/architecture/transit-key-model/) and [Security: Auth model](/docs/security/auth-model/).
 
-## Step 1: Enable The Transit Mount
+## Step 1: Enable the Transit mount
 
 Enable a dedicated Transit mount for Kubernetes KMS keys:
 
@@ -38,7 +39,7 @@ bao write transit/config/keys disable_upsert=true
 
 Use a dedicated Transit mount for the Kubernetes KMS keys. `disable_upsert` is configured at the mount level and would affect any other workloads sharing the same mount.
 
-## Step 2: Create The Transit Key
+## Step 2: Create the Transit key
 
 Create the key with the recommended profile:
 
@@ -71,7 +72,7 @@ After creating the key, do not enable `exportable` or
 `deletion_allowed=false`. This setting is reversible, but enabling it permits
 key deletion when a token also has delete capability.
 
-## Step 3: Capture The Key Lineage ID
+## Step 3: Capture the key lineage ID
 
 Generate a stable, non-secret identifier for this Transit key creation event:
 
@@ -100,7 +101,7 @@ derive the lineage ID from mutable topology strings.
 
 If the Transit key is deleted and recreated, generate a new lineage ID and treat the event as a destructive migration. The provider uses this ID to reject decrypt requests carrying ciphertext from a different key generation.
 
-## Step 4: Create The Policy
+## Step 4: Create the policy
 
 Write the least-privilege policy before creating the auth role:
 
@@ -162,9 +163,9 @@ The policy must not grant:
 - `read` on plaintext backup paths,
 - broad `sudo` or admin permissions.
 
-For policy variants and rationale see [Configure: Transit Policy Examples](/docs/configure/openbao-auth/).
+For policy variants and rationale see [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
 
-## Step 5: Configure JWT Auth
+## Step 5: Configure JWT auth
 
 JSON Web Token (JWT) auth is the default preview build and release path. This
 procedure uses OpenID Connect (OIDC) discovery. For a JSON Web Key Set (JWKS),
@@ -247,8 +248,8 @@ backup settings, deletion settings, and version restrictions. Run it before
 changing API server encryption to separate OpenBao setup problems from socket
 and API server wiring problems.
 
-## Read Next
+## Read next
 
-1. [Install](/docs/get-started/install/) to fetch the provider binary and verify the local environment.
-2. [Get Started: Choosing A Model](/docs/get-started/deployment-model/) to run the provider on every control-plane node.
-3. [Kubernetes Encryption Config](/docs/get-started/enable-encryption/) once the provider runs and exposes its Unix socket.
+1. [Install the provider](/docs/get-started/install/) to fetch the provider binary and verify the local environment.
+2. [Get started: Choose a deployment model](/docs/get-started/deployment-model/) to run the provider on every control-plane node.
+3. [Enable encryption](/docs/get-started/enable-encryption/) once the provider runs and exposes its Unix socket.

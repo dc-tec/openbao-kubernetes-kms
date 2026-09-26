@@ -1,6 +1,7 @@
 ---
-title: "systemd Deployment"
+title: Run with systemd
 description: "Hardened systemd unit, directory setup, and startup procedure for running bao-kms-provider as a host service."
+eyebrow: Get started · Step 5
 weight: 50
 ---
 
@@ -15,9 +16,9 @@ Model](/docs/get-started/deployment-model/). For the user, group, and file owner
 model, see [Security: Linux Identity
 Model](/docs/security/linux-identity-model/).
 
-## Recommended Unit
+## Recommended unit
 
-The maintained sample unit lives at `deploy/systemd/bao-kms-provider.service` in the repository. It uses the identity model from [Linux Identity Model](/docs/security/linux-identity-model/).
+The maintained sample unit lives at `deploy/systemd/bao-kms-provider.service` in the repository. It uses the identity model from [Linux identity model](/docs/security/linux-identity-model/).
 
 ```ini
 [Unit]
@@ -72,13 +73,13 @@ kubelet starts the static-pod API server.
 Use `deploy/config/provider-systemd.yaml` as the starting provider configuration
 for host-service deployments. Install only packages or tarballs that have passed
 the checksum, signature, and provenance verification described in
-[Getting Started: Install](/docs/get-started/install/#verify-release-artifacts).
+[Get started: Install the provider](/docs/get-started/install/#verify-release-artifacts).
 
 The sample unit uses the default JSON Web Token (JWT) configuration. PKCS#11
 certificate-auth deployments must replace the JWT `ConditionPathExists=` line
 with checks for the configured certificate chain and PKCS#11 PIN file.
 
-## Unit Settings
+## Unit settings
 
 | Setting | Purpose |
 |---|---|
@@ -100,10 +101,10 @@ routing, OpenBao TLS, or the OpenBao load balancer is ready. The provider's
 `bootstrap.graceTimeout` handles these boot races by retrying the initial
 metadata and deep probes before exiting.
 
-## Directory Setup
+## Directory setup
 
 For `0.1.0-preview.1` and `0.1.0-preview.2`, apply the persistent directory
-permission correction in [Install](/docs/get-started/install/#correct-directory-access-in-existing-previews)
+permission correction in [Install the provider](/docs/get-started/install/#correct-directory-access-in-existing-previews)
 so tmpfiles processing preserves service-user access after reboot.
 
 ```sh
@@ -153,7 +154,7 @@ bao-kms-provider doctor \
 Before enabling API server encryption, `systemctl status` reports the service
 as active and `doctor` exits with status `0` without a `[fail]` check.
 
-## Hardening Checklist
+## Hardening checklist
 
 - Run as non-root where possible.
 - Keep auth material readable only by the provider process.
@@ -165,7 +166,7 @@ as active and `doctor` exits with status `0` without a `[fail]` check.
 
 For the broader hardening surface beyond the systemd unit see [Security: Hardening](/docs/security/hardening/).
 
-## Failure Modes
+## Failure modes
 
 Common failures during initial bring-up:
 

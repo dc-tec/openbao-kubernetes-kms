@@ -1,13 +1,14 @@
 ---
-title: "Support Policy"
+title: Support policy
 description: "Current preview support scope, tested versions, security fix expectations, and operator responsibilities for bao-kms-provider."
+eyebrow: Reference · Lifecycle
 weight: 90
 ---
 
 This policy defines the tested configurations and operator expectations for the
 preview release line.
 
-## Current Status
+## Current status
 
 The current public release line is preview. Use it for labs, staging, and
 evaluation of the deployment model. Do not use preview releases for production
@@ -18,7 +19,7 @@ production service-level objective, and no guarantee that adjacent Kubernetes,
 OpenBao, operating-system, auth, or deployment variants will work unless they
 are listed as tested.
 
-## Tested Preview Scope
+## Tested preview scope
 
 | Component | Version |
 |---|---|
@@ -33,7 +34,7 @@ Kind node image is available. Kubernetes `1.29+` KMS v2 clusters may work, but
 unlisted versions are not part of the tested preview scope. See
 [Reference: Compatibility](/docs/reference/compatibility/) for the detailed matrix.
 
-## What Preview Covers
+## What preview covers
 
 A preview tag covers the versions, artifacts, and deployment models listed in
 that release's notes and compatibility table. In the default path, this means:
@@ -53,7 +54,7 @@ Preview releases do not cover production readiness, unlisted Kubernetes or
 OpenBao versions, unlisted OpenBao HA topologies, SPIFFE/SPIRE workload identity
 configuration, performance SLOs, or long-term maintenance windows.
 
-## Security Fixes
+## Security fixes
 
 Before a stable release line exists, security fixes apply to the latest released
 preview line only.
@@ -61,7 +62,7 @@ preview line only.
 Once stable releases exist, this policy will document the stable-line security
 fix and backport policy.
 
-## Operator Expectations
+## Operator expectations
 
 Operators using preview releases should:
 
@@ -71,4 +72,4 @@ Operators using preview releases should:
 - validate upgrades in staging,
 - run `bao-kms-provider doctor` on every control-plane node,
 - avoid main, nightly, release candidate, and preview channels in production,
-- avoid changing identity-bearing configuration fields after encryption begins; see [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
+- avoid changing identity-bearing configuration fields after encryption begins; see [Configuration: Identity-bearing fields](/docs/reference/configuration/#identity-bearing-fields).

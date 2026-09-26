@@ -1,14 +1,15 @@
 ---
-title: "Failure Modes"
+title: Failure modes
 description: "Failure modes the design considers: cause, impact, detection signals, mitigation, recovery, startup blocking, and data loss risk."
+eyebrow: Architecture
 weight: 50
 ---
 
-This catalog pairs each failure scenario with its detection signal, mitigation, and recovery action. For runbooks that act on these signals, see [Operate: Troubleshooting](/docs/operate/troubleshooting/) and [Operate: Disaster Recovery](/docs/operate/disaster-recovery/).
+This catalog pairs each failure scenario with its detection signal, mitigation, and recovery action. For runbooks that act on these signals, see [Operate: Troubleshooting](/docs/operate/troubleshooting/) and [Operate: Disaster recovery](/docs/operate/disaster-recovery/).
 
 <a id="how-to-use-this-page"></a>
 
-## How To Use The Catalog
+## How to use the catalog
 
 Each row in the catalog answers four questions:
 
@@ -22,7 +23,7 @@ Two columns flag operational severity:
 - **Blocks API server startup?** indicates whether the API server cannot decrypt previously encrypted resources during startup if this failure is active.
 - **Permanent data loss risk?** indicates whether the failure can leave Kubernetes resources unrecoverable.
 
-## Bootstrap And Runtime
+## Bootstrap and runtime
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|
@@ -38,7 +39,7 @@ Two columns flag operational severity:
 | Image unavailable for static pod | Pull failure, air gap | Provider not started | kubelet events or logs | Preloaded image, `IfNotPresent` or `Never` | Load image | Yes | No |
 | Package upgrade restarts systemd provider | Maintenance event | Transient KMS outage | Service logs | Controlled rollout | Restart one node at a time | Possible | No |
 
-## OpenBao And Transit
+## OpenBao and Transit
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|
@@ -50,7 +51,7 @@ Two columns flag operational severity:
 | TLS certificate expired | Certificate not renewed | Provider cannot connect | TLS errors | Certificate monitoring | Renew certificate, reload provider | Yes | No |
 | DNS or LB misrouting | Wrong backend or stale DNS | Auth or Transit errors | TLS or SNI errors, metadata mismatch | Pinned CA and SNI, instance ID checks | Fix DNS or load balancer | Yes | No |
 
-## Transit Key Material
+## Transit key material
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|
@@ -61,7 +62,7 @@ Two columns flag operational severity:
 | `min_decryption_version` raised too early | Operator error | Old ciphertext undecryptable | Decrypt failures for old `key_id` values | Verify migration first | Lower setting if key versions still exist | Yes | Possible |
 | Key backup missing | Disaster restore lacks Transit key versions | Data undecryptable | DR test failure | Coordinated OpenBao backups | Restore from valid backup | Yes | Yes |
 
-## Authentication And Issuer State
+## Authentication and issuer state
 
 This section uses JSON Web Token (JWT), JSON Web Key Set (JWKS), and OpenID
 Connect (OIDC) terminology. PKCS#11 refers to the interface for hardware or
@@ -84,7 +85,7 @@ framework, and an SVID is a SPIFFE Verifiable Identity Document.
 | PKCS#11 module or token unavailable | Module path, token label, key label, PIN, or hardware failure | Login impossible | Startup validation, auth error | Provider-only PIN file, token monitoring | Restore module or token, fix labels, replace hardware through planned procedure | Yes | No |
 | SPIFFE Workload API unavailable | SPIFFE agent or socket unavailable | Login impossible | Auth error, certificate TTL metric approaches zero | Independent SPIFFE availability and socket permissions | Restore SPIFFE agent or socket access | Yes | No |
 
-## KMS Contract, Registry, And Decrypt
+## KMS contract, registry, and decrypt
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|
@@ -100,7 +101,7 @@ framework, and an SVID is a SPIFFE Verifiable Identity Document.
 | OpenBao response exceeds its body limit | Backend fault, proxy fault, or unexpected response growth | Request fails as unavailable; metadata or deep-probe responses also make Status unhealthy | OpenBao request error metrics and provider logs | 64 KiB error-body limit, 4 MiB metadata and batch-decrypt limit, 256 KiB limit for other successful responses | Inspect the OpenBao or proxy response; restore a response shape within the documented limit | Possible | No |
 | Provider name changed | `EncryptionConfiguration` drift | Old encrypted data may not match provider | API server errors | Immutable provider name | Restore old name or configure migration | Yes for affected data | Possible |
 
-## Kubernetes Encryption Scope And Migration
+## Kubernetes encryption scope and migration
 
 | Failure mode | Cause | Impact | Detection | Control | Recovery | Startup block? | Data loss risk |
 |---|---|---|---|---|---|---|---|

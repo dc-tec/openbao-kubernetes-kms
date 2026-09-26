@@ -1,6 +1,7 @@
 ---
-title: "Testing"
+title: Testing
 description: "Testing strategy for bao-kms-provider: protocol correctness, fail-closed behavior, rotation, recovery, performance, and release evidence."
+eyebrow: Contribute
 weight: 30
 ---
 
@@ -11,12 +12,12 @@ over a single happy-path encrypt and decrypt check.
 
 The following sections define what the test system must prove. For runnable
 end-to-end (E2E) lanes and
-Make targets, see [E2E Framework](/contribute/e2e-framework/). For continuous
+Make targets, see [E2E framework](/contribute/e2e-framework/). For continuous
 integration (CI) lanes
-and release evidence requirements, see [CI And Supply Chain](/contribute/ci-supply-chain/).
-For captured load and cold-start evidence, see [Performance Evidence](/contribute/benchmark-results/).
+and release evidence requirements, see [CI and supply chain](/contribute/ci-supply-chain/).
+For captured load and cold-start evidence, see [Performance evidence](/contribute/benchmark-results/).
 
-## Test Priorities
+## Test priorities
 
 | Priority | What must be proven |
 |---|---|
@@ -29,7 +30,7 @@ For captured load and cold-start evidence, see [Performance Evidence](/contribut
 | Disaster recovery | OpenBao, provider state, and etcd restore procedures preserve decryptability only when the correct backup pair is restored. |
 | Observability and redaction | Logs, metrics, reports, and diagnostics never expose plaintext, JSON Web Tokens (JWTs), OpenBao tokens, full ciphertext, or raw Transit key material. |
 
-## Test Layers
+## Test layers
 
 | Layer | Purpose | Canonical location |
 |---|---|---|
@@ -44,7 +45,7 @@ For captured load and cold-start evidence, see [Performance Evidence](/contribut
 | Security and supply chain | Run redaction checks, fuzz targets, static analysis, vulnerability scan, license check, software bill of materials (SBOM), and vendor verification. | `make ci-core`, security CI, release workflow |
 | Disaster recovery | Validate OpenBao raft restore, provider state rehydration, etcd restore pairing, and Kubernetes readback after replacement. | Kind DR, OpenBao restore, and local VM validation |
 
-## Installation Regression Check
+## Installation regression check
 
 Run `make systemd-install-check` with Docker available. It uses the pinned
 Go builder image with Debian systemd tools to build a systemd bundle and
@@ -59,7 +60,7 @@ packaging, bundle builder, and deployment test changes. This check does not
 start systemd, authenticate to OpenBao, or prove Kubernetes boot and recovery
 behavior. Use the VM and E2E lanes for those checks.
 
-## Negative Path Bias
+## Negative path bias
 
 Encrypt and decrypt working once is not enough. The test suite must prove that
 the provider fails safely when:
@@ -77,7 +78,7 @@ the provider fails safely when:
 Every negative test must assert both the returned error behavior and the
 absence of sensitive values in logs, metrics, and artifacts.
 
-## Performance Model
+## Performance model
 
 Performance targets reflect Kubernetes behavior and the provider's role in API
 server startup:
@@ -99,10 +100,10 @@ proportional to Kubernetes object count. Add a production coalescer to the
 release scope only if sustained direct decrypt soak or local kubeadm VM
 cold-start evidence shows a release-blocking need.
 
-## Release Evidence
+## Release evidence
 
 Release evidence is assembled from the test layers above and the supply-chain
-controls documented in [CI And Supply Chain](/contribute/ci-supply-chain/).
+controls documented in [CI and supply chain](/contribute/ci-supply-chain/).
 In summary:
 
 - every pull request proves deterministic logic, conformance, redaction,
@@ -119,7 +120,7 @@ Additional Kubernetes or OpenBao versions remain candidates until exact-pinned
 lanes and release evidence exist. See [Reference: Compatibility](/docs/reference/compatibility/)
 for the support boundary.
 
-## Local Fuzz Campaigns
+## Local fuzz campaigns
 
 `make ci-core` runs short fuzz smoke campaigns with `FUZZTIME=10s` by default.
 To spend more time on the curated parser and preflight targets without changing

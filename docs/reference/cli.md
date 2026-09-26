@@ -1,6 +1,7 @@
 ---
-title: "CLI"
+title: CLI
 description: "Authoritative reference for the bao-kms-provider command-line interface: serve, doctor, verify-key, benchmark, rotation-plan, verify-rotation, retire-versions, config, policy openbao, completion, exit codes."
+eyebrow: Reference
 weight: 10
 ---
 
@@ -235,7 +236,7 @@ bao-kms-provider config \
   --config /etc/openbao-kms/config.yaml
 ```
 
-The output includes the derived identity fingerprint when all identity-bearing fields are present. See [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
+The output includes the derived identity fingerprint when all identity-bearing fields are present. See [Configuration: Identity-bearing fields](/docs/reference/configuration/#identity-bearing-fields).
 
 ## config schema
 
@@ -285,9 +286,9 @@ bao-kms-provider policy openbao \
   --config /etc/openbao-kms/config.yaml
 ```
 
-The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy. See [Configure: Transit Policy Examples](/docs/configure/openbao-auth/) for variants and rationale.
+The output grants Transit metadata read, encrypt update, decrypt update, `disable_upsert` inspection, and `sys/capabilities-self` for `doctor` policy diagnostics. Review the rendered paths before applying the policy. See [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/) for variants and rationale.
 
-## Common Flags
+## Common flags
 
 Common flags supported across commands:
 
@@ -309,7 +310,7 @@ Report-style commands also support:
 `doctor`, `verify-key`, `rotation-plan`, `verify-rotation`, and `retire-versions` support stable
 JSON reports for automation consumers. `text` remains the default.
 
-## Exit Codes
+## Exit codes
 
 | Code | Meaning |
 |---:|---|

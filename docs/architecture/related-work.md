@@ -1,6 +1,7 @@
 ---
-title: "Related Work"
+title: Related work
 description: "Existing Vault Transit Kubernetes KMS plugin work that informed bao-kms-provider, and the project-specific design boundaries this implementation chooses."
+eyebrow: Architecture
 weight: 60
 ---
 
@@ -8,7 +9,7 @@ The closest existing project in this space is [`FalcoSuessgott/vault-kubernetes-
 
 The surrounding ecosystem influenced this design, but project constraints led to a separate OpenBao-native implementation. This record identifies that lineage and explains the project's release boundary.
 
-## Design Influences
+## Design influences
 
 The existing Vault Transit plugin work reinforced several choices in this project:
 
@@ -21,7 +22,7 @@ The existing Vault Transit plugin work reinforced several choices in this projec
 
 Those lessons are reflected in the deployment, hardening, and operations docs for this provider.
 
-## Project-Specific Boundaries
+## Project-specific boundaries
 
 `bao-kms-provider` makes these explicit design choices:
 
@@ -38,7 +39,7 @@ Those lessons are reflected in the deployment, hardening, and operations docs fo
 | Socket handling | Unsafe paths fail closed; only verified-dead Unix sockets are removed. | Prevents accidental or malicious socket path replacement. |
 | Recovery docs | Disaster recovery, rotation, and troubleshooting are first-class docs. | KMS failures can block API server startup, so operators need runbooks before incidents. |
 
-## Shared Operating Lessons
+## Shared operating lessons
 
 Where the projects align, the alignment is intentional:
 

@@ -1,6 +1,7 @@
 ---
-title: "Disaster Recovery"
+title: Disaster recovery
 description: "Recover compatible OpenBao, etcd, provider state, auth, and API server dependencies without implying recovery from lost Transit key material."
+eyebrow: Operate · Recovery
 weight: 20
 ---
 
@@ -11,9 +12,9 @@ exists or is no longer decryptable, Kubernetes may be unable to read those
 objects. Adding `identity` fallback to the API server
 `EncryptionConfiguration` does not decrypt existing KMS ciphertext.
 
-For the design view of the failure modes addressed by this runbook, see [Architecture: Failure Modes](/docs/architecture/failure-modes/).
+For the design view of the failure modes addressed by this runbook, see [Architecture: Failure modes](/docs/architecture/failure-modes/).
 
-## Preview Boundary
+## Preview boundary
 
 Current preview releases do not include a supported `recover-state` command.
 Normal runtime can auto-bootstrap local registry state only for an initial,
@@ -41,7 +42,7 @@ decision is expected when `latest_version`, `min_available_version`, or
 `min_decryption_version` proves the provider cannot safely infer a complete
 first-use registry state.
 
-## Recovery Decision Flow
+## Recovery decision flow
 
 ```mermaid
 flowchart TD
@@ -70,7 +71,7 @@ flowchart TD
     CheckPair -->|no compatible pair| DataLoss
 ```
 
-## Backup Requirements
+## Backup requirements
 
 Back up:
 
@@ -104,7 +105,7 @@ that a control-plane node may have skipped over during back-to-back rotations;
 the provider treats missing or changed creation metadata as unsafe identity
 drift.
 
-## State Rollback Boundary
+## State rollback boundary
 
 The local registry state file and adjacent checkpoint help detect operational
 rollback mistakes. If the checkpoint survives, the provider rejects a missing
@@ -152,7 +153,7 @@ but etcd contains data encrypted after that rotation. If etcd is restored to an
 earlier point and OpenBao is restored to a later compatible point, old key
 versions usually keep the earlier data decryptable.
 
-## Restore etcd And OpenBao Together
+## Restore etcd and OpenBao together
 
 Preferred procedure when both stores must be restored:
 
@@ -165,7 +166,7 @@ Preferred procedure when both stores must be restored:
 6. Start the API server.
 7. Validate Kubernetes API reads.
 
-## Transit Key Loss
+## Transit key loss
 
 If Transit key material is lost and no valid backup exists:
 
@@ -176,7 +177,7 @@ If Transit key material is lost and no valid backup exists:
 
 Do not delete encrypted etcd data while investigating.
 
-## Key Recreated With Same Name
+## Key recreated with same name
 
 Symptoms:
 
@@ -198,10 +199,10 @@ Do not accept a recreated key as compatible with data encrypted under the previo
 
 <a id="plugin-config-loss"></a>
 
-## Provider Configuration Loss
+## Provider configuration loss
 
 1. Restore configuration from configuration management.
-2. Verify the identity-bearing fields match the previous values; see [Configuration: Identity-Bearing Fields](/docs/reference/configuration/#identity-bearing-fields).
+2. Verify the identity-bearing fields match the previous values; see [Configuration: Identity-bearing fields](/docs/reference/configuration/#identity-bearing-fields).
 3. Restore the local key registry state and its checkpoint when available.
 4. Restore the CA bundle and selected auth material.
 5. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml`.
@@ -217,7 +218,7 @@ replacement state file by hand. Current preview releases have no supported
 `recover-state` command, so normal runtime fails closed until complete
 state and checkpoint files are restored.
 
-## Auth Issuer Loss
+## Auth issuer loss
 
 If the configured JSON Web Token (JWT) issuer, certificate authority, or
 PKCS#11 token is unavailable:
@@ -236,7 +237,7 @@ Recovery options:
 
 Avoid relying only on a Kubernetes ServiceAccount token from the protected cluster for recovery.
 
-## Control-Plane Node Replacement
+## Control-plane node replacement
 
 1. Install the provider binary or preload the static pod image.
 2. Restore `/etc/openbao-kms/config.yaml`.
@@ -263,7 +264,7 @@ provider image digest and restore the manifest. Confirm that the numeric
 `openbao-kms-socket` group ID (GID) matches `supplementalGroups` and
 `server.socketGroup`.
 
-## API Server Cannot Start
+## API server cannot start
 
 Recovery order when the API server fails to start because the KMS path is unhealthy:
 
@@ -280,13 +281,13 @@ Do not try to fix KMS ciphertext by changing the provider name or recreating
 Transit keys. Adding or reordering `identity` only affects plaintext objects or
 future writes. It does not decrypt data already encrypted with KMS.
 
-## Single-Node Control Plane
+## Single-node control plane
 
 Single-node clusters have higher recovery risk because there is no alternate
 API server or provider instance. Prefer systemd mode, local image availability,
 and tested host-level recovery steps.
 
-## Multi-Node Control Plane
+## Multi-node control plane
 
 Recover one node at a time:
 
@@ -296,7 +297,7 @@ Recover one node at a time:
 - avoid simultaneous auth credential expiry,
 - avoid cluster-wide `min_decryption_version` changes during recovery.
 
-## Emergency Actions
+## Emergency actions
 
 Acceptable during an incident:
 

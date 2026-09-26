@@ -1,13 +1,14 @@
 ---
-title: "Release Policy"
+title: Release policy
 description: "Release channels, versioning, artifact families, and verification materials for bao-kms-provider."
+eyebrow: Reference · Lifecycle
 weight: 100
 ---
 
 This policy defines when `bao-kms-provider` publishes releases, what each
 channel means, and which artifacts users must verify before deployment.
 
-## Public Release Status
+## Public release status
 
 Public releases use SemVer tags without a leading `v`, for example `0.1.0`.
 Each public release publishes GitHub Release assets and a GHCR image, plus the
@@ -15,7 +16,7 @@ checksums, signatures, software bills of materials (SBOMs), and provenance
 attestations needed to verify them.
 
 The current public release line is a preview line unless the release notes and
-[Support Policy](/docs/reference/support-policy/) explicitly say otherwise.
+[Support policy](/docs/reference/support-policy/) explicitly say otherwise.
 
 ## Cadence
 
@@ -47,11 +48,11 @@ publication.
 | preview | tagged release for labs, staging, and evaluation | not production |
 | stable | production-ready release line | covered by the stable support policy |
 
-## Preview Release Rule
+## Preview release rule
 
 Preview releases ship only after the required test, packaging, signing, and
 verification steps pass. See
-[Contribute: CI And Supply Chain](/contribute/ci-supply-chain/) for the
+[Contribute: CI and supply chain](/contribute/ci-supply-chain/) for the
 maintainer-side workflow details.
 
 A preview release is suitable for validating:
@@ -69,7 +70,7 @@ The SPIFFE/SPIRE certificate source is not part of the preview user-facing
 configuration. It will be documented only after the required OpenBao cert-auth
 behavior and release validation are in place.
 
-## Stable Release Rule
+## Stable release rule
 
 A stable production-ready release requires, at minimum:
 
@@ -105,9 +106,9 @@ Before beta:
 
 After beta:
 
-- `key_id`, annotation, and AAD compatibility are treated as stable API surfaces. See [Reference: Compatibility: Compatibility Promises](/docs/reference/compatibility/#compatibility-promises).
+- `key_id`, annotation, and AAD compatibility are treated as stable API surfaces. See [Reference: Compatibility: Compatibility promises](/docs/reference/compatibility/#compatibility-promises).
 
-## Binary Artifacts
+## Binary artifacts
 
 Release binaries use this naming pattern:
 
@@ -156,7 +157,7 @@ Release artifacts are separated by supported auth path:
 SPIFFE artifacts, when present, are for local verification and upstream OpenBao
 alignment work until SPIFFE is listed as supported in the release notes.
 
-## Verification Materials
+## Verification materials
 
 Every public release publishes or retains enough material to verify the source,
 image, binary, and package artifacts:
@@ -179,4 +180,4 @@ image, binary, and package artifacts:
 - `provenance-index.json`,
 - release notes.
 
-For the full supply-chain controls see [Contribute: CI And Supply Chain](/contribute/ci-supply-chain/).
+For the full supply-chain controls see [Contribute: CI and supply chain](/contribute/ci-supply-chain/).

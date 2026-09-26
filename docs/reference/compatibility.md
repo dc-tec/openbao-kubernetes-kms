@@ -1,13 +1,14 @@
 ---
-title: "Compatibility"
+title: Compatibility
 description: "Tested Kubernetes, OpenBao, OS, deployment mode, Transit key type, and compatibility rules for bao-kms-provider."
+eyebrow: Reference · Lifecycle
 weight: 80
 ---
 
 This matrix lists the versions and deployment shapes currently tested for
 `bao-kms-provider`.
 
-## Tested Preview Matrix
+## Tested preview matrix
 
 The preview matrix is intentionally narrow. A tagged release covers only the
 versions, artifact families, and deployment models listed in its release notes
@@ -67,7 +68,7 @@ Certificate auth variants additionally require:
 - role constraints bound to the provider certificate identity,
 - a PKCS#11 module for `certauth_pkcs11` builds.
 
-## Operating Systems
+## Operating systems
 
 Targeted:
 
@@ -81,7 +82,7 @@ Not targeted for the current release line:
 - abstract Unix sockets,
 - non-Linux socket semantics.
 
-## Deployment Modes
+## Deployment modes
 
 | Mode | Current status |
 |---|---|
@@ -90,9 +91,9 @@ Not targeted for the current release line:
 | DaemonSet | Not recommended for protecting the same cluster's API server. |
 | Sidecar with `kube-apiserver` | Not targeted. |
 
-See [Get Started: Choosing A Model](/docs/get-started/deployment-model/) for the model selection rationale.
+See [Get started: Choose a deployment model](/docs/get-started/deployment-model/) for the model selection rationale.
 
-## Transit Key Types
+## Transit key types
 
 | Key type | Status |
 |---|---|
@@ -100,7 +101,7 @@ See [Get Started: Choosing A Model](/docs/get-started/deployment-model/) for the
 | Other AEAD Transit key types | Not supported. |
 | Derived or convergent keys | Not supported for the Kubernetes KMS path. |
 
-## Transit Profile Findings
+## Transit profile findings
 
 Transit profile findings are fail-closed. When metadata shows a blocking
 profile issue, the provider marks readiness and KMS Status unhealthy instead of
@@ -122,7 +123,7 @@ unreachable, or changed to an unsafe Transit profile. Use `verify-key`,
 `doctor`, readiness, and KMS Status as preflight and monitoring signals before
 changing API server encryption settings.
 
-## Auth Methods
+## Auth methods
 
 | Auth method | Build | Status |
 |---|---|---|
@@ -131,7 +132,7 @@ changing API server encryption settings.
 | Certificate with SPIFFE source | `certauth_spiffe` local-only artifact | Not a supported preview user configuration. |
 | OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
 
-## Compatibility Promises
+## Compatibility promises
 
 After the first stable release, these surfaces remain backward compatible within a major version:
 
@@ -143,7 +144,7 @@ After the first stable release, these surfaces remain backward compatible within
 - decrypt support for historical `key_id` values,
 - CLI JSON report shape for report-style commands.
 
-## Operator Retirement Compatibility
+## Operator retirement compatibility
 
 `retire-versions --apply` intentionally ends local decrypt support for the
 versions selected by the operator. Existing `key_id` derivation, annotations,
@@ -157,14 +158,14 @@ or erase the removal records. Recovery requires a reviewed restoration of a
 matching state/checkpoint pair and the required Transit versions. See
 [Operate: Rotation](/docs/operate/rotation/#retire-local-versions-before-raising-the-minimum)
 for the migration procedure and
-[Architecture: Rotation Model](/docs/architecture/rotation-model/#operator-controlled-retirement)
+[Architecture: Rotation model](/docs/architecture/rotation-model/#operator-controlled-retirement)
 for the design decision.
 
 The state writer lock also requires the state directory to be owned by the
 provider's OS user. Run retirement with that account. Existing deployments with
 a different directory owner must correct ownership before starting this version.
 
-## CI Version Policy
+## CI version policy
 
 CI does not use floating `latest` inputs for the tested compatibility matrix.
 
@@ -176,11 +177,11 @@ The implementation uses a central version manifest at `.ci/versions.yaml` for:
 - release matrix rows,
 - intended next validation lines and future candidate versions.
 
-For the full CI and supply-chain controls see [Contribute: CI And Supply Chain](/contribute/ci-supply-chain/).
+For the full CI and supply-chain controls see [Contribute: CI and supply chain](/contribute/ci-supply-chain/).
 
-## Breaking Changes
+## Breaking changes
 
-### Unreleased Rotation Corrections
+### Unreleased rotation corrections
 
 Pending snapshots become decryptable after metadata validation and persistence.
 They still cannot encrypt until promotion. Decrypt can read metadata for an
@@ -200,7 +201,7 @@ have used its pending version. First verify convergence and retained decrypt
 coverage on every node. Operator-issued retirement remains the only supported
 way to remove retained decrypt eligibility.
 
-### Change Requirements
+### Change requirements
 
 Breaking changes require:
 
@@ -219,7 +220,7 @@ Examples of breaking changes:
 - changing provider-name handling,
 - removing decrypt support for retained historical `key_id` values.
 
-## Source References
+## Source references
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)

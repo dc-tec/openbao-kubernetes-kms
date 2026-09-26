@@ -1,6 +1,7 @@
 ---
-title: "Configure"
+title: Configure
 description: "Set up OpenBao authentication and policy variants, and monitor the provider."
+eyebrow: Configure
 weight: 20
 ---
 

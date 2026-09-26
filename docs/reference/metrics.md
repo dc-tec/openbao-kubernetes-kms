@@ -1,6 +1,7 @@
 ---
-title: "Metrics"
+title: Metrics
 description: "Authoritative metric and log-field reference: every Prometheus metric exported by bao-kms-provider and every stable log field name."
+eyebrow: Reference · Observability
 weight: 40
 ---
 
@@ -10,7 +11,7 @@ This reference defines the Prometheus metrics and stable JSON log fields exporte
 
 Prometheus metrics are served by `bao-kms-provider serve` on `server.metricsAddress` at `/metrics`. The default address is `127.0.0.1:8081`, so the endpoint is not reachable from off-host without explicit configuration.
 
-## Label Rules
+## Label rules
 
 The provider applies these rules to every metric:
 
@@ -22,9 +23,9 @@ The provider applies these rules to every metric:
 - request UIDs are not used as labels,
 - full error strings are not used as labels.
 
-## Metric Reference
+## Metric reference
 
-### KMS gRPC Surface
+### KMS gRPC surface
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
@@ -33,7 +34,7 @@ The provider applies these rules to every metric:
 | `openbao_kms_grpc_in_flight` | gauge | `method` | Current active Status, Encrypt, and Decrypt handler counts. |
 | `openbao_kms_grpc_concurrency_rejections_total` | counter | `method` | KMS v2 requests rejected because the method reached its configured active-request limit. |
 
-### OpenBao Calls
+### OpenBao calls
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
@@ -42,7 +43,7 @@ The provider applies these rules to every metric:
 
 Metric `operation` label values are normalized for Prometheus. The matching log `openbao_operation` field uses the unnormalized operation names with spaces.
 
-### Auth And Token
+### Auth and token
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
@@ -53,14 +54,14 @@ Metric `operation` label values are normalized for Prometheus. The matching log 
 | `openbao_kms_token_ttl_seconds` | gauge | none | Remaining TTL of the current OpenBao token. |
 | `openbao_kms_certificate_ttl_seconds` | gauge | none | Remaining TTL of the current cert-auth client certificate. Zero when certificate auth is not in use or no certificate has been observed. |
 
-### Active Key
+### Active key
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
 | `openbao_kms_status_key_id_hash` | gauge | `hash` | Reports `1` for the current Kubernetes `key_id` hash. The label value is the `base64url-sha256` of the active `key_id`. |
 | `openbao_kms_key_version` | gauge | none | Active OpenBao Transit key version used for new encrypt operations. |
 
-### Status And Probes
+### Status and probes
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
@@ -73,14 +74,14 @@ Metric `operation` label values are normalized for Prometheus. The matching log 
 |---|---|---|---|
 | `openbao_kms_rotation_state` | gauge | `state` | Reports `1` for the current bounded rotation state (`active`, `pending`, `unknown`). Use `rotation-plan` for detailed promotion state. |
 
-### Validation Errors
+### Validation errors
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
 | `openbao_kms_aad_validation_errors_total` | counter | `reason` | Additional authenticated data (AAD) validation failures during decrypt. |
 | `openbao_kms_decrypt_key_id_errors_total` | counter | `reason` | Decrypt rejections caused by unknown, malformed, or stale-disallowed `key_id`. |
 
-### Runtime Health
+### Runtime health
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
@@ -88,7 +89,7 @@ Metric `operation` label values are normalized for Prometheus. The matching log 
 | `openbao_kms_panic_recoveries_total` | counter | `method` | Recovered KMS handler panics by bounded method. Panic values are not exported. |
 | `openbao_kms_socket_restarts_total` | counter | none | Socket reclamations after stale socket detection. |
 
-## Log Fields
+## Log fields
 
 Stable JSON log fields. Operators can rely on these names across preview patch releases.
 
@@ -106,7 +107,7 @@ Stable JSON log fields. Operators can rely on these names across preview patch r
 | `openbao_request_id` | string | OpenBao request ID when debug correlation is enabled and OpenBao returned a safe ID. |
 | `probe_kind` | string | Status-controller probe kind (`metadata`, `deep`) on `status.probe` events. |
 | `healthz` | string | KMS v2 Status health value on `kms.status` request events. |
-| `error_class` | string | One of the stable error classes; see [Observability: Error Classes](/docs/reference/observability/#error-classes). |
+| `error_class` | string | One of the stable error classes; see [Observability: Error classes](/docs/reference/observability/#error-classes). |
 | `request_uid_hash` | string | Hash of the KMS request UID when debug correlation is enabled. |
 | `debug_correlation_incident` | string | Operator-supplied incident ID when debug correlation is enabled. |
 | `debug_correlation_expires_at` | string | RFC 3339 timestamp at which debug correlation will expire. |

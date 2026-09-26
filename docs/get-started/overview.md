@@ -1,6 +1,7 @@
 ---
-title: "Overview"
+title: What the provider does
 description: "What bao-kms-provider does, what it does not do, the trust boundary, and the supported version envelope."
+eyebrow: Get started · Step 1
 weight: 10
 ---
 
@@ -10,7 +11,7 @@ and uses OpenBao Transit over HTTPS to wrap and unwrap Kubernetes storage keys.
 Kubernetes uses the provider to envelope-encrypt selected API resources before
 those objects are persisted to etcd.
 
-## Component Picture
+## Component picture
 
 The provider sits on each control-plane host between `kube-apiserver` and OpenBao Transit:
 
@@ -31,7 +32,7 @@ The provider runs on the same host as the Kubernetes API server. The tested
 preview deployment models are node-local systemd and static pod. The provider
 does not depend on the protected Kubernetes API server to operate.
 
-## What It Encrypts
+## What it encrypts
 
 The provider participates in Kubernetes envelope encryption for selected API
 resources at the storage layer. The API server reads its
@@ -46,11 +47,11 @@ The provider does not encrypt:
 - node filesystems or container layers,
 - arbitrary Kubernetes API traffic.
 
-For threats outside this scope, see [Threat Model](/docs/security/threat-model/).
+For threats outside this scope, see [Threat model](/docs/security/threat-model/).
 
 <a id="why-this-plugin-exists"></a>
 
-## Why This Provider Exists
+## Why this provider exists
 
 OpenBao Transit can encrypt and decrypt caller-supplied data. OpenBao itself
 does not implement the Kubernetes KMS gRPC protocol. The Kubernetes API server
@@ -67,7 +68,7 @@ service, or the Transit key is unavailable, the API server may be unable to
 decrypt previously encrypted resources. Treat the provider as control-plane
 critical infrastructure.
 
-## Tested Preview Scope
+## Tested preview scope
 
 The current preview validation targets are Kubernetes `1.34` and `1.35`, each
 with exact Kind node-image pins recorded in `.ci/versions.yaml`. Kubernetes
@@ -81,7 +82,7 @@ secrets engine using `aes256-gcm96` keys. See
 [Compatibility](/docs/reference/compatibility/) for the full supported version
 envelope and upgrade rules for this matrix.
 
-## Defaults And Boundaries
+## Defaults and boundaries
 
 The current release line is intentionally narrow:
 
@@ -99,7 +100,7 @@ The current release line is intentionally narrow:
 - Direct decrypt path without provider-side micro-batching.
 - systemd and static-pod deployment models.
 
-## Recommended Deployment Defaults
+## Recommended deployment defaults
 
 Use these defaults unless your platform has a documented reason to diverge:
 
@@ -113,10 +114,10 @@ Use these defaults unless your platform has a documented reason to diverge:
 - Pin binaries, packages, images, checksums, and verified release artifacts. Do not use floating `latest` inputs.
 
 Current performance validation keeps the simpler direct decrypt path. See
-[Contribute: Performance Evidence](/contribute/benchmark-results/) for the
+[Contribute: Performance evidence](/contribute/benchmark-results/) for the
 captured results.
 
-## Out Of Scope
+## Out of scope
 
 The current release line does not include:
 
@@ -130,10 +131,10 @@ The current release line does not include:
 - Provider-side decrypt micro-batching.
 - Production use while the release line remains preview.
 
-## Read Next
+## Read next
 
-1. [OpenBao Setup](/docs/get-started/openbao/) to provision the Transit mount, key, policy, and provider authentication.
-2. [Install](/docs/get-started/install/) to fetch a verified provider binary.
-3. [Get Started: Choosing A Model](/docs/get-started/deployment-model/) to run the provider on every control-plane node.
-4. [Kubernetes Encryption Config](/docs/get-started/enable-encryption/) to write the `EncryptionConfiguration` consumed by the API server.
-5. [First Encrypt](/docs/get-started/verify/) to verify the path end-to-end.
+1. [Prepare OpenBao](/docs/get-started/openbao/) to provision the Transit mount, key, policy, and provider authentication.
+2. [Install the provider](/docs/get-started/install/) to fetch a verified provider binary.
+3. [Get started: Choose a deployment model](/docs/get-started/deployment-model/) to run the provider on every control-plane node.
+4. [Enable encryption](/docs/get-started/enable-encryption/) to write the `EncryptionConfiguration` consumed by the API server.
+5. [Verify encryption](/docs/get-started/verify/) to verify the path end-to-end.

@@ -1,10 +1,11 @@
 ---
-title: "Key ID And AAD"
+title: Key ID and AAD
 description: "Authoritative reference for the Kubernetes key_id format, KMS v2 annotations, AAD envelope shape, decrypt validation order, and local registry state."
+eyebrow: Reference · Contract
 weight: 40
 ---
 
-This reference defines the Kubernetes `key_id` format, KMS v2 annotations, the additional authenticated data (AAD) envelope, decrypt validation order, and local registry state. OpenBao exposes AAD through the `associated_data` field. For the security framing of these mechanisms, see [Security: AAD And Decrypt Validation](/docs/security/aad-and-decrypt-validation/).
+This reference defines the Kubernetes `key_id` format, KMS v2 annotations, the additional authenticated data (AAD) envelope, decrypt validation order, and local registry state. OpenBao exposes AAD through the `associated_data` field. For the security framing of these mechanisms, see [Security: AAD and decrypt validation](/docs/security/aad-and-decrypt-validation/).
 
 ## Goals
 
@@ -15,7 +16,7 @@ This reference defines the Kubernetes `key_id` format, KMS v2 annotations, the a
 - Keep old `key_id` values decryptable while old Transit versions are allowed.
 - Bind ciphertext to provider, cluster, OpenBao namespace, key lineage, and key version through AAD.
 
-## Kubernetes `key_id` Properties
+## Kubernetes `key_id` properties
 
 `key_id` must be:
 
@@ -33,7 +34,7 @@ This reference defines the Kubernetes `key_id` format, KMS v2 annotations, the a
 
 Kubernetes documentation states that `key_id` is public, may be logged, must remain stable, must not flip-flop, and must not be reused.
 
-## Recommended Format
+## Recommended format
 
 Conceptual format:
 
@@ -70,7 +71,7 @@ Inputs:
 | `transit_key_version` | Transit metadata | Active version used for encryption. |
 | `transit_version_created_at_unix` | Transit metadata | Canonical Unix-second creation time for the Transit version. |
 
-## Transit Version Creation Time
+## Transit version creation time
 
 Transit version creation time is part of the long-lived `key_id` contract. The
 provider normalizes this value to Unix seconds before deriving `key_id` values,
@@ -98,7 +99,7 @@ replacement state file by hand. Restore the matching OpenBao backup and
 provider state, or keep the provider stopped until a supported recovery
 workflow is available for the release line.
 
-## Mount Accessor Vs Configured Mount ID
+## Mount accessor vs configured mount ID
 
 OpenBao mount accessors can disclose topology and may change during remount or restore operations. The provider prefers a configured stable mount ID generated and managed by platform automation.
 
@@ -109,7 +110,7 @@ If a mount accessor is used:
 - treat remount or accessor changes as planned migrations,
 - document disaster recovery behavior.
 
-## Key Lineage
+## Key lineage
 
 The Transit key name alone is not a safe identity. If a Transit key is deleted and recreated with the same name, the new key cannot decrypt old ciphertext.
 
@@ -143,7 +144,7 @@ Rules:
 - annotation and key snapshot mismatch is rejected,
 - annotation size is small and bounded.
 
-## OpenBao Request IDs
+## OpenBao request IDs
 
 OpenBao request IDs can help correlate provider logs and OpenBao audit logs. They are not stored in KMS annotations by default because they add noise, increase metadata size, and may expose operational correlation details.
 
@@ -151,9 +152,9 @@ The provider:
 
 - logs OpenBao request IDs in provider logs only when available and safe,
 - does not include request IDs in annotations by default,
-- supports a debug-only correlation mode for controlled incident response. See [Reference: Observability: Correlation With OpenBao](/docs/reference/observability/#correlation-with-openbao).
+- supports a debug-only correlation mode for controlled incident response. See [Reference: Observability: Correlation with OpenBao](/docs/reference/observability/#correlation-with-openbao).
 
-## AAD Envelope
+## AAD envelope
 
 For supported AEAD Transit key types, the provider uses OpenBao Transit `associated_data` by default.
 
@@ -185,7 +186,7 @@ Serialization rules:
 - include enough annotation data to reconstruct the same bytes during decrypt,
 - treat missing required fields as decrypt failure.
 
-## AAD Mode
+## AAD mode
 
 | Mode | Behavior | Intended use |
 |---|---|---|
@@ -194,7 +195,7 @@ Serialization rules:
 The current release only recognizes `aad.required`. There is no configuration
 switch to disable AAD or select compatibility read modes.
 
-## Decrypt Validation Order
+## Decrypt validation order
 
 1. Parse the `key_id`.
 2. Look up the matching historical key snapshot.
@@ -210,7 +211,7 @@ The implementation exposes a decrypt preflight helper that returns the resolved 
 Snapshots use `aad.required`. Any other AAD mode in local state is rejected
 during state validation.
 
-## Local Registry State
+## Local registry state
 
 The local registry is a non-secret JSON file that records:
 
@@ -283,7 +284,7 @@ file is private to that user and remains after shutdown. Never remove the lock
 file while a writer runs. These locks require a local filesystem with working
 advisory file locks.
 
-## Golden Fixtures
+## Golden fixtures
 
 The implementation maintains golden fixtures for:
 
@@ -293,9 +294,9 @@ The implementation maintains golden fixtures for:
 - operator-retired state with removal records,
 - malformed annotation rejection.
 
-Changing `key_id` or AAD derivation is a wire-format compatibility change. See [Reference: Compatibility: Breaking Changes](/docs/reference/compatibility/#breaking-changes).
+Changing `key_id` or AAD derivation is a wire-format compatibility change. See [Reference: Compatibility: Breaking changes](/docs/reference/compatibility/#breaking-changes).
 
-## Source References
+## Source references
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)

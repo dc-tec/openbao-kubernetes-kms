@@ -1,6 +1,7 @@
 ---
-title: "Observability"
+title: Observability
 description: "Principles, error classes, health endpoints, alerts, log shape, and debug correlation for bao-kms-provider."
+eyebrow: Reference · Observability
 weight: 30
 ---
 
@@ -46,7 +47,7 @@ The provider must never log:
 
 For the full set of stable log fields see [Reference: Metrics](/docs/reference/metrics/#log-fields).
 
-## Error Classes
+## Error classes
 
 The provider tags every failed operation with one of these stable error classes. Use these as alert routing keys and dashboard groupings.
 
@@ -81,7 +82,7 @@ recovery attempt, or while recovery is throttled. OpenBao does not distinguish
 revoked tokens from policy denials in every `403` response. OpenBao request
 metrics include both the rejected attempt and any retry.
 
-## Health Endpoints
+## Health endpoints
 
 ```text
 /live      process alive, gRPC server initialized, socket listener initialized
@@ -117,7 +118,7 @@ Example Prometheus alerting rules ship at `deploy/prometheus/rules/openbao-kms.r
 
 An example Grafana dashboard ships at `deploy/grafana/dashboards/openbao-kms-overview.json`. See [Configure: Observability](/docs/configure/monitor/) for scrape and import guidance.
 
-## Correlation With OpenBao
+## Correlation with OpenBao
 
 OpenBao request IDs may be logged when available and safe. They must not be stored in KMS annotations by default.
 
@@ -150,4 +151,4 @@ logging:
     incidentId: INC-12345
 ```
 
-For the configuration field reference see [Configuration: Debug Correlation](/docs/reference/configuration/#debug-correlation).
+For the configuration field reference see [Configuration: Debug correlation](/docs/reference/configuration/#debug-correlation).

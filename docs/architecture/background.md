@@ -1,12 +1,13 @@
 ---
-title: "Background"
+title: Background
 description: "Kubernetes etcd encryption-at-rest, KMS v2 protocol primer, and OpenBao Transit primer that bao-kms-provider builds on."
+eyebrow: Architecture
 weight: 20
 ---
 
-The provider design depends on Kubernetes KMS v2 and OpenBao Transit. Operators who already understand both can continue to [Overview](/docs/architecture/overview/).
+The provider design depends on Kubernetes KMS v2 and OpenBao Transit. Operators who already understand both can continue to [Components and data flow](/docs/architecture/overview/).
 
-## Kubernetes Etcd Encryption-At-Rest
+## Kubernetes etcd encryption-at-rest
 
 Kubernetes encryption at rest is configured through an
 `EncryptionConfiguration` file passed to `kube-apiserver` with
@@ -29,7 +30,7 @@ Kubernetes encryption applies on write. Existing resources are not automatically
 
 For initial enablement, Kubernetes documentation recommends including `identity: {}` as the last provider until all resources have been encrypted. After migration, remove the `identity` fallback to prevent silent plaintext writes.
 
-## KMS v2 Protocol Behavior
+## KMS v2 protocol behavior
 
 The KMS v2 gRPC contract has three methods: `Status`, `Encrypt`, `Decrypt`.
 
@@ -53,13 +54,13 @@ never be reused.
 
 KMS v2 caches unwrapped data encryption keys inside the API server after decrypt. Cold API server startup can still create a large initial decrypt burst while caches and watch state are rebuilt. This is why the project tracks both direct provider decrypt soak and API-server cold-start behavior in release evidence.
 
-KMS v2 annotations are plaintext metadata stored in etcd with the encrypted object. Annotation keys are fully qualified domain names, and the total annotation size is bounded. This design uses annotations only for non-secret metadata needed to validate and reconstruct additional authenticated data (AAD). See [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/).
+KMS v2 annotations are plaintext metadata stored in etcd with the encrypted object. Annotation keys are fully qualified domain names, and the total annotation size is bounded. This design uses annotations only for non-secret metadata needed to validate and reconstruct additional authenticated data (AAD). See [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
 
-## Kubernetes Static Pods
+## Kubernetes static pods
 
 Static pods are managed directly by kubelet without requiring the Kubernetes API server. Kubernetes documentation states that kubelet runs static pods from a host directory of manifests and that kubelet can run them without observing them through the API server.
 
-Static pods cannot reference Kubernetes API objects such as ServiceAccounts, ConfigMaps, or Secrets. The static-pod deployment of `bao-kms-provider` therefore mounts every required file or socket, including configuration, CA bundle, selected auth material, runtime socket directory, and optional state directory, from the host. See [Get Started: Static Pod Deployment](/docs/get-started/static-pod/).
+Static pods cannot reference Kubernetes API objects such as ServiceAccounts, ConfigMaps, or Secrets. The static-pod deployment of `bao-kms-provider` therefore mounts every required file or socket, including configuration, CA bundle, selected auth material, runtime socket directory, and optional state directory, from the host. See [Get started: Run as a static pod](/docs/get-started/static-pod/).
 
 ## OpenBao Transit
 
@@ -88,9 +89,9 @@ Transit supports multiple symmetric key types. The current release line validate
 
 Transit keys can be rotated. After rotation, new encrypt operations use the new key version; existing ciphertexts can be decrypted while old versions remain available.
 
-Transit key deletion is catastrophic for this use case. OpenBao documentation warns that deleting a Transit key makes decrypting ciphertext impossible and that deletion requires `deletion_allowed=true`. The provider's recommended posture keeps `deletion_allowed=false`; see [Architecture: Transit Key Model](/docs/architecture/transit-key-model/).
+Transit key deletion is catastrophic for this use case. OpenBao documentation warns that deleting a Transit key makes decrypting ciphertext impossible and that deletion requires `deletion_allowed=true`. The provider's recommended posture keeps `deletion_allowed=false`; see [Architecture: Transit key model](/docs/architecture/transit-key-model/).
 
-## Source References
+## Source references
 
 - [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
 - [Kubernetes encryption at rest documentation](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)

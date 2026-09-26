@@ -1,6 +1,7 @@
 ---
-title: "Observability Deployment"
+title: Monitor the provider
 description: "Deploy the Prometheus scrape, alert rules, and Grafana dashboard samples for bao-kms-provider."
+eyebrow: Configure · Observability
 weight: 20
 ---
 

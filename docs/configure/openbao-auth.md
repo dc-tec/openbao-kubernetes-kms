@@ -1,14 +1,15 @@
 ---
-title: "Transit Policy Examples"
+title: OpenBao auth and policy
 description: "Reference OpenBao policy, auth role, and Transit key configuration examples for bao-kms-provider, plus capabilities to avoid."
+eyebrow: Configure · Authentication
 weight: 10
 ---
 
-These examples define the OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies them, see [Getting Started: OpenBao Setup](/docs/get-started/openbao/). Replace workload-specific identifiers such as the mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
+These examples define the OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies them, see [Get started: Prepare OpenBao](/docs/get-started/openbao/). Replace workload-specific identifiers such as the mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
 
 <a id="plugin-hot-path-policy"></a>
 
-## Provider Hot-Path Policy
+## Provider hot-path policy
 
 Least-privilege OpenBao policy granting only the capabilities the provider needs at the encrypt and decrypt path:
 
@@ -42,7 +43,7 @@ path "auth/token/renew-self" {
 
 The provider runtime does not call `auth/token/lookup-self`. Grant `lookup-self` only to separate operator diagnostics that need to inspect the token. If the provider uses re-login instead of token renewal, `renew-self` can be omitted.
 
-## Capabilities To Avoid
+## Capabilities to avoid
 
 The provider token must not have:
 
@@ -63,7 +64,7 @@ the management operations. The generated hot-path policy needs no additional
 grants for this check. A passing result covers the queried paths; review the
 complete policy separately for permissions on other keys or paths.
 
-## JWT Auth Role: OIDC Discovery
+## JWT auth role: OIDC discovery
 
 This example configures JSON Web Token (JWT) authentication through OpenID
 Connect (OIDC) discovery.
@@ -86,7 +87,7 @@ bao write auth/k8s-workload-a-jwt/role/openbao-kms-control-plane \
   expiration_leeway="30s"
 ```
 
-## JWT Auth Role: Pinned Public Keys
+## JWT auth role: Pinned public keys
 
 For recovery or isolated environments where OIDC discovery is unavailable:
 
@@ -98,7 +99,7 @@ bao write auth/k8s-workload-a-jwt/config \
 
 OpenBao JWT auth requires OIDC discovery, a JSON Web Key Set (JWKS) URL, or local validation public keys.
 
-## Certificate Auth Role: URI SAN
+## Certificate auth role: URI SAN
 
 ```sh
 bao auth enable -path=k8s-workload-a-cert cert
@@ -117,7 +118,7 @@ bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
 
 The OpenBao listener used by the provider must request client certificates. Keep cert auth binding enabled so renewal remains tied to the certificate identity used during login.
 
-## Transit Key Configuration
+## Transit key configuration
 
 ```sh
 bao secrets enable -path=transit transit
@@ -141,7 +142,7 @@ bao write transit/keys/k8s-workload-a-etcd/config \
 
 Verify the exact CLI syntax against the OpenBao CLI version you are running. See [Reference: Compatibility: OpenBao](/docs/reference/compatibility/#openbao) for the validated OpenBao version.
 
-## Generating The Policy From Configuration
+## Generating the policy from configuration
 
 The provider CLI generates the hot-path policy from the active configuration:
 

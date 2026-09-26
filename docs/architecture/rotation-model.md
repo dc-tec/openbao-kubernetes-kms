@@ -1,6 +1,7 @@
 ---
-title: "Rotation Model"
+title: Rotation model
 description: "Rotation invariants, state machine, flip-flop guards, and version restriction semantics for bao-kms-provider."
+eyebrow: Architecture
 weight: 40
 ---
 
@@ -14,7 +15,7 @@ The provider does not rotate the Transit key. Rotation is a platform operation, 
 
 Kubernetes recommends rotating KEKs at least every 90 days and explains that KMS v2 uses `key_id` changes to determine when data may be stale.
 
-## State Machine
+## State machine
 
 ```mermaid
 stateDiagram-v2
@@ -59,7 +60,7 @@ sequenceDiagram
     Operator->>Bao: consider min_decryption_version only after independent rewrite and backup evidence
 ```
 
-## Avoiding Key ID Flip-Flop
+## Avoiding key ID flip-flop
 
 The provider must not flip-flop between `key_id` values during rotation. Recommended controls:
 
@@ -111,7 +112,7 @@ blocked, Status becomes unhealthy instead of advertising a decrypt registry that
 OpenBao can no longer serve. `min_encryption_version` is checked against the
 active version only.
 
-### Operator-Controlled Retirement
+### Operator-controlled retirement
 
 The provider does not infer retirement from OpenBao minimum versions. Those
 settings cannot prove that Kubernetes objects or retained backups no longer
@@ -138,13 +139,13 @@ disaster-recovery operation and requires matching backup and Transit evidence.
 
 The operator runbook for raising `min_decryption_version` lives at [Operate: Rotation: min_decryption_version](/docs/operate/rotation/#min_decryption_version).
 
-## Transit Rewrap
+## Transit rewrap
 
 OpenBao Transit `rewrap` can upgrade Transit ciphertexts to a newer key version without exposing plaintext to the caller.
 
 For Kubernetes KMS v2, rewrap remains outside the hot path because Kubernetes owns stale-data detection through `key_id` changes plus resource rewrites. Rewrap is useful for non-Kubernetes Transit consumers and for one-off operational migrations, but it does not replace Kubernetes storage migration in this design.
 
-## Cross-Node Convergence
+## Cross-node convergence
 
 Each control-plane node runs its own provider instance and maintains its own
 snapshot. The activation delay and stable observation count reduce the chance

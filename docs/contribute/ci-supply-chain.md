@@ -1,6 +1,7 @@
 ---
-title: "CI And Supply Chain"
+title: CI and supply chain
 description: "Version pinning, CI lanes, release automation, artifact signing, provenance, reproducibility, and release evidence for bao-kms-provider."
+eyebrow: Contribute
 weight: 50
 ---
 
@@ -22,7 +23,7 @@ The repository commits the Go `vendor/` tree. CI and release jobs run with
 `GOFLAGS=-mod=vendor` except where a target intentionally refreshes or verifies
 module metadata.
 
-## Version Policy
+## Version policy
 
 `.ci/versions.yaml` is the source of truth for toolchain, action, dependency,
 container, OpenBao, Kubernetes, and artifact-version inputs. CI and release
@@ -54,7 +55,7 @@ Future Kubernetes or OpenBao versions become support claims only after
 exact-pinned release evidence exists. See
 [Reference: Compatibility](/docs/reference/compatibility/).
 
-## Local Parity
+## Local parity
 
 Use devenv to load the pinned toolchain. The named task calls the canonical
 Makefile entry point:
@@ -76,11 +77,11 @@ ID and additional authenticated data (AAD) golden tests, configuration
 validation, redaction tests, and end-to-end (E2E) suite manifest validation.
 
 Run focused E2E lanes when a change touches runtime, OpenBao, Kubernetes, or
-deployment behavior. The canonical command list is [E2E Framework](/contribute/e2e-framework/).
+deployment behavior. The canonical command list is [E2E framework](/contribute/e2e-framework/).
 
-## CI Lanes
+## CI lanes
 
-### Pull Requests
+### Pull requests
 
 Every pull request runs the fast quality and safety gates:
 
@@ -106,7 +107,7 @@ Change-routed expansions add deeper checks:
 | packaging or Dockerfile | image scan, software bill of materials (SBOM) smoke, reproducibility smoke |
 | docs only | docs check and Hugo build |
 
-### Main And Nightly
+### Main and nightly
 
 Main and scheduled lanes add the slower integration coverage:
 
@@ -131,7 +132,7 @@ Local kubeadm VM validation stays outside public CI because it restarts VMs,
 restarts API servers, and intentionally stops OpenBao in the validation
 environment.
 
-## Release Automation
+## Release automation
 
 release-please owns release PRs, version proposals, and `CHANGELOG.md`.
 Publishing is a separate tag workflow.
@@ -185,7 +186,7 @@ records `attestations.available: false` in `provenance-index.json`, and still
 validates the build, E2E, reproducibility, signatures, checksums, SBOMs, and
 published assets. Public release tags must run with attestations enabled.
 
-## Supply-Chain Gates
+## Supply-chain gates
 
 Required before publishing any release artifact:
 
@@ -205,7 +206,7 @@ Required before publishing any release artifact:
 - byte reproducibility check for release images and SBOMs,
 - release provenance index.
 
-## Build Once, Promote By Digest
+## Build once, promote by digest
 
 Release workflows build immutable subjects once, capture digests, verify trust
 evidence, and publish by digest. Publication does not rebuild a different
@@ -225,7 +226,7 @@ release-please PR merge
   -> publish release
 ```
 
-## Release Channels
+## Release channels
 
 | Channel | Use | Support expectation |
 |---|---|---|
@@ -236,9 +237,9 @@ release-please PR merge
 | preview | tagged release for controlled validation | not production |
 | stable | production-ready release line | only after production-readiness gates pass |
 
-For channel rules see [Reference: Release Policy](/docs/reference/release-policy/).
+For channel rules see [Reference: Release policy](/docs/reference/release-policy/).
 
-## Release Evidence
+## Release evidence
 
 Every public release publishes or retains:
 
@@ -258,4 +259,4 @@ Every public release publishes or retains:
 - `provenance-index.json`,
 - release notes.
 
-Install-time verification is documented in [Getting Started: Install](/docs/get-started/install/#verify-release-artifacts).
+Install-time verification is documented in [Get started: Install the provider](/docs/get-started/install/#verify-release-artifacts).

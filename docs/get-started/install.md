@@ -1,15 +1,16 @@
 ---
-title: "Install"
+title: Install the provider
 description: "Fetch a verified provider binary or container image, place the runtime files, and validate the local environment with doctor."
+eyebrow: Get started · Step 4
 weight: 40
 ---
 
-Complete [OpenBao Setup](/docs/get-started/openbao/) before installing the
+Complete [Prepare OpenBao](/docs/get-started/openbao/) before installing the
 provider. Then fetch a verified `bao-kms-provider` artifact, place the runtime
 files, and validate the local environment before wiring the provider into
 Kubernetes.
 
-## Release Artifacts
+## Release artifacts
 
 Every public release publishes native packages, tarballs, a static-pod bundle,
 a container image, and verification files such as checksums, signatures,
@@ -17,10 +18,10 @@ software bills of materials (SBOMs), and provenance attestations.
 
 Verify the release artifacts before placing the provider on a control-plane
 host, and validate the deployment in a staging environment before using it to
-protect cluster data. See [Support Policy](/docs/reference/support-policy/) for the
+protect cluster data. See [Support policy](/docs/reference/support-policy/) for the
 current release maturity.
 
-## Choose The Artifact
+## Choose the artifact
 
 Choose the artifact that matches the deployment model you will use.
 
@@ -59,9 +60,9 @@ Release artifacts distinguish these auth paths:
 | `bao-kms-provider-certauth-pkcs11` host artifacts | PKCS#11 certificate auth only when the release marks that path as tested. |
 | SPIFFE or combined cert-auth artifacts | Not a supported preview user configuration. |
 
-The choice between systemd and static-pod is made on a separate page. See [Get Started: Choosing A Model](/docs/get-started/deployment-model/) once the artifact is in place.
+The choice between systemd and static-pod is made on a separate page. See [Get started: Choose a deployment model](/docs/get-started/deployment-model/) once the artifact is in place.
 
-## Verify Release Artifacts
+## Verify release artifacts
 
 Verify the artifact before placing it on a control-plane host. The release
 verification files include:
@@ -155,9 +156,9 @@ artifact. Each signature and attestation command must exit with status `0` and
 identify the expected repository, workflow, source tag, and artifact digest.
 
 For the full supply-chain controls behind these artifacts, see
-[Contribute: CI And Supply Chain](/contribute/ci-supply-chain/).
+[Contribute: CI and supply chain](/contribute/ci-supply-chain/).
 
-## Install A Native Package
+## Install a native package
 
 Use the native package when deploying with systemd on a supported Linux distribution.
 
@@ -175,7 +176,7 @@ sudo rpm -Uvh "bao-kms-provider_${VERSION}_linux_${ARCH}.rpm"
 
 The package installs the binary, systemd unit, sysusers and tmpfiles inputs, and example configuration files. Review and replace the example configuration before starting the service.
 
-## Install The systemd Tarball
+## Install the systemd tarball
 
 Use the systemd tarball when native packaging is not available for your host
 image. These commands require GNU `install`, `systemd-sysusers`, and
@@ -220,7 +221,7 @@ systemctl daemon-reload
 The package and tarball procedures leave the service disabled and stopped on a
 new host. Complete the runtime file setup and validation before starting it.
 
-## Correct Directory Access In Existing Previews
+## Correct directory access in existing previews
 
 The native packages and systemd tarballs for `0.1.0-preview.1` and
 `0.1.0-preview.2` create `/etc/openbao-kms` with group `root` and mode `0750`.
@@ -244,7 +245,7 @@ Keep this override until the installed package's
 `/usr/lib/tmpfiles.d/openbao-kms.conf` sets the directory group to
 `openbao-kms`. Then remove the override if it contains no other local changes.
 
-## Install The Static-Pod Bundle
+## Install the static-pod bundle
 
 Use the static-pod bundle when the provider will run as a kubelet-managed static pod:
 
@@ -261,13 +262,13 @@ The bundle contains the static pod manifest, provider configuration sample, Kube
 - the OpenBao CA path,
 - the configured auth material paths.
 
-Preload the referenced image on every control-plane node before relying on it for recovery-sensitive boot. See [Get Started: Static Pod Deployment](/docs/get-started/static-pod/) for the host preparation and pod hardening details.
+Preload the referenced image on every control-plane node before relying on it for recovery-sensitive boot. See [Get started: Run as a static pod](/docs/get-started/static-pod/) for the host preparation and pod hardening details.
 
-## Place Runtime Files
+## Place runtime files
 
 For systemd, prepare these files after installing the package or tarball.
 Static-pod deployments require the numeric ownership described in
-[Static Pod Deployment](/docs/get-started/static-pod/).
+[Run as a static pod](/docs/get-started/static-pod/).
 
 On a new systemd host, copy the installed example to a working file:
 
@@ -333,7 +334,7 @@ Identity Model](/docs/security/linux-identity-model/).
 
 For the configuration file shape and field reference, see [Configuration](/docs/reference/configuration/).
 
-## Validate Before Kubernetes Wiring
+## Validate before Kubernetes wiring
 
 For systemd, run the checks as `openbao-kms` so unreadable files cause the same
 failure as they would in the service. For static pods, run diagnostics with the
@@ -388,7 +389,7 @@ sudo bao-kms-provider doctor \
 
 Run these checks with the new artifact on every control-plane node before promoting the binary or image. For the full command reference, see [Reference: CLI](/docs/reference/cli/).
 
-## Read Next
+## Read next
 
-1. [Get Started: Choosing A Model](/docs/get-started/deployment-model/) to decide between systemd and static pod.
-2. [Kubernetes Encryption Config](/docs/get-started/enable-encryption/) to wire the provider into the Kubernetes API server.
+1. [Get started: Choose a deployment model](/docs/get-started/deployment-model/) to decide between systemd and static pod.
+2. [Enable encryption](/docs/get-started/enable-encryption/) to wire the provider into the Kubernetes API server.
