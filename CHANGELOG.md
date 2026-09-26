@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- **rotation:** Decrypt peer ciphertext through validated pending snapshots.
+  Discover unknown key IDs with bounded metadata refresh without advancing
+  promotion. Retain pending identities across later rotations and reject
+  metadata rollback or identity changes that would lose decrypt coverage.
+- **rotation:** Persist observations when `min_encryption_version` blocks the
+  old active key, then promote after the configured delay and observation count.
+  Encrypt remains unavailable until the new active key passes its deep probe.
+
+### Compatibility
+
+Key IDs, AAD, annotations, and state schema remain unchanged. Upgrade all nodes
+before rotating Transit keys. Older binaries do not provide pending-key decrypt
+coverage. See [rotation upgrade guidance](docs/reference/compatibility.md#unreleased-rotation-corrections).
+
 ## [0.1.0-preview.2](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.1...0.1.0-preview.2) (2026-09-21)
 
 

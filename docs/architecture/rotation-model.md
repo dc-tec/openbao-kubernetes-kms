@@ -24,13 +24,15 @@ stateDiagram-v2
     [*] --> Pending: newer Transit version observed
     Pending --> Pending: collect stable observations and wait activationDelay
     Pending --> Active: promotion guards satisfied
+    Pending --> Retired: a newer candidate supersedes this version
     Active --> Retired: another version promoted
     Retired --> Removed: operator applies retire-versions
 ```
 
 These states describe individual snapshots. The previous active snapshot stays
-active while a newer snapshot is pending. A retired snapshot remains available
-for decrypt. A removed snapshot is a persistent record excluded from decrypt.
+active while a newer snapshot is pending. Metadata-validated pending and retired
+snapshots remain available for decrypt. Only the active snapshot can encrypt.
+A removed snapshot is a persistent record excluded from decrypt.
 Validation failures make status unhealthy; they do not persist a `rejected`
 transition.
 
@@ -47,9 +49,9 @@ sequenceDiagram
     Operator->>Bao: rotate Transit key
     Watcher->>Bao: read key metadata
     Bao-->>Watcher: latest version increased
+    Watcher->>Watcher: validate identity and persist decryptable pending snapshot
     Watcher->>Watcher: require stable observations
     Watcher->>Watcher: wait activationDelay
-    Watcher->>Watcher: compute opaque Kubernetes key_id
     Watcher->>Status: publish new active key_id
     API->>Status: observe changed Status.key_id
     API->>API: mark older encrypted data stale
@@ -65,7 +67,8 @@ The provider must not flip-flop between `key_id` values during rotation. Recomme
 
 - require a stable observation count (`rotation.requireStableObservationCount`),
 - require an activation delay (`rotation.activationDelay`),
-- reject apparent version rollback unless disaster-recovery mode is explicitly enabled,
+- reject apparent version rollback; disabling `rejectVersionRollback` still
+  requires valid metadata for every retained decryptable identity,
 - keep old snapshots in the registry for decrypt,
 - do not promote a key while OpenBao metadata is stale or inconsistent,
 - do not promote when Transit metadata read fails,
@@ -81,6 +84,12 @@ The flip-flop guard is critical because Kubernetes treats Status `key_id` change
 ## `min_encryption_version`
 
 `min_encryption_version` can be used as a guard after rotation to prevent encryption with older versions. It is managed by platform automation; the provider only observes it.
+
+If the minimum advances during the activation delay, Status becomes unhealthy
+and Encrypt is unavailable while the old active version is blocked. Metadata
+observations and their persisted state continue to advance. Promotion still
+requires the configured observation count and activation delay. Health recovers
+after promotion and a successful deep probe of the new active version.
 
 ## `min_decryption_version`
 
@@ -98,8 +107,8 @@ backup-retention proof, and `min_decryption_version` decisions to operator
 change control.
 
 Runtime status probes validate `min_decryption_version` and
-`min_available_version` against every retained active, retired, and
-historical snapshot in the local registry. If any retained historical version is
+`min_available_version` against every retained active, pending, and
+retired snapshot in the local registry. If any retained version is
 blocked, Status becomes unhealthy instead of advertising a decrypt registry that
 OpenBao can no longer serve. `min_encryption_version` is checked against the
 active version only.
@@ -114,7 +123,7 @@ The command changes eligible `retired` snapshots to `removed` in a new hashed
 state generation. It preserves their identities and observation metadata as
 removal records. It excludes them from decrypt lookup and Transit usability
 checks. Normal state transitions must preserve every previously decryptable
-active or retired key and every removal record. They cannot authorize removal
+active, pending, or retired key and every removal record. They cannot authorize removal
 or reintroduce a removed identity.
 
 Retirement requires no pending rotation, an active version equal to OpenBao's
@@ -146,3 +155,22 @@ not eliminate it. Operators verify cross-node convergence by comparing the
 `openbao_kms_status_key_id_hash` metric across nodes during and after rotation.
 See [Operations: Rotation: Observe
 Promotion](/operations/rotation/#observe-promotion).
+
+A node can decrypt a peer's new ciphertext before local promotion once it has
+validated the version's metadata. If a well-formed `key_id` is unknown, Decrypt
+can request one metadata discovery attempt before repeating local validation.
+Discovery reads only the configured Transit mount and key. Request annotations
+never select a backend or establish a snapshot's identity.
+
+Concurrent requests share discovery results. Attempts are limited to one per
+`status.probeInterval` per process, including failures, and share the Decrypt
+request deadline. Discovery does not increment stable observations, start the
+activation delay, or promote a snapshot. Status and Encrypt use cached state;
+known and malformed decrypt IDs do not trigger discovery.
+
+Discovery persists validated identities before publishing them for decrypt.
+Missing or changed metadata fails validation and preserves the previous state.
+A pending identity remains retained if a newer candidate supersedes it. A
+rollback that loses a pending version fails validation rather than discarding
+an identity that another node might already have used. Removed identities stay
+excluded from discovery and decrypt.

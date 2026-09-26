@@ -45,6 +45,11 @@ func validateRetainedSnapshots(previous StateFile, next StateFile) error {
 	for _, record := range previous.Snapshots {
 		nextRecord, ok := nextRecords[record.KubernetesKeyID]
 		switch SnapshotState(record.State) {
+		case StatePending:
+			if !ok || (SnapshotState(nextRecord.State) != StatePending &&
+				SnapshotState(nextRecord.State) != StateActive && SnapshotState(nextRecord.State) != StateRetired) {
+				return fmt.Errorf("%w: decryptable pending snapshot lost", ErrStateRollback)
+			}
 		case StateActive, StateRetired:
 			if !ok || (SnapshotState(nextRecord.State) != StateActive && SnapshotState(nextRecord.State) != StateRetired) {
 				return fmt.Errorf("%w: decryptable snapshot lost; use the operator retirement transition", ErrStateRollback)

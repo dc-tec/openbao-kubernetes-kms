@@ -70,6 +70,8 @@ type ControllerOptions struct {
 	KeyName       string
 	Breaker       CircuitBreakerOptions
 	ProbeObserver ProbeObserver
+	// DecryptRefreshInterval bounds metadata attempts caused by unknown key IDs.
+	DecryptRefreshInterval time.Duration
 }
 
 // Controller runs one-shot status probes used by the scheduler and tests.
@@ -85,6 +87,10 @@ type Controller struct {
 	metadataBreaker circuitBreaker
 	deepBreaker     circuitBreaker
 	probeObserver   ProbeObserver
+	probeGate       chan struct{}
+	refreshInterval time.Duration
+	nextRefresh     time.Time
+	refreshErr      error
 }
 
 // NewController builds a status probe controller and loads persisted registry state when available.
@@ -100,6 +106,11 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		return nil, fmt.Errorf("%w: Transit mount path is required", ErrConfigInvalid)
 	case opts.KeyName == "":
 		return nil, fmt.Errorf("%w: Transit key name is required", ErrConfigInvalid)
+	case opts.DecryptRefreshInterval < 0:
+		return nil, fmt.Errorf("%w: decrypt refresh interval must not be negative", ErrConfigInvalid)
+	}
+	if opts.DecryptRefreshInterval == 0 {
+		opts.DecryptRefreshInterval = 30 * time.Second
 	}
 
 	controller := &Controller{
@@ -113,6 +124,8 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		metadataBreaker: newCircuitBreaker(opts.Breaker),
 		deepBreaker:     newCircuitBreaker(opts.Breaker),
 		probeObserver:   opts.ProbeObserver,
+		probeGate:       make(chan struct{}, 1),
+		refreshInterval: opts.DecryptRefreshInterval,
 	}
 	controller.publishCircuitBreakerState()
 	if opts.StateStore != nil {
@@ -124,7 +137,72 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 }
 
 // ProbeOnce reads Transit metadata, advances rotation state, and publishes metadata health.
-func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
+func (c *Controller) ProbeOnce(ctx context.Context) error {
+	if err := c.acquireProbe(ctx); err != nil {
+		return err
+	}
+	defer c.releaseProbe()
+	return c.probeOnce(ctx, false)
+}
+
+// RefreshForDecrypt discovers validated keys on an unknown key_id. Concurrent
+// requests share the next eligible attempt. Discovery never advances promotion.
+func (c *Controller) RefreshForDecrypt(ctx context.Context, keyID string) error {
+	if _, err := keyregistry.ParseKeyID(keyID); err != nil {
+		return err
+	}
+	if err := c.acquireProbe(ctx); err != nil {
+		return err
+	}
+	defer c.releaseProbe()
+	if _, err := c.store.Lookup(keyID); err == nil {
+		return nil
+	}
+	state, ok := c.store.State()
+	if !ok {
+		return ErrStateUnavailable
+	}
+	for _, record := range state.Snapshots {
+		if record.KubernetesKeyID == keyID {
+			// Removed and rejected identities cannot be rediscovered.
+			return nil
+		}
+	}
+	now := c.clock.Now()
+	if now.Before(c.nextRefresh) {
+		return c.refreshErr
+	}
+	c.nextRefresh = now.Add(c.refreshInterval)
+	err := c.probeOnce(ctx, true)
+	c.refreshErr = err
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		// A canceled discoverer must not label other requests as canceled.
+		c.refreshErr = fmt.Errorf("%w: metadata discovery interrupted", ErrProbeFailed)
+	}
+	if _, err := c.store.Lookup(keyID); err == nil {
+		// Encryption can remain blocked while a validated pending key decrypts.
+		return nil
+	}
+	return err
+}
+
+func (c *Controller) acquireProbe(ctx context.Context) error {
+	if err := contextErr(ctx); err != nil {
+		return err
+	}
+	select {
+	case c.probeGate <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *Controller) releaseProbe() {
+	<-c.probeGate
+}
+
+func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 	start := time.Now()
 	defer func() {
 		c.observeProbe(ctx, ProbeObservation{
@@ -163,7 +241,11 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 	state, hasState := c.store.State()
 	var result ObservationResult
 	if hasState {
-		result, err = c.observer.Observe(state, profile, now)
+		if discover {
+			result, err = c.observer.Discover(state, profile, now)
+		} else {
+			result, err = c.observer.Observe(state, profile, now)
+		}
 	} else {
 		assessment := AssessAutoBootstrapState(profile)
 		if !assessment.Allowed {
@@ -189,16 +271,23 @@ func (c *Controller) ProbeOnce(ctx context.Context) (err error) {
 			return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, err)
 		}
 	}
-	if err := c.store.publishMetadataHealthy(result.State, now); err != nil {
+	if err := c.store.publishMetadata(result.State, now, result.EncryptionBlocked); err != nil {
 		c.store.publishMetadataUnhealthy(now)
 		return err
 	}
 	c.recordProbeSuccess(ProbeKindMetadata)
+	if result.EncryptionBlocked {
+		return fmt.Errorf("%w: active Transit version cannot encrypt", ErrTransitKeyUnusable)
+	}
 	return nil
 }
 
 // DeepProbeOnce performs a non-secret Transit round trip for the active cached version.
 func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
+	if err := c.acquireProbe(ctx); err != nil {
+		return err
+	}
+	defer c.releaseProbe()
 	start := time.Now()
 	defer func() {
 		c.observeProbe(ctx, ProbeObservation{
@@ -216,10 +305,11 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 		c.store.publishDeepUnhealthy()
 		return fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen)
 	}
-	active, ok := c.store.Active()
-	if !ok {
-		c.store.publishDeepUnhealthy()
-		return ErrStateUnavailable
+	active, err := c.store.activeForDeepProbe()
+	if err != nil {
+		// A known encryption restriction is not a backend failure. Avoid
+		// opening the breaker for the old key while promotion advances.
+		return err
 	}
 	result, err := c.transit.ProbeEncryptDecrypt(ctx, openbao.ProbeRequest{
 		MountPath:      c.mountPath,

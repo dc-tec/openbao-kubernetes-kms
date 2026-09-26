@@ -140,7 +140,9 @@ sequenceDiagram
     Plugin-->>API: plaintext
 ```
 
-Decrypt does not brute-force unknown keys or try every historical key. Unknown `key_id` values fail before Transit is called.
+Decrypt does not brute-force unknown keys or try every historical key. A
+well-formed unknown `key_id` can trigger rate-limited metadata discovery for the
+configured key. If it remains unknown, it fails before Transit decrypt is called.
 
 ### Status
 

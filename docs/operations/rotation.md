@@ -91,6 +91,7 @@ curl -sf http://127.0.0.1:8081/metrics \
 Expected state:
 
 - the old version remains decryptable,
+- metadata-validated pending versions decrypt peer ciphertext before promotion,
 - the new version becomes active once the stability window passes,
 - every control-plane node converges to the same `key_id` hash,
 - no node flips back to the old `key_id`.
@@ -102,6 +103,13 @@ snapshots. Missing intermediate metadata fails closed because another
 control-plane node may have already encrypted data under a skipped version.
 
 The rotation metric is intentionally bounded to `state="active"`, `state="pending"`, and `state="unknown"`. Use `rotation-plan` for the detailed promotion reason and timing.
+
+An unknown decrypt ID can trigger metadata discovery at most once per
+`status.probeInterval` on each provider. Discovery does not promote a key.
+If `min_encryption_version` blocks the old active key during the delay,
+Status and readiness become unhealthy and Encrypt stops. Observations continue;
+health recovers after promotion and a successful deep probe. Wait for all nodes
+to converge before raising the encryption minimum to avoid this interruption.
 
 ## Migrate Kubernetes Data
 
@@ -218,9 +226,13 @@ fails. Do not restore one file from the pair or edit either file by hand.
 
 If new encrypt or decrypt behavior fails before migration completes:
 
-1. Stop promotion by restoring the previous known-good provider configuration and version if the rotation state machine has not yet activated the new version.
+1. Stop further Transit rotations. Compare active and pending identities on all
+   nodes before changing provider versions. A peer might already use a version
+   that is pending locally.
 2. Keep old Transit key versions decryptable. Do not raise `min_decryption_version`.
-3. Restore the previous provider version and configuration if the failure is provider-related.
+3. If the failure is provider-related, verify the previous binary preserves all
+   required decrypt identities before restoring it. Follow the
+   [rotation compatibility guidance](/reference/compatibility/#unreleased-rotation-corrections).
 4. Do not delete the new Transit version.
 5. Do not recreate the Transit key.
 6. Use `doctor`, `rotation-plan`, and the metric catalog in [Reference: Observability](/reference/observability/) to identify the failing layer.

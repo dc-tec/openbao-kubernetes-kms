@@ -44,7 +44,7 @@ func TestRotationSequencePromotesOnceAndConverges(t *testing.T) {
 	assertConvergedObservationIdempotent(t, observer, state, profileV2, clock.Now())
 }
 
-func TestRotationSequenceClearsPendingAndRestartsObservation(t *testing.T) {
+func TestRotationSequencePreservesPendingAcrossMetadataRollback(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 2, 0)
 	profileV1 := profileForLatest(1, clock.Now())
@@ -56,14 +56,10 @@ func TestRotationSequenceClearsPendingAndRestartsObservation(t *testing.T) {
 	assertActiveVersion(t, state, 1)
 	assertPendingCount(t, state, 1)
 
-	state, promotions = observeContractStep(t, observer, state, profileV1, clock.Now(), promotions)
-	assertActiveVersion(t, state, 1)
-	assertNoPending(t, state)
-
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
-	assertActiveVersion(t, state, 1)
-	assertPendingCount(t, state, 1)
-
+	if _, err := observer.Observe(state, profileV1, clock.Now()); !errors.Is(err, status.ErrTransitMetadataInvalid) {
+		t.Fatalf("pending identity disappeared without rejection: %v", err)
+	}
+	assertRotationStateInvariantCatalog(t, state)
 	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
 	assertActiveVersion(t, state, 2)
 	assertRetiredVersion(t, state, 1)
@@ -291,15 +287,15 @@ func assertRotationStateInvariantCatalog(t testing.TB, state keyregistry.StateFi
 			if lookedUp.State != keyregistry.StateActive {
 				t.Fatalf("active lookup returned state %s", lookedUp.State)
 			}
-		case keyregistry.StateRetired:
+		case keyregistry.StateRetired, keyregistry.StatePending:
 			lookedUp, lookupErr := registry.Lookup(snapshot.KubernetesKeyID)
 			if lookupErr != nil {
 				t.Fatalf("retired snapshot version %d missing from registry: %v", snapshot.TransitVersion, lookupErr)
 			}
-			if lookedUp.State != keyregistry.StateRetired {
+			if lookedUp.State != snapshot.State {
 				t.Fatalf("retired lookup returned state %s", lookedUp.State)
 			}
-		case keyregistry.StatePending, keyregistry.StateRejected:
+		case keyregistry.StateRejected, keyregistry.StateRemoved:
 			if _, lookupErr := registry.Lookup(snapshot.KubernetesKeyID); !errors.Is(lookupErr, keyregistry.ErrUnknownKeyID) {
 				t.Fatalf(
 					"non-decryptable snapshot %s version %d lookup returned %v",

@@ -63,6 +63,7 @@ The provider tags every failed operation with one of these stable error classes.
 - `transit_key_missing`
 - `transit_policy_denied`
 - `key_id_unknown`
+- `key_metadata_refresh_failed`
 - `key_id_malformed`
 - `aad_missing`
 - `aad_mismatch`

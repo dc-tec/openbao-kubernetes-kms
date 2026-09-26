@@ -2,7 +2,6 @@ package status_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -50,7 +49,7 @@ func TestStoreCurrentBecomesUnhealthyWhenStale(t *testing.T) {
 	}
 }
 
-func TestStoreLookupExcludesPendingSnapshots(t *testing.T) {
+func TestStoreLookupIncludesPendingSnapshotsWithoutActivatingThem(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, 2*time.Minute)
 	state := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
@@ -64,9 +63,12 @@ func TestStoreLookupExcludesPendingSnapshots(t *testing.T) {
 		t.Fatalf("publish pending state: %v", err)
 	}
 
-	_, err = store.Lookup(pendingKeyID)
-	if !errors.Is(err, keyregistry.ErrUnknownKeyID) {
-		t.Fatalf("expected pending key ID to be unavailable for decrypt, got %v", err)
+	if _, err = store.Lookup(pendingKeyID); err != nil {
+		t.Fatalf("lookup pending key ID: %v", err)
+	}
+	current, err := store.Current(context.Background())
+	if err != nil || current.KeyID != state.ActiveKeyID {
+		t.Fatalf("pending key changed encryption identity: %+v, %v", current, err)
 	}
 }
 

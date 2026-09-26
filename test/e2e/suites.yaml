@@ -317,7 +317,7 @@ lanes:
     makeTarget: test-e2e-provider-rotation-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && rotation && ci
-    runRegex: ^TestProvider(TransitRotation|TransitMinDecryptionVersionBlocksHistorical|MissingStateAfterRotationFailsClosed)E2E$
+    runRegex: ^TestProvider(TransitRotation|TransitMultiNodeRotation|TransitEncryptionMinimumDuringDelay|TransitMinDecryptionVersionBlocksHistorical|MissingStateAfterRotationFailsClosed)E2E$
     prScope: main
     environment: local-openbao
     isolation: local-container

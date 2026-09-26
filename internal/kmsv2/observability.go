@@ -21,6 +21,7 @@ const (
 	errorClassAnnotationInvalid   = "annotation_invalid"
 	errorClassKeyIDMalformed      = "key_id_malformed"
 	errorClassKeyIDUnknown        = "key_id_unknown"
+	errorClassKeyMetadataRefresh  = "key_metadata_refresh_failed"
 	errorClassOpenBaoRateLimited  = "openbao_rate_limited"
 	errorClassOpenBaoSealed       = "openbao_sealed"
 	errorClassOpenBaoUnavailable  = "openbao_unavailable"
@@ -160,6 +161,8 @@ func contextErrorClass(err error) string {
 
 func validationErrorClass(err error) string {
 	switch {
+	case errors.Is(err, ErrKeyMetadataRefresh):
+		return errorClassKeyMetadataRefresh
 	case errors.Is(err, keyregistry.ErrMalformedKeyID):
 		return errorClassKeyIDMalformed
 	case errors.Is(err, keyregistry.ErrUnknownKeyID):

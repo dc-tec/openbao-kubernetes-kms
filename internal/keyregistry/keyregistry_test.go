@@ -294,7 +294,7 @@ func TestStateFileRoundTrip(t *testing.T) {
 	}
 }
 
-func TestStateFileRegistryExcludesPendingAndRejectedSnapshots(t *testing.T) {
+func TestStateFileRegistryIncludesPendingAndExcludesRejectedSnapshots(t *testing.T) {
 	active, err := loadGoldenFixture(t).Snapshot.keySnapshot().Normalize()
 	if err != nil {
 		t.Fatalf("normalize active: %v", err)
@@ -339,11 +339,11 @@ func TestStateFileRegistryExcludesPendingAndRejectedSnapshots(t *testing.T) {
 	if _, err := registry.Lookup(active.KubernetesKeyID); err != nil {
 		t.Fatalf("lookup active key ID: %v", err)
 	}
-	for _, keyID := range []string{pending.KubernetesKeyID, rejected.KubernetesKeyID} {
-		_, err := registry.Lookup(keyID)
-		if !errors.Is(err, keyregistry.ErrUnknownKeyID) {
-			t.Fatalf("expected non-decryptable key ID to be excluded, got %v", err)
-		}
+	if _, err := registry.Lookup(pending.KubernetesKeyID); err != nil {
+		t.Fatalf("lookup pending key ID: %v", err)
+	}
+	if _, err := registry.Lookup(rejected.KubernetesKeyID); !errors.Is(err, keyregistry.ErrUnknownKeyID) {
+		t.Fatalf("expected rejected key ID to be excluded, got %v", err)
 	}
 }
 

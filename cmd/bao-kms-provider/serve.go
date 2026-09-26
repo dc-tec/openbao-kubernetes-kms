@@ -160,8 +160,9 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 	}
 
 	kmsServer, err := kmsv2.NewServer(kmsv2.Options{
-		StatusCache: store,
-		Registry:    store,
+		StatusCache:  store,
+		Registry:     store,
+		KeyRefresher: controller,
 		Transit: transitAdapter{
 			client:    transitClient,
 			mountPath: cfg.Transit.MountPath,
@@ -234,13 +235,14 @@ func buildStatusRuntime(
 		return nil, nil, nil, err
 	}
 	controller, err := status.NewController(status.ControllerOptions{
-		Store:         store,
-		Observer:      observer,
-		Transit:       transitClient,
-		StateStore:    status.FileStateStore{Path: cfg.State.Path},
-		MountPath:     cfg.Transit.MountPath,
-		KeyName:       cfg.Transit.KeyName,
-		ProbeObserver: probeObserver,
+		Store:                  store,
+		Observer:               observer,
+		Transit:                transitClient,
+		StateStore:             status.FileStateStore{Path: cfg.State.Path},
+		MountPath:              cfg.Transit.MountPath,
+		KeyName:                cfg.Transit.KeyName,
+		ProbeObserver:          probeObserver,
+		DecryptRefreshInterval: cfg.Status.ProbeInterval,
 	})
 	if err != nil {
 		return nil, nil, nil, err
