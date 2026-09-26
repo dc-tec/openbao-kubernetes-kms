@@ -26,9 +26,9 @@ required controls, see [Hardening](/docs/security/hardening/#auth-material).
 | `cert` with `spiffe` source | Not user-configurable in preview | SPIFFE workload identity source wiring remains in tree for local verification, but it is not a supported preview configuration. |
 
 OpenBao Kubernetes auth is deliberately not supported. It calls TokenReview on
-the API server that might need the provider to start. JWT auth validates tokens
+the API server that might need the provider to start. [JWT auth](https://openbao.org/api-docs/auth/jwt/) validates tokens
 with local keys, a JSON Web Key Set (JWKS), or OpenID Connect (OIDC) discovery,
-and cert auth validates the client certificate chain; neither calls the
+and [cert auth](https://openbao.org/docs/auth/cert/) validates the client certificate chain; neither calls the
 protected cluster. Support for each method per release is listed in
 [Reference: Compatibility](/docs/reference/compatibility/).
 
@@ -140,11 +140,3 @@ It does not defend against:
 - a malicious provider binary that exfiltrates tokens it sees in memory,
 - OpenBao administrative actions that revoke or modify the role,
 - a compromised host that can read JWT files, certificate chains, PIN files, or process memory directly.
-
-## Source references
-
-- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
-- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
-- [OpenBao TCP listener configuration](https://openbao.org/docs/configuration/listener/tcp/)
-- [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)
-- [SPIFFE X.509-SVID](https://spiffe.io/docs/latest/spiffe-specs/x509-svid/)

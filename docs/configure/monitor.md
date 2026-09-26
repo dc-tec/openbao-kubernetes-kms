@@ -1,23 +1,23 @@
 ---
 title: Monitor the provider
-description: "Deploy the Prometheus scrape, alert rules, and Grafana dashboard samples for bao-kms-provider."
+description: "Scrape provider metrics on every control-plane node, load the sample alert rules, and import the Grafana dashboard."
 eyebrow: Configure · Observability
 weight: 20
+verifiedBy:
+  - deploy/prometheus/rules/openbao-kms.rules.yaml
+  - deploy/grafana/dashboards/openbao-kms-overview.json
 ---
 
-`bao-kms-provider` exposes Prometheus metrics on `server.metricsAddress` at
-`/metrics`. The default listen address is `127.0.0.1:8081`, so a production
-scrape normally needs a node-local Prometheus agent, host networking, or another
-explicit local forwarding model. Do not expose the metrics endpoint on a
-routable interface unless the surrounding control-plane monitoring design
-requires it.
+Metrics listen on `127.0.0.1:8081` by default, so scrape them with a
+node-local Prometheus agent, host networking, or explicit local forwarding.
+Expose the endpoint on a routable interface only if your control-plane
+monitoring design requires it. For every metric, see
+[Reference: Observability](/docs/reference/observability/#metrics).
 
 ## Prometheus
 
-Scrape the provider on every control-plane node. Keep the scrape labels stable
-enough to distinguish nodes and compare active key state across the fleet.
-
-Minimum scrape target:
+Scrape every control-plane node with labels that tell nodes apart, so you can
+compare the active `key_id` hash across them:
 
 ```yaml
 scrape_configs:
@@ -27,30 +27,15 @@ scrape_configs:
           - 127.0.0.1:8081
 ```
 
-Example alerting rules live at
-`deploy/prometheus/rules/openbao-kms.rules.yaml`. Treat
-them as starting points; tune thresholds to the configured probe cadence, OpenBao
-latency, token TTLs, and API server restart behavior before using them for
-paging.
+Load the sample rules from `deploy/prometheus/rules/openbao-kms.rules.yaml`,
+and tune their thresholds to your probe cadence, OpenBao latency, token TTLs,
+and API server restart behavior before paging on them.
 
 ## Grafana
 
-The maintained dashboard sample lives at:
-
-```text
-deploy/grafana/dashboards/openbao-kms-overview.json
-```
-
-Import it into Grafana with a Prometheus data source whose unique identifier
-(UID) is `Prometheus`, or adjust the dashboard data source UID during import.
-The dashboard covers:
-
-- KMS gRPC request rate, error ratio, and p95/p99 latency,
-- OpenBao request rate, error ratio, and p95/p99 latency,
-- status cache age, token time to live (TTL), certificate TTL, and circuit breaker state,
-- active Transit key version, active `key_id` hash convergence, and rotation state,
-- auth failures, Transit metadata probe failures, decrypt validation errors,
-- panic recovery and stale socket cleanup counters.
-
-For the metric contract, see [Reference: Observability](/docs/reference/observability/#metrics). For
-health and alerting semantics, see [Reference: Observability](/docs/reference/observability/).
+Import `deploy/grafana/dashboards/openbao-kms-overview.json` with a Prometheus
+data source whose UID is `Prometheus`, or change the UID during import. The
+dashboard shows KMS and OpenBao request rates, errors, and latency, Status
+cache age, token and certificate TTLs, the circuit breaker, the active key
+version, `key_id` convergence and rotation state, auth and probe failures,
+decrypt validation errors, panics, and stale socket cleanup.

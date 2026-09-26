@@ -1,175 +1,110 @@
 ---
 title: OpenBao auth and policy
-description: "Reference OpenBao policy, auth role, and Transit key configuration examples for bao-kms-provider, plus capabilities to avoid."
+description: "Variants of the default OpenBao setup: policy details and capabilities to avoid, JWKS or pinned JWT keys, certificate auth with PKCS#11, and generating the policy from configuration."
 eyebrow: Configure · Authentication
 weight: 10
+verifiedBy:
+  - cmd/bao-kms-provider/policy.go
+  - test/e2e/openbao_cert_auth_test.go
+  - test/e2e/provider_certauth_source_test.go
 ---
 
-These examples define the OpenBao policy, auth role, and Transit key configuration shapes used by `bao-kms-provider`. For the bring-up workflow that applies them, see [Get started: Prepare OpenBao](/docs/get-started/openbao/). Replace workload-specific identifiers such as the mount path, key name, role name, audience, subject, and certificate identity with values from your environment.
+[Prepare OpenBao](/docs/get-started/openbao/) sets up the default: a JWT role
+using OIDC discovery and the standard policy. This page covers the variants.
+Commands use the shell variables from
+[Plan identity values](/docs/get-started/plan-values/#record-the-values).
 
-<a id="plugin-hot-path-policy"></a>
+## Policy
 
-## Provider hot-path policy
+The standard policy grants metadata read, encrypt, and decrypt on the key,
+read on `<mount>/config/keys` so the provider can verify `disable_upsert`, and
+update on `sys/capabilities-self` so `doctor` can check the token.
 
-Least-privilege OpenBao policy granting only the capabilities the provider needs at the encrypt and decrypt path:
+- Keep `auth/token/renew-self` when the role sets `token_no_default_policy=true`
+  and the provider renews its token. Drop it if the provider only logs in
+  again.
+- The provider never calls `auth/token/lookup-self`; grant it only to separate
+  diagnostic tooling.
 
-```hcl
-path "transit/encrypt/k8s-workload-a-etcd" {
-  capabilities = ["update"]
-}
-path "transit/decrypt/k8s-workload-a-etcd" {
-  capabilities = ["update"]
-}
-path "transit/keys/k8s-workload-a-etcd" {
-  capabilities = ["read"]
-}
-path "transit/config/keys" {
-  capabilities = ["read"]
-}
-path "sys/capabilities-self" {
-  capabilities = ["update"]
-}
-```
+Never grant the provider:
 
-The provider reads `transit/config/keys` during runtime metadata probes. It uses this path to verify `disable_upsert=true`. `sys/capabilities-self` is required so `bao-kms-provider doctor` can verify the token's effective capabilities.
+- `create` on `<mount>/encrypt/*`, which would let an encrypt call create a key,
+- write access to key creation, rotation, configuration, or trim paths, which
+  belong to operators,
+- write access to `<mount>/config/keys`, which could turn off `disable_upsert`,
+- write access to `<mount>/restore`, `<mount>/restore/<key>`, or
+  `<mount>/rewrap/<key>`,
+- `delete` on any key path, `read` on export or plaintext backup paths, or
+  broad `sudo` or admin capabilities.
 
-If token renewal is enabled and the JSON Web Token (JWT) role disables the default policy, add the required self-renewal path:
+`doctor` queries the token's capabilities on these paths for the configured key
+and mount without calling them, and the standard policy needs no extra grant
+for that. A pass covers only the queried paths; review the whole policy for
+access to other keys or paths.
 
-```hcl
-path "auth/token/renew-self" {
-  capabilities = ["update"]
-}
-```
+`bao-kms-provider policy openbao` prints the standard policy from the active
+configuration; review its paths before applying it. See
+[Reference: CLI](/docs/reference/cli/#policy-openbao).
 
-The provider runtime does not call `auth/token/lookup-self`. Grant `lookup-self` only to separate operator diagnostics that need to inspect the token. If the provider uses re-login instead of token renewal, `renew-self` can be omitted.
+## JWT key sources
 
-## Capabilities to avoid
-
-The provider token must not have:
-
-- `create` on `transit/encrypt/*` (key creation through encrypt; blocked by `disable_upsert` at the mount and refused at the token level),
-- write capabilities on key creation, rotation, configuration, or trim paths,
-- write capabilities on `transit/config/keys` (can change `disable_upsert`),
-- write capabilities on `transit/restore`, `transit/restore/<key>`, or `transit/rewrap/<key>`,
-- `delete` on any Transit key path,
-- `read` on `transit/export/*`,
-- `read` on plaintext backup paths,
-- broad `sudo` or admin permissions.
-
-OpenBao policies are path-based and deny by default. Capabilities are only what is explicitly granted.
-
-The `doctor` check `transit.capabilities` queries these management paths for the
-configured key and mount, including both restore endpoints. It does not invoke
-the management operations. The generated hot-path policy needs no additional
-grants for this check. A passing result covers the queried paths; review the
-complete policy separately for permissions on other keys or paths.
-
-## JWT auth role: OIDC discovery
-
-This example configures JSON Web Token (JWT) authentication through OpenID
-Connect (OIDC) discovery.
+The default JWT config uses OIDC discovery. To use a JSON Web Key Set URL
+instead, replace `<jwks-url>` with the issuer's key set URL:
 
 ```sh
-bao auth enable -path=k8s-workload-a-jwt jwt
-bao write auth/k8s-workload-a-jwt/config \
-  oidc_discovery_url="https://issuer.example.internal" \
-  bound_issuer="https://issuer.example.internal"
-bao write auth/k8s-workload-a-jwt/role/openbao-kms-control-plane \
-  role_type="jwt" \
-  user_claim="sub" \
-  bound_audiences='["bao-kms-provider"]' \
-  bound_subject="system:openbao-kms:workload-a" \
-  token_policies='["openbao-kms-workload-a"]' \
-  token_ttl="10m" \
-  token_max_ttl="30m" \
-  token_no_default_policy="true" \
-  clock_skew_leeway="60s" \
-  expiration_leeway="30s"
+bao write "auth/${JWT_MOUNT}/config" \
+  jwks_url="<jwks-url>" \
+  bound_issuer="${JWT_ISSUER}"
 ```
 
-## JWT auth role: Pinned public keys
-
-For recovery or isolated environments where OIDC discovery is unavailable:
+For recovery or isolated environments without a reachable issuer, pin the
+issuer's public keys:
 
 ```sh
-bao write auth/k8s-workload-a-jwt/config \
+bao write "auth/${JWT_MOUNT}/config" \
   jwt_validation_pubkeys=@/etc/openbao/jwt-issuer.pub \
-  bound_issuer="https://issuer.example.internal"
+  bound_issuer="${JWT_ISSUER}"
 ```
 
-OpenBao JWT auth requires OIDC discovery, a JSON Web Key Set (JWKS) URL, or local validation public keys.
+Pinned keys must be updated when the issuer rotates its signing keys.
 
-## Certificate auth role: URI SAN
+## Certificate auth
 
-```sh
-bao auth enable -path=k8s-workload-a-cert cert
-bao write auth/k8s-workload-a-cert/config \
-  disable_binding=false
-bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
-  display_name="openbao-kms-control-plane" \
-  certificate=@/etc/openbao/trust/openbao-kms-client-ca.pem \
-  allowed_uri_sans="urn:openbao-kms:workload-a" \
-  token_policies='["openbao-kms-workload-a"]' \
-  token_ttl="10m" \
-  token_max_ttl="30m" \
-  token_no_default_policy="true" \
-  ocsp_fail_open="false"
-```
-
-The OpenBao listener used by the provider must request client certificates. Keep cert auth binding enabled so renewal remains tied to the certificate identity used during login.
-
-### Certificate auth builds
-
-Published release artifacts support JWT auth only. Certificate auth with a
-PKCS#11 token is a separate host build that needs cgo and a PKCS#11 module on
-the host:
+Certificate auth uses a client certificate whose private key stays in a
+PKCS#11 token. Published release artifacts support JWT only; certificate auth
+needs the separate host build, which requires cgo and a PKCS#11 module on the
+host:
 
 ```sh
 make build-certauth-pkcs11
 make release-artifact-certauth-pkcs11-host
 ```
 
-| Artifact family | Preview support |
-|---|---|
-| Default `bao-kms-provider` artifacts | JWT auth only. |
-| `bao-kms-provider-certauth-pkcs11` host artifacts | PKCS#11 certificate auth, only when the selected release publishes the artifact and marks the path as tested. |
-| SPIFFE or combined cert-auth builds | Not a supported preview configuration. |
+It is supported only when the selected release publishes that artifact and
+marks it as tested; see [Reference: Compatibility](/docs/reference/compatibility/#auth-methods).
 
-For the systemd unit, replace the JWT `ConditionPathExists=` line with checks
-for the configured certificate chain and PKCS#11 PIN file. For static pods,
-mount the certificate chain, PIN file, and PKCS#11 module instead of the JWT.
-
-## Transit key configuration
+Configure a cert auth mount and a role bound to the provider's certificate
+identity. This example binds a URI SAN:
 
 ```sh
-bao secrets enable -path=transit transit
-
-# Recommended for a dedicated Transit mount used by Kubernetes KMS.
-bao write transit/config/keys disable_upsert=true
-
-bao write transit/keys/k8s-workload-a-etcd \
-  type="aes256-gcm96" \
-  derived="false" \
-  convergent_encryption="false" \
-  exportable="false" \
-  allow_plaintext_backup="false"
-
-bao write transit/keys/k8s-workload-a-etcd/config \
-  deletion_allowed="false" \
-  min_encryption_version="0" \
-  min_decryption_version="1" \
-  auto_rotate_period="0"
+bao auth enable -path=k8s-workload-a-cert cert
+bao write auth/k8s-workload-a-cert/config disable_binding=false
+bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
+  display_name=openbao-kms-control-plane \
+  certificate=@/etc/openbao/trust/openbao-kms-client-ca.pem \
+  allowed_uri_sans=urn:openbao-kms:workload-a \
+  token_policies="${POLICY_NAME}" \
+  token_ttl=10m \
+  token_max_ttl=30m \
+  token_no_default_policy=true \
+  ocsp_fail_open=false
 ```
 
-Verify the exact CLI syntax against the OpenBao CLI version you are running. See [Reference: Compatibility: OpenBao](/docs/reference/compatibility/#required-openbao-features) for the validated OpenBao version.
+The OpenBao listener the provider uses must request client certificates.
+Keep `disable_binding=false` so renewal stays tied to the login certificate.
 
-## Generating the policy from configuration
-
-The provider CLI generates the hot-path policy from the active configuration:
-
-```sh
-bao-kms-provider policy openbao \
-  --config /etc/openbao-kms/config.yaml
-```
-
-Review the rendered paths before applying. See [Reference: CLI: policy openbao](/docs/reference/cli/#policy-openbao).
+On the provider side, set `auth.method: cert` with the PKCS#11 fields from
+[Reference: Configuration](/docs/reference/configuration/#auth). For systemd,
+replace the unit's JWT `ConditionPathExists=` line with checks for the
+certificate chain and PIN file. For static pods, mount the certificate chain,
+PIN file, and PKCS#11 module instead of the JWT.

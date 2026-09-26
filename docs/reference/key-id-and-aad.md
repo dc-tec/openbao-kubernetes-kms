@@ -9,8 +9,8 @@ verifiedBy:
   - internal/keyregistry/retirement.go
 ---
 
-This page defines the wire contract between the provider, Kubernetes, and
-OpenBao. Changing any of it is a breaking change; see
+The provider, Kubernetes, and OpenBao share this wire contract. Changing any
+of it is a breaking change; see
 [Compatibility](/docs/reference/compatibility/#breaking-changes). For what the
 contract protects, see [Security: AAD and decrypt validation](/docs/security/aad-and-decrypt-validation/).
 

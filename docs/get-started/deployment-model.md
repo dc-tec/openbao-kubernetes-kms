@@ -1,6 +1,6 @@
 ---
 title: Choose a deployment model
-description: "Compare systemd and static-pod deployment for bao-kms-provider against control-plane lifecycle, bootstrap dependencies, and operational constraints."
+description: "Pick systemd or a static pod for the provider on each control-plane node, based on who manages the host and what the boot path may depend on."
 eyebrow: Get started · Step 2
 weight: 20
 verifiedBy:
@@ -9,111 +9,53 @@ verifiedBy:
   - test/e2e/kind_smoke_test.go
 ---
 
-The tested preview deployment models are a hardened systemd unit on the
-control-plane host and a static pod managed by the kubelet. The choice depends
-on the control-plane lifecycle model, bootstrap dependencies, host hardening,
-upgrade process, and operator familiarity.
+The provider runs on every control-plane node, either as a hardened systemd
+service or as a kubelet static pod. Both are tested. Choose systemd when you
+manage the host operating system; choose a static pod when your control plane
+is kubeadm-style and you can preload the provider image on every node.
 
-Default to systemd when you control the host operating-system lifecycle. Use
-static pods when the control plane is already kubeadm-style, every
-control-plane node can preload the provider image by digest, and hostPath
-preparation is part of the node lifecycle.
+## Compare the models
 
-A Kubernetes Deployment or DaemonSet running inside the protected cluster is
-not supported for protecting that cluster's API server. See [DaemonSet Is Not
-Supported](#daemonset-is-not-supported) for the bootstrap dependency.
-
-## At a glance
-
-| Property | systemd | Static pod |
+| | systemd | Static pod |
 |---|---|---|
-| Lifecycle managed by | systemd | kubelet |
-| Bootstrap dependency | systemd, host filesystem | kubelet, container runtime, local image, host filesystem |
-| Starts before | kubelet (configurable through `Before=`) | API server (kubelet starts both static pods together) |
-| Hardening surface | systemd directives (NoNewPrivileges, ProtectSystem, capability bounds, ...) | Pod `securityContext`, distroless non-root image |
-| File mounts | systemd `ReadWritePaths` and `ReadOnlyPaths` | hostPath volumes |
-| Identity | host user (`openbao-kms`) | container user and group IDs (UID and GID) `65532:65532`, joined to host socket group |
-| Upgrade unit | distro package or binary replacement | container image digest pin |
-| Air-gap recovery | binary on host | preloaded image digest on host |
-| Fits which control-plane style | host-binary control planes, kubeadm with extra tooling | kubeadm-style control planes managing the API server as a static pod |
+| Managed by | systemd | kubelet |
+| Boot path depends on | systemd and host files | kubelet, container runtime, local image, and host files |
+| Starts | Before kubelet, through `Before=kubelet.service` | Alongside the API server, without ordering |
+| Hardening | systemd sandbox directives | Pod `securityContext` and a distroless non-root image |
+| Identity | Host user `openbao-kms` | UID and GID `65532` plus the host socket group GID |
+| Upgrade and rollback | Package or tarball | Image digest in the manifest |
+| Recovery needs | The binary on the host | The image preloaded on the host |
 
 ## Recommendation
 
-Use systemd as the baseline deployment model when:
+Use **systemd** when configuration management or OS images own the host, the
+package can be installed before kubelet starts, and the container runtime
+should not be a precondition for decrypting cluster data. It has the fewest
+boot-path dependencies, so prefer it for single-node control planes.
 
-- the provider package can be installed before kubelet starts,
-- host users, groups, tmpfiles, and systemd hardening are managed by the platform,
-- package rollback is part of the control-plane maintenance process,
-- single-node recovery risk matters.
+Use a **static pod** when every control-plane component already runs as a
+static pod, the provider image is preloaded on every node, and you manage the
+provider manifest and its hostPath files with the same discipline as the API
+server manifest.
 
-Use static pod mode when:
+## Boot-path risks
 
-- kubeadm static-pod lifecycle is the standard control-plane model,
-- every control-plane node has the provider image preloaded or pinned by digest,
-- the provider manifest is managed with the same discipline as the API server manifest,
-- the team already operates hostPath-mounted control-plane files safely.
+Both models put the provider on the API server boot path, with different
+failure points:
 
-Multi-control-plane validation exercises static-pod mode with one provider per
-control-plane node. All nodes must use the same provider name, cluster ID,
-OpenBao instance ID, Transit mount ID, key lineage ID, and Transit key name. A
-difference in any identity-bearing value can make API servers disagree about
-active `key_id` state.
+- **systemd:** `network-online.target` does not prove OpenBao is reachable; an
+  overly strict sandbox can turn misconfiguration into opaque failures;
+  restarting the unit during API server startup or a rotation can cause
+  transient errors.
+- **Static pod:** a broken kubelet, container runtime, or image pull stops the
+  provider; the API server can start before the socket exists and must retry;
+  host networking is needed to reach OpenBao before the CNI is up; socket
+  ownership must be checked on the host because the container UID means
+  nothing there.
 
-## When systemd is the right choice
-
-Use systemd when:
-
-- the control-plane host is managed at the operating-system layer (configuration management, OS images, OS-native lifecycle),
-- starting the provider before kubelet is preferable so the socket is ready by the time the static-pod API server comes up,
-- container runtime availability is not a precondition for KMS health,
-- host-level sandboxing through systemd directives fits the existing hardening posture,
-- package upgrades and restarts can be coordinated with control-plane maintenance windows.
-
-## When static pod is the right choice
-
-Use a static pod when:
-
-- the control plane is already kubeadm-style with all components running as static pods,
-- operators want a Kubernetes-native manifest on each control-plane node,
-- container images are preloaded or reliably available on each node,
-- hostPath-mounted configuration and auth material are acceptable,
-- OpenBao is reachable independently of the protected API server.
-
-## Bootstrap risk comparison
-
-Both models put the provider on the API server boot path. The bootstrap risks differ.
-
-systemd risks:
-
-- `network-online.target` can be misleading if DNS, routing, or OpenBao load balancers are not truly reachable,
-- host hardening directives vary by distribution and systemd version, and a too-aggressive sandbox can hide misconfiguration as opaque failures,
-- restarting the unit during API server startup or a Transit rotation may cause transient API server errors.
-
-Static pod risks:
-
-- the provider depends on kubelet and the container runtime; if either is unavailable, the provider does not start,
-- startup ordering with the API server is not a hard dependency graph; both static pods come up under kubelet at roughly the same time,
-- container image availability matters during disaster recovery; broken pull paths block provider startup,
-- host networking is often required to avoid Container Network Interface (CNI) bootstrap dependencies during early boot,
-- socket file permissions and group ownership must be validated on the host since the container UID is opaque to host tools.
-
-The 10,000 and 50,000 Secret cold-start validation runs showed that large
-Kubernetes object lists drive API server and etcd load. Provider and OpenBao
-decrypt counter deltas stayed low, which supports the direct decrypt path. The
-provider must still be available before API server startup. See [Development:
-Performance Evidence](/contribute/benchmark-results/).
-
-## DaemonSet is not supported
-
-A standard Kubernetes DaemonSet running in the protected cluster is not a
-supported deployment model for protecting that same cluster's API server.
-DaemonSets depend on the Kubernetes API server and controller machinery. If the
-API server cannot start without the KMS provider plugin, it also cannot start
-the DaemonSet that runs the provider.
-
-A DaemonSet is acceptable for a different cluster (for example, a management cluster running the provider against its own OpenBao), or for non-boot-path diagnostics.
-
-## Decision tree
+A DaemonSet in the protected cluster is not supported: it needs the API server
+that needs the provider. A DaemonSet is fine for a different cluster, such as
+a management cluster, or for diagnostics outside the boot path.
 
 ```mermaid
 flowchart TD
