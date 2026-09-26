@@ -237,7 +237,7 @@ release-please PR merge
 | preview | tagged release for controlled validation | not production |
 | stable | production-ready release line | only after production-readiness gates pass |
 
-For channel rules see [Reference: Release policy](/docs/reference/release-policy/).
+For channel rules see [Reference: Release and support lifecycle](/docs/reference/release-lifecycle/#channels).
 
 ## Release evidence
 

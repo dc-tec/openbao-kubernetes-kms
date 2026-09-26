@@ -161,7 +161,7 @@ bao write transit/keys/k8s-workload-a-etcd/config \
   auto_rotate_period="0"
 ```
 
-Verify the exact CLI syntax against the OpenBao CLI version you are running. See [Reference: Compatibility: OpenBao](/docs/reference/compatibility/#openbao) for the validated OpenBao version.
+Verify the exact CLI syntax against the OpenBao CLI version you are running. See [Reference: Compatibility: OpenBao](/docs/reference/compatibility/#required-openbao-features) for the validated OpenBao version.
 
 ## Generating the policy from configuration
 

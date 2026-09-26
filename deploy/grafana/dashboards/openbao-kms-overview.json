@@ -10,7 +10,7 @@
       "targetBlank": true,
       "title": "Metrics Reference",
       "type": "link",
-      "url": "https://dc-tec.github.io/openbao-kubernetes-kms/docs/reference/metrics/"
+      "url": "https://dc-tec.github.io/openbao-kubernetes-kms/docs/reference/observability/#metrics"
     },
     {
       "targetBlank": true,

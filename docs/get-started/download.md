@@ -75,4 +75,4 @@ Keep this shell open: the next step uses `VERSION`, `ARCH`, and the
 downloaded file.
 
 The current release line is a preview. Use it for labs, staging, and
-evaluation; see [Reference: Support policy](/docs/reference/support-policy/).
+evaluation; see [Reference: Release and support lifecycle](/docs/reference/release-lifecycle/).

@@ -52,5 +52,5 @@ The dashboard covers:
 - auth failures, Transit metadata probe failures, decrypt validation errors,
 - panic recovery and stale socket cleanup counters.
 
-For the metric contract, see [Reference: Metrics](/docs/reference/metrics/). For
+For the metric contract, see [Reference: Observability](/docs/reference/observability/#metrics). For
 health and alerting semantics, see [Reference: Observability](/docs/reference/observability/).

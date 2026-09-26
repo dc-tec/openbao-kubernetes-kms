@@ -7,4 +7,4 @@ weight: 50
 
 These pages describe what the provider protects, the controls a deployment must
 keep, and the limits of both. For the current release maturity, see
-[Reference: Support policy](/docs/reference/support-policy/).
+[Reference: Release and support lifecycle](/docs/reference/release-lifecycle/).

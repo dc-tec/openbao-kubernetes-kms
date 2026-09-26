@@ -72,7 +72,7 @@ once every five seconds, even when the new token is denied too, and failed
 logins back off exponentially. A late rejection or renewal for an old token
 never replaces the current one, and no extra policy capability is needed. A
 request denied again after recovery keeps its OpenBao error class, so a
-persistent `403` means checking both the auth role and the Transit policy. For the configuration fields, see [Reference: Configuration](/docs/reference/configuration/#auth-timing).
+persistent `403` means checking both the auth role and the Transit policy. For the configuration fields, see [Reference: Configuration](/docs/reference/configuration/#auth).
 
 ## JWT source options
 

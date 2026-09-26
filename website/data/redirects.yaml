@@ -126,16 +126,16 @@
   to: docs/reference/kms-v2-contract/
   reason: Documentation moved under /docs/.
 - from: reference/metrics
-  to: docs/reference/metrics/
+  to: docs/reference/observability/
   reason: Documentation moved under /docs/.
 - from: reference/observability
   to: docs/reference/observability/
   reason: Documentation moved under /docs/.
 - from: reference/release-policy
-  to: docs/reference/release-policy/
+  to: docs/reference/release-lifecycle/
   reason: Documentation moved under /docs/.
 - from: reference/support-policy
-  to: docs/reference/support-policy/
+  to: docs/reference/release-lifecycle/
   reason: Documentation moved under /docs/.
 - from: reference/transit-policy-examples
   to: docs/configure/openbao-auth/

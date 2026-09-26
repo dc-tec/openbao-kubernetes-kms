@@ -15,7 +15,7 @@ kubeconfigs, logs with secrets, or environment-specific credentials.
 
 Security fixes are provided for the latest released preview line. Stable support windows will be documented before a stable production-ready release line is introduced.
 
-See [Support Policy](docs/reference/support-policy.md) and [Release Policy](docs/reference/release-policy.md).
+See [Release and support lifecycle](docs/reference/release-lifecycle.md).
 
 ## Security Scope
 

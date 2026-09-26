@@ -1,245 +1,99 @@
 ---
 title: KMS v2 contract
-description: "The Kubernetes KMS v2 gRPC behavior bao-kms-provider satisfies: endpoint, provider name, Status, Encrypt, Decrypt, annotations, error semantics, and conformance tests."
+description: "What the API server can rely on from the provider's Status, Encrypt, and Decrypt calls, the protocol and size limits, and the conformance cases that prove it."
 eyebrow: Reference · Contract
-weight: 30
+weight: 50
+verifiedBy:
+  - internal/kmsv2/server.go
+  - internal/kmsv2/limits.go
+  - internal/openbao/client.go
+  - test/kmsconformance
 ---
 
-This reference defines the observable Kubernetes KMS v2 protocol behavior implemented by `bao-kms-provider`: what the API server sees and what the provider must guarantee.
-
-## Baseline
-
-The provider implements Kubernetes KMS v2. KMS v1 is out of scope for the current implementation.
-
-Kubernetes KMS v2 is stable from Kubernetes 1.29. Kubernetes recommends KMS v2 for current clusters; KMS v1 is deprecated and disabled by default in Kubernetes 1.29 and later.
-
-## Endpoint
-
-The provider serves gRPC over a filesystem Unix domain socket.
-
-Default socket path:
-
-```text
-/run/openbao-kms/kms.sock
-```
-
-The implementation rejects unsafe socket paths, symlink targets, regular files at the socket path, and unsafe parent directories. It removes a stale socket only after verifying that no live listener owns it.
-
-## Provider name
-
-The Kubernetes provider name is identity-bearing. It appears in the API server `EncryptionConfiguration` and participates in `key_id` and additional authenticated data (AAD) scope. OpenBao exposes AAD through the `associated_data` field.
-
-Once encrypted data exists, changing the provider name requires a migration plan. The provider fails closed or warns loudly when local configuration does not match the Kubernetes encryption configuration that `doctor` validates. See [Configuration: Identity-bearing fields](/docs/reference/configuration/#identity-bearing-fields).
+The provider implements Kubernetes KMS v2, stable since Kubernetes 1.29, over
+gRPC on a filesystem Unix socket (`/run/openbao-kms/kms.sock` by default). KMS
+v1 is not implemented. It rejects unsafe socket paths, symlinks, regular files
+at the socket path, and unsafe parent directories, and removes a stale socket
+only after confirming no live listener owns it.
 
 ## Status
 
-`Status` returns:
+Status returns the plugin API version, the health state, and the active
+`key_id`, always from cached state and never with a live Transit call.
 
-- the plugin API version,
-- the health state,
-- the active Kubernetes `key_id`.
+- Status turns healthy only after both a metadata probe and an
+  encrypt-and-decrypt deep probe succeed, and neither success clears the
+  other's failure.
+- It is unhealthy when `disable_upsert=true` cannot be verified or the cache is
+  older than `status.statusMaxStaleness`.
+- After a failed deep probe, the provider retries it following the next
+  successful metadata probe, within its circuit breaker, without waiting for
+  `status.deepProbeInterval`.
+- `key_id` changes only when the rotation state machine promotes a new
+  snapshot.
 
-Required behavior:
-
-- Status reads from cached state.
-- Status does not perform live Transit encrypt or decrypt.
-- Status is healthy only after a metadata probe and a Transit encrypt/decrypt deep probe succeed.
-- Status is unhealthy when the provider cannot verify `disable_upsert=true` on the Transit mount.
-- A metadata-probe success does not clear a deep-probe failure.
-- A deep-probe success does not clear a metadata-probe failure.
-- After a deep-probe failure, the scheduler retries the deep probe after successful metadata probes, subject to the deep-probe circuit breaker. It does not wait for `status.deepProbeInterval` to elapse.
-- Background OpenBao requests use the normal token reuse, renewal, and re-login lifecycle.
-- Status becomes unhealthy when the cache exceeds `status.statusMaxStaleness`.
-- Status `key_id` changes only after the rotation state machine promotes a new active snapshot.
-
-Invariant:
+The provider always keeps this invariant, because Kubernetes discards any
+encrypt response that breaks it and marks the provider unhealthy:
 
 ```text
 EncryptResponse.key_id == most_recent_healthy_Status.key_id
 ```
 
-Kubernetes treats `Status.key_id` as authoritative. If encrypt returns a different `key_id`, the API server discards the encrypt response and treats the KMS provider plugin as unhealthy.
-
 ## Encrypt
 
-Input:
+Encrypt takes plaintext and a request UID, and returns Transit ciphertext, the
+active `key_id`, and annotations. Each call uses exactly one active snapshot
+and passes an explicit Transit `key_version`, so a rotation between the call
+and a later metadata read cannot mislabel the ciphertext.
 
-- plaintext bytes,
-- request UID.
-
-Output:
-
-- Transit ciphertext bytes,
-- the active Kubernetes `key_id`,
-- annotations.
-
-Required behavior:
-
-- use exactly one active key snapshot per encrypt,
-- pass an explicit Transit `key_version`,
-- return the same `key_id` as cached healthy Status,
-- return annotations when AAD is enabled,
-- never log plaintext,
-- never log full ciphertext,
-- fail closed when no active snapshot exists,
-- fail closed when OpenBao is unavailable or auth is invalid.
-
-Encrypt must not:
-
-- create a Transit key,
-- rotate a Transit key,
-- rely on implicit latest Transit version,
-- fall back to plaintext or `identity`,
-- return a stale `key_id`.
-
-The explicit `key_version` requirement avoids a race in which the Transit key rotates between encrypt and a subsequent metadata lookup.
+Encrypt fails closed when no active snapshot exists or OpenBao or auth is
+unavailable. It never creates or rotates a Transit key, relies on the implicit
+latest version, falls back to plaintext, or returns a stale `key_id`.
 
 ## Decrypt
 
-Input:
+Decrypt takes ciphertext, the `key_id`, annotations, and a request UID, and
+returns plaintext only after the local checks in
+[Key ID and AAD: Decrypt validation order](/docs/reference/key-id-and-aad/#decrypt-validation-order)
+pass. It never tries other keys or versions, and it never decrypts without AAD.
 
-- ciphertext bytes,
-- Kubernetes `key_id`,
-- annotations,
-- request UID.
+A well-formed unknown `key_id` triggers metadata discovery, shared with the
+request timeout and limited to once per `status.probeInterval`. Discovery never
+advances promotion. A failed lookup returns `Unavailable` with
+`key_metadata_refresh_failed`; a successful lookup that does not find the
+identity returns `NotFound`. Pending snapshots decrypt once validated but never
+encrypt.
 
-Output:
+## Limits
 
-- plaintext bytes.
+| Limit | Value |
+|---|---|
+| `ciphertext` | non-empty, under 1024 bytes |
+| `key_id` | non-empty, under 1024 bytes |
+| Annotations | keys plus values under 32768 bytes, valid UTF-8, fully qualified domain-name keys |
+| gRPC messages | 65536 bytes in either direction |
+| Active handlers | 16 Status, 32 Encrypt, 64 Decrypt by default; configurable from 1 to 1024; excess requests fail with `ResourceExhausted` |
+| OpenBao response bodies | 64 KiB for errors, 4 MiB for key metadata and batch decrypt, 256 KiB otherwise |
 
-Required behavior:
+Oversized decrypt requests are rejected before Transit is called. Encrypt fails
+closed if a Transit response would break the KMS v2 limits, and the deep probe
+checks the ciphertext size and key version of a real round trip so response
+drift shows up as a readiness failure. Oversized OpenBao responses fail as
+`openbao_unavailable`, detected by reading one byte past the limit rather than
+trusting `Content-Length`.
 
-- reject empty or malformed `key_id`,
-- attempt rate-limited metadata discovery for a well-formed unknown `key_id`,
-- reject `key_id` if it remains unknown after discovery,
-- reject known-disallowed stale `key_id`,
-- reject missing annotations when AAD is required,
-- reject malformed annotations,
-- reject annotation and key snapshot mismatch,
-- reconstruct AAD deterministically,
-- call Transit decrypt only after local validation succeeds,
-- never brute-force across Transit keys or key versions,
-- never log plaintext,
-- never log full ciphertext.
+Errors returned to Kubernetes carry a stable class and never contain secrets,
+plaintext, full ciphertext, or raw paths; see
+[Observability: Error classes](/docs/reference/observability/#error-classes).
 
-The provider requires valid AAD annotations. There is no supported mode that
-decrypts without AAD. See [Security: AAD and decrypt validation](/docs/security/aad-and-decrypt-validation/).
-
-Metadata-validated pending snapshots can decrypt before local promotion. They
-cannot encrypt. Unknown-key discovery shares the request timeout, runs at most
-once per `status.probeInterval`, and cannot advance promotion. Failed discovery
-returns `Unavailable` with `key_metadata_refresh_failed`; request cancellation
-and expiry retain their context status codes. A successful discovery that does
-not find the requested identity returns `NotFound`.
-
-## Protocol limits
-
-The provider enforces the Kubernetes KMS v2 field limits at the gRPC boundary:
-
-- `ciphertext` is non-empty and less than 1024 bytes.
-- `key_id` is non-empty and less than 1024 bytes.
-- annotation keys plus values are less than 32768 bytes in total.
-- annotation keys and values must be valid UTF-8.
-- annotation keys must be fully qualified domain names.
-
-Decrypt requests that exceed these limits are rejected before Transit decrypt is called. Encrypt fails closed if Transit returns a ciphertext or response metadata that would exceed the KMS v2 response limits.
-
-The gRPC server also caps inbound and outbound protobuf messages at 65536 bytes. This keeps the transport envelope bounded while leaving room for protobuf overhead around the KMS v2 field limits.
-
-The provider limits active KMS handlers to 16 Status requests, 32 Encrypt
-requests, and 64 Decrypt requests by default. Operators can change each limit
-from 1 through 1024 in the provider configuration. The provider rejects a
-request above its method limit with gRPC `ResourceExhausted`. It does not queue
-the request. The separate limits reserve Decrypt capacity during API server
-startup.
-
-The OpenBao client also limits HTTP response bodies:
-
-- error responses: 64 KiB,
-- key metadata and batch decrypt responses: 4 MiB,
-- all other successful responses: 256 KiB.
-
-The client reads one byte past the applicable limit to detect an oversized body.
-It does not depend on the HTTP `Content-Length` value. An oversized response
-fails as `openbao_unavailable`. The error does not include response content.
-
-The deep status probe also checks that a real non-secret Transit encrypt/decrypt
-round trip returns the expected Transit key version and ciphertext within the
-KMS v2 ciphertext limit. This turns backend response-shape drift into a
-readiness failure before Kubernetes depends on that response shape for new
-writes.
-
-## Annotations
-
-KMS v2 annotations are plaintext metadata stored with encrypted data. They are non-secret and use fully qualified domain-name keys.
-
-Allowed annotation content:
-
-- provider marker,
-- hash of Kubernetes `key_id`,
-- Transit key version,
-- hash of Transit mount ID,
-- hash of Transit key lineage ID,
-- hash of OpenBao namespace when configured,
-- plugin version,
-- AAD version.
-
-Disallowed annotation content:
-
-- plaintext,
-- JWTs,
-- OpenBao tokens,
-- raw Transit key names,
-- raw Transit mount paths,
-- full OpenBao namespaces,
-- full ciphertext,
-- high-cardinality user-controlled values.
-
-For the full annotation schema and AAD envelope shape see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
-
-## Decrypt micro-batching
-
-OpenBao Transit supports `batch_input` for encrypt and decrypt. The provider
-does not implement KMS decrypt micro-batching in this release line because the
-current direct decrypt path is simpler and has been sufficient in validation so
-far.
-
-Micro-batching adds request queueing, per-request deadlines, cancellation
-behavior, order preservation, fairness, and failure fan-out concerns. Do not add
-or enable it until benchmarks show it improves API server startup behavior
-without violating the validation thresholds below.
-
-## Error semantics
-
-Errors map to stable classes in logs and metrics:
-
-- `config_invalid`
-- `socket_unavailable`
-- `auth_failed`
-- `auth_expired`
-- `openbao_rate_limited`
-- `openbao_sealed`
-- `openbao_unavailable`
-- `panic`
-- `transit_key_missing`
-- `transit_policy_denied`
-- `key_id_unknown`
-- `key_metadata_refresh_failed`
-- `key_id_malformed`
-- `aad_missing`
-- `aad_mismatch`
-- `annotation_invalid`
-- `protocol_limit`
-- `status_stale`
-- `timeout`
-- `canceled`
-- `unknown`
-
-Errors returned to Kubernetes are specific enough for diagnosis but contain no secrets, tokens, plaintext, full ciphertext, or raw sensitive paths. See [Reference: Observability: Error classes](/docs/reference/observability/#error-classes).
+The provider does not micro-batch decrypt calls into Transit `batch_input`.
+The direct path has met the validation thresholds, and batching would add
+queueing, deadline, ordering, and fan-out concerns.
 
 ## Validation thresholds
 
-Initial validation thresholds used by tests and examples:
+Tests and examples use these latency targets. They are not production SLOs;
+tune alerts to your OpenBao deployment and network path.
 
 ```yaml
 status:
@@ -253,30 +107,16 @@ decrypt:
   p99: 50ms
 ```
 
-These thresholds are not production SLOs. Validate alert thresholds against the
-operator's OpenBao deployment, network path, and Kubernetes API server behavior
-before using them for paging.
+## Conformance
 
-## Conformance tests
+The conformance suite drives the real KMS v2 protobuf client against the Unix
+socket. It blocks a release unless:
 
-The implementation includes a protocol conformance suite that uses the real KMS v2 protobuf client against the Unix socket.
-
-Blocking cases:
-
-- healthy Status returns a non-empty `key_id`,
-- repeated Status calls do not call OpenBao,
-- encrypt returns the Status `key_id`,
-- encrypt output stays within KMS v2 ciphertext, `key_id`, and annotation limits,
-- decrypt accepts encrypt output,
-- decrypt rejects oversized ciphertext, `key_id`, and annotations before Transit,
-- oversized gRPC messages are rejected over the Unix socket before Transit,
-- decrypt rejects unresolved unknown `key_id` before the Transit decrypt call,
-- decrypt rejects malformed annotations,
-- decrypt rejects AAD mismatch,
-- rotation does not produce `key_id` flip-flop,
-- Status becomes unhealthy when background probes go stale.
-
-## Source references
-
-- [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
-- [Kubernetes KMS v2 Go package](https://pkg.go.dev/k8s.io/kms/apis/v2)
+- a healthy Status returns a non-empty `key_id`, and repeated Status calls
+  never reach OpenBao,
+- Encrypt returns the Status `key_id` within every size limit, and Decrypt
+  accepts its output,
+- oversized fields and messages, unresolved unknown `key_id` values, malformed
+  annotations, and AAD mismatches are rejected before Transit,
+- rotation never flips `key_id` back,
+- Status turns unhealthy when background probes go stale.
