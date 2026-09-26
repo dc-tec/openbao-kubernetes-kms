@@ -82,7 +82,9 @@ sequenceDiagram
     Plugin-&gt;&gt;Transit: decrypt(ciphertext, associated_data)
     Transit--&gt;&gt;Plugin: plaintext
     Plugin--&gt;&gt;API: plaintext
-  </pre></figure><p>Decrypt does not brute-force unknown keys or try every historical key. Unknown <code>key_id</code> values fail before Transit is called.</p><h3 id=status>Status</h3><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
+  </pre></figure><p>Decrypt does not brute-force unknown keys or try every historical key. A
+well-formed unknown <code>key_id</code> can trigger rate-limited metadata discovery for the
+configured key. If it remains unknown, it fails before Transit decrypt is called.</p><h3 id=status>Status</h3><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
 sequenceDiagram
     participant API as kube-apiserver
     participant Plugin as bao-kms-provider

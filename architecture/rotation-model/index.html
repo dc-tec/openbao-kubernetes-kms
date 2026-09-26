@@ -13,11 +13,13 @@ stateDiagram-v2
     [*] --&gt; Pending: newer Transit version observed
     Pending --&gt; Pending: collect stable observations and wait activationDelay
     Pending --&gt; Active: promotion guards satisfied
+    Pending --&gt; Retired: a newer candidate supersedes this version
     Active --&gt; Retired: another version promoted
     Retired --&gt; Removed: operator applies retire-versions
   </pre></figure><p>These states describe individual snapshots. The previous active snapshot stays
-active while a newer snapshot is pending. A retired snapshot remains available
-for decrypt. A removed snapshot is a persistent record excluded from decrypt.
+active while a newer snapshot is pending. Metadata-validated pending and retired
+snapshots remain available for decrypt. Only the active snapshot can encrypt.
+A removed snapshot is a persistent record excluded from decrypt.
 Validation failures make status unhealthy; they do not persist a <code>rejected</code>
 transition.</p><p>End-to-end flow:</p><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
 sequenceDiagram
@@ -30,9 +32,9 @@ sequenceDiagram
     Operator-&gt;&gt;Bao: rotate Transit key
     Watcher-&gt;&gt;Bao: read key metadata
     Bao--&gt;&gt;Watcher: latest version increased
+    Watcher-&gt;&gt;Watcher: validate identity and persist decryptable pending snapshot
     Watcher-&gt;&gt;Watcher: require stable observations
     Watcher-&gt;&gt;Watcher: wait activationDelay
-    Watcher-&gt;&gt;Watcher: compute opaque Kubernetes key_id
     Watcher-&gt;&gt;Status: publish new active key_id
     API-&gt;&gt;Status: observe changed Status.key_id
     API-&gt;&gt;API: mark older encrypted data stale
@@ -40,15 +42,20 @@ sequenceDiagram
     Operator-&gt;&gt;Watcher: collect local verify-rotation preflight
     Operator-&gt;&gt;Watcher: apply reviewed retire-versions plan on every node
     Operator-&gt;&gt;Bao: consider min_decryption_version only after independent rewrite and backup evidence
-  </pre></figure><h2 id=avoiding-key-id-flip-flop>Avoiding Key ID Flip-Flop</h2><p>The provider must not flip-flop between <code>key_id</code> values during rotation. Recommended controls:</p><ul><li>require a stable observation count (<code>rotation.requireStableObservationCount</code>),</li><li>require an activation delay (<code>rotation.activationDelay</code>),</li><li>reject apparent version rollback unless disaster-recovery mode is explicitly enabled,</li><li>keep old snapshots in the registry for decrypt,</li><li>do not promote a key while OpenBao metadata is stale or inconsistent,</li><li>do not promote when Transit metadata read fails,</li><li>retain complete intermediate Transit version metadata as decrypt-only
+  </pre></figure><h2 id=avoiding-key-id-flip-flop>Avoiding Key ID Flip-Flop</h2><p>The provider must not flip-flop between <code>key_id</code> values during rotation. Recommended controls:</p><ul><li>require a stable observation count (<code>rotation.requireStableObservationCount</code>),</li><li>require an activation delay (<code>rotation.activationDelay</code>),</li><li>reject apparent version rollback; disabling <code>rejectVersionRollback</code> still
+requires valid metadata for every retained decryptable identity,</li><li>keep old snapshots in the registry for decrypt,</li><li>do not promote a key while OpenBao metadata is stale or inconsistent,</li><li>do not promote when Transit metadata read fails,</li><li>retain complete intermediate Transit version metadata as decrypt-only
 historical snapshots if a node observes <code>latest_version</code> jump over one or
 more versions,</li><li>fail closed when an observed <code>latest_version</code> jump is missing intermediate
-Transit version creation metadata,</li><li>do not promote based on an encrypt response.</li></ul><p>The flip-flop guard is critical because Kubernetes treats Status <code>key_id</code> changes as a signal that older data is stale. A flip-flop would oscillate the staleness signal and confuse the API server&rsquo;s storage migration tracking.</p><h2 id=min_encryption_version><code>min_encryption_version</code></h2><p><code>min_encryption_version</code> can be used as a guard after rotation to prevent encryption with older versions. It is managed by platform automation; the provider only observes it.</p><h2 id=min_decryption_version><code>min_decryption_version</code></h2><p><code>min_decryption_version</code> is dangerous. Raising it too early can make existing Kubernetes data undecryptable. Raise it only after:</p><ul><li>every configured resource has been rewritten,</li><li>old <code>key_id</code> references are no longer observed,</li><li>backups are aligned with retained Transit versions,</li><li>disaster recovery drills have passed,</li><li>OpenBao and etcd backup retention implications are understood.</li></ul><p>The current preview implementation does not prove those conditions. It validates
+Transit version creation metadata,</li><li>do not promote based on an encrypt response.</li></ul><p>The flip-flop guard is critical because Kubernetes treats Status <code>key_id</code> changes as a signal that older data is stale. A flip-flop would oscillate the staleness signal and confuse the API server&rsquo;s storage migration tracking.</p><h2 id=min_encryption_version><code>min_encryption_version</code></h2><p><code>min_encryption_version</code> can be used as a guard after rotation to prevent encryption with older versions. It is managed by platform automation; the provider only observes it.</p><p>If the minimum advances during the activation delay, Status becomes unhealthy
+and Encrypt is unavailable while the old active version is blocked. Metadata
+observations and their persisted state continue to advance. Promotion still
+requires the configured observation count and activation delay. Health recovers
+after promotion and a successful deep probe of the new active version.</p><h2 id=min_decryption_version><code>min_decryption_version</code></h2><p><code>min_decryption_version</code> is dangerous. Raising it too early can make existing Kubernetes data undecryptable. Raise it only after:</p><ul><li>every configured resource has been rewritten,</li><li>old <code>key_id</code> references are no longer observed,</li><li>backups are aligned with retained Transit versions,</li><li>disaster recovery drills have passed,</li><li>OpenBao and etcd backup retention implications are understood.</li></ul><p>The current preview implementation does not prove those conditions. It validates
 local registry state and Transit metadata, then leaves rewrite proof,
 backup-retention proof, and <code>min_decryption_version</code> decisions to operator
 change control.</p><p>Runtime status probes validate <code>min_decryption_version</code> and
-<code>min_available_version</code> against every retained active, retired, and
-historical snapshot in the local registry. If any retained historical version is
+<code>min_available_version</code> against every retained active, pending, and
+retired snapshot in the local registry. If any retained version is
 blocked, Status becomes unhealthy instead of advertising a decrypt registry that
 OpenBao can no longer serve. <code>min_encryption_version</code> is checked against the
 active version only.</p><h3 id=operator-controlled-retirement>Operator-Controlled Retirement</h3><p>The provider does not infer retirement from OpenBao minimum versions. Those
@@ -57,7 +64,7 @@ need an old key. The operator uses <code>retire-versions</code> after collecting
 state generation. It preserves their identities and observation metadata as
 removal records. It excludes them from decrypt lookup and Transit usability
 checks. Normal state transitions must preserve every previously decryptable
-active or retired key and every removal record. They cannot authorize removal
+active, pending, or retired key and every removal record. They cannot authorize removal
 or reintroduce a removed identity.</p><p>Retirement requires no pending rotation, an active version equal to OpenBao&rsquo;s
 latest version, and valid live metadata for all retained decryptable versions.
 The command defaults to a read-only plan. Applying a plan requires its exact
@@ -74,4 +81,17 @@ not eliminate it. Operators verify cross-node convergence by comparing the
 <code>openbao_kms_status_key_id_hash</code> metric across nodes during and after rotation.
 See <a href=/openbao-kubernetes-kms/operations/rotation/#observe-promotion>Operations: Rotation: Observe
 Promotion</a>
-.</p></div></article></div><aside class=docs-shell__rail><div class=page-toc><p class=page-toc__label>On This Page</p><nav id=TableOfContents><ul><li><a href=#principles>Principles</a></li><li><a href=#state-machine>State Machine</a></li><li><a href=#avoiding-key-id-flip-flop>Avoiding Key ID Flip-Flop</a></li><li><a href=#min_encryption_version><code>min_encryption_version</code></a></li><li><a href=#min_decryption_version><code>min_decryption_version</code></a><ul><li><a href=#operator-controlled-retirement>Operator-Controlled Retirement</a></li></ul></li><li><a href=#transit-rewrap>Transit Rewrap</a></li><li><a href=#cross-node-convergence>Cross-Node Convergence</a></li></ul></nav></div></aside></main><footer class=site-footer><div class=site-footer__inner><p>OpenBao Kubernetes KMS provider documentation, published with Hugo.</p><div class=site-footer__links><a href=https://github.com/dc-tec/openbao-kubernetes-kms>Source Repository</a></div></div></footer></div><script src=/openbao-kubernetes-kms/vendor/mermaid/mermaid.min.js defer></script><script src=/openbao-kubernetes-kms/js/mermaid-init.min.48f9f4860f75462a80d9f32ee09a0c4141e1f3ef66fdaa749a9276f842b0fd81.js integrity="sha256-SPn0hg91RiqA2fMu4JoMQUHh8+9m/ap0mpJ2+EKw/YE=" defer></script></body></html>
+.</p><p>A node can decrypt a peer&rsquo;s new ciphertext before local promotion once it has
+validated the version&rsquo;s metadata. If a well-formed <code>key_id</code> is unknown, Decrypt
+can request one metadata discovery attempt before repeating local validation.
+Discovery reads only the configured Transit mount and key. Request annotations
+never select a backend or establish a snapshot&rsquo;s identity.</p><p>Concurrent requests share discovery results. Attempts are limited to one per
+<code>status.probeInterval</code> per process, including failures, and share the Decrypt
+request deadline. Discovery does not increment stable observations, start the
+activation delay, or promote a snapshot. Status and Encrypt use cached state;
+known and malformed decrypt IDs do not trigger discovery.</p><p>Discovery persists validated identities before publishing them for decrypt.
+Missing or changed metadata fails validation and preserves the previous state.
+A pending identity remains retained if a newer candidate supersedes it. A
+rollback that loses a pending version fails validation rather than discarding
+an identity that another node might already have used. Removed identities stay
+excluded from discovery and decrypt.</p></div></article></div><aside class=docs-shell__rail><div class=page-toc><p class=page-toc__label>On This Page</p><nav id=TableOfContents><ul><li><a href=#principles>Principles</a></li><li><a href=#state-machine>State Machine</a></li><li><a href=#avoiding-key-id-flip-flop>Avoiding Key ID Flip-Flop</a></li><li><a href=#min_encryption_version><code>min_encryption_version</code></a></li><li><a href=#min_decryption_version><code>min_decryption_version</code></a><ul><li><a href=#operator-controlled-retirement>Operator-Controlled Retirement</a></li></ul></li><li><a href=#transit-rewrap>Transit Rewrap</a></li><li><a href=#cross-node-convergence>Cross-Node Convergence</a></li></ul></nav></div></aside></main><footer class=site-footer><div class=site-footer__inner><p>OpenBao Kubernetes KMS provider documentation, published with Hugo.</p><div class=site-footer__links><a href=https://github.com/dc-tec/openbao-kubernetes-kms>Source Repository</a></div></div></footer></div><script src=/openbao-kubernetes-kms/vendor/mermaid/mermaid.min.js defer></script><script src=/openbao-kubernetes-kms/js/mermaid-init.min.48f9f4860f75462a80d9f32ee09a0c4141e1f3ef66fdaa749a9276f842b0fd81.js integrity="sha256-SPn0hg91RiqA2fMu4JoMQUHh8+9m/ap0mpJ2+EKw/YE=" defer></script></body></html>
