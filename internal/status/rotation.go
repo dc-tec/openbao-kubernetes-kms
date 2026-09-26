@@ -39,6 +39,8 @@ type ObservationResult struct {
 	Changed  bool
 	Promoted bool
 	Pending  bool
+	// EncryptionBlocked means the current active version is below the observed encryption minimum.
+	EncryptionBlocked bool
 }
 
 // Observer promotes new Transit versions only after stable observation and activation delay.
@@ -121,6 +123,23 @@ func (o *Observer) Observe(
 	profile openbao.KeyProfile,
 	now time.Time,
 ) (ObservationResult, error) {
+	return o.observe(state, profile, now, true)
+}
+
+// Discover retains metadata-validated keys for decrypt without advancing
+// stable observations, starting the activation delay, or promoting a key.
+func (o *Observer) Discover(
+	state keyregistry.StateFile, profile openbao.KeyProfile, now time.Time,
+) (ObservationResult, error) {
+	return o.observe(state, profile, now, false)
+}
+
+func (o *Observer) observe(
+	state keyregistry.StateFile,
+	profile openbao.KeyProfile,
+	now time.Time,
+	advance bool,
+) (ObservationResult, error) {
 	if err := state.Validate(); err != nil {
 		return ObservationResult{}, err
 	}
@@ -142,26 +161,22 @@ func (o *Observer) Observe(
 				ErrVersionRollback,
 			)
 		}
-		return ObservationResult{State: state}, nil
 	}
-	if err := validateProfileForState(profile, state); err != nil {
+	if err := validateDecryptableState(profile, state); err != nil {
 		return ObservationResult{}, err
 	}
 
-	if profile.LatestVersion == active.TransitVersion {
-		cleared, changed, clearErr := clearPendingRecords(state)
-		if clearErr != nil {
-			return ObservationResult{}, clearErr
-		}
-		return ObservationResult{State: cleared, Changed: changed}, nil
+	if profile.LatestVersion <= active.TransitVersion {
+		return ObservationResult{State: state, EncryptionBlocked: profile.MinEncryptionVersion > active.TransitVersion}, nil
 	}
-	return o.observeNewerVersion(state, profile, now)
+	return o.observeNewerVersion(state, profile, now, advance)
 }
 
 func (o *Observer) observeNewerVersion(
 	state keyregistry.StateFile,
 	profile openbao.KeyProfile,
 	now time.Time,
+	advance bool,
 ) (ObservationResult, error) {
 	active, err := state.ActiveSnapshot()
 	if err != nil {
@@ -175,17 +190,28 @@ func (o *Observer) observeNewerVersion(
 	if err != nil {
 		return ObservationResult{}, err
 	}
+	if !advance {
+		for _, record := range state.Snapshots {
+			if record.KubernetesKeyID == candidate.KubernetesKeyID && record.State == string(keyregistry.StatePending) {
+				return ObservationResult{
+					State: state, Pending: true,
+					EncryptionBlocked: profile.MinEncryptionVersion > active.TransitVersion,
+				}, nil
+			}
+		}
+	}
 	records, pendingRecord, err := upsertPendingRecord(
 		state,
-		recordFromSnapshot(candidate, now, time.Time{}, 1, time.Time{}),
+		recordFromSnapshot(candidate, now, time.Time{}, 0, time.Time{}),
 		o.policy.RequireStableObservationCount,
 		now,
 		intermediateRecords,
+		advance,
 	)
 	if err != nil {
 		return ObservationResult{}, err
 	}
-	if pendingReady(pendingRecord, o.policy.ActivationDelay, now) {
+	if advance && pendingReady(pendingRecord, o.policy.ActivationDelay, now) {
 		promoted, promoteErr := promotePendingRecord(state, records, pendingRecord, now)
 		if promoteErr != nil {
 			return ObservationResult{}, promoteErr
@@ -200,10 +226,13 @@ func (o *Observer) observeNewerVersion(
 	if err != nil {
 		return ObservationResult{}, err
 	}
-	if err := validateProfileForState(profile, next); err != nil {
+	if err := validateDecryptableState(profile, next); err != nil {
 		return ObservationResult{}, err
 	}
-	return ObservationResult{State: next, Changed: true, Pending: true}, nil
+	return ObservationResult{
+		State: next, Changed: true, Pending: true,
+		EncryptionBlocked: profile.MinEncryptionVersion > active.TransitVersion,
+	}, nil
 }
 
 func (s SnapshotScope) snapshot(
@@ -258,9 +287,9 @@ func (o *Observer) intermediateHistoricalRecords(
 			return nil, snapshotErr
 		}
 		switch snapshot.State {
-		case keyregistry.StateActive, keyregistry.StateRetired:
+		case keyregistry.StateActive, keyregistry.StateRetired, keyregistry.StatePending:
 			retainedVersions[snapshot.TransitVersion] = struct{}{}
-		case keyregistry.StatePending, keyregistry.StateRejected, keyregistry.StateRemoved:
+		case keyregistry.StateRejected, keyregistry.StateRemoved:
 		default:
 			return nil, fmt.Errorf("%w: unsupported snapshot state", ErrTransitMetadataInvalid)
 		}
@@ -357,40 +386,33 @@ func (o *Observer) ValidateStateProfile(state keyregistry.StateFile, profile ope
 }
 
 func validateProfileForState(profile openbao.KeyProfile, state keyregistry.StateFile) error {
+	active, err := state.ActiveSnapshot()
+	if err != nil {
+		return err
+	}
+	if profile.MinEncryptionVersion > active.TransitVersion {
+		return fmt.Errorf("%w: active Transit version cannot encrypt", ErrTransitKeyUnusable)
+	}
+	return validateDecryptableState(profile, state)
+}
+
+func validateDecryptableState(profile openbao.KeyProfile, state keyregistry.StateFile) error {
 	for _, record := range state.Snapshots {
 		snapshot, err := record.Snapshot()
 		if err != nil {
 			return err
 		}
 		switch snapshot.State {
-		case keyregistry.StateActive:
-			if err := validateActiveSnapshot(profile, snapshot); err != nil {
+		case keyregistry.StateActive, keyregistry.StateRetired, keyregistry.StatePending:
+			if err := validateDecryptableSnapshot(profile, snapshot, string(snapshot.State)); err != nil {
 				return err
 			}
-		case keyregistry.StateRetired:
-			if err := validateHistoricalSnapshot(profile, snapshot); err != nil {
-				return err
-			}
-		case keyregistry.StatePending, keyregistry.StateRejected, keyregistry.StateRemoved:
+		case keyregistry.StateRejected, keyregistry.StateRemoved:
 		default:
 			return fmt.Errorf("%w: unsupported snapshot state", ErrTransitMetadataInvalid)
 		}
 	}
 	return nil
-}
-
-func validateActiveSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot) error {
-	if profile.MinEncryptionVersion > snapshot.TransitVersion {
-		return fmt.Errorf("%w: active Transit version cannot encrypt", ErrTransitKeyUnusable)
-	}
-	if err := validateDecryptableSnapshot(profile, snapshot, "active"); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateHistoricalSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot) error {
-	return validateDecryptableSnapshot(profile, snapshot, "historical")
 }
 
 func validateDecryptableSnapshot(profile openbao.KeyProfile, snapshot keyregistry.KeySnapshot, label string) error {
@@ -463,11 +485,11 @@ func upsertPendingRecord(
 	stableThreshold int,
 	now time.Time,
 	additionalRetired []keyregistry.SnapshotStateRecord,
+	advance bool,
 ) ([]keyregistry.SnapshotStateRecord, keyregistry.SnapshotStateRecord, error) {
 	records := make([]keyregistry.SnapshotStateRecord, 0, len(state.Snapshots)+1)
 	seen := make(map[string]struct{}, len(state.Snapshots)+len(additionalRetired)+1)
 	pending := candidate
-	found := false
 	for _, record := range state.Snapshots {
 		snapshot, err := record.Snapshot()
 		if err != nil {
@@ -476,9 +498,11 @@ func upsertPendingRecord(
 		if snapshot.State == keyregistry.StatePending {
 			if snapshot.KubernetesKeyID == candidate.KubernetesKeyID {
 				pending = record
-				found = true
+				continue
 			}
-			continue
+			// A peer may already have encrypted with this identity. Keep it
+			// decryptable when a newer pending candidate supersedes it.
+			record.State = string(keyregistry.StateRetired)
 		}
 		records = append(records, record)
 		seen[snapshot.KubernetesKeyID] = struct{}{}
@@ -495,15 +519,13 @@ func upsertPendingRecord(
 		seen[snapshot.KubernetesKeyID] = struct{}{}
 	}
 
-	if found {
+	if advance {
 		pending.StableObservationCount++
-	} else if pending.StableObservationCount == 0 {
-		pending.StableObservationCount = 1
 	}
 	if pending.ObservedAtUnix == 0 {
 		pending.ObservedAtUnix = now.Unix()
 	}
-	if pending.StableObservationCount >= stableThreshold && pending.StableAtUnix == 0 {
+	if advance && pending.StableObservationCount >= stableThreshold && pending.StableAtUnix == 0 {
 		pending.StableAtUnix = now.Unix()
 	}
 	records = append(records, pending)
@@ -578,30 +600,6 @@ func promotePendingRecord(
 		promotedActive.KubernetesKeyID,
 		orderedRecords(promotedActive.KubernetesKeyID, promotedRecords),
 	)
-}
-
-func clearPendingRecords(state keyregistry.StateFile) (keyregistry.StateFile, bool, error) {
-	records := make([]keyregistry.SnapshotStateRecord, 0, len(state.Snapshots))
-	changed := false
-	for _, record := range state.Snapshots {
-		snapshot, err := record.Snapshot()
-		if err != nil {
-			return keyregistry.StateFile{}, false, err
-		}
-		if snapshot.State == keyregistry.StatePending {
-			changed = true
-			continue
-		}
-		records = append(records, record)
-	}
-	if !changed {
-		return state, false, nil
-	}
-	next, err := nextStateFromRecords(state, state.ActiveKeyID, orderedRecords(state.ActiveKeyID, records))
-	if err != nil {
-		return keyregistry.StateFile{}, false, err
-	}
-	return next, true, nil
 }
 
 func nextStateFromRecords(

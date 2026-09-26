@@ -27,7 +27,9 @@ This addresses the following threats:
 The provider rejects ciphertext as early as possible to keep failure observable and to avoid spending Transit decrypt calls on doomed payloads. The validation pipeline is:
 
 1. Parse the `key_id`.
-2. Look up the matching historical key snapshot in the local registry.
+2. Look up the matching active, pending, or retired snapshot. For an unknown ID,
+   attempt rate-limited metadata discovery for the configured key and repeat
+   the lookup. Validate and persist new identities before accepting them.
 3. Validate annotation keys and versions.
 4. Validate annotation hashes against the snapshot.
 5. Reconstruct the canonical AAD bytes.

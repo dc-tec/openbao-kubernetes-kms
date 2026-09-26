@@ -10,6 +10,8 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 )
 
+const dropSnapshot = "drop"
+
 func retirementState(t *testing.T) keyregistry.StateFile {
 	t.Helper()
 	active := loadGoldenFixture(t).Snapshot.keySnapshot()
@@ -73,13 +75,13 @@ func assertRetirementRecords(t *testing.T, previous, loaded keyregistry.StateFil
 func TestStateProgressRejectsLossOfDecryptableSnapshots(t *testing.T) {
 	previous := retirementState(t)
 	for _, version := range []int{1, 2, 3} {
-		for _, replacement := range []string{"drop", "pending", "rejected"} {
+		for _, replacement := range []string{dropSnapshot, "pending", "rejected"} {
 			t.Run(replacement+"-v"+strconv.Itoa(version), func(t *testing.T) {
 				records := make([]keyregistry.SnapshotStateRecord, 0, len(previous.Snapshots))
 				activeID := previous.ActiveKeyID
 				for _, record := range previous.Snapshots {
 					if record.TransitVersion == version {
-						if replacement == "drop" {
+						if replacement == dropSnapshot {
 							continue
 						}
 						record.State = replacement
@@ -118,13 +120,13 @@ func TestStateProgressPreservesRemovedRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, replacement := range []string{"drop", "retired", "changed"} {
+	for _, replacement := range []string{dropSnapshot, "retired", "changed"} {
 		t.Run(replacement, func(t *testing.T) {
 			records := make([]keyregistry.SnapshotStateRecord, 0, len(previous.Snapshots))
 			for _, record := range previous.Snapshots {
 				if record.State == string(keyregistry.StateRemoved) {
 					switch replacement {
-					case "drop":
+					case dropSnapshot:
 						continue
 					case "retired":
 						record.State = replacement
@@ -140,6 +142,36 @@ func TestStateProgressPreservesRemovedRecords(t *testing.T) {
 			}
 			if err := keyregistry.ValidateStateProgress(previous, next); !errors.Is(err, keyregistry.ErrStateRollback) {
 				t.Fatalf("removed record mutation accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestStateProgressPreservesPendingDecryptEligibility(t *testing.T) {
+	base := retirementState(t)
+	records := append([]keyregistry.SnapshotStateRecord(nil), base.Snapshots...)
+	// Exercise retention independently of version ordering.
+	records[1].State = string(keyregistry.StatePending)
+	previous, err := keyregistry.NewStateFileFromRecords(base.ActiveKeyID, records, 2, base.CurrentHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{dropSnapshot, "rejected", "removed", "pending", "retired"} {
+		t.Run(target, func(t *testing.T) {
+			nextRecords := append([]keyregistry.SnapshotStateRecord(nil), previous.Snapshots...)
+			if target == dropSnapshot {
+				nextRecords = append(nextRecords[:1], nextRecords[2:]...)
+			} else {
+				nextRecords[1].State = target
+			}
+			next, err := keyregistry.NewStateFileFromRecords(previous.ActiveKeyID, nextRecords, 3, previous.CurrentHash)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = keyregistry.ValidateStateProgress(previous, next)
+			allowed := target == "pending" || target == "retired"
+			if allowed && err != nil || !allowed && !errors.Is(err, keyregistry.ErrStateRollback) {
+				t.Fatalf("pending transition to %s: %v", target, err)
 			}
 		})
 	}

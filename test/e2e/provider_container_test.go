@@ -170,6 +170,7 @@ type providerContainerConfigOptions struct {
 	ExpectedSubject        string
 	ProbeInterval          string
 	DeepProbeInterval      string
+	ActivationDelay        string
 	StatusMaxStaleness     string
 	MinJWTRemainingTTL     string
 	LoginBeforeTokenExpiry string
@@ -223,6 +224,9 @@ func writeProviderContainerConfigWithOptions(
 	}
 	if opts.DeepProbeInterval == "" {
 		opts.DeepProbeInterval = "30s"
+	}
+	if opts.ActivationDelay == "" {
+		opts.ActivationDelay = "1s"
 	}
 	if opts.StatusMaxStaleness == "" {
 		opts.StatusMaxStaleness = "1m"
@@ -284,7 +288,7 @@ state:
   path: %q
 rotation:
   mode: observed
-  activationDelay: 1s
+  activationDelay: %s
   requireStableObservationCount: 1
   rejectVersionRollback: true
 logging:
@@ -307,6 +311,7 @@ logging:
 		opts.DeepProbeInterval,
 		opts.StatusMaxStaleness,
 		containerStatePath,
+		opts.ActivationDelay,
 	)
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write provider container config: %v", err)

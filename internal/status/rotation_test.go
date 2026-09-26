@@ -64,7 +64,7 @@ func TestRotationPromotesAfterStableObservationAndActivationDelay(t *testing.T) 
 	}
 }
 
-func TestRotationRollbackClearsPendingAndRejectsActiveRollback(t *testing.T) {
+func TestRotationRollbackPreservesPendingAndRejectsActiveRollback(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, 0)
 	profileV1 := profileForLatest(1, clock.Now())
@@ -77,23 +77,20 @@ func TestRotationRollbackClearsPendingAndRejectsActiveRollback(t *testing.T) {
 	}
 	assertPendingCount(t, first.State, 1)
 
-	rolledBack, err := observer.Observe(first.State, profileV1, clock.Now())
-	if err != nil {
-		t.Fatalf("observe active version after pending: %v", err)
+	_, err = observer.Observe(first.State, profileV1, clock.Now())
+	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
+		t.Fatalf("expected rollback to reject missing pending metadata: %v", err)
 	}
-	if !rolledBack.Changed {
-		t.Fatal("expected active-version observation to clear pending rotation")
-	}
-	assertNoPending(t, rolledBack.State)
+	assertPendingCount(t, first.State, 1)
 
-	restarted, err := observer.Observe(rolledBack.State, profileV2, clock.Now())
+	resumed, err := observer.Observe(first.State, profileV2, clock.Now())
 	if err != nil {
-		t.Fatalf("observe v2 after pending clear: %v", err)
+		t.Fatalf("observe restored pending version: %v", err)
 	}
-	assertPendingCount(t, restarted.State, 1)
+	assertPendingCount(t, resumed.State, 2)
 
 	fastObserver := newTestObserver(t, clock, 1, 0)
-	pending, err := fastObserver.Observe(rolledBack.State, profileV2, clock.Now())
+	pending, err := fastObserver.Observe(resumed.State, profileV2, clock.Now())
 	if err != nil {
 		t.Fatalf("fast observe v2: %v", err)
 	}
@@ -147,17 +144,78 @@ func TestRotationRestartDuringPendingUsesPersistedObservationCount(t *testing.T)
 	assertActiveVersion(t, promoted.State, 2)
 }
 
-func TestRotationRejectsMetadataThatCannotServeActiveVersion(t *testing.T) {
+func TestRotationAdvancesWhenEncryptionMinimumBlocksActiveVersion(t *testing.T) {
 	clock := newFakeClock()
-	observer := newTestObserver(t, clock, 3, time.Minute)
+	observer := newTestObserver(t, clock, 1, time.Minute)
 	profileV1 := profileForLatest(1, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 	profileV2 := profileForLatest(2, clock.Now())
 	profileV2.MinEncryptionVersion = 2
 
-	_, err := observer.Observe(state, profileV2, clock.Now())
-	if !errors.Is(err, status.ErrTransitKeyUnusable) {
-		t.Fatalf("expected active version unusable error, got %v", err)
+	pending, err := observer.Observe(state, profileV2, clock.Now())
+	if err != nil {
+		t.Fatalf("observe encryption minimum during activation delay: %v", err)
+	}
+	assertActiveVersion(t, pending.State, 1)
+	assertPendingCount(t, pending.State, 1)
+	clock.Advance(time.Minute)
+	promoted, err := observer.Observe(pending.State, profileV2, clock.Now())
+	if err != nil || !promoted.Promoted {
+		t.Fatalf("promote after activation delay: %+v, %v", promoted, err)
+	}
+	assertActiveVersion(t, promoted.State, 2)
+}
+
+func TestDiscoveryCannotAdvancePromotionAndRetainsPendingIdentity(t *testing.T) {
+	clock := newFakeClock()
+	base := clock.Now()
+	observer := newTestObserver(t, clock, 1, time.Minute)
+	state := rebuildState(t, observer, profileForLatest(1, base), base)
+	profile := profileForLatest(2, base)
+	discovered, err := observer.Discover(state, profile, clock.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(2 * time.Minute)
+	repeated, err := observer.Discover(discovered.State, profile, clock.Now())
+	if err != nil || repeated.State.CurrentHash != discovered.State.CurrentHash || repeated.Promoted {
+		t.Fatalf("discovery advanced promotion: %+v, %v", repeated, err)
+	}
+	first, err := observer.Observe(repeated.State, profile, clock.Now())
+	if err != nil || first.Promoted {
+		t.Fatalf("discovery started activation delay: %v", err)
+	}
+	assertPendingCount(t, first.State, 1)
+	changed := profileForLatest(2, base)
+	changed.VersionCreationTimes[1].CreatedAt = base.Add(time.Hour)
+	if _, err := observer.Observe(first.State, changed, clock.Now()); !errors.Is(err, status.ErrTransitMetadataInvalid) {
+		t.Fatalf("pending identity replacement accepted: %v", err)
+	}
+	clock.Advance(time.Minute)
+	promoted, err := observer.Observe(first.State, profile, clock.Now())
+	if err != nil || !promoted.Promoted {
+		t.Fatalf("promotion failed after recovery: %v", err)
+	}
+}
+
+func TestRollbackOptionCannotBypassRetainedIdentityValidation(t *testing.T) {
+	clock := newFakeClock()
+	observer := newTestObserver(t, clock, 1, 0)
+	state := rebuildState(t, observer, profileForLatest(2, clock.Now()), clock.Now())
+	active, err := state.ActiveSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	permissive, err := status.NewObserver(status.SnapshotScope{
+		ProviderName: active.ProviderName, ClusterID: active.ClusterID, OpenBaoInstanceID: active.OpenBaoInstanceID,
+		TransitMountID: active.TransitMountID, TransitKeyLineageID: active.TransitKeyLineageID, AADMode: active.AADMode,
+	}, status.RotationPolicy{RequireStableObservationCount: 1, RejectVersionRollback: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = permissive.Observe(state, profileForLatest(1, clock.Now()), clock.Now())
+	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
+		t.Fatalf("rollback flag bypassed retained metadata validation: %v", err)
 	}
 }
 
@@ -387,20 +445,6 @@ func assertPendingCount(t *testing.T, state keyregistry.StateFile, count int) {
 		}
 	}
 	t.Fatal("pending snapshot missing")
-}
-
-func assertNoPending(t *testing.T, state keyregistry.StateFile) {
-	t.Helper()
-
-	for _, record := range state.Snapshots {
-		snapshot, err := record.Snapshot()
-		if err != nil {
-			t.Fatalf("record snapshot: %v", err)
-		}
-		if snapshot.State == keyregistry.StatePending {
-			t.Fatalf("unexpected pending snapshot for version %d", snapshot.TransitVersion)
-		}
-	}
 }
 
 func assertRetiredVersion(t *testing.T, state keyregistry.StateFile, version int) {

@@ -110,7 +110,9 @@ Output:
 
 Required behavior:
 
-- reject empty, malformed, or unknown `key_id`,
+- reject empty or malformed `key_id`,
+- attempt rate-limited metadata discovery for a well-formed unknown `key_id`,
+- reject `key_id` if it remains unknown after discovery,
 - reject known-disallowed stale `key_id`,
 - reject missing annotations when AAD is required,
 - reject malformed annotations,
@@ -123,6 +125,13 @@ Required behavior:
 
 The provider requires valid AAD annotations. There is no supported mode that
 decrypts without AAD. See [Security: AAD And Decrypt Validation](/security/aad-and-decrypt-validation/).
+
+Metadata-validated pending snapshots can decrypt before local promotion. They
+cannot encrypt. Unknown-key discovery shares the request timeout, runs at most
+once per `status.probeInterval`, and cannot advance promotion. Failed discovery
+returns `Unavailable` with `key_metadata_refresh_failed`; request cancellation
+and expiry retain their context status codes. A successful discovery that does
+not find the requested identity returns `NotFound`.
 
 ## Protocol Limits
 
@@ -216,6 +225,7 @@ Errors map to stable classes in logs and metrics:
 - `transit_key_missing`
 - `transit_policy_denied`
 - `key_id_unknown`
+- `key_metadata_refresh_failed`
 - `key_id_malformed`
 - `aad_missing`
 - `aad_mismatch`
@@ -261,7 +271,7 @@ Blocking cases:
 - decrypt accepts encrypt output,
 - decrypt rejects oversized ciphertext, `key_id`, and annotations before Transit,
 - oversized gRPC messages are rejected over the Unix socket before Transit,
-- decrypt rejects unknown `key_id` before the Transit call,
+- decrypt rejects unresolved unknown `key_id` before the Transit decrypt call,
 - decrypt rejects malformed annotations,
 - decrypt rejects AAD mismatch,
 - rotation does not produce `key_id` flip-flop,

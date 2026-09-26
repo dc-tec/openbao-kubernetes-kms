@@ -315,9 +315,9 @@ func (s StateFile) Registry() (Registry, error) {
 	decryptableHistorical := make([]KeySnapshot, 0, len(historical))
 	for _, snapshot := range historical {
 		switch snapshot.State {
-		case StateRetired:
+		case StateRetired, StatePending:
 			decryptableHistorical = append(decryptableHistorical, snapshot)
-		case StatePending, StateRejected, StateRemoved:
+		case StateRejected, StateRemoved:
 		default:
 			return Registry{}, fmt.Errorf("%w: snapshot state %q is invalid", ErrStateCorrupt, snapshot.State)
 		}

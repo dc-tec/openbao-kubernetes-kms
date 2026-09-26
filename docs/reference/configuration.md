@@ -177,6 +177,12 @@ is treated as identity-bearing provider scope.
 | `logging.debugCorrelation.ttl` | `15m` |
 | `logging.debugCorrelation.incidentId` | empty |
 
+## Decrypt Discovery Timing
+
+Unknown-key decrypt discovery uses `status.probeInterval` as its per-process
+retry interval. It shares `openbao.timeout` with the decrypt request and does
+not advance rotation observations or promotion.
+
 ## Auth Timing
 
 `auth.method` selects how the provider obtains its OpenBao token. The default

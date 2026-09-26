@@ -15,6 +15,7 @@ const (
 	initialStateFixturePath = "../../test/testdata/keyregistry/state-initial-v1.json"
 	rotatedStateFixturePath = "../../test/testdata/keyregistry/state-rotated-v1-v2.json"
 	removedStateFixturePath = "../../test/testdata/keyregistry/state-removed-v1-active-v2.json"
+	pendingStateFixturePath = "../../test/testdata/keyregistry/state-discovered-v2.json"
 )
 
 func TestStateCompatibilityGoldenFixtures(t *testing.T) {
@@ -25,6 +26,11 @@ func TestStateCompatibilityGoldenFixtures(t *testing.T) {
 	assertStateMatchesFixture(t, initial, initialStateFixturePath)
 
 	clock.Advance(time.Minute)
+	discovered, err := observer.Discover(initial, profileForLatest(2, base), clock.Now())
+	if err != nil {
+		t.Fatalf("discover fixture state: %v", err)
+	}
+	assertStateMatchesFixture(t, discovered.State, pendingStateFixturePath)
 	promoted, err := observer.Observe(initial, profileForLatest(2, base), clock.Now())
 	if err != nil {
 		t.Fatalf("promote fixture state: %v", err)
@@ -35,6 +41,21 @@ func TestStateCompatibilityGoldenFixtures(t *testing.T) {
 		t.Fatalf("retire fixture version: %v", err)
 	}
 	assertStateMatchesFixture(t, removed, removedStateFixturePath)
+}
+
+func TestStateCompatibilityPendingFixtureDecryptsWithoutPromotion(t *testing.T) {
+	state := loadStateFixture(t, pendingStateFixturePath)
+	rotated := loadStateFixture(t, rotatedStateFixturePath)
+	registry, err := state.Registry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := registry.Lookup(rotated.ActiveKeyID)
+	if err != nil || pending.State != keyregistry.StatePending {
+		t.Fatalf("pending fixture cannot decrypt peer's active key: %v", err)
+	}
+	assertActiveVersion(t, state, 1)
+	assertPendingCount(t, state, 0)
 }
 
 func TestStateCompatibilityRemovedFixtureExcludesHistoricalKeyID(t *testing.T) {

@@ -52,6 +52,7 @@ const (
 	modeExpectRotationPromotion = "expect-rotation-promotion"
 	modeExpectRotationRollback  = "expect-rotation-rollback"
 	modeExpectRetirement        = "expect-retirement"
+	modeExpectPeerRotation      = "expect-peer-rotation"
 	modeDecryptStorm            = "decrypt-storm"
 	modeDecryptSoak             = "decrypt-soak"
 	modeLoadSoak                = "load-soak"
@@ -114,6 +115,7 @@ var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceC
 	modeExpectRotationPromotion: expectRotationPromotion,
 	modeExpectRotationRollback:  expectRotationRollback,
 	modeExpectRetirement:        expectRetirement,
+	modeExpectPeerRotation:      expectPeerRotation,
 	modeDecryptStorm:            decryptStorm,
 	modeDecryptSoak:             decryptSoak,
 	modeLoadSoak:                loadSoak,
@@ -647,6 +649,22 @@ func expectRetirement(ctx context.Context, client kmsapi.KeyManagementServiceCli
 	decrypt(ctx, client, encrypt(ctx, client, current.GetKeyId()))
 	_, err := decryptStored(ctx, client, removed)
 	assertCode(err, codes.NotFound, "operator-retired key_id")
+}
+
+func expectPeerRotation(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+	old := readSampleAt(currentSamplePath())
+	rotated := readSampleAt(currentRotationSamplePath())
+	current := waitForHealthyStatus(ctx, client)
+	if current.GetKeyId() != old.KeyID || rotated.KeyID == old.KeyID {
+		failf("expected peer to retain the old encryption identity")
+	}
+	decryptSample(ctx, client, rotated, "promoted peer sample while locally unobserved")
+	decryptSample(ctx, client, old, "old sample during promotion skew")
+	current = waitForHealthyStatus(ctx, client)
+	if current.GetKeyId() != old.KeyID {
+		failf("decrypt discovery promoted the pending key")
+	}
+	writeSampleAt(currentSamplePath(), encrypt(ctx, client, old.KeyID))
 }
 
 func expectRotationRollback(ctx context.Context, client kmsapi.KeyManagementServiceClient) {

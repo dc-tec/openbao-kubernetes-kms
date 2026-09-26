@@ -19,6 +19,74 @@ const (
 	postRotationSamplePath = "/kms-sample/post-rotation-sample.json"
 )
 
+func TestProviderTransitMultiNodeRotationE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-multi-rotation", providerFailureStackOptions{})
+	peer := startRotationPeer(t, ctx, stack)
+	rotationEnv := []string{
+		kmsSamplePathEnv + "=" + preRotationSamplePath,
+		kmsRotationSamplePathEnv + "=" + postRotationSamplePath,
+	}
+	stack.runClientWithEnv(ctx, "pre-rotation", kmsClientModeWriteSample, sampleReadWrite, rotationEnv)
+	peer.runClientWithEnv(ctx, "ready", kmsClientModeReadSample, sampleReadOnly, rotationEnv)
+	if err := stack.environment.RotateTransitKey(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stack.runClientWithEnv(ctx, "promoted", kmsClientModeExpectRotationPromotion, sampleReadWrite, rotationEnv)
+	peer.runClientWithEnv(ctx, "decrypt-new", "expect-peer-rotation", sampleReadWrite, rotationEnv)
+	stack.runClientWithEnv(ctx, "decrypt-peer", kmsClientModeReadSample, sampleReadOnly, rotationEnv)
+}
+
+func startRotationPeer(t *testing.T, ctx context.Context, primary *providerFailureStack) *providerFailureStack {
+	t.Helper()
+	peer := *primary
+	peer.providerName = primary.providerName + "-peer"
+	peer.volumes = providerVolumes{
+		config: peer.providerName + "-config", tls: peer.providerName + "-tls",
+		run: peer.providerName + "-run", state: peer.providerName + "-state",
+	}
+	createDockerVolumes(t, ctx, peer.dockerPath, peer.volumes.names()...)
+	t.Cleanup(func() {
+		removeContainer(t, context.Background(), peer.dockerPath, peer.providerName)
+		for _, volume := range peer.volumes.names() {
+			removeVolume(t, context.Background(), peer.dockerPath, volume)
+		}
+	})
+	staging := t.TempDir()
+	// Hold scheduled observations beyond the test duration. Decrypt must discover
+	// the peer's promoted key without activating it locally.
+	writeProviderContainerConfigWithOptions(t, filepath.Join(staging, "provider.yaml"), peer.environment,
+		providerContainerConfigOptions{ProbeInterval: "10m", DeepProbeInterval: "10m", StatusMaxStaleness: "20m"})
+	copyFile(t, peer.environment.CACertFile, filepath.Join(staging, "openbao-ca.crt"), 0o644)
+	copyFile(t, peer.environment.JWTFile, filepath.Join(staging, "identity.jwt"), 0o600)
+	populateProviderVolumes(t, ctx, peer.dockerPath, staging, peer.openBaoImage, peer.volumes)
+	startProviderContainerWithOptions(t, ctx, peer.dockerPath, peer.providerName, peer.networkName,
+		peer.providerImage, peer.volumes, peer.providerStart)
+	return &peer
+}
+
+func TestProviderTransitEncryptionMinimumDuringDelayE2E(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-min-encrypt", providerFailureStackOptions{
+		Config: providerContainerConfigOptions{ActivationDelay: "15s"},
+	})
+	rotationEnv := []string{
+		kmsSamplePathEnv + "=" + preRotationSamplePath,
+		kmsRotationSamplePathEnv + "=" + postRotationSamplePath,
+	}
+	stack.runClientWithEnv(ctx, "pre-rotation", kmsClientModeWriteSample, sampleReadWrite, rotationEnv)
+	if err := stack.environment.RotateTransitKey(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := stack.environment.SetTransitMinEncryptionVersion(ctx, 2); err != nil {
+		t.Fatal(err)
+	}
+	stack.runClientWithEnv(ctx, "blocked-active", kmsClientModeExpectUnhealthy, sampleNotMounted, nil)
+	stack.runClientWithEnv(ctx, "promoted", kmsClientModeExpectRotationPromotion, sampleReadWrite, rotationEnv)
+}
+
 func TestProviderTransitRotationE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()

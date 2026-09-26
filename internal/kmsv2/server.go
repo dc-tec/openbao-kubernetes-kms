@@ -90,11 +90,18 @@ var (
 	ErrConcurrencyLimitExceeded = errors.New("kms request concurrency limit reached")
 	// ErrPanicRecovered identifies a recovered panic inside a KMS v2 request handler.
 	ErrPanicRecovered = errors.New("kms panic recovered")
+	// ErrKeyMetadataRefresh identifies a failed unknown-key discovery attempt.
+	ErrKeyMetadataRefresh = errors.New("key metadata refresh failed")
 )
 
 // StatusCache exposes the cached Status view maintained by the status workstream.
 type StatusCache interface {
 	Current(context.Context) (CachedStatus, error)
+}
+
+// KeyRefresher discovers validated snapshots without activating them for Encrypt.
+type KeyRefresher interface {
+	RefreshForDecrypt(context.Context, string) error
 }
 
 // CachedStatus is the Status data consumed by KMS v2 request handlers.
@@ -138,6 +145,7 @@ type TransitDecryptResponse struct {
 type Options struct {
 	StatusCache          StatusCache
 	Registry             aad.SnapshotLookup
+	KeyRefresher         KeyRefresher
 	Transit              Transit
 	PluginVersion        string
 	RequestTimeout       time.Duration
@@ -153,6 +161,7 @@ type Server struct {
 
 	statusCache    StatusCache
 	registry       aad.SnapshotLookup
+	keyRefresher   KeyRefresher
 	transit        Transit
 	pluginVersion  string
 	requestTimeout time.Duration
@@ -192,6 +201,7 @@ func NewServer(opts Options) (*Server, error) {
 	return &Server{
 		statusCache:    opts.StatusCache,
 		registry:       opts.Registry,
+		keyRefresher:   opts.KeyRefresher,
 		transit:        opts.Transit,
 		pluginVersion:  opts.PluginVersion,
 		requestTimeout: opts.RequestTimeout,
@@ -366,6 +376,13 @@ func (s *Server) Decrypt(
 		return nil, rpcError(err)
 	}
 	prepared, err := aad.PrepareDecrypt(s.registry, request.GetKeyId(), annotations)
+	if errors.Is(err, keyregistry.ErrUnknownKeyID) && s.keyRefresher != nil {
+		if refreshErr := s.keyRefresher.RefreshForDecrypt(requestCtx, request.GetKeyId()); refreshErr != nil {
+			err = fmt.Errorf("%w: %w", ErrKeyMetadataRefresh, refreshErr)
+		} else {
+			prepared, err = aad.PrepareDecrypt(s.registry, request.GetKeyId(), annotations)
+		}
+	}
 	if err != nil {
 		s.observeValidationError(err)
 		observation.ErrorClass = errorClass(err)
@@ -482,6 +499,8 @@ func rpcError(err error) error {
 		return contextRPCError(err)
 	}
 	switch {
+	case errors.Is(err, ErrKeyMetadataRefresh):
+		return grpcstatus.Error(codes.Unavailable, ErrKeyMetadataRefresh.Error())
 	case errors.Is(err, ErrPlaintextRequired),
 		errors.Is(err, ErrCiphertextRequired),
 		errors.Is(err, ErrRequestLimitExceeded),

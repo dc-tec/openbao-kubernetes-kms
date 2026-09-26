@@ -140,6 +140,7 @@ type transitKeyRequestBody struct {
 
 type transitKeyConfigRequestBody struct {
 	MinDecryptionVersion int `json:"min_decryption_version,omitempty"`
+	MinEncryptionVersion int `json:"min_encryption_version,omitempty"`
 }
 
 type policyRequestBody struct {
@@ -579,6 +580,19 @@ func (f *OpenBaoEnvironment) SetTransitMinDecryptionVersion(ctx context.Context,
 	}
 	return f.write(ctx, httpClient, path.Join(f.TransitMount, "keys", f.TransitKey, "config"), transitKeyConfigRequestBody{
 		MinDecryptionVersion: version,
+	})
+}
+
+func (f *OpenBaoEnvironment) SetTransitMinEncryptionVersion(ctx context.Context, version int) error {
+	if version <= 0 {
+		return fmt.Errorf("OpenBao Transit min_encryption_version must be positive")
+	}
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, path.Join(f.TransitMount, "keys", f.TransitKey, "config"), transitKeyConfigRequestBody{
+		MinEncryptionVersion: version,
 	})
 }
 

@@ -715,6 +715,7 @@ func newTestServerWithOptions(
 		MaxConcurrentEncrypt: testMaxConcurrentEncrypt,
 		MaxConcurrentDecrypt: testMaxConcurrentDecrypt,
 		Observer:             overrides.Observer,
+		KeyRefresher:         overrides.KeyRefresher,
 	}
 	if overrides.MaxConcurrentStatus != 0 {
 		options.MaxConcurrentStatus = overrides.MaxConcurrentStatus

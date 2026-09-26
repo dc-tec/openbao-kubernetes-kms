@@ -90,7 +90,7 @@ $(eval $(call provider-e2e-target,test-e2e-provider-decrypt-storm-openbao-ci,^Te
 $(eval $(call provider-e2e-target,test-e2e-provider-decrypt-soak-openbao-ci,^TestProviderDecryptSoakE2E$$$$,7m))
 $(eval $(call provider-e2e-target,test-e2e-provider-load-soak-openbao-ci,^TestProviderLoadSoakE2E$$$$,6m))
 $(eval $(call provider-e2e-target,test-e2e-provider-restore-openbao-ci,^TestProvider(OpenBaoBackendReplacement|ContainerizedDRRestore)E2E$$$$,8m))
-$(eval $(call provider-e2e-target,test-e2e-provider-rotation-openbao-ci,^TestProvider(TransitRotation|TransitMinDecryptionVersionBlocksHistorical|MissingStateAfterRotationFailsClosed)E2E$$$$,18m))
+$(eval $(call provider-e2e-target,test-e2e-provider-rotation-openbao-ci,^TestProvider(TransitRotation|TransitMultiNodeRotation|TransitEncryptionMinimumDuringDelay|TransitMinDecryptionVersionBlocksHistorical|MissingStateAfterRotationFailsClosed)E2E$$$$,18m))
 
 .PHONY: test-e2e-cert-auth-openbao-ci
 test-e2e-cert-auth-openbao-ci: verify-e2e-manifest ## Run the OpenBao TLS certificate auth E2E lane.

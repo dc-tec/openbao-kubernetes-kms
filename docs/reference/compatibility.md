@@ -182,6 +182,28 @@ For the full CI and supply-chain controls see [Development: CI And Supply Chain]
 
 ## Breaking Changes
 
+### Unreleased Rotation Corrections
+
+Pending snapshots become decryptable after metadata validation and persistence.
+They still cannot encrypt until promotion. Decrypt can read metadata for an
+unknown ID, bounded by the request timeout and `status.probeInterval`. Discovery
+does not count toward promotion. Ordinary state transitions now preserve
+pending identities as well as active and retired identities.
+
+The `key_id` derivation, AAD bytes, annotations, and state schema are unchanged.
+Existing state files load without conversion. Upgrade every provider before
+starting a new Transit rotation. Pause rotation during the rolling upgrade and
+verify that all nodes report the same active key ID. No Kubernetes data rewrite
+is required for this provider change.
+
+Older binaries exclude pending snapshots from decrypt and can discard them
+after a metadata rollback. Do not roll back a node while another node might
+have used its pending version. First verify convergence and retained decrypt
+coverage on every node. Operator-issued retirement remains the only supported
+way to remove retained decrypt eligibility.
+
+### Change Requirements
+
 Breaking changes require:
 
 - a written design decision,

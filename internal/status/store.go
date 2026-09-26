@@ -20,19 +20,20 @@ type StoreOptions struct {
 
 // Store is the runtime bridge between background probes and KMS v2 request handlers.
 type Store struct {
-	mu           sync.RWMutex
-	clock        Clock
-	maxStaleness time.Duration
-	healthz      string
-	updatedAt    time.Time
-	metadataOK   bool
-	deepProbeOK  bool
-	deepProbed   bool
-	state        keyregistry.StateFile
-	registry     keyregistry.Registry
-	active       keyregistry.KeySnapshot
-	hasState     bool
-	breaker      CircuitBreakerSnapshot
+	mu                sync.RWMutex
+	clock             Clock
+	maxStaleness      time.Duration
+	healthz           string
+	updatedAt         time.Time
+	metadataOK        bool
+	encryptionBlocked bool
+	deepProbeOK       bool
+	deepProbed        bool
+	state             keyregistry.StateFile
+	registry          keyregistry.Registry
+	active            keyregistry.KeySnapshot
+	hasState          bool
+	breaker           CircuitBreakerSnapshot
 }
 
 // NewStore creates an initially unhealthy status cache.
@@ -91,6 +92,7 @@ func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt time.Time)
 	s.active = active
 	s.hasState = true
 	s.metadataOK = true
+	s.encryptionBlocked = false
 	s.deepProbeOK = true
 	s.deepProbed = true
 	s.updateHealthLocked()
@@ -98,7 +100,7 @@ func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt time.Time)
 	return nil
 }
 
-func (s *Store) publishMetadataHealthy(state keyregistry.StateFile, updatedAt time.Time) error {
+func (s *Store) publishMetadata(state keyregistry.StateFile, updatedAt time.Time, encryptionBlocked bool) error {
 	active, registry, err := runtimeRegistry(state)
 	if err != nil {
 		return err
@@ -115,7 +117,8 @@ func (s *Store) publishMetadataHealthy(state keyregistry.StateFile, updatedAt ti
 	s.registry = registry
 	s.active = active
 	s.hasState = true
-	s.metadataOK = true
+	s.metadataOK = !encryptionBlocked
+	s.encryptionBlocked = encryptionBlocked
 	if activeChanged {
 		s.deepProbeOK = false
 		s.deepProbed = false
@@ -161,6 +164,18 @@ func (s *Store) deepProbeRequired() bool {
 	defer s.mu.RUnlock()
 
 	return s.hasState && s.metadataOK && (!s.deepProbed || !s.deepProbeOK)
+}
+
+func (s *Store) activeForDeepProbe() (keyregistry.KeySnapshot, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !s.hasState {
+		return keyregistry.KeySnapshot{}, ErrStateUnavailable
+	}
+	if s.encryptionBlocked {
+		return keyregistry.KeySnapshot{}, ErrTransitKeyUnusable
+	}
+	return s.active, nil
 }
 
 // Current returns the cached KMS Status view without calling OpenBao.
@@ -280,28 +295,7 @@ func runtimeRegistry(state keyregistry.StateFile) (keyregistry.KeySnapshot, keyr
 		return keyregistry.KeySnapshot{}, keyregistry.Registry{}, err
 	}
 
-	historical := make([]keyregistry.KeySnapshot, 0, len(state.Snapshots)-1)
-	for _, record := range state.Snapshots {
-		snapshot, snapshotErr := record.Snapshot()
-		if snapshotErr != nil {
-			return keyregistry.KeySnapshot{}, keyregistry.Registry{}, snapshotErr
-		}
-		if snapshot.KubernetesKeyID == state.ActiveKeyID {
-			continue
-		}
-		switch snapshot.State {
-		case keyregistry.StateRetired:
-			historical = append(historical, snapshot)
-		case keyregistry.StatePending, keyregistry.StateRejected, keyregistry.StateRemoved:
-		default:
-			return keyregistry.KeySnapshot{}, keyregistry.Registry{}, fmt.Errorf(
-				"snapshot state %q is not registry-decryptable",
-				snapshot.State,
-			)
-		}
-	}
-
-	registry, err := keyregistry.NewRegistry(active, historical)
+	registry, err := state.Registry()
 	if err != nil {
 		return keyregistry.KeySnapshot{}, keyregistry.Registry{}, err
 	}

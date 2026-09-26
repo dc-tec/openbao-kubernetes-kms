@@ -250,8 +250,9 @@ State-file invariants enforced at load:
 - the current hash must match the typed state body,
 - malformed previous or current hashes are rejected,
 - duplicate persisted `key_id` records are rejected,
-- pending, rejected, and removed snapshots are retained in state but excluded from decrypt lookup,
-- normal rotation preserves every accepted active or retired identity; only the
+- pending snapshots are decryptable after metadata validation; rejected and
+  removed snapshots remain excluded from decrypt lookup,
+- normal rotation preserves every accepted active, pending, or retired identity; only the
   operator retirement transition can remove its decrypt eligibility,
 - removed records remain unchanged across later rotations,
 - the checkpoint rejects older generations and same-generation hash mismatches,
@@ -260,9 +261,10 @@ State-file invariants enforced at load:
   provider requires their creation metadata and retains them as decrypt-only
   historical snapshots; missing intermediate creation metadata fails closed,
 - loaded state must match the current provider, cluster, OpenBao instance, OpenBao namespace, Transit mount, lineage, key name, and AAD mode,
-- active and retained historical Transit version creation times must match current Transit metadata after Unix-second normalization,
-- `min_available_version` and `min_decryption_version` must not block active or retained historical versions,
-- `min_encryption_version` must not block the active version.
+- active, pending, and retired Transit version creation times must match current Transit metadata after Unix-second normalization,
+- `min_available_version` and `min_decryption_version` must not block retained decryptable versions,
+- `min_encryption_version` must not block the active version for healthy Status
+  or Encrypt; pending observations continue while encryption is blocked.
 
 If both the state file and checkpoint are missing, normal startup auto-bootstraps
 only from initial Transit metadata: `latest_version` must be `1`,
