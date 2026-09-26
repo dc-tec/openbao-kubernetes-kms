@@ -149,6 +149,12 @@ type policyRequestBody struct {
 
 type emptyRequestBody struct{}
 
+type revokeTokenRequestBody struct {
+	Token string `json:"token"`
+}
+
+func (revokeTokenRequestBody) environmentSetupPayload() {}
+
 type initStatusResponseBody struct {
 	Initialized bool `json:"initialized"`
 }
@@ -513,6 +519,24 @@ func (f *OpenBaoEnvironment) PrunePreviousJWTSigningKeys(ctx context.Context) er
 	}
 	f.jwtPublicKeys = []string{f.jwtPublicKey}
 	return f.writeJWTAuthConfig(ctx)
+}
+
+// RevokeToken revokes a test token through the administrator API.
+func (f *OpenBaoEnvironment) RevokeToken(ctx context.Context, token string) error {
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, f.TLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, "auth/token/revoke", revokeTokenRequestBody{Token: token})
+}
+
+// RevokeProviderTokens revokes all login leases issued by this test auth mount.
+func (f *OpenBaoEnvironment) RevokeProviderTokens(ctx context.Context) error {
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, f.TLSServerName, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	return f.write(ctx, httpClient, "sys/leases/revoke-prefix/"+f.AuthMount+"/login", emptyRequestBody{})
 }
 
 func (f *OpenBaoEnvironment) InstallProviderPolicy(ctx context.Context, policy string) error {

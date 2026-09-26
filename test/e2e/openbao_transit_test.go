@@ -63,7 +63,7 @@ var _ = Describe("OpenBao Transit CI", Label(framework.LabelOpenBao, framework.L
 			ClockSkewLeeway:        30 * time.Second,
 			LoginBeforeTokenExpiry: 30 * time.Second,
 			TokenRenewalIncrement:  time.Hour,
-		}, authClient, auth.ManagerOptions{})
+		}, authClient, auth.ManagerOptions{LifecycleContext: ctx})
 		Expect(err).NotTo(HaveOccurred())
 
 		token, err := manager.Token(ctx)

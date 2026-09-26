@@ -289,6 +289,7 @@ func TestCertLoginSourceLogsInWithValidatedCertificate(t *testing.T) {
 		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
 		TokenRenewalIncrement:  testRenewalIncrement,
 	}, source, client, ManagerOptions{
+		LifecycleContext:   t.Context(),
 		Clock:              &fakeClock{now: now},
 		RefreshRetryJitter: noRetryJitter,
 	})
@@ -346,6 +347,7 @@ func TestCertLoginSourceFailsClosedBeforeOpenBao(t *testing.T) {
 		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
 		TokenRenewalIncrement:  testRenewalIncrement,
 	}, source, client, ManagerOptions{
+		LifecycleContext:   t.Context(),
 		Clock:              &fakeClock{now: now},
 		RefreshRetryJitter: noRetryJitter,
 	})

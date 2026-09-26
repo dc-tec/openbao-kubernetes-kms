@@ -110,6 +110,10 @@ func TestManagerReReadsJWTBeforeReLogin(t *testing.T) {
 		t.Fatalf("rotate jwt fixture: %v", err)
 	}
 	clock.advance(35 * time.Second)
+	if _, err := manager.Token(context.Background()); err != nil {
+		t.Fatalf("start refresh: %v", err)
+	}
+	finishRefresh(t, manager)
 	second, err := manager.Token(context.Background())
 	if err != nil {
 		t.Fatalf("second token: %v", err)
@@ -153,6 +157,7 @@ func TestManagerRenewsWhenEnabledAndRenewable(t *testing.T) {
 	if renewed != testBaoToken1 {
 		t.Fatalf("renewal should retain token when response omits a token")
 	}
+	finishRefresh(t, manager)
 	logins := client.Logins()
 	renewals := client.Renewals()
 	if len(logins) != 1 || len(renewals) != 1 {
@@ -179,6 +184,10 @@ func TestManagerRecordsRenewalFailureWhenReloginSucceeds(t *testing.T) {
 		t.Fatalf("initial token: %v", err)
 	}
 	clock.advance(40 * time.Second)
+	if _, err := manager.Token(context.Background()); err != nil {
+		t.Fatalf("start refresh: %v", err)
+	}
+	finishRefresh(t, manager)
 	token, err := manager.Token(context.Background())
 	if err != nil {
 		t.Fatalf("re-login after renewal failure: %v", err)
@@ -226,6 +235,7 @@ func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
 		TokenRenewalIncrement:  testRenewalIncrement,
 	}, client, ManagerOptions{
+		LifecycleContext:    t.Context(),
 		Clock:               clock,
 		RefreshRetryBackoff: 10 * time.Second,
 		RefreshRetryJitter:  noRetryJitter,
@@ -247,6 +257,7 @@ func TestManagerUsesCurrentTokenDuringRefreshBackoff(t *testing.T) {
 	if token != testBaoToken1 {
 		t.Fatalf("unexpected token during failed refresh")
 	}
+	finishRefresh(t, manager)
 	logins := client.Logins()
 	if len(logins) != 2 {
 		t.Fatalf("expected one failed refresh attempt, got %d logins", len(logins))
@@ -317,6 +328,7 @@ func TestManagerStateRedactsJWTIdentityMismatchValues(t *testing.T) {
 		ExpectedAudience:       []string{"wrong-audience"},
 		ExpectedSubject:        "system:serviceaccount:secret-namespace:other-sa",
 	}, &fakes.OpenBaoAuthClient{}, ManagerOptions{
+		LifecycleContext:   t.Context(),
 		Clock:              clock,
 		RefreshRetryJitter: noRetryJitter,
 	})
@@ -351,6 +363,7 @@ func TestManagerUsesExponentialRefreshBackoff(t *testing.T) {
 		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
 		TokenRenewalIncrement:  testRenewalIncrement,
 	}, client, ManagerOptions{
+		LifecycleContext:       t.Context(),
 		Clock:                  clock,
 		RefreshRetryBackoff:    time.Second,
 		MaxRefreshRetryBackoff: 4 * time.Second,
@@ -370,7 +383,7 @@ func TestManagerUsesExponentialRefreshBackoff(t *testing.T) {
 		if state.ConsecutiveFailures != attempt+1 {
 			t.Fatalf("attempt %d: expected %d failures, got %#v", attempt+1, attempt+1, state)
 		}
-		if got := state.NextRetryAt.Sub(clock.now); got != expected {
+		if got := state.NextRetryAt.Sub(clock.Now()); got != expected {
 			t.Fatalf("attempt %d: expected retry backoff %s, got %s", attempt+1, expected, got)
 		}
 		clock.advance(expected)
@@ -509,6 +522,7 @@ func newTestManager(
 		LoginBeforeTokenExpiry: testLoginBeforeExpiry,
 		TokenRenewalIncrement:  testRenewalIncrement,
 	}, client, ManagerOptions{
+		LifecycleContext:   t.Context(),
 		Clock:              clock,
 		RenewalEnabled:     renewalEnabled,
 		RefreshRetryJitter: noRetryJitter,

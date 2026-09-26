@@ -47,6 +47,12 @@ type TokenSource interface {
 	Token(context.Context) (string, error)
 }
 
+// TokenRecoverer can replace a rejected token. An empty result suppresses retry.
+// Implementations must coalesce concurrent recovery and limit repeated logins.
+type TokenRecoverer interface {
+	RecoverToken(ctx context.Context, rejectedToken string) (string, error)
+}
+
 // StaticTokenSource is useful for tests and manually supplied integration tokens.
 type StaticTokenSource struct {
 	TokenValue string
@@ -274,7 +280,7 @@ func (c *Client) do(
 	if err != nil {
 		return err
 	}
-	return doOpenBao(
+	err = doOpenBao(
 		ctx,
 		c.httpClient,
 		c.baseURL,
@@ -288,6 +294,23 @@ func (c *Client) do(
 		true,
 		c.observer,
 	)
+	var apiErr *Error
+	recoverer, ok := c.tokenSource.(TokenRecoverer)
+	if !ok || !errors.As(err, &apiErr) ||
+		(apiErr.Class != ErrorClassUnauthenticated && apiErr.Class != ErrorClassPermissionDenied) {
+		return err
+	}
+	replacement, recoveryErr := recoverer.RecoverToken(ctx, token)
+	if recoveryErr != nil {
+		return recoveryErr
+	}
+	if replacement == "" || replacement == token {
+		return err
+	}
+	// Authentication rejects the request before Transit executes it. Retry once
+	// with the replacement; persistent denials retain their policy error class.
+	return doOpenBao(ctx, c.httpClient, c.baseURL, c.namespace, operation, method,
+		apiPath, requestBody, response, replacement, true, c.observer)
 }
 
 func (c *AuthClient) doUnauthenticated(

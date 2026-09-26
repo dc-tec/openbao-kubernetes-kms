@@ -532,6 +532,9 @@ func transitRPCError(err error) error {
 	if contextError(err) {
 		return contextRPCError(err)
 	}
+	if authenticationError(err) {
+		return grpcstatus.Error(codes.Unauthenticated, safeCodeMessage(codes.Unauthenticated))
+	}
 	code := grpcstatus.Code(err)
 	if code != codes.Unknown {
 		return grpcstatus.Error(code, safeCodeMessage(code))
@@ -551,6 +554,9 @@ func transitErrorClass(err error) string {
 	if class := contextErrorClass(err); class != "" {
 		return class
 	}
+	if authenticationError(err) {
+		return errorClassAuthFailed
+	}
 	var openBaoErr *openbao.Error
 	if errors.As(err, &openBaoErr) {
 		return openBaoKMSClass(openBaoErr.Class)
@@ -563,6 +569,20 @@ func transitErrorClass(err error) string {
 		return class
 	}
 	return errorClassUnknown
+}
+
+func authenticationError(err error) bool {
+	if !errors.Is(err, openbao.ErrAuthentication) {
+		return false
+	}
+	var apiErr *openbao.Error
+	if errors.As(err, &apiErr) {
+		switch apiErr.Class {
+		case openbao.ErrorClassUnavailable, openbao.ErrorClassSealed, openbao.ErrorClassRateLimited:
+			return false
+		}
+	}
+	return true
 }
 
 func openBaoRPCCode(class openbao.ErrorClass) codes.Code {

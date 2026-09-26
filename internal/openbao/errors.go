@@ -18,6 +18,9 @@ const (
 // ErrResponseTooLarge identifies an OpenBao response that exceeds its operation limit.
 var ErrResponseTooLarge = errors.New("OpenBao response exceeds operation limit")
 
+// ErrAuthentication identifies a token acquisition or authentication failure.
+var ErrAuthentication = errors.New("auth failed")
+
 // ErrorClass is a stable OpenBao error category for callers and metrics.
 type ErrorClass string
 

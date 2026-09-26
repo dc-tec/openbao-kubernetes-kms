@@ -40,8 +40,10 @@ func newCertAuthManager(
 		return nil, err
 	}
 	return auth.NewManagerWithSource(lifecycleConfig(cfg), source, authClient, auth.ManagerOptions{
-		RenewalEnabled: true,
-		Observer:       observer,
+		LifecycleContext: ctx,
+		RefreshTimeout:   authLoginTimeout(cfg),
+		RenewalEnabled:   true,
+		Observer:         observer,
 	})
 }
 

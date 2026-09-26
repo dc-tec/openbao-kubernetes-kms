@@ -160,7 +160,19 @@ Recovery:
 1. Replace or restore the configured auth material.
 2. Fix OpenBao auth role constraints if they are wrong.
 3. Fix issuer, JWKS, OIDC discovery, certificate authority, or PKCS#11 reachability.
-4. Restart the provider if the current in-memory token does not recover. The provider re-reads auth material before re-login.
+4. Check that login succeeds on a subsequent request or background probe. The
+   provider re-reads auth material before re-login and backs off after failures.
+
+After token revocation or an OpenBao restore, the provider attempts re-login on
+`401` or `403` and retries the rejected request once. It does not wait for the
+recorded token TTL to expire. Recovery starts at most once every five seconds;
+failed logins also use exponential backoff. OpenBao uses `403` for both invalid
+tokens and policy denials. If `403` persists after successful login, check the
+role's token policies and the required Transit capabilities.
+
+Local credential validation and rejected logins produce `auth_failed` KMS
+errors. OpenBao availability, sealed-state, rate-limit, and context errors
+retain their corresponding classifications.
 
 ## Transit Key Missing
 

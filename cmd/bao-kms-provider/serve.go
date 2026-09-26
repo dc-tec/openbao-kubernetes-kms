@@ -53,6 +53,8 @@ func newServeCommand(runtimeConfig *config.Runtime, configPath *string, info ver
 		Short: "Start the KMS provider",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, cancel := context.WithCancel(cmd.Context())
+			defer cancel()
 			cfg, err := loadAndValidateConfig(runtimeConfig, *configPath, true)
 			if err != nil {
 				return err
@@ -63,11 +65,11 @@ func newServeCommand(runtimeConfig *config.Runtime, configPath *string, info ver
 			}
 			defer func() { _ = lock.Close() }()
 			builder := runtimeBuilder{info: info, logWriter: cmd.ErrOrStderr()}
-			deps, err := builder.build(cmd.Context(), cfg)
+			deps, err := builder.build(ctx, cfg)
 			if err != nil {
 				return cli.WithExitCode(cli.ExitRuntime, err)
 			}
-			if err := runServe(cmd.Context(), deps); err != nil {
+			if err := runServe(ctx, deps); err != nil {
 				return cli.WithExitCode(cli.ExitRuntime, err)
 			}
 			return nil
@@ -315,8 +317,10 @@ func buildAuthManager(
 			return nil, err
 		}
 		return auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{
-			RenewalEnabled: true,
-			Observer:       observer,
+			LifecycleContext: ctx,
+			RefreshTimeout:   authLoginTimeout(cfg),
+			RenewalEnabled:   true,
+			Observer:         observer,
 		})
 	case authMethodCert:
 		return newCertAuthManager(ctx, cfg, observer)

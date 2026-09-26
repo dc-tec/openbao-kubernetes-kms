@@ -39,6 +39,7 @@ stateDiagram-v2
     Login --> AuthUnhealthy: login fails
     TokenReady --> TransitCalls: use token for Transit calls
     TransitCalls --> TrackTTL: track token TTL
+    TransitCalls --> ReLogin: 401 or 403 and recovery cooldown elapsed
     TrackTTL --> Renew: renewal configured and allowed
     TrackTTL --> ReLogin: renewal unavailable or not allowed
     Renew --> TokenReady: renewal succeeds
@@ -47,6 +48,24 @@ stateDiagram-v2
     AuthUnhealthy --> StatusUnhealthy: KMS Status unhealthy
     AuthUnhealthy --> ReadyFalse: ready endpoint fails
 ```
+
+When a request reaches the refresh-ahead threshold, the provider starts one
+shared renewal or login. Requests continue with the current token while it is
+unexpired. Requests without a usable token wait for that attempt. Canceling a
+request stops only its wait. Provider shutdown cancels shared auth work, and
+`auth.loginTimeout` sets one deadline for the renewal and fallback login.
+
+OpenBao can return `403` for both a revoked token and a policy denial. On `401`
+or `403`, the provider replaces the rejected credential and retries the request
+once. Concurrent rejections share the login. Recovery starts at most once every
+five seconds, including when login succeeds but the replacement is also denied.
+Failed logins also use exponential backoff. A late rejection or renewal for an
+old token cannot replace the current credential. No additional OpenBao policy
+capabilities are required.
+
+A failed recovery login does not restore the rejected token. A request denied
+again after recovery keeps its OpenBao error classification. Persistent `403`
+responses require checking both the auth role and the Transit policy.
 
 JWT configuration:
 
@@ -166,7 +185,8 @@ behavior.
 | Certificate expiry | Refuse login when the certificate remaining TTL is below `auth.cert.minRemainingTtl`. Track certificate TTL through metrics. |
 | JWKS rotation | Support OIDC discovery and JWKS cache behavior. Provide recovery mode with pinned public keys when discovery is unavailable. |
 | Issuer rotation | Treat issuer change as planned migration. Configure overlapping trust only during a bounded window. |
-| OpenBao token expiry | Re-login before expiry by default. Token renewal is supported when the role allows `auth/token/renew-self`. |
+| OpenBao token expiry | Start shared renewal or login on demand before expiry. Use the current token while it remains valid. Token renewal requires `auth/token/renew-self`. |
+| OpenBao token revocation or backend restore | Attempt bounded re-login after a rejected request, without waiting for the recorded token TTL to expire. |
 | Revoked JWT | Pure JWT auth cannot detect revocation until expiry. Mitigate with short JWT TTL where renewal is reliable, or use external issuer revocation controls. |
 | Revoked certificate | Use OpenBao certificate revocation list (CRL) or OCSP configuration for the cert auth mount. Prefer fail-closed OCSP behavior. |
 | API server down | Avoid TokenReview dependency. The external JWT issuer and PKCS#11 token must not depend on the protected API server. |

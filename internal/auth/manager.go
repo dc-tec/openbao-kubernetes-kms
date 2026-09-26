@@ -38,7 +38,7 @@ var (
 	// ErrAuthConfig identifies invalid local authentication manager settings.
 	ErrAuthConfig = errors.New("auth config invalid")
 	// ErrAuthFailed identifies a failed OpenBao authentication operation.
-	ErrAuthFailed = errors.New("auth failed")
+	ErrAuthFailed = openbao.ErrAuthentication
 	// ErrTokenUnavailable identifies a missing or expired in-memory OpenBao token.
 	ErrTokenUnavailable = errors.New("openbao token unavailable")
 )
@@ -131,6 +131,10 @@ type SourceInfo struct {
 
 // ManagerOptions contains testable lifecycle behavior settings.
 type ManagerOptions struct {
+	// LifecycleContext is required and cancels shared refresh work when the provider stops.
+	LifecycleContext context.Context
+	// RefreshTimeout sets the shared renewal/login deadline. Zero uses five seconds.
+	RefreshTimeout         time.Duration
 	Clock                  Clock
 	RenewalEnabled         bool
 	RefreshRetryBackoff    time.Duration
@@ -186,8 +190,10 @@ type Manager struct {
 	maxRetryBackoff     time.Duration
 	retryJitter         func(time.Duration) time.Duration
 	consecutiveFailures int
-	refreshing          bool
-	refreshDone         chan struct{}
+	lifecycle           context.Context
+	refreshTimeout      time.Duration
+	flight              *refreshFlight
+	nextRecoveryAt      time.Time
 	observer            Observer
 }
 
@@ -219,6 +225,15 @@ func NewManagerWithSource(
 	if source == nil {
 		return nil, fmt.Errorf("%w: login source is required", ErrAuthConfig)
 	}
+	if opts.RefreshTimeout < 0 {
+		return nil, fmt.Errorf("%w: refresh timeout must not be negative", ErrAuthConfig)
+	}
+	if opts.RefreshTimeout == 0 {
+		opts.RefreshTimeout = 5 * time.Second
+	}
+	if opts.LifecycleContext == nil {
+		return nil, fmt.Errorf("%w: lifecycle context is required", ErrAuthConfig)
+	}
 	normalized, err := validateLifecycleConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -249,6 +264,8 @@ func NewManagerWithSource(
 		maxRetryBackoff:  maxRetryBackoff,
 		retryJitter:      retryJitter,
 		observer:         opts.Observer,
+		lifecycle:        opts.LifecycleContext,
+		refreshTimeout:   opts.RefreshTimeout,
 	}, nil
 }
 
@@ -256,7 +273,7 @@ func NewManagerWithSource(
 func (m *Manager) Token(ctx context.Context) (string, error) {
 	token, err := m.ensureToken(ctx, false)
 	if err != nil {
-		return "", err
+		return "", publicAuthError(err)
 	}
 	if token.value == "" {
 		return "", ErrTokenUnavailable
@@ -267,7 +284,7 @@ func (m *Manager) Token(ctx context.Context) (string, error) {
 // Refresh forces an auth-method login.
 func (m *Manager) Refresh(ctx context.Context) error {
 	_, err := m.ensureToken(ctx, true)
-	return err
+	return publicAuthError(err)
 }
 
 // State returns redacted auth state for status and readiness code.
@@ -305,49 +322,6 @@ func (m *Manager) State() State {
 	return state
 }
 
-func (m *Manager) ensureToken(ctx context.Context, forceLogin bool) (currentToken, error) {
-	for {
-		m.mu.Lock()
-		now := m.clock.Now()
-		if !forceLogin && m.current.value != "" && now.Before(m.refreshAtLocked()) {
-			token := m.current
-			m.mu.Unlock()
-			return token, nil
-		}
-		if !forceLogin && m.retryBlockedLocked(now) {
-			token, err := m.tokenDuringRetryBackoffLocked(now)
-			m.mu.Unlock()
-			return token, err
-		}
-		if m.refreshing {
-			done := m.refreshDone
-			m.mu.Unlock()
-			select {
-			case <-done:
-				continue
-			case <-ctx.Done():
-				return currentToken{}, ctx.Err()
-			}
-		}
-
-		action := m.refreshActionLocked(forceLogin, now)
-		done := make(chan struct{})
-		m.refreshing = true
-		m.refreshDone = done
-		m.mu.Unlock()
-
-		result := m.performRefresh(ctx, action)
-
-		m.mu.Lock()
-		token, err := m.applyRefreshResultLocked(result, forceLogin)
-		m.refreshing = false
-		m.refreshDone = nil
-		close(done)
-		m.mu.Unlock()
-		return token, err
-	}
-}
-
 func (m *Manager) refreshAtLocked() time.Time {
 	if m.current.expiresAt.IsZero() {
 		return time.Time{}
@@ -371,6 +345,7 @@ type refreshAction struct {
 }
 
 type refreshResult struct {
+	kind        refreshKind
 	token       currentToken
 	jwt         JWT
 	certificate Certificate
@@ -402,7 +377,7 @@ func (m *Manager) performRefresh(ctx context.Context, action refreshAction) refr
 	if action.kind == refreshKindRenew {
 		token, renewedAt, err := m.renew(ctx, action)
 		if err == nil {
-			return refreshResult{token: token, renewalAt: renewedAt}
+			return refreshResult{kind: refreshKindRenew, token: token, renewalAt: renewedAt}
 		}
 		loginResult := m.login(ctx, action)
 		loginResult.renewalErr = err
@@ -412,6 +387,9 @@ func (m *Manager) performRefresh(ctx context.Context, action refreshAction) refr
 }
 
 func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult {
+	if err := ctx.Err(); err != nil {
+		return refreshResult{err: publicAuthError(err)}
+	}
 	login, err := action.source.Login(ctx, m.client, action.clock)
 	if err != nil {
 		m.observeLogin(ctx, err)
@@ -452,7 +430,7 @@ func (m *Manager) renew(ctx context.Context, action refreshAction) (currentToken
 	return token, now, nil
 }
 
-func (m *Manager) applyRefreshResultLocked(result refreshResult, forceLogin bool) (currentToken, error) {
+func (m *Manager) applyRefreshResultLocked(result refreshResult) error {
 	now := m.clock.Now()
 	if result.renewalErr != nil {
 		m.lastRenewalErr = result.renewalErr
@@ -461,13 +439,7 @@ func (m *Manager) applyRefreshResultLocked(result refreshResult, forceLogin bool
 		m.lastErr = result.err
 		m.consecutiveFailures++
 		m.nextRetryAt = now.Add(m.nextRetryBackoffLocked())
-		if forceLogin {
-			return m.current, result.err
-		}
-		if m.current.value != "" && now.Before(m.current.expiresAt) {
-			return m.current, nil
-		}
-		return currentToken{}, result.err
+		return result.err
 	}
 
 	m.current = result.token
@@ -487,7 +459,7 @@ func (m *Manager) applyRefreshResultLocked(result refreshResult, forceLogin bool
 	m.lastErr = nil
 	m.nextRetryAt = time.Time{}
 	m.consecutiveFailures = 0
-	return result.token, nil
+	return nil
 }
 
 func currentTokenFromAuth(
@@ -520,16 +492,6 @@ func currentTokenFromAuth(
 
 func (m *Manager) retryBlockedLocked(now time.Time) bool {
 	return !m.nextRetryAt.IsZero() && now.Before(m.nextRetryAt)
-}
-
-func (m *Manager) tokenDuringRetryBackoffLocked(now time.Time) (currentToken, error) {
-	if m.current.value != "" && now.Before(m.current.expiresAt) {
-		return m.current, nil
-	}
-	if m.lastErr != nil {
-		return currentToken{}, m.lastErr
-	}
-	return currentToken{}, ErrTokenUnavailable
 }
 
 func (m *Manager) nextRetryBackoffLocked() time.Duration {
@@ -695,13 +657,6 @@ func ttlUntil(now time.Time, expiry time.Time) time.Duration {
 		return 0
 	}
 	return expiry.Sub(now)
-}
-
-func publicAuthError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("%w: %s", ErrAuthFailed, safeErrorMessage(err))
 }
 
 func (m *Manager) observeLogin(ctx context.Context, err error) {
