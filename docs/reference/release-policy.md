@@ -79,7 +79,10 @@ A stable production-ready release requires, at minimum:
 - OpenBao HA and failover tests,
 - disaster recovery restore tests,
 - startup decrypt storm tests,
-- a security review,
+- a security review of `key_id` derivation, AAD canonicalization, the OpenBao
+  policy, socket handling, auth material handling, and log and metric
+  redaction, plus failure validation for key deletion, recreated keys, and a
+  premature `min_decryption_version`,
 - signed and attested artifacts,
 - SBOMs,
 - reproducibility reports,

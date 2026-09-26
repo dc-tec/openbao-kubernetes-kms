@@ -5,7 +5,7 @@ eyebrow: Operate · Change management
 weight: 30
 verifiedBy:
   - test/deployment/systemd-install.sh
-  - test/e2e/kind_smoke_test.go
+  - test/e2e/provider_upgrade_test.go
 ---
 
 Every provider sits on its API server's boot path, so upgrade one control-plane

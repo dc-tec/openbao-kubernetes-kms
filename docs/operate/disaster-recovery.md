@@ -7,6 +7,7 @@ verifiedBy:
   - internal/keyregistry
   - cmd/bao-kms-provider/diagnostics.go
   - test/e2e/kind_dr_test.go
+  - test/e2e/provider_restore_test.go
 ---
 
 Kubernetes data encrypted through the provider is readable only while OpenBao

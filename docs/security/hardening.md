@@ -1,215 +1,103 @@
 ---
 title: Hardening
-description: "Required and recommended hardening for bao-kms-provider deployments: OpenBao, provider host, file permissions, auth material, logging, metrics, and Kubernetes-side."
+description: "The controls a hardened deployment must have in OpenBao, on the host, for auth material, in logs and metrics, and in Kubernetes."
 eyebrow: Security · Host
 weight: 20
+verifiedBy:
+  - deploy/systemd/bao-kms-provider.service
+  - deploy/static-pod/bao-kms-provider.yaml
+  - internal/config/validation.go
+  - internal/logging
+  - internal/metrics
 ---
 
-These requirements define the hardened deployment posture. Preview releases
-still need staging validation before production use. For the threat coverage see
-[Threat model](/docs/security/threat-model/). For the file ownership and group model
-the host-side requirements rely on, see [Security: Linux identity model](/docs/security/linux-identity-model/).
+Following [Get started](/docs/get-started/) with the maintained samples
+produces most of these controls. Use this page to review a deployment, and
+keep the controls in place when you customize it.
 
 ## OpenBao
 
 Required:
 
-- TLS enabled,
-- CA bundle pinned in provider configuration,
-- server name verified,
-- Transit key export disabled,
-- plaintext backup disabled,
-- key deletion disabled,
-- OpenBao HA deployment outside the protected Kubernetes dependency path,
-- Transit upsert disabled at the dedicated mount,
-- provider policy limited to metadata read, encrypt update, decrypt update, and `disable_upsert` inspection,
-- no Transit create, delete, rotate, export, backup, or configuration write permissions for the provider token,
-- audit logging enabled and monitored.
+- TLS with the CA bundle pinned in the provider configuration and server name
+  verification.
+- A dedicated Transit mount with `disable_upsert=true`, and a key with export,
+  plaintext backup, and deletion disabled.
+- A provider policy limited to key metadata read, encrypt, decrypt,
+  `disable_upsert` inspection, and its own capabilities and renewal. No create,
+  rotate, delete, export, backup, or configuration permission.
+- OpenBao HA outside the protected cluster's dependency path, with audit
+  logging enabled and monitored.
 
-Recommended:
+Recommended: one Transit key and one auth role per cluster or trust domain,
+tested OpenBao backup and restore, and change control around rotation and
+`min_decryption_version`.
 
-- tested OpenBao backup and restore procedure,
-- a separate Transit key per Kubernetes cluster or trust domain,
-- a separate auth mount or role per Kubernetes cluster or trust domain,
-- change control around key rotation and `min_decryption_version`.
-
-<a id="plugin-host"></a>
-
-## Provider host
+## Host
 
 Required:
 
-- configuration file readable only by root and the required service identity,
-- file-backed auth material readable only by the provider process,
-- socket writable only by the provider and the API server identity,
-- metrics and health endpoints bound to localhost by default,
-- no debug endpoints in production,
-- debug correlation disabled except during bounded incident response,
-- time synchronized through NTP or chrony.
+- File ownership and modes from [Linux identity model](/docs/security/linux-identity-model/):
+  configuration and auth material readable only by root and the provider, the
+  socket writable only by the provider and the API server identity.
+- Metrics and health endpoints bound to localhost, and debug correlation off
+  except during a bounded incident.
+- Synchronized clocks.
 
-Recommended:
-
-- systemd sandboxing where systemd mode is used,
-- distroless non-root image and read-only container filesystem where static-pod mode is used,
-- immutable image digests,
-- pinned release artifacts with verified checksums,
-- host audit for configuration and auth material changes,
-- one-node-at-a-time upgrades.
-
-## File permissions
-
-Recommended:
-
-```text
-/etc/openbao-kms/config.yaml        root:openbao-kms                0640
-/etc/openbao-kms/tls/ca.crt         root:root                       0644
-/var/lib/openbao-kms/identity.jwt   root:openbao-kms                0640
-/etc/openbao-kms/client/client-chain.pem root:openbao-kms           0640
-/etc/openbao-kms/pkcs11/pin         root:openbao-kms                0640
-/var/lib/openbao-kms/state          openbao-kms:openbao-kms         0750
-/run/openbao-kms                    openbao-kms:openbao-kms-socket  2750
-/run/openbao-kms/kms.sock           openbao-kms:openbao-kms-socket  0660
-```
-
-For the rationale and runtime directory creation pattern see [Security: Linux identity model](/docs/security/linux-identity-model/).
+Recommended: keep the sandboxing in the maintained systemd unit and static pod
+manifest unchanged. The settings and their purpose are listed in
+[Run with systemd](/docs/get-started/systemd/#about-the-unit) and
+[Run as a static pod](/docs/get-started/static-pod/#about-the-manifest). Audit
+changes to configuration and auth material, and upgrade one node at a time.
 
 ## Auth material
 
-The default authentication path uses a JSON Web Token (JWT). The optional
-certificate path can use a PKCS#11 hardware or software token.
-
 Required for JWT auth:
 
-- bound issuer,
-- bound audience,
-- bound subject or strong bound claims,
-- no default policy on the OpenBao token,
-- one dedicated Transit policy,
-- expiry checked before login,
-- JWT file re-read before re-login,
-- OpenBao client token stored in memory only,
-- no JWT logging.
+- An OpenBao role that binds issuer, audience, and subject or strong claims,
+  with a short token TTL, a limited maximum TTL, no default policy, and only the
+  provider policy.
+- A JWT that expires, is checked before login, and is never logged.
 
-Recommended for JWT auth:
-
-- external issuer independent of the protected API server,
-- short JWT lifetime with reliable renewal,
-- `auth.jwt.expectedIssuer`, `auth.jwt.expectedAudience`, and `auth.jwt.expectedSubject` set as early misconfiguration diagnostics when the expected service-account token identity is stable,
-- issuer key rotation overlap,
-- documented emergency issuance process,
-- pinned public keys for recovery where appropriate.
+Recommended for JWT auth: an issuer independent of the protected API server,
+short JWT lifetimes with reliable renewal, `auth.jwt.expectedIssuer`,
+`expectedAudience`, and `expectedSubject` set, issuer key rotation overlap, and
+a documented emergency issuance process.
 
 Required for certificate auth:
 
-- OpenBao listener requests TLS client certificates,
-- cert auth role binds the expected certificate identity,
-- cert auth method binding remains enabled for renewal,
-- OpenBao client token stored in memory only,
-- no certificate private key or PIN logging,
-- no PEM private key file source.
+- An OpenBao listener that requests client certificates, and cert auth binding
+  left enabled so renewal stays tied to the login identity.
+- A role bound to the expected certificate identity.
+- A PKCS#11 source; the provider rejects PEM private key files. Keys stay
+  non-exportable, and the PIN file is a local file readable only by the
+  provider.
 
-Recommended for certificate auth:
+Recommended for certificate auth: `ocsp_fail_open=false` when OCSP is on, and
+alerts on `openbao_kms_certificate_ttl_seconds`.
 
-- PKCS#11 private keys stay non-exportable,
-- PKCS#11 PIN files are local regular files with provider-only read access,
-- Online Certificate Status Protocol (OCSP) fail-open remains disabled when
-  OCSP is enabled,
-- certificate TTL monitoring uses `openbao_kms_certificate_ttl_seconds`.
+For the reasoning behind these rules, see [Auth model](/docs/security/auth-model/).
 
-The portable OpenBao/provider end-to-end lanes exercise bound-claim rejection
-and pinned public-key rollover. Validate issuer-specific JSON Web Key Set
-(JWKS) or OpenID Connect (OIDC) discovery behavior during issuer integration.
+## Logs and metrics
 
-For the trust-boundary discussion see [Auth model](/docs/security/auth-model/).
-
-## Logging
-
-The provider must never log:
-
-- plaintext,
-- JWTs,
-- OpenBao tokens,
-- full ciphertext,
-- raw Transit key material,
-- raw OpenBao paths by default,
-- raw key names by default.
-
-Use bounded error classes and hashed `key_id` values. For the full log shape and field reference see [Reference: Observability](/docs/reference/observability/) and [Reference: Metrics](/docs/reference/metrics/).
-
-## Metrics
-
-Do not label metrics with:
-
-- raw `key_id` values,
-- raw OpenBao paths,
-- raw key names,
-- request UID values,
-- Kubernetes namespace or object name values,
-- unbounded error message strings.
-- SPIFFE IDs or certificate subject values.
+The provider never logs plaintext, JWTs, OpenBao tokens, full ciphertext, key
+material, or, by default, raw OpenBao paths and key names. Metrics never carry
+raw `key_id` values, OpenBao paths, key names, request UIDs, Kubernetes object
+names, certificate subjects, or free-form error strings as labels. Keep custom
+dashboards and log pipelines within the same rules. See
+[Reference: Observability](/docs/reference/observability/).
 
 ## Kubernetes
 
 Required:
 
-- the KMS provider uses `apiVersion: v2`,
-- the provider name is stable across the lifetime of encrypted data,
-- the endpoint is a local Unix socket,
-- the API server can access only the required socket path,
-- the API server socket access group can traverse the socket directory but cannot create, delete, or replace entries in it.
+- A KMS v2 provider on a local Unix socket, with a provider name that never
+  changes while encrypted data exists.
+- An API server that can reach only the socket, and can traverse but not
+  modify the socket directory.
+- An identical `EncryptionConfiguration`, provider name, and socket path on
+  every control-plane node.
 
-Recommended:
-
-- `identity` fallback only during migration,
-- `EncryptionConfiguration` audited after migration,
-- provider name, socket path, and `EncryptionConfiguration` consistent across all control-plane nodes,
-- API server restart tested after enabling encryption,
-- etcd plaintext inspection performed in a controlled environment.
-
-## Static pod specific
-
-- Do not reference ConfigMaps, Secrets, or ServiceAccounts.
-- Set `automountServiceAccountToken: false`.
-- Use hostPath mounts for all required files.
-- Preload images in air-gapped environments.
-- Use read-only mounts for configuration, CA, JWT, certificate chain, and PKCS#11 PIN files.
-- Run as a non-root numeric user and numeric supplemental group that matches the host socket group.
-- Set `seccompProfile: RuntimeDefault`.
-- Set `allowPrivilegeEscalation: false`.
-- Drop all Linux capabilities.
-- Set `readOnlyRootFilesystem: true`.
-- Keep the previous image available for rollback.
-
-## systemd specific
-
-Recommended hardening directives:
-
-- `NoNewPrivileges=true`
-- `ProtectSystem=strict`
-- `ProtectHome=true`
-- `PrivateTmp=true`
-- `PrivateDevices=true`
-- `MemoryDenyWriteExecute=true`
-- `LockPersonality=true`
-- `RestrictSUIDSGID=true`
-- `RestrictRealtime=true`
-- `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`
-- `SystemCallArchitectures=native`
-- `CapabilityBoundingSet=`
-- `AmbientCapabilities=`
-- `ReadOnlyPaths=/etc/openbao-kms`
-- minimal `ReadWritePaths`
-
-Verify hardening does not prevent access to the configuration file, selected auth material, CA bundle, socket directory, or the optional state file.
-
-## Validate hardening
-
-Run these checks before enabling the provider in an API server:
-
-```sh
-bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
-bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
-curl -sf http://127.0.0.1:8082/ready
-```
-
-After the API server is configured, confirm that newly written Secret data is not stored as plaintext in etcd and that the provider metrics on `127.0.0.1:8081` show successful KMS `encrypt` and `decrypt` requests.
+Recommended: keep the `identity` fallback only during migration, audit the
+`EncryptionConfiguration` afterwards, and test an API server restart after
+enabling encryption.

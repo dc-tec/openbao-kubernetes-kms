@@ -1,68 +1,55 @@
 ---
 title: AAD and decrypt validation
-description: "What Transit associated_data binds, how decrypt validation rejects unknown or tampered ciphertext, and which compatibility-mode actions are unsafe."
+description: "What the additional authenticated data bound to every ciphertext protects against, how decryption rejects unknown or tampered ciphertext early, and why AAD is never disabled."
 eyebrow: Security · Data integrity
 weight: 40
+verifiedBy:
+  - internal/aad
+  - internal/kmsv2
+  - internal/keyregistry
 ---
 
-The provider uses additional authenticated data (AAD) and local decrypt validation to reject ciphertext outside its expected scope. OpenBao exposes AAD through the `associated_data` field. For the exact `key_id` format, AAD envelope, annotation rules, and decrypt validation order, see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
+Every ciphertext the provider creates is bound to additional authenticated data
+(AAD) through Transit's `associated_data`. Transit decrypts only when the caller
+supplies the same AAD. For the exact `key_id` format, AAD envelope, and
+annotation rules, see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
 
 ## What AAD protects against
 
-OpenBao Transit `associated_data` binds ciphertext to non-secret metadata for
-AEAD ciphers. Decrypt succeeds only when the caller supplies the same data. The
-provider uses AAD to bind every ciphertext to the provider, cluster, OpenBao
-instance, Transit mount, key lineage, and active key version that produced it.
+The AAD names the provider, cluster, OpenBao instance, Transit mount, key
+lineage, and key version that produced the ciphertext. That stops:
 
-This addresses the following threats:
+- **Replay across clusters**: ciphertext from one cluster fails in another,
+  even with a shared Transit key.
+- **Replay across key lineages**: a key recreated with the same name has a new
+  lineage ID, so old ciphertext fails.
+- **Replay across providers**: ciphertext another application made with the
+  same Transit key fails, because the provider name differs.
+- **Annotation tampering**: annotations that disagree with the key snapshot
+  are rejected before Transit is called.
 
-- **Replay across clusters.** A Transit ciphertext encrypted for one cluster cannot be successfully decrypted in another cluster, even if the OpenBao key is shared, because the cluster identity is bound into the AAD.
-- **Replay across key lineages.** If a Transit key is deleted and recreated with the same name, the new key has a different lineage ID. Old ciphertext, even if presented to the new key, fails AAD reconstruction.
-- **Replay across providers.** A Transit ciphertext produced by a different application using the same Transit key cannot be decrypted by the Kubernetes KMS provider because the provider name is bound into the AAD.
-- **Annotation tampering.** Annotations that disagree with the active key snapshot are rejected before Transit is called, preventing maliciously edited ciphertext from reaching the cipher.
+## Validation before Transit
 
-## Decrypt validation order
+The provider rejects bad ciphertext as early as possible, which keeps failures
+visible and saves Transit calls. It parses the `key_id`, finds the matching
+active, pending, or retired snapshot, checks the annotations and their hashes,
+and rebuilds the AAD before it calls Transit. An unknown `key_id` triggers one
+rate-limited metadata lookup; new identities are validated and saved before
+they are accepted.
 
-The provider rejects ciphertext as early as possible to keep failure observable and to avoid spending Transit decrypt calls on doomed payloads. The validation pipeline is:
+Failures before the Transit call surface as `key_id_unknown`,
+`key_id_malformed`, `aad_missing`, `aad_mismatch`, or `annotation_invalid`; see
+[Reference: Observability](/docs/reference/observability/#error-classes).
 
-1. Parse the `key_id`.
-2. Look up the matching active, pending, or retired snapshot. For an unknown ID,
-   attempt rate-limited metadata discovery for the configured key and repeat
-   the lookup. Validate and persist new identities before accepting them.
-3. Validate annotation keys and versions.
-4. Validate annotation hashes against the snapshot.
-5. Reconstruct the canonical AAD bytes.
-6. Call OpenBao Transit decrypt.
+## AAD is always required
 
-Unknown `key_id` values, mismatched snapshots, missing required annotations, and AAD reconstruction failures all fail before step 6. Operators see these as `key_id_unknown`, `key_id_malformed`, `aad_missing`, `aad_mismatch`, or `annotation_invalid` in the [error class catalog](/docs/reference/observability/#error-classes).
+AAD is always required. The provider has no setting to disable it, and state
+validation rejects any other mode. Bypassing AAD during an incident would
+reopen every replay above; follow
+[Troubleshooting: AAD mismatch](/docs/operate/troubleshooting/#aad-mismatch)
+instead.
 
-For the exact field-by-field validation steps see [Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
-
-## Compatibility modes
-
-| Mode | Behavior | Acceptable use |
-|---|---|---|
-| `aad.required` | Encrypt and decrypt require valid AAD metadata. | The required mode for new deployments. |
-
-`aad.required` is the only supported mode. The provider does not expose a config
-switch to disable AAD, and state validation rejects non-required AAD modes.
-
-## Compatibility-mode misuse
-
-Disabling AAD globally as an incident response is unsafe. Specifically:
-
-- bypassing AAD would expose the decrypt path to ciphertext that was not bound to the current cluster, key lineage, or provider name,
-- accepting an AAD-disabled state re-enables the cross-cluster replay class of threats that AAD prevents,
-- future compatibility read modes must require explicit retained historical state before they are introduced.
-
-If decrypt is failing during an incident, follow [Operate: Troubleshooting: AAD mismatch](/docs/operate/troubleshooting/#aad-mismatch) instead of disabling AAD.
-
-## Threats not addressed here
-
-AAD and decrypt validation do not protect against:
-
-- A compromised provider binary. The provider sees plaintext on the way through, before AAD is reconstructed and after it is verified.
-- An attacker with valid Transit decrypt permission. Transit will decrypt any ciphertext encrypted under the key, AAD or not, and the attacker can supply matching AAD if they have read access to the configuration.
-- Loss of Transit key material. AAD validates ciphertext authenticity; it does not recover lost keys. See [Operate: Disaster recovery](/docs/operate/disaster-recovery/).
-
-For the full asset and threat catalog see [Threat model](/docs/security/threat-model/).
+AAD does not protect against a compromised provider, which sees plaintext in
+flight, or against anyone with Transit decrypt permission and read access to
+the configuration, who can supply matching AAD. It also cannot recover lost
+key material.

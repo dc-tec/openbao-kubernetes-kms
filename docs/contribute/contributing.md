@@ -153,7 +153,7 @@ Tests must prove these never appear in logs or command output:
 - full ciphertext,
 - raw Transit key material.
 
-For the full redaction policy see [Reference: Observability: Logs](/docs/reference/observability/#logs) and [Security: Hardening: Logging](/docs/security/hardening/#logging).
+For the full redaction policy see [Reference: Observability: Logs](/docs/reference/observability/#logs) and [Security: Hardening: Logging](/docs/security/hardening/#logs-and-metrics).
 
 ## Dependency policy
 
