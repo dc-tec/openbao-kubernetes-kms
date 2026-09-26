@@ -3,6 +3,10 @@ title: What the provider does
 description: "What bao-kms-provider does, what it does not do, the trust boundary, and the supported version envelope."
 eyebrow: Get started · Step 1
 weight: 10
+verifiedBy:
+  - .ci/versions.yaml
+  - internal/kmsv2
+  - internal/openbao
 ---
 
 `bao-kms-provider` is a Kubernetes Key Management Service (KMS) v2 provider
@@ -70,52 +74,15 @@ critical infrastructure.
 
 ## Tested preview scope
 
-The current preview validation targets are Kubernetes `1.34` and `1.35`, each
-with exact Kind node-image pins recorded in `.ci/versions.yaml`. Kubernetes
-`1.36` is the intended next validation line once a digest-pinned Kind node image
-is available. Kubernetes `1.29+` KMS v2 clusters may work, but unlisted versions
-are not part of the tested preview matrix. KMS v2 is
-the only supported Kubernetes KMS API; KMS v1 is not implemented.
+The current release line is tested with Kubernetes `1.34` and `1.35` and
+OpenBao `2.6.0`, using Transit `aes256-gcm96` keys. Other Kubernetes `1.29+`
+clusters with KMS v2 might work but are outside the tested matrix. KMS v1 is
+not implemented. See [Reference: Compatibility](/docs/reference/compatibility/)
+for the full matrix and upgrade rules.
 
-The current OpenBao validation target is OpenBao `2.6.0` with the Transit
-secrets engine using `aes256-gcm96` keys. See
-[Compatibility](/docs/reference/compatibility/) for the full supported version
-envelope and upgrade rules for this matrix.
-
-## Defaults and boundaries
-
-The current release line is intentionally narrow:
-
-- Kubernetes KMS v2 only. KMS v1 is not implemented.
-- JWT authentication to OpenBao by default.
-- PKCS#11 certificate auth only when the selected release includes matching
-  opt-in artifacts and marks that path as tested.
-- SPIFFE/SPIRE certificate-source configuration is not supported in preview.
-- OpenBao tokens stored in process memory only.
-- Transit associated data required for encrypt and decrypt.
-- Deterministic, opaque Kubernetes `key_id` values derived from configured identity scope and Transit metadata.
-- Local registry state at `/var/lib/openbao-kms/state/key-registry.json`.
-- Provider socket at `/run/openbao-kms/kms.sock` with mode `0660`.
-- Metrics on `127.0.0.1:8081` and health on `127.0.0.1:8082`.
-- Direct decrypt path without provider-side micro-batching.
-- systemd and static-pod deployment models.
-
-## Recommended deployment defaults
-
-Use these defaults unless your platform has a documented reason to diverge:
-
-- Use one named Transit key per Kubernetes cluster or trust domain.
-- Use `aes256-gcm96` Transit keys for the supported path.
-- Keep Transit key export, plaintext backup, and deletion disabled.
-- Keep Transit key creation and rotation outside the provider, through platform automation or an OpenBao administrator workflow.
-- Generate and store a non-secret key lineage ID when each Transit key is created.
-- Prefer systemd when you control the host operating-system lifecycle.
-- Use static pods for kubeadm-style control planes only when image preload, hostPath preparation, and node-local provider identity are operationally controlled.
-- Pin binaries, packages, images, checksums, and verified release artifacts. Do not use floating `latest` inputs.
-
-Current performance validation keeps the simpler direct decrypt path. See
-[Contribute: Performance evidence](/contribute/benchmark-results/) for the
-captured results.
+The provider authenticates to OpenBao with a JSON Web Token (JWT) by default.
+PKCS#11 certificate auth is a separate, opt-in build; see
+[Security: Auth model](/docs/security/auth-model/).
 
 ## Out of scope
 
@@ -130,11 +97,3 @@ The current release line does not include:
 - A Helm chart that installs the provider into the protected cluster.
 - Provider-side decrypt micro-batching.
 - Production use while the release line remains preview.
-
-## Read next
-
-1. [Prepare OpenBao](/docs/get-started/openbao/) to provision the Transit mount, key, policy, and provider authentication.
-2. [Install the provider](/docs/get-started/install/) to fetch a verified provider binary.
-3. [Get started: Choose a deployment model](/docs/get-started/deployment-model/) to run the provider on every control-plane node.
-4. [Enable encryption](/docs/get-started/enable-encryption/) to write the `EncryptionConfiguration` consumed by the API server.
-5. [Verify encryption](/docs/get-started/verify/) to verify the path end-to-end.

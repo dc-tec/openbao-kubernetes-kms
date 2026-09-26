@@ -1,185 +1,202 @@
 ---
 title: Run with systemd
-description: "Hardened systemd unit, directory setup, and startup procedure for running bao-kms-provider as a host service."
-eyebrow: Get started · Step 5
-weight: 50
+description: "Install the provider as a hardened systemd service on each control-plane node, configure it, validate it with doctor, and start it."
+eyebrow: Get started · Step 6
+weight: 60
+verifiedBy:
+  - deploy/systemd/bao-kms-provider.service
+  - deploy/package/linux
+  - deploy/config/provider-systemd.yaml
+  - test/deployment/systemd-install.sh
 ---
 
-systemd is the preferred hardened deployment model when operators control the
-host operating system. It does not depend on kubelet, the container runtime, or
-the Kubernetes API server to start the provider. This separation matters
-because `kube-apiserver` may require the provider to decrypt existing resources
-during startup.
+Repeat this procedure on every control-plane node. At the end, the provider
+runs as the non-root `openbao-kms` user, listens on
+`/run/openbao-kms/kms.sock`, and has passed `doctor` against OpenBao.
 
-For the model selection rationale, see [Get Started: Choosing A
-Model](/docs/get-started/deployment-model/). For the user, group, and file ownership
-model, see [Security: Linux Identity
-Model](/docs/security/linux-identity-model/).
+## Before you begin
 
-## Recommended unit
+- Download and verify the artifact in
+  [Download the release](/docs/get-started/download/), and keep that shell with
+  `VERSION` and `ARCH` set.
+- Have the values from [Plan identity values](/docs/get-started/plan-values/)
+  and the lineage ID from [Prepare OpenBao](/docs/get-started/openbao/).
+- Obtain the OpenBao CA bundle as `ca.crt` and the provider host JWT as
+  `identity.jwt` from your identity provisioning process. The JWT must be
+  renewable without the protected API server.
 
-The maintained sample unit lives at `deploy/systemd/bao-kms-provider.service` in the repository. It uses the identity model from [Linux identity model](/docs/security/linux-identity-model/).
+## Step 1: Install the package or tarball
 
-```ini
-[Unit]
-Description=OpenBao Kubernetes KMS v2 Provider
-Documentation=https://github.com/dc-tec/openbao-kubernetes-kms
-Wants=network-online.target
-After=network-online.target
-Before=kubelet.service
-StartLimitIntervalSec=60
-StartLimitBurst=10
-ConditionPathExists=/etc/openbao-kms/config.yaml
-ConditionPathExists=/var/lib/openbao-kms/identity.jwt
-ConditionPathIsDirectory=/run/openbao-kms
-
-[Service]
-Type=exec
-User=openbao-kms
-Group=openbao-kms
-SupplementaryGroups=openbao-kms-socket
-ExecStart=/usr/bin/bao-kms-provider serve --config /etc/openbao-kms/config.yaml
-Restart=always
-RestartSec=5s
-UMask=0027
-
-NoNewPrivileges=true
-PrivateTmp=true
-PrivateDevices=true
-ProtectSystem=strict
-ProtectHome=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictSUIDSGID=true
-RestrictRealtime=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-SystemCallArchitectures=native
-LockPersonality=true
-MemoryDenyWriteExecute=true
-CapabilityBoundingSet=
-AmbientCapabilities=
-ReadOnlyPaths=/etc/openbao-kms
-ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state
-
-[Install]
-WantedBy=multi-user.target
-```
-
-The exact ordering depends on the Kubernetes distribution. On kubeadm-style
-hosts, start the provider early enough that the socket is available before
-kubelet starts the static-pod API server.
-
-Use `deploy/config/provider-systemd.yaml` as the starting provider configuration
-for host-service deployments. Install only packages or tarballs that have passed
-the checksum, signature, and provenance verification described in
-[Get started: Install the provider](/docs/get-started/install/#verify-release-artifacts).
-
-The sample unit uses the default JSON Web Token (JWT) configuration. PKCS#11
-certificate-auth deployments must replace the JWT `ConditionPathExists=` line
-with checks for the configured certificate chain and PKCS#11 PIN file.
-
-## Unit settings
-
-| Setting | Purpose |
-|---|---|
-| `Before=kubelet.service` | Starts the provider before kubelet starts static-pod control-plane components on kubeadm-style hosts. |
-| `ConditionPathExists=` | Fails early when config or selected auth material has not been staged. |
-| `ConditionPathIsDirectory=` | Requires the runtime socket directory to exist with packaging-controlled ownership. |
-| `Type=exec` | Surfaces `execve` failures before systemd marks the service started. |
-| `Restart=always` and restart limits | Restarts transient provider failures without hiding a fast crash loop. |
-| `UMask=0027` | Prevents permissive files created by the process. |
-| `NoNewPrivileges=true` | Blocks privilege escalation through setuid or file capabilities. |
-| `ProtectSystem=strict` | Makes the host filesystem read-only except explicitly allowed paths. |
-| `ReadOnlyPaths=/etc/openbao-kms` | Allows config and certificate authority (CA) bundle reads without making the directory writable. |
-| `ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state` | Limits writes to the socket directory and non-secret local registry state. |
-| `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6` | Allows Unix sockets plus IPv4 and IPv6 OpenBao traffic. |
-| `CapabilityBoundingSet=` and `AmbientCapabilities=` | Runs without Linux capabilities. |
-
-`network-online.target` is only an ordering hint. It does not prove that DNS,
-routing, OpenBao TLS, or the OpenBao load balancer is ready. The provider's
-`bootstrap.graceTimeout` handles these boot races by retrying the initial
-metadata and deep probes before exiting.
-
-## Directory setup
-
-For `0.1.0-preview.1` and `0.1.0-preview.2`, apply the persistent directory
-permission correction in [Install the provider](/docs/get-started/install/#correct-directory-access-in-existing-previews)
-so tmpfiles processing preserves service-user access after reboot.
+On Debian or Ubuntu:
 
 ```sh
-install -d -o root -g openbao-kms -m 0750 /etc/openbao-kms
-install -d -o root -g root -m 0755 /etc/openbao-kms/tls
-install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms
-install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms/state
-install -d -o openbao-kms -g openbao-kms-socket -m 2750 /run/openbao-kms
+sudo dpkg -i "bao-kms-provider_${VERSION}_linux_${ARCH}.deb"
 ```
 
-The service verifies `/run/openbao-kms` at startup. Packaging must create the
-runtime directory through `tmpfiles.d` or an equivalent root-owned install
-step. The directory group must be `openbao-kms-socket`, and the setgid bit must
-preserve the socket access group. The socket access group needs execute
-permission on the directory and write permission on `kms.sock`. It must not
-have write permission on the directory.
+On RHEL-family hosts:
 
-A sample `tmpfiles.d` entry lives under `deploy/package/linux/tmpfiles.d/openbao-kms.conf`. The runtime-only entry is:
-
-```text
-d /run/openbao-kms 2750 openbao-kms openbao-kms-socket -
+```sh
+sudo rpm -Uvh "bao-kms-provider_${VERSION}_linux_${ARCH}.rpm"
 ```
 
-## Start
+On other hosts, install the systemd tarball. The commands need GNU `install`,
+`systemd-sysusers`, and `systemd-tmpfiles`; hosts without them must create the
+same layout through configuration management, as described in
+[Security: Linux identity model](/docs/security/linux-identity-model/).
+Extract the archive and enter its versioned directory:
+
+<!-- systemd-bundle-extract -->
+```sh
+tar -xzf "bao-kms-provider_${VERSION}_systemd_linux_${ARCH}.tar.gz"
+cd "bao-kms-provider_${VERSION}_systemd_linux_${ARCH}"
+```
+
+Run the following block in a root shell from the extracted directory. It
+installs the files and creates the service identities and directories. It
+leaves live configuration and authentication material unchanged.
+
+<!-- systemd-bundle-install -->
+```sh
+set -eu
+install -D -o root -g root -m 0755 bin/bao-kms-provider /usr/bin/bao-kms-provider
+install -D -o root -g root -m 0644 systemd/bao-kms-provider.service /usr/lib/systemd/system/bao-kms-provider.service
+install -D -o root -g root -m 0644 sysusers.d/openbao-kms.conf /usr/lib/sysusers.d/openbao-kms.conf
+install -D -o root -g root -m 0644 tmpfiles.d/openbao-kms.conf /usr/lib/tmpfiles.d/openbao-kms.conf
+install -D -o root -g root -m 0644 config/provider-systemd.yaml /usr/share/doc/bao-kms-provider/examples/provider-systemd.yaml
+install -D -o root -g root -m 0644 kubernetes/encryption-config.yaml /usr/share/doc/bao-kms-provider/examples/encryption-config.yaml
+install -D -o root -g root -m 0644 README.md /usr/share/doc/bao-kms-provider/README.md
+install -D -o root -g root -m 0644 LICENSE /usr/share/doc/bao-kms-provider/LICENSE
+systemd-sysusers /usr/lib/sysusers.d/openbao-kms.conf
+systemd-tmpfiles --create /usr/lib/tmpfiles.d/openbao-kms.conf
+```
+
+Reload systemd to register the unit:
 
 ```sh
 systemctl daemon-reload
-systemctl enable bao-kms-provider.service
-systemctl start bao-kms-provider.service
-systemctl status bao-kms-provider.service
 ```
 
-Run `doctor` before enabling kube-apiserver encryption:
+The package and tarball leave the service disabled and stopped.
+
+## Step 2: Correct directory access on preview releases
+
+The packages and tarballs for `0.1.0-preview.1` and `0.1.0-preview.2` create
+`/etc/openbao-kms` with group `root`, so the service user cannot read its
+configuration. On these releases, run this block as root. It adds a persistent
+tmpfiles override so the fix survives reboot. If an override already exists,
+update its `/etc/openbao-kms` entry by hand instead.
+
+<!-- systemd-preview-permissions -->
+```sh
+set -eu
+test ! -e /etc/tmpfiles.d/openbao-kms.conf
+install -d -o root -g root -m 0755 /etc/tmpfiles.d
+sed 's@^d /etc/openbao-kms 0750 root root -$@d /etc/openbao-kms 0750 root openbao-kms -@' \
+  /usr/lib/tmpfiles.d/openbao-kms.conf > /etc/tmpfiles.d/openbao-kms.conf
+chmod 0644 /etc/tmpfiles.d/openbao-kms.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/openbao-kms.conf
+```
+
+Remove the override once an installed release sets the group to `openbao-kms`
+in `/usr/lib/tmpfiles.d/openbao-kms.conf`, unless it holds other local changes.
+
+## Step 3: Write the provider configuration
+
+Copy the installed example to a working file:
 
 ```sh
+cp /usr/share/doc/bao-kms-provider/examples/provider-systemd.yaml provider.yaml
+```
+
+Edit `provider.yaml` and replace the sample values in the fields listed in
+[Plan identity values: Provider configuration](/docs/get-started/plan-values/#provider-configuration)
+with your recorded values.
+
+Keep the other fields at their sample values unless you have a reason to change
+them; see [Reference: Configuration](/docs/reference/configuration/).
+
+## Step 4: Place the runtime files
+
+From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`,
+run as root:
+
+<!-- systemd-runtime-files -->
+```sh
+set -eu
+test ! -e /etc/openbao-kms/config.yaml
+test ! -e /etc/openbao-kms/tls/ca.crt
+test ! -e /var/lib/openbao-kms/identity.jwt
+install -o root -g openbao-kms -m 0640 provider.yaml /etc/openbao-kms/config.yaml
+install -o root -g root -m 0644 ca.crt /etc/openbao-kms/tls/ca.crt
+install -o root -g openbao-kms -m 0640 identity.jwt /var/lib/openbao-kms/identity.jwt
+```
+
+The `test` lines stop the block on a node that already has a deployment. For
+an existing node, follow [Operate: Upgrade](/docs/operate/upgrade/) instead and
+keep its identity and state.
+
+## Step 5: Validate as the service user
+
+Run the checks as `openbao-kms`, so an unreadable file fails here the same way
+it would fail in the service.
+
+Resolve the configuration and print its identity fingerprint:
+
+```sh
+sudo -u openbao-kms bao-kms-provider config --config /etc/openbao-kms/config.yaml
+```
+
+Check the Transit key profile, then run the full bootstrap check against
+OpenBao:
+
+```sh
+sudo -u openbao-kms bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
 sudo -u openbao-kms bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
 ```
 
-After the Kubernetes `EncryptionConfiguration` is staged, include it in the check:
+Each command exits with status `0`, and neither `verify-key` nor `doctor`
+reports a `[fail]` check. Every control-plane node must print the same
+identity fingerprint. `doctor` failures on a new setup are usually policy or
+auth problems; see [Operate: Troubleshooting](/docs/operate/troubleshooting/)
+and [Reference: CLI](/docs/reference/cli/#doctor).
+
+## Step 6: Start the service
 
 ```sh
-bao-kms-provider doctor \
-  --config /etc/openbao-kms/config.yaml \
-  --encryption-config /etc/kubernetes/encryption-config.yaml
+systemctl enable --now bao-kms-provider.service
+systemctl status bao-kms-provider.service
 ```
 
-Before enabling API server encryption, `systemctl status` reports the service
-as active and `doctor` exits with status `0` without a `[fail]` check.
+`systemctl status` reports the service as active, and
+`/run/openbao-kms/kms.sock` exists. The provider is ready for
+[Enable encryption](/docs/get-started/enable-encryption/) once it runs on every
+control-plane node.
 
-## Hardening checklist
-
-- Run as non-root where possible.
-- Keep auth material readable only by the provider process.
-- Keep the socket writable only by the provider and the API server identity.
-- Verify `ProtectSystem=strict` does not block required paths.
-- Bind metrics and health endpoints to localhost unless explicitly needed.
-- Avoid debug endpoints.
-- Use systemd restart limits suitable for control-plane recovery.
-
-For the broader hardening surface beyond the systemd unit see [Security: Hardening](/docs/security/hardening/).
-
-## Failure modes
-
-Common failures during initial bring-up:
+If the service does not become active, check these common first-start causes:
 
 - the service starts after kubelet or the API server,
-- the socket directory group is wrong,
-- `ProtectSystem` blocks the configuration file or auth material,
+- the socket directory group is not `openbao-kms-socket`,
+- `ProtectSystem` blocks a configuration or auth material path,
 - the CA bundle path is missing,
-- host DNS is not ready before service start,
+- host DNS is not ready when the service starts,
 - the OpenBao TLS server name does not match the certificate.
 
-The provider retries the initial metadata and deep probes for
-`bootstrap.graceTimeout` before exiting. Keep the grace long enough for auth
-material projection, DNS or routing, OpenBao restart, and clock synchronization.
-Keep it short enough that service status exposes deterministic misconfiguration.
+## About the unit
 
-For diagnosis and recovery see [Operate: Troubleshooting](/docs/operate/troubleshooting/). For provider upgrade procedure see [Operate: Upgrade](/docs/operate/upgrade/).
+The installed unit comes from `deploy/systemd/bao-kms-provider.service`. The
+settings that matter for the control-plane boot path:
+
+| Setting | Purpose |
+|---|---|
+| `Before=kubelet.service` | Starts the provider before kubelet starts a static-pod API server on kubeadm-style hosts. |
+| `ConditionPathExists=` | Skips start until the configuration and JWT are staged. PKCS#11 deployments replace the JWT condition with their certificate chain and PIN file. |
+| `ConditionPathIsDirectory=/run/openbao-kms` | Requires the socket directory that tmpfiles creates. |
+| `User=openbao-kms`, `SupplementaryGroups=openbao-kms-socket` | Runs without root; the socket group is how the API server connects. |
+| `Restart=always` with start limits | Restarts transient failures without hiding a fast crash loop. |
+| `ProtectSystem=strict`, `ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state` | Makes the host read-only except the socket directory and non-secret registry state. |
+| `CapabilityBoundingSet=`, `NoNewPrivileges=true` | Runs without Linux capabilities or privilege escalation. |
+
+`network-online.target` orders the start but does not prove DNS, routing, or
+OpenBao are reachable. The provider retries its initial checks for
+`bootstrap.graceTimeout` before it exits. For the full hardening surface, see
+[Security: Hardening](/docs/security/hardening/).

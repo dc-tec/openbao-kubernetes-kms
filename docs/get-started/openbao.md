@@ -1,129 +1,116 @@
 ---
 title: Prepare OpenBao
-description: "Provision the Transit mount, key, least-privilege policy, and OpenBao authentication required by bao-kms-provider."
-eyebrow: Get started · Step 3
-weight: 30
+description: "Create the dedicated Transit mount and key, the least-privilege policy, and the JWT auth role the provider logs in with."
+eyebrow: Get started · Step 4
+weight: 40
+verifiedBy:
+  - deploy/opentofu/openbao-kubernetes-kms/main.tofu
+  - cmd/bao-kms-provider/policy.go
+  - test/dev-env/opentofu/main.tofu
 ---
 
-Before installing the provider, provision OpenBao with the Transit secrets
-engine, one named key for each Kubernetes cluster, a least-privilege policy,
-and a release-supported host authentication method. Run the following commands
-in order as an OpenBao administrator. The static policy template in Step 4 is
-the bootstrap path before the provider binary and configuration file exist.
+Run these steps once per Kubernetes cluster as an OpenBao administrator. At the
+end, OpenBao holds a Transit key the provider can use for encrypt and decrypt
+only, and a JWT role that issues the provider a token with exactly that
+permission.
 
-## Prerequisites
+## Before you begin
 
-- A reachable OpenBao instance (HTTPS endpoint, valid TLS).
-- An endpoint that serves requests without HTTP redirects. For HA, use OpenBao
-  server-side request forwarding or an endpoint routed to the active node.
-- An OpenBao token with administrative capabilities for `sys/`, `auth/`, and `transit/` paths.
-- A deterministic name for the Kubernetes Transit key. The naming convention used in this guide is `k8s-<workload>-etcd`. Replace `workload-a` with your environment-specific identifier in every example below.
-- A stable OpenBao instance ID and Transit mount ID for provider configuration. These are non-secret identity values used in Kubernetes `key_id` and additional authenticated data (AAD) derivation.
-- Optional: an OpenBao namespace for this Kubernetes cluster when a single OpenBao cluster serves multiple Kubernetes clusters. Configure it as `openbao.namespace`; auth and Transit paths in this guide remain relative to that namespace.
+- Choose and record the values from [Plan identity values](/docs/get-started/plan-values/),
+  and set the shell variables from that page in this shell.
+- Use an OpenBao endpoint with valid TLS that serves requests without HTTP
+  redirects. For HA, use server-side request forwarding or an endpoint routed
+  to the active node.
+- Log in to the `bao` CLI with a token that can manage `sys/mounts`, `sys/auth`,
+  `sys/policies`, and the new Transit mount.
+- Confirm that the JWT issuer for the provider host credential is reachable
+  independently of the protected Kubernetes API server. See
+  [Security: Auth model](/docs/security/auth-model/).
 
-For background on why each choice is made, see [Architecture: Transit key model](/docs/architecture/transit-key-model/) and [Security: Auth model](/docs/security/auth-model/).
+{{< callout type="tip" title="Manage OpenBao with OpenTofu" >}}
+The OpenTofu module in `deploy/opentofu/openbao-kubernetes-kms` creates the
+Transit mount, `disable_upsert`, the key, and the policy from Steps 1, 2, and 4.
+Pin its source to the release you install, for example
+`git::https://github.com/dc-tec/openbao-kubernetes-kms.git//deploy/opentofu/openbao-kubernetes-kms?ref=0.1.0-preview.2`.
+You still generate the lineage ID and configure auth with Steps 3 and 5.
+{{< /callout >}}
 
 ## Step 1: Enable the Transit mount
 
-Enable a dedicated Transit mount for Kubernetes KMS keys:
+Enable a dedicated Transit mount, then disable upsert so an encrypt call to a
+misspelled key name fails instead of creating a new key:
 
 ```sh
-bao secrets enable -path=transit transit
+bao secrets enable -path="${TRANSIT_MOUNT}" transit
+bao write "${TRANSIT_MOUNT}/config/keys" disable_upsert=true
 ```
 
-Disable upsert on the mount so an encrypt call to a misspelled key name does not silently create a new key:
-
-```sh
-bao write transit/config/keys disable_upsert=true
-```
-
-Use a dedicated Transit mount for the Kubernetes KMS keys. `disable_upsert` is configured at the mount level and would affect any other workloads sharing the same mount.
+`disable_upsert` applies to the whole mount, which is one reason the mount must
+not be shared with other workloads.
 
 ## Step 2: Create the Transit key
 
-Create the key with the recommended profile:
-
 ```sh
-bao write transit/keys/k8s-workload-a-etcd \
+bao write "${TRANSIT_MOUNT}/keys/${KEY_NAME}" \
   type=aes256-gcm96 \
   exportable=false \
   allow_plaintext_backup=false
 ```
 
-Recommended properties:
+Confirm the key profile:
 
-| Property | Value |
-|---|---|
-| key type | `aes256-gcm96` |
-| derived | `false` |
-| convergent encryption | `false` |
-| exportable | `false` |
-| plaintext backup | `false` |
-| deletion allowed | `false` |
-| auto-rotate period | `0` (rotation is operator-driven) |
+```sh
+bao read "${TRANSIT_MOUNT}/keys/${KEY_NAME}"
+```
 
-For the current release line, `aes256-gcm96` is the only tested and supported
-key type. Other authenticated encryption with associated data (AEAD) Transit
-key types need implementation, compatibility testing, and documentation before
-they can be supported.
+The output shows `type` `aes256-gcm96` and `false` for `derived`,
+`convergent_encryption`, `exportable`, `allow_plaintext_backup`, and
+`deletion_allowed`, with `auto_rotate_period` `0s`. `aes256-gcm96` is the only
+tested key type in the current release line.
 
-After creating the key, do not enable `exportable` or
-`allow_plaintext_backup`. OpenBao treats both settings as irreversible. Keep
-`deletion_allowed=false`. This setting is reversible, but enabling it permits
-key deletion when a token also has delete capability.
+{{< callout type="warning" title="Irreversible key settings" >}}
+Never enable `exportable` or `allow_plaintext_backup` on this key. OpenBao
+cannot turn either setting off again. Keep `deletion_allowed=false`; enabling
+it permits key deletion by any token with delete capability.
+{{< /callout >}}
 
 ## Step 3: Capture the key lineage ID
 
-Generate a stable, non-secret identifier for this Transit key creation event:
+Generate the lineage ID for this key and record it with the other values:
 
 ```sh
-openssl rand -hex 16
+KEY_LINEAGE_ID=$(openssl rand -hex 16)
+echo "${KEY_LINEAGE_ID}"
 ```
 
-Example output:
-
-```text
-7d34fb7df15f4e4c95d6c2a50fe90d84
-```
-
-Store the lineage ID in platform configuration management and supply it to the provider through `transit.keyIdScope.keyLineageId` (see [Configuration](/docs/reference/configuration/)).
-
-The lineage ID is not a secret. It must be:
-
-- generated once when the Transit key is created,
-- stable for the full lifetime of that key generation,
-- unique across deleted and recreated keys,
-- independent of the key name, mount path, OpenBao URL, or cluster name.
-
-An existing platform inventory ID or Universally Unique Lexicographically
-Sortable Identifier (ULID) can be used if it has the same properties. Do not
-derive the lineage ID from mutable topology strings.
-
-If the Transit key is deleted and recreated, generate a new lineage ID and treat the event as a destructive migration. The provider uses this ID to reject decrypt requests carrying ciphertext from a different key generation.
+The lineage ID is not a secret. Generate it once, when the key is created, and
+keep it for the key's whole lifetime. If the Transit key is ever deleted and
+recreated, generate a new lineage ID and treat the change as a destructive
+migration; the provider rejects ciphertext from a different key generation.
 
 ## Step 4: Create the policy
 
-Write the least-privilege policy before creating the auth role:
+Write the least-privilege policy for the provider token:
 
 ```sh
-cat >/tmp/openbao-kms-workload-a.hcl <<'HCL'
+bao policy write "${POLICY_NAME}" - <<EOF
 # Read Transit key metadata.
-path "transit/keys/k8s-workload-a-etcd" {
+path "${TRANSIT_MOUNT}/keys/${KEY_NAME}" {
   capabilities = ["read"]
 }
 
 # Encrypt with the existing key.
-path "transit/encrypt/k8s-workload-a-etcd" {
+path "${TRANSIT_MOUNT}/encrypt/${KEY_NAME}" {
   capabilities = ["update"]
 }
 
 # Decrypt existing ciphertext.
-path "transit/decrypt/k8s-workload-a-etcd" {
+path "${TRANSIT_MOUNT}/decrypt/${KEY_NAME}" {
   capabilities = ["update"]
 }
 
 # Inspect Transit disable_upsert.
-path "transit/config/keys" {
+path "${TRANSIT_MOUNT}/config/keys" {
   capabilities = ["read"]
 }
 
@@ -136,120 +123,53 @@ path "sys/capabilities-self" {
 path "auth/token/renew-self" {
   capabilities = ["update"]
 }
-HCL
+EOF
 ```
 
-Apply the policy:
-
-```sh
-bao policy write openbao-kms-workload-a /tmp/openbao-kms-workload-a.hcl
-```
-
-After the provider binary and `/etc/openbao-kms/config.yaml` exist, you can generate the hot-path Transit policy from the active configuration and compare the rendered paths with the policy above:
-
-```sh
-bao-kms-provider policy openbao \
-  --config /etc/openbao-kms/config.yaml
-```
-
-The generated policy includes the Transit and `sys/capabilities-self` paths. Keep the token-renewal self path in the applied policy when the provider configuration uses token renewal and the auth role sets `token_no_default_policy=true`.
-
-The policy must not grant:
-
-- `create` on `transit/encrypt/*` (key creation through encrypt is what `disable_upsert` blocks at the mount level; the policy enforces it again at the token level),
-- `update` on `transit/keys/*` (this is the rotation capability and stays with operators or platform automation),
-- `delete` on any Transit key path,
-- `read` on `transit/export/*`,
-- `read` on plaintext backup paths,
-- broad `sudo` or admin permissions.
-
-For policy variants and rationale see [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
+The policy deliberately omits `create` on the encrypt path, `update` on the key
+path (rotation stays with operators), and any delete, export, or backup
+capability. For variants and the full list of capabilities to avoid, see
+[Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
 
 ## Step 5: Configure JWT auth
 
-JSON Web Token (JWT) auth is the default preview build and release path. This
-procedure uses OpenID Connect (OIDC) discovery. For a JSON Web Key Set (JWKS),
-pinned local public keys, or PKCS#11 certificate-auth variants, use [Reference:
-Transit Policy Examples](/docs/configure/openbao-auth/) after completing
-this procedure.
-
-Enable JWT auth at a dedicated path:
+Enable JWT auth at a dedicated path and trust the issuer that signs the
+provider host JWT. This example uses OpenID Connect (OIDC) discovery; for a
+JSON Web Key Set (JWKS) URL or pinned public keys, see
+[Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
 
 ```sh
-bao auth enable -path=k8s-workload-a-jwt jwt
+bao auth enable -path="${JWT_MOUNT}" jwt
+bao write "auth/${JWT_MOUNT}/config" \
+  oidc_discovery_url="${JWT_ISSUER}" \
+  bound_issuer="${JWT_ISSUER}"
 ```
 
-Configure JWT validation for the issuer that signs the provider host JWT:
+Create the role the provider logs in with. It binds the audience and subject,
+attaches only the policy from Step 4, and issues short-lived tokens:
 
 ```sh
-bao write auth/k8s-workload-a-jwt/config \
-  oidc_discovery_url="https://issuer.example.internal" \
-  bound_issuer="https://issuer.example.internal"
-```
-
-Create a role bound to the control-plane provider identity. The example uses a
-30-minute token time to live (TTL) and a one-hour maximum TTL:
-
-```sh
-bao write auth/k8s-workload-a-jwt/role/openbao-kms-control-plane \
+bao write "auth/${JWT_MOUNT}/role/${JWT_ROLE}" \
   role_type=jwt \
-  bound_audiences='["bao-kms-provider"]' \
-  bound_subject="system:openbao-kms:workload-a" \
-  user_claim="sub" \
-  token_policies='["openbao-kms-workload-a"]' \
-  token_ttl="30m" \
-  token_max_ttl="1h" \
+  bound_audiences="${JWT_AUDIENCE}" \
+  bound_subject="${JWT_SUBJECT}" \
+  user_claim=sub \
+  token_policies="${POLICY_NAME}" \
+  token_ttl=30m \
+  token_max_ttl=1h \
   token_no_default_policy=true
 ```
 
-Recommended role constraints:
+If the issuer adds a cluster or environment claim, bind it as well with
+`bound_claims`.
 
-- bound issuer,
-- bound audience,
-- bound subject,
-- bound cluster or environment claim,
-- short token TTL,
-- no default policy,
-- the narrow policy from Step 4.
+The provider reads its JWT from a file on the host. Do not rely on a Kubernetes
+ServiceAccount token from the protected cluster as the only credential: if that
+API server is down, the provider cannot refresh its token during recovery.
 
-The provider reads JWTs from a host-mounted file. For reliable recovery, use a
-JWT issuer that is reachable independently of the protected Kubernetes API
-server. Avoid using a Kubernetes ServiceAccount token from the same protected
-cluster as the only credential source. If that API server is unavailable, the
-provider might not be able to refresh the token during recovery. See [Security: Auth
-Model](/docs/security/auth-model/) for the trust-boundary discussion.
+## Result
 
-## Step 6: Verify
-
-After installing the provider, `bao-kms-provider doctor` validates the OpenBao side end-to-end:
-
-- TLS connection to OpenBao succeeds.
-- The configured auth material is locally valid.
-- OpenBao auth login succeeds.
-- The token can read Transit key metadata.
-- The token can encrypt and decrypt probe data.
-- The token cannot rotate, export, back up, or delete the key.
-- The key type and flags match the recommended profile.
-- `disable_upsert` is enabled on the Transit mount.
-
-Doctor failures during initial setup are usually policy-related. See [Operate: Troubleshooting](/docs/operate/troubleshooting/) for common cases.
-
-Before wiring Kubernetes encryption, run the focused key check as well:
-
-```sh
-bao-kms-provider verify-key \
-  --config /etc/openbao-kms/config.yaml
-```
-
-The command must exit with status `0` and must not report a `[fail]` check.
-
-`verify-key` checks Transit metadata, key type, export settings, plaintext
-backup settings, deletion settings, and version restrictions. Run it before
-changing API server encryption to separate OpenBao setup problems from socket
-and API server wiring problems.
-
-## Read next
-
-1. [Install the provider](/docs/get-started/install/) to fetch the provider binary and verify the local environment.
-2. [Get started: Choose a deployment model](/docs/get-started/deployment-model/) to run the provider on every control-plane node.
-3. [Enable encryption](/docs/get-started/enable-encryption/) once the provider runs and exposes its Unix socket.
+OpenBao now has the Transit mount with `disable_upsert`, the key with the
+recommended profile, the policy, and the JWT role. You verify the provider's
+view of this setup with `bao-kms-provider doctor` and `verify-key` after the
+provider is installed on a control-plane node.

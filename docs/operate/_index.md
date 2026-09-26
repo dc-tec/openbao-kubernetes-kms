@@ -15,7 +15,7 @@ upgrade state, run:
 ```sh
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
-  --encryption-config /etc/kubernetes/encryption-config.yaml
+  --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
 
 The command must exit with status `0` and must not report a `[fail]` check.

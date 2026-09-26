@@ -78,7 +78,7 @@
   to: docs/get-started/verify/
   reason: Page moved in the documentation restructure.
 - from: getting-started/install
-  to: docs/get-started/install/
+  to: docs/get-started/download/
   reason: Page moved in the documentation restructure.
 - from: getting-started/kubernetes-encryption-config
   to: docs/get-started/enable-encryption/

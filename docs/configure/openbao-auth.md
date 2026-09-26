@@ -118,6 +118,27 @@ bao write auth/k8s-workload-a-cert/certs/openbao-kms-control-plane \
 
 The OpenBao listener used by the provider must request client certificates. Keep cert auth binding enabled so renewal remains tied to the certificate identity used during login.
 
+### Certificate auth builds
+
+Published release artifacts support JWT auth only. Certificate auth with a
+PKCS#11 token is a separate host build that needs cgo and a PKCS#11 module on
+the host:
+
+```sh
+make build-certauth-pkcs11
+make release-artifact-certauth-pkcs11-host
+```
+
+| Artifact family | Preview support |
+|---|---|
+| Default `bao-kms-provider` artifacts | JWT auth only. |
+| `bao-kms-provider-certauth-pkcs11` host artifacts | PKCS#11 certificate auth, only when the selected release publishes the artifact and marks the path as tested. |
+| SPIFFE or combined cert-auth builds | Not a supported preview configuration. |
+
+For the systemd unit, replace the JWT `ConditionPathExists=` line with checks
+for the configured certificate chain and PKCS#11 PIN file. For static pods,
+mount the certificate chain, PIN file, and PKCS#11 module instead of the JWT.
+
 ## Transit key configuration
 
 ```sh

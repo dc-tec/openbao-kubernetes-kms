@@ -208,7 +208,7 @@ Run these checks before enabling the provider in an API server:
 
 ```sh
 bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
-bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml
+bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
 curl -sf http://127.0.0.1:8082/ready
 ```
 

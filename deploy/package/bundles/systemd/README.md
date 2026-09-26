@@ -35,7 +35,6 @@ sudo -u openbao-kms bao-kms-provider doctor --config /etc/openbao-kms/config.yam
 ```
 
 Continue only if `doctor` exits with status `0` without a `[fail]` check.
-Follow [Install](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/install/)
-for file ownership, artifact verification, and configuration instructions.
-Follow [systemd Deployment](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/systemd/)
-to enable and start the service after validation.
+Follow [Run with systemd](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/systemd/)
+for configuration, file ownership, validation, and service start. Verify the
+artifact first with [Download the release](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/download/).

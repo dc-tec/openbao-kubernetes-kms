@@ -271,7 +271,7 @@ Recovery order when the API server fails to start because the KMS path is unheal
 1. Do not delete encrypted etcd data.
 2. Inspect API server logs for KMS connection or decrypt errors.
 3. Restore the provider, socket, OpenBao, and auth material first.
-4. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml` locally. Include `--encryption-config /etc/kubernetes/encryption-config.yaml` when the API server encryption config is available.
+4. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml` locally. Include `--encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml` when the API server encryption config is available.
 5. Start the provider and verify KMS Status.
 6. Restart the API server.
 7. If OpenBao key material is missing, restore the OpenBao backup.

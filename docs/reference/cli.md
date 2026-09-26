@@ -39,7 +39,7 @@ Run preflight checks before promoting the binary or before changing the API serv
 ```sh
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
-  --encryption-config /etc/kubernetes/encryption-config.yaml \
+  --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml \
   --output json
 ```
 

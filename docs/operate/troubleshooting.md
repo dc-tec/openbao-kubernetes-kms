@@ -18,7 +18,7 @@ curl -sf http://127.0.0.1:8082/ready
 curl -sf http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_status_cache_age_seconds'
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
-  --encryption-config /etc/kubernetes/encryption-config.yaml
+  --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
 
 In a healthy baseline, each `curl` command exits with status `0`, the metric
@@ -393,7 +393,7 @@ Recovery:
 
 1. Restore the last known-good `EncryptionConfiguration`.
 2. Restart or reload `kube-apiserver`.
-3. Complete resource migration; see [Enable encryption: Migrate existing resources](/docs/get-started/enable-encryption/#migrate-existing-resources).
+3. Complete resource migration; see [Enable encryption: Migrate existing resources](/docs/get-started/enable-encryption/#step-5-rewrite-existing-secrets).
 4. Remove the fallback after migration verification.
 
 ## Do not do this during incidents

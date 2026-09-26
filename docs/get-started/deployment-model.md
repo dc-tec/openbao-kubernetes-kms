@@ -3,6 +3,10 @@ title: Choose a deployment model
 description: "Compare systemd and static-pod deployment for bao-kms-provider against control-plane lifecycle, bootstrap dependencies, and operational constraints."
 eyebrow: Get started · Step 2
 weight: 20
+verifiedBy:
+  - deploy/systemd/bao-kms-provider.service
+  - deploy/static-pod/bao-kms-provider.yaml
+  - test/e2e/kind_smoke_test.go
 ---
 
 The tested preview deployment models are a hardened systemd unit on the
@@ -133,9 +137,3 @@ flowchart TD
     SingleNode -->|yes| PreferSystemd
     SingleNode -->|no| UseStaticPod
 ```
-
-## Read next
-
-1. [Run with systemd](/docs/get-started/systemd/) for the unit file, directory setup, and start procedure.
-2. [Run as a static pod](/docs/get-started/static-pod/) for the manifest, image preload, and host preparation.
-3. [Linux identity model](/docs/security/linux-identity-model/) for the user, group, and permission model both deployments share.

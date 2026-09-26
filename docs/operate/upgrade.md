@@ -15,11 +15,11 @@ For wire-format compatibility expectations and the upgrade-window history, see [
 
 Verify:
 
-- the new binary or image is fetched and verified per [Install the provider: Verify release artifacts](/docs/get-started/install/#verify-release-artifacts),
+- the new binary or image is fetched and verified per [Install the provider: Verify release artifacts](/docs/get-started/download/#download-and-verify-the-artifact),
 - the cluster is not mid-rotation (check `bao-kms-provider rotation-plan --config /etc/openbao-kms/config.yaml`),
 - OpenBao is healthy and the configured auth credentials on every node are valid,
 - the existing provider reports a stable `key_id` hash on every control-plane node,
-- `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` passes,
+- `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml` passes,
 - the previous binary or image is still available on every node in case of rollback.
 
 Record:
@@ -37,7 +37,7 @@ OpenBao and API server recovery has been tested.
 
 For each node:
 
-1. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` with the new binary or image. Resolve any failed checks before continuing.
+1. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml` with the new binary or image. Resolve any failed checks before continuing.
 2. Stop the provider on the target node.
 3. Replace the binary or image with the new version.
 4. Start the provider.
@@ -72,7 +72,7 @@ For each node:
 
 1. Stop the provider on the target node.
 2. Replace the binary or image with the previous version.
-3. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` with the previous version.
+3. Run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml` with the previous version.
 4. Start the provider.
 5. Verify Status and the `key_id` hash match the rest of the fleet.
 6. Restart the API server only if required.

@@ -1,272 +1,204 @@
 ---
 title: Run as a static pod
-description: "Static pod manifest, image preload, host preparation, and bootstrap risk profile for running bao-kms-provider as a kubelet-managed pod."
-eyebrow: Get started · Step 5
-weight: 60
+description: "Verify and preload the provider image, prepare host files with numeric ownership, validate with doctor, and start the provider as a kubelet-managed static pod on each control-plane node."
+eyebrow: Get started · Step 6
+weight: 70
+verifiedBy:
+  - deploy/static-pod/bao-kms-provider.yaml
+  - deploy/config/provider-static-pod.yaml
+  - hack/harvester/remote/install-provider-static-pod.sh
+  - test/dev-env/scripts/stage-provider.sh
 ---
 
-Static pod deployment is appropriate for kubeadm-style environments and
-image-based control-plane management. It keeps the provider under kubelet
-management alongside the API server. Kubelet, the container runtime, and local
-image availability are therefore part of the KMS provider boot path.
+Repeat this procedure on every control-plane node. At the end, kubelet runs the
+provider next to the API server as UID `65532`, the provider listens on
+`/run/openbao-kms/kms.sock`, and it has passed `doctor` against OpenBao.
 
-For the model selection rationale see [Get started: Choose a deployment model](/docs/get-started/deployment-model/). For the user, group, and file ownership model see [Security: Linux identity model](/docs/security/linux-identity-model/).
+Static pods cannot use ConfigMaps, Secrets, or ServiceAccounts, because the
+API server might need the provider before those objects are readable.
+Everything the provider needs comes from host files.
 
-## Constraints
+## Before you begin
 
-Kubelet reads a static pod manifest from the host filesystem. Static pods
-cannot depend on Kubernetes API objects such as ConfigMaps, Secrets, or
-ServiceAccounts. The protected API server may need the KMS provider before
-those API objects are reachable.
+- Download and verify the static-pod bundle in
+  [Download the release](/docs/get-started/download/), and keep that shell with
+  `VERSION`, `ARCH`, `REPO`, and `WORKFLOW_IDENTITY` set.
+- Download and verify the systemd tarball of the same release as well. You use
+  its `bao-kms-provider` binary on the host to run `doctor`.
+- Have the values from [Plan identity values](/docs/get-started/plan-values/)
+  and the lineage ID from [Prepare OpenBao](/docs/get-started/openbao/).
+- Obtain the OpenBao CA bundle as `ca.crt` and the provider host JWT as
+  `identity.jwt`. The JWT must be renewable without the protected API server.
+- Use a kubeadm-style control plane that runs `kube-apiserver` as a static pod
+  on containerd.
 
-The provider static pod mounts everything it needs from the host:
+## Step 1: Extract the bundle
 
-- configuration file,
-- certificate authority (CA) bundle,
-- configured auth material such as a JSON Web Token (JWT) file, certificate chain, or PKCS#11 personal identification number (PIN) file,
-- runtime socket directory,
-- local state directory owned by the provider's OS user.
-
-The provider acquires `<state.path>.lock` before bootstrap. Prepare the state
-directory with the pod's `runAsUser` as its owner and without group or world
-write permission. Keep the lock file in place across container restarts.
-
-## Example manifest
-
-The maintained sample manifest lives at
-`deploy/static-pod/bao-kms-provider.yaml`. Replace the placeholder image digest
-with the verified digest from the selected release. Replace the supplemental
-group ID (GID) before deploying. Do not deploy a tag-only image reference.
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: bao-kms-provider
-  namespace: kube-system
-  labels:
-    app.kubernetes.io/name: bao-kms-provider
-    app.kubernetes.io/component: kms-provider
-spec:
-  # Required during early control-plane boot because the Container Network
-  # Interface (CNI) may be unavailable when the provider must reach OpenBao.
-  hostNetwork: true
-  priorityClassName: system-node-critical
-  automountServiceAccountToken: false
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 65532
-    runAsGroup: 65532
-    supplementalGroups:
-      # Replace with the host openbao-kms-socket GID from:
-      # getent group openbao-kms-socket
-      - 1234
-    seccompProfile:
-      type: RuntimeDefault
-  containers:
-    - name: bao-kms-provider
-      # Replace with the verified image digest from the selected release.
-      image: ghcr.io/dc-tec/bao-kms-provider@sha256:0000000000000000000000000000000000000000000000000000000000000000
-      imagePullPolicy: IfNotPresent
-      args:
-        - serve
-        - --config=/etc/openbao-kms/config.yaml
-      ports:
-        - name: metrics
-          containerPort: 8081
-          protocol: TCP
-        - name: health
-          containerPort: 8082
-          protocol: TCP
-      securityContext:
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        capabilities:
-          drop:
-            - ALL
-      volumeMounts:
-        - name: config
-          mountPath: /etc/openbao-kms/config.yaml
-          readOnly: true
-        - name: tls
-          mountPath: /etc/openbao-kms/tls
-          readOnly: true
-        - name: jwt
-          mountPath: /var/lib/openbao-kms/identity.jwt
-          readOnly: true
-        - name: run
-          mountPath: /run/openbao-kms
-        - name: state
-          mountPath: /var/lib/openbao-kms/state
-      startupProbe:
-        httpGet:
-          host: 127.0.0.1
-          path: /live
-          port: 8082
-        periodSeconds: 5
-        timeoutSeconds: 1
-        failureThreshold: 24
-      livenessProbe:
-        httpGet:
-          host: 127.0.0.1
-          path: /live
-          port: 8082
-        initialDelaySeconds: 5
-        periodSeconds: 10
-      readinessProbe:
-        httpGet:
-          host: 127.0.0.1
-          path: /ready
-          port: 8082
-        initialDelaySeconds: 5
-        periodSeconds: 10
-  volumes:
-    - name: config
-      hostPath:
-        path: /etc/openbao-kms/config.yaml
-        type: File
-    - name: tls
-      hostPath:
-        path: /etc/openbao-kms/tls
-        type: Directory
-    - name: jwt
-      hostPath:
-        path: /var/lib/openbao-kms/identity.jwt
-        type: File
-    - name: run
-      hostPath:
-        path: /run/openbao-kms
-        type: Directory
-    - name: state
-      hostPath:
-        path: /var/lib/openbao-kms/state
-        type: Directory
+```sh
+tar -xzf "bao-kms-provider_${VERSION}_static-pod.tar.gz"
+cd "bao-kms-provider_${VERSION}_static-pod"
+cat image-ref.txt
 ```
 
-The final manifest depends on the host socket GID and the released
-image digest recorded for the selected release. The sample uses user ID (UID)
-and GID `65532:65532`, matching the distroless non-root image user.
+`image-ref.txt` holds the provider image reference, ending in
+`@sha256:<digest>`. Place the diagnostic binary from the systemd tarball on the
+host:
 
-## Pod hardening
+```sh
+tar -xzf "../bao-kms-provider_${VERSION}_systemd_linux_${ARCH}.tar.gz" \
+  --strip-components=2 "bao-kms-provider_${VERSION}_systemd_linux_${ARCH}/bin/bao-kms-provider"
+sudo install -o root -g root -m 0755 bao-kms-provider /usr/bin/bao-kms-provider
+```
+
+## Step 2: Verify the provider image
+
+Set `IMAGE` to the digest reference, replacing `<digest>` with the digest from
+`image-ref.txt`, then verify the image signature from the release workflow and
+its build provenance from the reusable build workflow:
+
+```sh
+IMAGE="ghcr.io/dc-tec/bao-kms-provider@sha256:<digest>"
+
+cosign verify \
+  --new-bundle-format=true \
+  --certificate-identity "${WORKFLOW_IDENTITY}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "${IMAGE}"
+
+gh attestation verify "oci://${IMAGE}" \
+  --repo "${REPO}" \
+  --signer-workflow "${REPO}/.github/workflows/reusable-build.yml" \
+  --source-ref "refs/tags/${VERSION}" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --deny-self-hosted-runners
+```
+
+Both commands exit with status `0`. Stop if either fails.
+
+## Step 3: Preload the image
+
+Pull the verified digest into containerd on every control-plane node, so the
+provider can start during recovery without registry access:
+
+```sh
+sudo crictl pull "${IMAGE}"
+```
+
+For air-gapped nodes, export the image once and import it on each node with
+`ctr -n k8s.io images import`. Keep the previous release's image on every node
+for rollback.
+
+## Step 4: Prepare the host
+
+Create the socket group if it does not exist and record its numeric group ID
+(GID). The distroless image has no host group names, so the pod and the
+provider configuration both use this number:
+
+```sh
+getent group openbao-kms-socket >/dev/null || sudo groupadd --system openbao-kms-socket
+SOCKET_GID=$(getent group openbao-kms-socket | cut -d: -f3)
+echo "${SOCKET_GID}"
+```
+
+Create the directories with numeric ownership for the container user `65532`,
+and a tmpfiles entry that recreates the socket directory under `/run` after
+every reboot:
+
+```sh
+sudo sh -eu -c "
+install -d -m 0750 -o root -g root /etc/openbao-kms
+install -d -m 0755 -o root -g root /etc/openbao-kms/tls
+install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
+install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state
+install -d -m 0755 -o root -g root /etc/kubernetes/openbao-kms
+printf 'd /run/openbao-kms 2750 65532 ${SOCKET_GID} -\n' > /etc/tmpfiles.d/openbao-kms-static-pod.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/openbao-kms-static-pod.conf
+"
+```
+
+The state directory must stay owned by `65532` without group or world write
+permission; the provider holds a lock file there across restarts.
+
+## Step 5: Write the provider configuration
+
+Copy the configuration sample from the bundle:
+
+```sh
+cp config/provider-static-pod.yaml provider.yaml
+```
+
+Edit `provider.yaml` and replace the sample values in the fields listed in
+[Plan identity values: Provider configuration](/docs/get-started/plan-values/#provider-configuration).
+Set `server.socketGroup` to the value of `SOCKET_GID`, as a quoted string.
+
+## Step 6: Place the runtime files
+
+From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`:
+
+```sh
+sudo install -m 0640 -o root -g 65532 provider.yaml /etc/openbao-kms/config.yaml
+sudo install -m 0644 -o root -g root ca.crt /etc/openbao-kms/tls/ca.crt
+sudo install -m 0640 -o root -g 65532 identity.jwt /var/lib/openbao-kms/identity.jwt
+```
+
+## Step 7: Validate the configuration
+
+Resolve the configuration, check the Transit key profile, and run the full
+bootstrap check against OpenBao:
+
+```sh
+sudo bao-kms-provider config --config /etc/openbao-kms/config.yaml
+sudo bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
+sudo bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
+```
+
+Each command exits with status `0`, and neither `verify-key` nor `doctor`
+reports a `[fail]` check. Every control-plane node must print the same identity
+fingerprint. These checks run as root, so file permission problems for UID
+`65532` show up only when the pod starts in the next step.
+
+## Step 8: Start the static pod
+
+Edit `static-pod/bao-kms-provider.yaml` from the bundle:
+
+- set `image` to the verified `IMAGE` digest reference,
+- replace the `supplementalGroups` entry `1234` with `SOCKET_GID`.
+
+Then hand the manifest to kubelet and wait for readiness:
+
+```sh
+sudo install -m 0644 -o root -g root static-pod/bao-kms-provider.yaml \
+  /etc/kubernetes/manifests/bao-kms-provider.yaml
+curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/ready
+```
+
+`/ready` returns HTTP 200 and `/run/openbao-kms/kms.sock` exists. If the pod
+does not become ready, inspect it with `sudo crictl ps -a --name bao-kms-provider`
+and `sudo crictl logs <container-id>`. The provider is ready for
+[Enable encryption](/docs/get-started/enable-encryption/) once it runs on every
+control-plane node.
+
+## About the manifest
+
+The maintained manifest is `deploy/static-pod/bao-kms-provider.yaml`. The
+settings that matter for the control-plane boot path:
 
 | Setting | Purpose |
 |---|---|
-| `hostNetwork: true` | Avoids CNI availability as an early-boot dependency. |
-| `automountServiceAccountToken: false` | Prevents accidental dependency on protected-cluster ServiceAccount tokens. |
-| `runAsNonRoot: true` and `runAsUser: 65532` | Runs as the distroless non-root image user. |
-| `supplementalGroups` | Gives the container access to the host socket group without exposing provider auth material to the API server. |
-| `seccompProfile: RuntimeDefault` | Uses the runtime default syscall filter. |
-| `allowPrivilegeEscalation: false` | Blocks privilege escalation inside the container. |
-| `readOnlyRootFilesystem: true` | Forces writes into explicit hostPath mounts. |
-| `capabilities.drop: [ALL]` | Runs without Linux capabilities. |
-| immutable image digest | Prevents image drift during recovery. |
-| startup probe | Defers liveness and readiness probes until the provider completes bootstrap. |
-| liveness and readiness probes | Lets kubelet report provider process and dependency health. |
+| `hostNetwork: true` | Reaches OpenBao before the Container Network Interface (CNI) is available. |
+| `priorityClassName: system-node-critical` | Keeps the provider scheduled with other control-plane components. |
+| `automountServiceAccountToken: false` | Avoids any dependency on protected-cluster ServiceAccount tokens. |
+| `runAsUser: 65532`, `supplementalGroups` | Runs as the distroless non-root user, with socket access through the host socket GID. |
+| `readOnlyRootFilesystem`, `capabilities.drop: [ALL]`, `allowPrivilegeEscalation: false` | Limits writes to the hostPath mounts and removes Linux capabilities. |
+| Image by digest, `imagePullPolicy: IfNotPresent` | Starts from the preloaded image without registry access or tag drift. |
+| Startup probe on `/live` | Allows about two minutes for bootstrap before liveness and readiness probes start. |
 
-## Image availability
+The startup probe budget covers the default 60-second `bootstrap.graceTimeout`.
+If you raise that timeout or the auth and request timeouts, raise the probe's
+`failureThreshold` to match.
 
-For air-gapped or bootstrap-sensitive control planes, preload the image on every control-plane node:
-
-- use immutable image digests from the selected release,
-- avoid `Always` pulls in recovery-sensitive deployments,
-- keep the previous image available for rollback,
-- document image import steps for node replacement.
-
-`imagePullPolicy: IfNotPresent` is appropriate only when the exact digest has already been imported or is reliably pullable during node recovery. Do not rely on tag movement for upgrade or rollback.
-
-## Host preparation
-
-Every control-plane node must have:
-
-```text
-/etc/openbao-kms/config.yaml
-/etc/openbao-kms/tls/ca.crt
-/var/lib/openbao-kms/identity.jwt
-/etc/openbao-kms/client/client-chain.pem
-/etc/openbao-kms/pkcs11/pin
-/var/lib/openbao-kms/state
-/run/openbao-kms
-```
-
-The JWT path is needed only for `auth.method: jwt`. PKCS#11 certificate-auth
-deployments must instead mount the configured certificate chain, PKCS#11 PIN
-file, and PKCS#11 module path.
-
-The API server must be able to access the socket under `/run/openbao-kms`. The
-container user must own the socket directory, or an equally narrow
-provider-only identity must be the only writer. The API server socket group
-needs execute permission on the directory and write permission on `kms.sock`.
-It must not have write permission on the directory.
-
-The provider configuration used by the static pod sets `server.socketGroup` to the same numeric host GID listed in `supplementalGroups`. See `deploy/config/provider-static-pod.yaml` for the matching configuration sample.
-
-Every provider in a multi-control-plane cluster must use the same
-identity-bearing configuration: provider name, cluster ID, OpenBao instance ID,
-Transit mount ID, key lineage ID, Transit mount path, and Transit key name.
-Multi-control-plane validation exercises this model with one node-local
-provider per API server.
-
-## kubeadm placement
-
-Typical kubeadm static pod path:
-
-```text
-/etc/kubernetes/manifests/bao-kms-provider.yaml
-```
-
-The kubelet watches this directory and starts the static pod.
-
-## Bootstrap risks
-
-Static pod mode depends on:
-
-- kubelet,
-- the container runtime,
-- local image availability,
-- hostPath mounts,
-- container networking and DNS,
-- file permissions inside the container.
-
-If kubelet or the container runtime is broken, the provider may not start and
-the API server may be unable to decrypt existing resources.
-
-The provider retries its initial metadata and deep probes for
-`bootstrap.graceTimeout` before exiting. Keep this setting enabled for static
-pod deployments because auth material, container networking, DNS, OpenBao
-availability, and clock synchronization can settle after the container starts.
-
-The sample startup probe allows about two minutes for `/live` to become
-available. This covers the default 60-second bootstrap grace with time for
-in-flight probes and listener setup. If you increase `bootstrap.graceTimeout`
-or authentication/request timeouts, increase the startup probe budget to cover
-them. Liveness and readiness probes start after the startup probe succeeds.
-
-For single-node control planes, systemd is usually safer. See [Get started: Choose a deployment model](/docs/get-started/deployment-model/).
-
-## Verification
-
-Before enabling API server encryption:
-
-1. Place the static pod manifest under `/etc/kubernetes/manifests/`.
-2. Confirm the pod is running through kubelet or container runtime tooling.
-3. Confirm `/run/openbao-kms/kms.sock` exists on the host.
-4. Run `bao-kms-provider doctor` on the host or in an equivalent debug container.
-5. Confirm `kube-apiserver` can connect to the socket.
-
-After the Kubernetes `EncryptionConfiguration` is staged, include it in `doctor`:
-
-```sh
-bao-kms-provider doctor \
-  --config /etc/openbao-kms/config.yaml \
-  --encryption-config /etc/kubernetes/encryption-config.yaml
-```
-
-Before enabling API server encryption, the pod is running, the socket exists
-with the configured owner and mode, and the API server can connect to it. The
-`doctor` command must exit with status `0` and must not report a `[fail]` check.
-
-## Source references
-
-- [Kubernetes startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#protect-slow-starting-containers-with-startup-probes)
-- [Kubernetes static Pods](https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/)
-- [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
+Static-pod mode adds kubelet, the container runtime, and the local image to
+the provider's boot path. If any of them is broken, the provider does not
+start and the API server cannot decrypt existing resources. For single-node
+control planes, prefer [Run with systemd](/docs/get-started/systemd/). For the
+full hardening surface, see [Security: Hardening](/docs/security/hardening/).

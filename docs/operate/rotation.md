@@ -38,7 +38,7 @@ Verify:
 - etcd backup is current.
 - The provider is healthy on every control-plane node.
 - All nodes report the same active `key_id` hash.
-- `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml` passes on every control-plane node.
+- `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml` passes on every control-plane node.
 - No `identity` fallback remains unexpectedly in the API server `EncryptionConfiguration`.
 - OpenBao `min_decryption_version` allows every version still present in etcd and backups.
 
@@ -144,7 +144,7 @@ Kubernetes resources, inspect etcd, or evaluate retained backups.
 
 Then collect independent verification:
 
-- run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/encryption-config.yaml`,
+- run `bao-kms-provider doctor --config /etc/openbao-kms/config.yaml --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml`,
 - restart one API server and verify reads succeed,
 - verify new writes carry the new `key_id`,
 - verify every configured resource type was included in the rewrite procedure,

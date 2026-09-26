@@ -10,7 +10,7 @@ These pages cover trust boundaries, authentication, hardening, and the security 
 The security section documents the intended hardened posture for
 `bao-kms-provider`. For the current maturity statement see
 [Reference: Support policy](/docs/reference/support-policy/), and for artifact
-verification see [Get started: Install the provider](/docs/get-started/install/#verify-release-artifacts).
+verification see [Get started: Download the release](/docs/get-started/download/#download-and-verify-the-artifact).
 
 ## Topics
 
