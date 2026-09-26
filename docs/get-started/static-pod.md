@@ -131,6 +131,10 @@ Edit `provider.yaml` and replace the sample values in the fields listed in
 [Plan identity values: Provider configuration](/docs/get-started/plan-values/#provider-configuration).
 Set `server.socketGroup` to the value of `SOCKET_GID`, as a quoted string.
 
+If you ran [`init`](/docs/get-started/plan-values/#generate-the-files-with-init)
+with `--model static-pod`, copy `generated/config.yaml` to `provider.yaml`
+instead; it already carries the socket GID.
+
 ## Step 6: Place the runtime files
 
 From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`:
@@ -163,6 +167,8 @@ Edit `static-pod/bao-kms-provider.yaml` from the bundle:
 
 - set `image` to the verified `IMAGE` digest reference,
 - replace the `supplementalGroups` entry `1234` with `SOCKET_GID`.
+
+With `init`, use `generated/bao-kms-provider.yaml`, which already has both.
 
 Then hand the manifest to kubelet and wait for readiness:
 

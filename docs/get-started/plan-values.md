@@ -128,3 +128,26 @@ The provider prints an identity fingerprint over the identity-bearing values
 when you run `bao-kms-provider config`. Record it during rollout; every
 control-plane node must print the same fingerprint. For every field, see
 [Reference: Configuration](/docs/reference/configuration/#identity-bearing-fields).
+
+## Generate the files with init
+
+Releases that include `bao-kms-provider init` can generate every file that
+repeats these values, so they cannot disagree. Save the fragment above as
+`values.yaml`, add `configVersion: v1alpha1` as its first line, and leave out
+`keyLineageId` if you are about to create the Transit key. Then run `init`
+from the provider image, pinned to the digest you verified; the image runs on
+any workstation with Docker:
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD:/work" -w /work \
+  ghcr.io/dc-tec/bao-kms-provider@sha256:<digest> \
+  init --values values.yaml --out generated --new-key
+```
+
+`generated/` then holds `config.yaml`, `encryption-config.yaml`,
+`openbao-policy.hcl`, and `openbao-setup.sh`. Record the lineage ID that `init`
+prints with your values. For static pods, add `--model static-pod --image
+<digest reference> --socket-gid <gid>` to also get the pod manifest. The later
+pages point out which step each generated file replaces; see
+[Reference: CLI](/docs/reference/cli/#init) for every flag.

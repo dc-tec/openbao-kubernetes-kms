@@ -115,6 +115,9 @@ with your recorded values.
 Keep the other fields at their sample values unless you have a reason to change
 them; see [Reference: Configuration](/docs/reference/configuration/).
 
+If you ran [`init`](/docs/get-started/plan-values/#generate-the-files-with-init),
+copy `generated/config.yaml` to `provider.yaml` instead of editing the sample.
+
 ## Step 4: Place the runtime files
 
 From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`,

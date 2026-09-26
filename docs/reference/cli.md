@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: "Every bao-kms-provider command, what doctor and verify-key check, the rotation reports, common flags, and exit codes."
+description: "Every bao-kms-provider command, what doctor and verify-key check, the rotation reports, file generation with init, common flags, and exit codes."
 eyebrow: Reference
 weight: 10
 verifiedBy:
@@ -161,6 +161,43 @@ bao-kms-provider config schema
 environment overrides, and flags, including the identity fingerprint when all
 identity-bearing values are set. `config schema` prints the JSON Schema, which
 rejects unknown fields and requires `configVersion: v1alpha1`.
+
+## init
+
+Generates every file that shares the provider's identity values from one
+values file, so they cannot disagree.
+
+```sh
+bao-kms-provider init --values values.yaml --out ./generated --new-key
+```
+
+| Flag | Meaning |
+|---|---|
+| `--values <path>` | Required. A file in the provider configuration format with the values you choose; see [Plan identity values](/docs/get-started/plan-values/#generate-the-files-with-init). |
+| `--out <dir>` | Required. Output directory; it must be absent or empty. |
+| `--model systemd\|static-pod` | Deployment model. Default: `systemd`. |
+| `--new-key` | Generate `transit.keyIdScope.keyLineageId` for a Transit key you are about to create. Rejected if the values file already sets one. |
+| `--policy-name <name>` | OpenBao policy name. Default: `openbao-kms-<clusterId>`. |
+| `--image <ref>` | Static pod only, required. The provider image pinned by `@sha256` digest. |
+| `--socket-gid <gid>` | Static pod only, required. Numeric host GID of `openbao-kms-socket`. |
+
+`init` fills the documented host paths for an omitted `openbao.caCertFile`,
+`auth.jwt.jwtFile`, and `server.socketGroup`, then validates the result as
+`serve` would. With JWT auth it also needs `auth.jwt.expectedIssuer`,
+`expectedAudience`, and `expectedSubject`, because the OpenBao role binds them.
+
+| File | Contents |
+|---|---|
+| `config.yaml` | The complete provider configuration for every control-plane node. |
+| `encryption-config.yaml` | The `EncryptionConfiguration` with the identity fallback, cross-checked against `config.yaml`. |
+| `openbao-policy.hcl` | The least-privilege policy, including token renewal. |
+| `openbao-setup.sh` | The `bao` commands for the Transit mount, key, policy, and JWT role, for an administrator to review and run. |
+| `bao-kms-provider.yaml` | Static pod only: the manifest with the image digest and socket GID. |
+
+`init` prints the identity fingerprint, and the generated lineage ID with
+`--new-key`. It never contacts OpenBao, never writes outside `--out`, and never
+replaces an existing file. It exits with `2` for invalid flags, `3` for invalid
+values, and `1` when writing fails.
 
 ## policy openbao
 
