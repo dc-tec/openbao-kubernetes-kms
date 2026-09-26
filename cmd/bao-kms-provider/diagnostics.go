@@ -412,12 +412,12 @@ func checkCapabilities(
 	if err != nil {
 		return err
 	}
-	if hasAnyCapability(caps, paths.metadata, capabilityCreate, capabilityUpdate, capabilityDelete, capabilitySudo) ||
-		hasAnyCapability(caps, paths.rotate, capabilityUpdate, capabilitySudo) ||
-		hasAnyCapability(caps, paths.export, capabilityCreate, capabilityRead, capabilityUpdate, capabilitySudo) ||
-		hasAnyCapability(caps, paths.backup, capabilityCreate, capabilityRead, capabilityUpdate, capabilitySudo) ||
-		hasAnyCapability(caps, paths.encrypt, capabilitySudo) ||
-		hasAnyCapability(caps, paths.decrypt, capabilitySudo) {
+	for _, checkedPath := range paths.all() {
+		if len(caps.ByPath[checkedPath]) == 0 {
+			return fmt.Errorf("capability response is incomplete")
+		}
+	}
+	if unsafeTransitCapabilities(caps, paths) {
 		return fmt.Errorf("token can perform non-hot-path key management")
 	}
 	if !hasAnyCapability(caps, paths.metadata, capabilityRead) {
@@ -432,13 +432,38 @@ func checkCapabilities(
 	return nil
 }
 
+func unsafeTransitCapabilities(caps openbao.CapabilitiesResult, paths transitCapabilityPathSet) bool {
+	for _, checkedPath := range []string{
+		paths.metadata, paths.keyConfig, paths.mountConfig, paths.rotate,
+		paths.trim, paths.restore, paths.restoreNamed, paths.rewrap,
+	} {
+		if hasAnyCapability(caps, checkedPath, capabilityCreate, capabilityUpdate, capabilityDelete, capabilitySudo, "root") {
+			return true
+		}
+	}
+	for _, checkedPath := range []string{paths.export, paths.backup} {
+		if hasAnyCapability(caps, checkedPath,
+			capabilityCreate, capabilityRead, capabilityUpdate, capabilityDelete, capabilitySudo, "root") {
+			return true
+		}
+	}
+	return hasAnyCapability(caps, paths.encrypt, capabilityCreate, capabilitySudo, "root") ||
+		hasAnyCapability(caps, paths.decrypt, capabilitySudo, "root")
+}
+
 type transitCapabilityPathSet struct {
-	metadata string
-	encrypt  string
-	decrypt  string
-	rotate   string
-	export   string
-	backup   string
+	metadata     string
+	encrypt      string
+	decrypt      string
+	rotate       string
+	export       string
+	backup       string
+	keyConfig    string
+	mountConfig  string
+	trim         string
+	restore      string
+	restoreNamed string
+	rewrap       string
 }
 
 func transitCapabilityPaths(cfg config.Config) transitCapabilityPathSet {
@@ -458,12 +483,21 @@ func transitCapabilityPaths(cfg config.Config) transitCapabilityPathSet {
 			transitSegmentEncryptionKey,
 			cfg.Transit.KeyName,
 		),
-		backup: path.Join(cfg.Transit.MountPath, transitSegmentBackup, cfg.Transit.KeyName),
+		backup:       path.Join(cfg.Transit.MountPath, transitSegmentBackup, cfg.Transit.KeyName),
+		keyConfig:    path.Join(cfg.Transit.MountPath, transitSegmentKeys, cfg.Transit.KeyName, "config"),
+		mountConfig:  path.Join(cfg.Transit.MountPath, "config", transitSegmentKeys),
+		trim:         path.Join(cfg.Transit.MountPath, transitSegmentKeys, cfg.Transit.KeyName, "trim"),
+		restore:      path.Join(cfg.Transit.MountPath, "restore"),
+		restoreNamed: path.Join(cfg.Transit.MountPath, "restore", cfg.Transit.KeyName),
+		rewrap:       path.Join(cfg.Transit.MountPath, "rewrap", cfg.Transit.KeyName),
 	}
 }
 
 func (p transitCapabilityPathSet) all() []string {
-	return []string{p.metadata, p.encrypt, p.decrypt, p.rotate, p.export, p.backup}
+	return []string{
+		p.metadata, p.encrypt, p.decrypt, p.rotate, p.export, p.backup,
+		p.keyConfig, p.mountConfig, p.trim, p.restore, p.restoreNamed, p.rewrap,
+	}
 }
 
 func hasAnyCapability(caps openbao.CapabilitiesResult, capabilityPath string, capabilities ...string) bool {

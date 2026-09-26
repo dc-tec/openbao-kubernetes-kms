@@ -25,6 +25,8 @@ const (
 )
 
 type rotationReport struct {
+	TransitMetadataStatus     cli.CheckStatus
+	TransitMetadataError      string
 	Name                      string
 	StateLoaded               bool
 	StateGeneration           uint64
@@ -59,10 +61,7 @@ func newRotationPlanCommand(runtimeConfig *config.Runtime, configPath *string) *
 				return err
 			}
 			report, err := buildRotationReport(commandContext(cmd), cfg, "rotation-plan")
-			if err != nil {
-				return cli.WithExitCode(cli.ExitCheckFailed, err)
-			}
-			return printRotationReport(cmd.OutOrStdout(), report, output)
+			return finishRotationReport(cmd.OutOrStdout(), report, output, err)
 		},
 	}
 	addOutputFlag(cmd, &output)
@@ -81,12 +80,9 @@ func newVerifyRotationCommand(runtimeConfig *config.Runtime, configPath *string)
 				return err
 			}
 			report, err := buildRotationReport(commandContext(cmd), cfg, "verify-rotation")
-			if err != nil {
-				return cli.WithExitCode(cli.ExitCheckFailed, err)
-			}
 			report.Confidence = rotationConfidenceLimited
 			report.Limitations = rotationLimitationsLocal
-			return printRotationReport(cmd.OutOrStdout(), report, output)
+			return finishRotationReport(cmd.OutOrStdout(), report, output, err)
 		},
 	}
 	addOutputFlag(cmd, &output)
@@ -94,7 +90,7 @@ func newVerifyRotationCommand(runtimeConfig *config.Runtime, configPath *string)
 }
 
 func buildRotationReport(ctx context.Context, cfg config.Config, name string) (rotationReport, error) {
-	report := rotationReport{Name: name, RotationState: status.RotationStateUnknown}
+	report := rotationReport{Name: name, RotationState: status.RotationStateUnknown, TransitMetadataStatus: cli.CheckSkip}
 	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
 	if err != nil && !errors.Is(err, keyregistry.ErrStateNotFound) {
 		return rotationReport{}, err
@@ -129,17 +125,15 @@ func buildRotationReport(ctx context.Context, cfg config.Config, name string) (r
 
 	clients, err := rotationClients(ctx, cfg)
 	if err != nil {
-		if report.StateLoaded {
-			return report, nil
-		}
-		return rotationReport{}, err
+		report.TransitMetadataStatus = cli.CheckFail
+		report.TransitMetadataError = safeMessage(err)
+		return report, err
 	}
 	profile, err := clients.transitClient.ReadKeyProfile(ctx, cfg.Transit.MountPath, cfg.Transit.KeyName)
 	if err != nil {
-		if report.StateLoaded {
-			return report, nil
-		}
-		return rotationReport{}, err
+		report.TransitMetadataStatus = cli.CheckFail
+		report.TransitMetadataError = safeMessage(err)
+		return report, err
 	}
 	return applyTransitProfileToRotationReport(cfg, report, profile, time.Now().UTC())
 }
@@ -150,6 +144,7 @@ func applyTransitProfileToRotationReport(
 	profile openbao.KeyProfile,
 	now time.Time,
 ) (rotationReport, error) {
+	report.TransitMetadataStatus = cli.CheckPass
 	report.LatestTransitVersion = profile.LatestVersion
 	if !report.StateLoaded {
 		assessment := status.AssessAutoBootstrapState(profile)
@@ -199,6 +194,16 @@ func pendingSnapshot(state keyregistry.StateFile) (keyregistry.SnapshotStateReco
 	return keyregistry.SnapshotStateRecord{}, false
 }
 
+// finishRotationReport preserves partial local evidence while signaling failed remote checks.
+func finishRotationReport(out io.Writer, report rotationReport, output string, reportErr error) error {
+	if report.Name != "" {
+		if err := printRotationReport(out, report, output); err != nil {
+			return err
+		}
+	}
+	return cli.WithExitCode(cli.ExitCheckFailed, reportErr)
+}
+
 func printRotationReport(out io.Writer, report rotationReport, output string) error {
 	switch normalizeOutputFormat(output) {
 	case outputFormatText:
@@ -213,6 +218,10 @@ func printRotationReport(out io.Writer, report rotationReport, output string) er
 
 func printRotationReportText(out io.Writer, report rotationReport) {
 	_, _ = fmt.Fprintln(out, report.Name)
+	_, _ = fmt.Fprintf(out, "transitMetadataStatus: %s\n", report.TransitMetadataStatus)
+	if report.TransitMetadataError != "" {
+		_, _ = fmt.Fprintf(out, "transitMetadataError: %s\n", report.TransitMetadataError)
+	}
 	_, _ = fmt.Fprintf(out, "stateLoaded: %t\n", report.StateLoaded)
 	if report.StateLoaded {
 		_, _ = fmt.Fprintf(out, "stateGeneration: %d\n", report.StateGeneration)
@@ -251,6 +260,8 @@ func printRotationReportText(out io.Writer, report rotationReport) {
 }
 
 type rotationReportJSON struct {
+	TransitMetadataStatus         cli.CheckStatus      `json:"transitMetadataStatus"`
+	TransitMetadataError          string               `json:"transitMetadataError,omitempty"`
 	Name                          string               `json:"name"`
 	StateLoaded                   bool                 `json:"stateLoaded"`
 	StateGeneration               uint64               `json:"stateGeneration,omitempty"`
@@ -275,6 +286,8 @@ type rotationReportJSON struct {
 
 func printRotationReportJSON(out io.Writer, report rotationReport) error {
 	jsonReport := rotationReportJSON{
+		TransitMetadataStatus:         report.TransitMetadataStatus,
+		TransitMetadataError:          report.TransitMetadataError,
 		Name:                          report.Name,
 		StateLoaded:                   report.StateLoaded,
 		StateGeneration:               report.StateGeneration,

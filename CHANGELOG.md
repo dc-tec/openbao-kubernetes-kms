@@ -4,6 +4,15 @@
 
 ### Bug Fixes
 
+- **cli:** Check Transit configuration, trim, restore, and rewrap capabilities
+  in doctor. Accept Kubernetes migration encryption configurations with local
+  encryption keys and additional KMS providers while requiring the configured
+  provider identity and socket. Redact inline keys from parse errors.
+- **cli:** Return exit code `4` when rotation commands cannot read live OpenBao
+  metadata. Preserve available local evidence and include
+  `transitMetadataStatus` and, on failure, `transitMetadataError` in text and JSON
+  reports.
+
 - **auth:** Recover rejected OpenBao tokens with a shared, rate-limited login
   and one request retry. Keep valid tokens usable during early refresh, isolate
   refresh from caller cancellation, and apply `auth.loginTimeout` to shared

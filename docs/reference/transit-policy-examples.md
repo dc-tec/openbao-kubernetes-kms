@@ -49,13 +49,21 @@ The provider runtime does not call `auth/token/lookup-self`. Grant `lookup-self`
 The provider token must not have:
 
 - `create` on `transit/encrypt/*` (key creation through encrypt; blocked by `disable_upsert` at the mount and refused at the token level),
-- `update` on `transit/keys/*` (the rotation capability; rotation belongs to operators or platform automation),
+- write capabilities on key creation, rotation, configuration, or trim paths,
+- write capabilities on `transit/config/keys` (can change `disable_upsert`),
+- write capabilities on `transit/restore`, `transit/restore/<key>`, or `transit/rewrap/<key>`,
 - `delete` on any Transit key path,
 - `read` on `transit/export/*`,
 - `read` on plaintext backup paths,
 - broad `sudo` or admin permissions.
 
 OpenBao policies are path-based and deny by default. Capabilities are only what is explicitly granted.
+
+The `doctor` check `transit.capabilities` queries these management paths for the
+configured key and mount, including both restore endpoints. It does not invoke
+the management operations. The generated hot-path policy needs no additional
+grants for this check. A passing result covers the queried paths; review the
+complete policy separately for permissions on other keys or paths.
 
 ## JWT Auth Role: OIDC Discovery
 

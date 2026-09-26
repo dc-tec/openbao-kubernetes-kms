@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -32,9 +33,29 @@ type EncryptionResourceSelection struct {
 
 // EncryptionProvider is one provider entry in a Kubernetes EncryptionConfiguration.
 type EncryptionProvider struct {
-	KMS      *KMSProvider      `yaml:"kms"`
-	Identity *IdentityProvider `yaml:"identity"`
+	KMS       *KMSProvider       `yaml:"kms"`
+	Identity  *IdentityProvider  `yaml:"identity"`
+	AESCBC    *SymmetricProvider `yaml:"aescbc"`
+	AESGCM    *SymmetricProvider `yaml:"aesgcm"`
+	Secretbox *SymmetricProvider `yaml:"secretbox"`
 }
+
+// SymmetricProvider holds migration keys for a Kubernetes local encryption provider.
+type SymmetricProvider struct {
+	Keys []EncryptionKey `yaml:"keys"`
+}
+
+// EncryptionKey is a local encryption key. Diagnostic formatting redacts its contents.
+type EncryptionKey struct {
+	Name   string `yaml:"name"`
+	Secret string `yaml:"secret"`
+}
+
+// String redacts key material in diagnostic output.
+func (EncryptionKey) String() string { return "encryption key (redacted)" }
+
+// GoString redacts key material in Go-syntax diagnostic output.
+func (k EncryptionKey) GoString() string { return k.String() }
 
 // KMSProvider is the Kubernetes KMS provider configuration.
 type KMSProvider struct {
@@ -42,6 +63,7 @@ type KMSProvider struct {
 	Name       string `yaml:"name"`
 	Endpoint   string `yaml:"endpoint"`
 	Timeout    string `yaml:"timeout"`
+	CacheSize  *int32 `yaml:"cachesize"`
 }
 
 // IdentityProvider marks Kubernetes identity fallback in an EncryptionConfiguration.
@@ -80,7 +102,14 @@ func ParseEncryptionConfiguration(reader io.Reader) (EncryptionConfiguration, er
 	decoder := yaml.NewDecoder(reader)
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
-		return EncryptionConfiguration{}, fmt.Errorf("decode encryption config: %w", err)
+		// YAML type errors can contain inline encryption keys. Do not expose them.
+		return EncryptionConfiguration{}, fmt.Errorf(
+			"%w: malformed YAML or unsupported field", ErrInvalidEncryptionConfiguration,
+		)
+	}
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return EncryptionConfiguration{}, fmt.Errorf("%w: expected one YAML document", ErrInvalidEncryptionConfiguration)
 	}
 	return cfg, nil
 }
@@ -128,6 +157,9 @@ func ValidateEncryptionConfiguration(
 	if result.KMSProviderCount == 0 {
 		appendProblem(&problems, "encryptionConfig.providers", "must contain a kms provider")
 	}
+	if result.MatchedProviderName == "" {
+		appendProblem(&problems, "encryptionConfig.providers.kms.name", "must include the configured KMS provider")
+	}
 	if result.IdentityFallback && !opts.AllowIdentityFallback {
 		appendProblem(&problems, "encryptionConfig.identity", "identity fallback is not allowed")
 	}
@@ -150,8 +182,25 @@ func validateProviderEntry(
 	if provider.Identity != nil {
 		count++
 	}
+	for _, symmetric := range []*SymmetricProvider{provider.AESCBC, provider.AESGCM, provider.Secretbox} {
+		if symmetric != nil {
+			count++
+			validateSymmetricProvider(problems, providerField(resourceIndex, providerIndex), symmetric)
+		}
+	}
 	if count != 1 {
 		appendProblem(problems, providerField(resourceIndex, providerIndex), "must configure exactly one provider type")
+	}
+}
+
+func validateSymmetricProvider(problems *[]ValidationProblem, field string, provider *SymmetricProvider) {
+	if len(provider.Keys) == 0 {
+		appendProblem(problems, field+".keys", "must contain at least one key")
+	}
+	for keyIndex, key := range provider.Keys {
+		if key.Name == "" || key.Secret == "" {
+			appendProblem(problems, fmt.Sprintf("%s.keys[%d]", field, keyIndex), "key name and secret are required")
+		}
 	}
 }
 
@@ -164,13 +213,23 @@ func validateKMSProvider(
 	result *EncryptionValidationResult,
 ) {
 	field := providerField(resourceIndex, providerIndex)
-	if kms.APIVersion != kubernetesKMSAPIVersionV2 {
-		appendProblem(problems, field+".kms.apiVersion", "must be v2")
+	if kms.Name == "" {
+		appendProblem(problems, field+".kms.name", "must not be empty")
 	}
-	if kms.Name != cfg.Transit.KeyIDScope.ProviderName {
-		appendProblem(problems, field+".kms.name", "must match transit.keyIdScope.providerName")
+	if kms.APIVersion != "" && kms.APIVersion != "v1" && kms.APIVersion != kubernetesKMSAPIVersionV2 {
+		appendProblem(problems, field+".kms.apiVersion", "must be v1 or v2")
 	}
-	if err := validateKMSEndpoint(kms.Endpoint, cfg.Server.SocketPath); err != nil {
+	socketPath := ""
+	if kms.Name == cfg.Transit.KeyIDScope.ProviderName {
+		socketPath = cfg.Server.SocketPath
+		if kms.APIVersion != kubernetesKMSAPIVersionV2 {
+			appendProblem(problems, field+".kms.apiVersion", "must be v2 for the configured provider")
+		}
+	}
+	if kms.APIVersion == kubernetesKMSAPIVersionV2 && kms.CacheSize != nil {
+		appendProblem(problems, field+".kms.cachesize", "is only allowed for KMS v1 providers")
+	}
+	if err := validateKMSEndpoint(kms.Endpoint, socketPath); err != nil {
 		appendProblem(problems, field+".kms.endpoint", err.Error())
 	}
 	if kms.Timeout != "" {
@@ -191,9 +250,9 @@ func validateKMSEndpoint(endpoint string, socketPath string) error {
 		return fmt.Errorf("must be a unix URL")
 	}
 	if parsed.Scheme != unixEndpointScheme || parsed.Path == "" || parsed.Host != "" {
-		return fmt.Errorf("must be unix://%s", socketPath)
+		return fmt.Errorf("must be a unix URL with an absolute socket path")
 	}
-	if parsed.Path != socketPath {
+	if socketPath != "" && parsed.Path != socketPath {
 		return fmt.Errorf("must match server.socketPath")
 	}
 	return nil

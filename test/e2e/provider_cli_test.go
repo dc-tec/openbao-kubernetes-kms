@@ -287,6 +287,7 @@ func assertCLIJSONReport(t *testing.T, output string, name string, checkID strin
 }
 
 type rotationJSONReport struct {
+	TransitMetadataStatus string `json:"transitMetadataStatus"`
 	Name                  string `json:"name"`
 	StateLoaded           bool   `json:"stateLoaded"`
 	StateCheckpointLoaded bool   `json:"stateCheckpointLoaded"`
@@ -303,6 +304,7 @@ func assertRotationJSONReport(t *testing.T, output string, name string, state st
 		t.Fatalf("invalid rotation JSON report: %v\n%s", err, output)
 	}
 	if report.Name != name ||
+		report.TransitMetadataStatus != "pass" ||
 		!report.StateLoaded ||
 		!report.StateCheckpointLoaded ||
 		report.StateCheckpointStatus != "current" ||
