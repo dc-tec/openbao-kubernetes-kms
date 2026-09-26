@@ -62,8 +62,10 @@ certificate chain before every login.
 When a request reaches the refresh-ahead threshold, the provider starts one
 shared renewal or login. Requests keep using the current token while it is
 valid; requests without a usable token wait for the shared attempt, and
-canceling a request stops only its own wait. `auth.loginTimeout` bounds the
-renewal plus any fallback login, and provider shutdown cancels it.
+canceling a request stops only its own wait. `auth.loginTimeout` sets the
+deadline for renewal plus any fallback login, and provider shutdown cancels
+that context. PKCS#11 pool waits also use this timeout. Native PKCS#11 calls
+have a separate limit described in [Reference: Configuration](/docs/reference/configuration/#auth).
 
 OpenBao can return `403` for a revoked token as well as a policy denial. On a
 `401` or `403`, the provider replaces the rejected credential and retries the

@@ -85,6 +85,16 @@ func TestValidatePKCS11ProviderConfigRejectsUnsafeLabels(t *testing.T) {
 	}
 }
 
+func TestValidatePKCS11ProviderConfigRejectsUnboundedPoolWait(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -time.Second} {
+		cfg := validPKCS11ProviderConfig(t)
+		cfg.PoolWaitTimeout = timeout
+		if _, err := validatePKCS11ProviderConfig(cfg); !errors.Is(err, ErrAuthConfig) {
+			t.Fatalf("accepted pool wait timeout %s: %v", timeout, err)
+		}
+	}
+}
+
 func TestPKCS11ProviderCurrentCertificateRejectsSignerMismatch(t *testing.T) {
 	now := time.Unix(testCurrentUnix, 0).UTC()
 	pemBytes, _, _ := newCertificateFixture(t, certificateFixtureOptions{
@@ -120,5 +130,6 @@ func validPKCS11ProviderConfig(t *testing.T) PKCS11ProviderConfig {
 		KeyLabel:        "openbao-kms-client",
 		PINFile:         filepath.Join(dir, "pin"),
 		MaxSessions:     2,
+		PoolWaitTimeout: time.Second,
 	}
 }

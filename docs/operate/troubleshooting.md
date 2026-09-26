@@ -92,12 +92,17 @@ refresh fails.
 - Certificate: the OpenBao listener requests client certificates, and the
   certificate is valid, has client-auth usage, and matches the role.
 - PKCS#11: the module path, token label, key label, and PIN file are correct.
+  If signer probes fail after a delay, check HSM latency and session usage.
+  Pool waits use `auth.loginTimeout`; native HSM calls require finite timeouts
+  in the vendor client. See [Configuration](/docs/reference/configuration/#auth).
 - Host, OpenBao, issuer, and CA clocks agree.
 
 **Fix:** replace the auth material or correct the role, the issuer
 reachability, or the CA, then confirm the next request or background probe
 logs in. The provider re-reads auth material before each login and backs off
-after failures, so it needs no restart.
+after failures. A pool timeout recovers when a session becomes available. A
+native HSM call that never returns can require a provider restart after HSM
+connectivity recovers.
 
 After a token revocation or an OpenBao restore, the provider logs in again on a
 `401` or `403` and retries the rejected request once, without waiting for the
