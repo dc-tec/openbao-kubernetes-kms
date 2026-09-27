@@ -20,7 +20,7 @@ is kubeadm-style and you can preload the provider image on every node.
 |---|---|---|
 | Managed by | systemd | kubelet |
 | Boot path depends on | systemd and host files | kubelet, container runtime, local image, and host files |
-| Starts | Before kubelet, through `Before=kubelet.service` | Alongside the API server, without ordering |
+| Starts | Process execution is ordered before kubelet when both units start together; readiness is not ordered | Alongside the API server, without ordering |
 | Hardening | systemd sandbox directives | Pod `securityContext` and a distroless non-root image |
 | Identity | Host user `openbao-kms` | UID and GID `65532` plus the host socket group GID |
 | Upgrade and rollback | Package or tarball | Image digest in the manifest |
@@ -43,10 +43,10 @@ server manifest.
 Both models put the provider on the API server boot path, with different
 failure points:
 
-- **systemd:** `network-online.target` does not prove OpenBao is reachable; an
-  overly strict sandbox can turn misconfiguration into opaque failures;
-  restarting the unit during API server startup or a rotation can cause
-  transient errors.
+- **systemd:** process-start ordering does not make kubelet wait for provider
+  readiness; the API server must retry while the provider bootstraps.
+  `network-online.target` does not prove OpenBao is reachable. A sandbox
+  restriction or restart can interrupt the KMS path.
 - **Static pod:** a broken kubelet, container runtime, or image pull stops the
   provider; the API server can start before the socket exists and must retry;
   host networking is needed to reach OpenBao before the CNI is up; socket

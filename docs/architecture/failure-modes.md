@@ -23,7 +23,7 @@ permanently unrecoverable. For recovery steps, see
 | Provider unavailable | Service not installed, crash, disabled | API server cannot reach KMS | systemd or kubelet status, socket missing, KMS unhealthy | Yes | No |
 | Socket unavailable | Directory missing, listener failed | API server cannot call KMS | API server logs, `/live` failure | Yes | No |
 | Kubelet or container runtime unavailable for static pod | Host boot failure | Provider static pod cannot start | kubelet or CRI logs | Yes | No |
-| systemd ordering wrong | Provider starts after API server | API server fails or retries | Boot logs | Yes | No |
+| Provider bootstrap incomplete | API server starts before the KMS path is ready despite process-start ordering | API server fails or retries | Boot logs and `/ready` | Yes | No |
 | Stale socket | Crash left socket path | Startup failure or wrong listener | Socket check | Yes | No |
 | Wrong socket permissions | API server cannot connect | KMS unavailable | API server permission errors | Yes | No |
 | SELinux or AppArmor block | Host policy denies socket or file | KMS unavailable | Audit logs | Yes | No |

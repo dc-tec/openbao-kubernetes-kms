@@ -3,6 +3,7 @@ Description=OpenBao Kubernetes KMS v2 Provider
 Documentation=https://github.com/dc-tec/openbao-kubernetes-kms
 Wants=network-online.target
 After=network-online.target
+# Orders process execution only; kubelet does not wait for provider readiness.
 Before=kubelet.service
 StartLimitIntervalSec=60
 StartLimitBurst=10
