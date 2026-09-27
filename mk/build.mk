@@ -153,6 +153,8 @@ release-packages: ## Build native systemd .deb/.rpm packages from release binari
 .PHONY: release-bundles
 release-bundles: ## Build deterministic systemd and static-pod tarball bundles.
 	@set -eu; \
+	mkdir -p "$(DIST_DIR)"; \
+	install -m 0755 hack/install/download-release.sh "$(DIST_DIR)/download-release.sh"; \
 	source_date_epoch="$${SOURCE_DATE_EPOCH:-0}"; \
 	image_ref="$(IMAGE)"; \
 	if [ -n "$${IMAGE_DIGEST:-}" ]; then image_ref="$${image_ref}@$${IMAGE_DIGEST}"; fi; \
