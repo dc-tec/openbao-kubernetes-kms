@@ -12,6 +12,7 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/logging"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/metrics"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
 )
 
 func TestObservabilityOmitsCorrelationFieldsByDefault(t *testing.T) {
@@ -168,5 +169,44 @@ func newTestObservability(t *testing.T, out *bytes.Buffer, correlation debugCorr
 		logger:      logger,
 		metrics:     recorder,
 		correlation: correlation,
+	}
+}
+
+func TestObservabilityLogsProbeCausesAndPromotionsAtDefaultLevel(t *testing.T) {
+	var out bytes.Buffer
+	observer := newTestObservability(t, &out, debugCorrelation{})
+	logger, err := logging.New(logging.Options{Level: "info", Format: logging.FormatJSON, Output: &out})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observer.logger = logger
+	observer.ObserveStatusProbe(context.Background(), status.ProbeObservation{
+		Kind: status.ProbeKindMetadata, Status: "tls_failed", Reason: status.ReasonMetadataReadFailed,
+		ErrorClass: "tls_failed",
+	})
+	observer.ObserveKeyPromotion(context.Background(), status.PromotionObservation{
+		PreviousKeyIDHash: "old-hash", KeyIDHash: "new-hash", PreviousTransitVersion: 1, TransitVersion: 2,
+	})
+	observer.ObserveStatusProbe(context.Background(), status.ProbeObservation{Kind: status.ProbeKindDeep, Status: "ok"})
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("unexpected log count: %s", out.String())
+	}
+	for _, want := range []string{
+		`"message":"status.probe"`, `"level":"WARN"`,
+		`"reason":"metadata_read_failed"`, `"error_class":"tls_failed"`,
+	} {
+		if !strings.Contains(lines[0], want) {
+			t.Fatalf("missing %s: %s", want, lines[0])
+		}
+	}
+	for _, want := range []string{
+		`"message":"key.promoted"`, `"level":"INFO"`,
+		`"previous_key_id_hash":"old-hash"`, `"key_id_hash":"new-hash"`,
+		`"previous_transit_key_version":1`, `"transit_key_version":2`,
+	} {
+		if !strings.Contains(lines[1], want) {
+			t.Fatalf("missing %s: %s", want, lines[1])
+		}
 	}
 }

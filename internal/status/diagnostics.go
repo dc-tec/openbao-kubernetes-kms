@@ -22,6 +22,9 @@ const (
 
 // Diagnostics is a redacted local snapshot for readiness, metrics, and node comparison.
 type Diagnostics struct {
+	Reasons                       []HealthReason
+	MetadataErrorClass            string
+	DeepErrorClass                string
 	Healthz                       string
 	UpdatedAt                     time.Time
 	CacheAge                      time.Duration

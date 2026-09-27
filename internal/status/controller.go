@@ -49,14 +49,17 @@ type TransitProbeClient interface {
 
 // ProbeObservation is one redacted background status probe observation.
 type ProbeObservation struct {
-	Kind     ProbeKind
-	Status   string
-	Duration time.Duration
+	Kind       ProbeKind
+	Status     string
+	Duration   time.Duration
+	Reason     HealthReason
+	ErrorClass string
 }
 
 // ProbeObserver receives redacted background probe observations.
 type ProbeObserver interface {
 	ObserveStatusProbe(context.Context, ProbeObservation)
+	ObserveKeyPromotion(context.Context, PromotionObservation)
 }
 
 // ControllerOptions wires the status cache, rotation observer, and probe dependencies.
@@ -205,10 +208,13 @@ func (c *Controller) releaseProbe() {
 func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 	start := time.Now()
 	defer func() {
+		failure := failureForProbe(err)
 		c.observeProbe(ctx, ProbeObservation{
-			Kind:     ProbeKindMetadata,
-			Status:   probeStatus(err),
-			Duration: time.Since(start),
+			Kind:       ProbeKindMetadata,
+			Status:     probeStatus(err),
+			Duration:   time.Since(start),
+			Reason:     failure.reason,
+			ErrorClass: failure.errorClass,
 		})
 	}()
 
@@ -217,28 +223,29 @@ func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 	}
 	now := c.clock.Now()
 	if !c.allowProbe(ProbeKindMetadata, now) {
-		c.store.publishMetadataUnhealthy(now)
-		return fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen)
+		return c.metadataFailed(now, ReasonCircuitBreakerOpen,
+			fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen))
 	}
 	disableUpsert, err := c.transit.ReadDisableUpsert(ctx, c.mountPath)
 	if err != nil {
-		c.store.publishMetadataUnhealthy(now)
 		c.recordProbeFailure(ProbeKindMetadata, now)
-		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageTransitUpsertRead, err)
+		return c.metadataFailed(now, ReasonUpsertCheckFailed,
+			fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageTransitUpsertRead, err))
 	}
 	if !disableUpsert {
-		c.store.publishMetadataUnhealthy(now)
-		return fmt.Errorf("%w: %s", ErrProbeFailed, messageTransitUpsertAllowed)
+		return c.metadataFailed(now, ReasonUpsertAllowed,
+			fmt.Errorf("%w: %s", ErrProbeFailed, messageTransitUpsertAllowed))
 	}
 
 	profile, err := c.transit.ReadKeyProfile(ctx, c.mountPath, c.keyName)
 	if err != nil {
-		c.store.publishMetadataUnhealthy(now)
 		c.recordProbeFailure(ProbeKindMetadata, now)
-		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageTransitMetadataFailed, err)
+		return c.metadataFailed(now, ReasonMetadataReadFailed,
+			fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageTransitMetadataFailed, err))
 	}
 
 	state, hasState := c.store.State()
+	previous, _ := c.store.Active()
 	var result ObservationResult
 	if hasState {
 		if discover {
@@ -249,32 +256,30 @@ func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 	} else {
 		assessment := AssessAutoBootstrapState(profile)
 		if !assessment.Allowed {
-			c.store.publishMetadataUnhealthy(now)
-			return fmt.Errorf(
+			return c.metadataFailed(now, ReasonStateUnavailable, fmt.Errorf(
 				"%w: local registry state is absent and cannot be auto-bootstrapped: %s",
 				ErrStateUnavailable,
 				assessment.Reason,
-			)
+			))
 		}
 		rebuilt, rebuildErr := c.observer.RebuildState(profile, now)
 		err = rebuildErr
 		result = ObservationResult{State: rebuilt, Changed: true}
 	}
 	if err != nil {
-		c.store.publishMetadataUnhealthy(now)
-		return err
+		return c.metadataFailed(now, profileFailureReason(err), err)
 	}
 
 	if result.Changed && c.stateStore != nil {
 		if err := c.stateStore.Save(result.State); err != nil {
-			c.store.publishMetadataUnhealthy(now)
-			return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, err)
+			return c.metadataFailed(now, ReasonStateSaveFailed,
+				fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, err))
 		}
 	}
 	if err := c.store.publishMetadata(result.State, now, result.EncryptionBlocked); err != nil {
-		c.store.publishMetadataUnhealthy(now)
-		return err
+		return c.metadataFailed(now, ReasonStatePublishFailed, err)
 	}
+	c.observePromotion(ctx, previous)
 	c.recordProbeSuccess(ProbeKindMetadata)
 	if result.EncryptionBlocked {
 		return fmt.Errorf("%w: active Transit version cannot encrypt", ErrTransitKeyUnusable)
@@ -290,10 +295,13 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 	defer c.releaseProbe()
 	start := time.Now()
 	defer func() {
+		failure := failureForProbe(err)
 		c.observeProbe(ctx, ProbeObservation{
-			Kind:     ProbeKindDeep,
-			Status:   probeStatus(err),
-			Duration: time.Since(start),
+			Kind:       ProbeKindDeep,
+			Status:     probeStatus(err),
+			Duration:   time.Since(start),
+			Reason:     failure.reason,
+			ErrorClass: failure.errorClass,
 		})
 	}()
 
@@ -302,8 +310,8 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 	}
 	now := c.clock.Now()
 	if !c.allowProbe(ProbeKindDeep, now) {
-		c.store.publishDeepUnhealthy()
-		return fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen)
+		return c.deepFailed(ReasonCircuitBreakerOpen,
+			fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen))
 	}
 	active, err := c.store.activeForDeepProbe()
 	if err != nil {
@@ -318,27 +326,25 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 		AssociatedData: []byte(probeAssociatedDataValue),
 	})
 	if err != nil {
-		c.store.publishDeepUnhealthy()
 		c.recordProbeFailure(ProbeKindDeep, now)
-		return fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageDeepProbeFailed, err)
+		return c.deepFailed(ReasonDeepProbeFailed,
+			fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageDeepProbeFailed, err))
 	}
 	if len(result.Ciphertext) >= kmsv2.MaxKMSCiphertextBytes {
-		c.store.publishDeepUnhealthy()
 		c.recordProbeFailure(ProbeKindDeep, now)
-		return fmt.Errorf(
+		return c.deepFailed(ReasonDeepProbeInvalid, fmt.Errorf(
 			"%w: %s: Transit ciphertext exceeds Kubernetes KMS v2 response limit",
 			ErrProbeFailed,
 			messageDeepProbeFailed,
-		)
+		))
 	}
 	if result.KeyVersion != 0 && result.KeyVersion != active.TransitVersion {
-		c.store.publishDeepUnhealthy()
 		c.recordProbeFailure(ProbeKindDeep, now)
-		return fmt.Errorf(
+		return c.deepFailed(ReasonDeepProbeInvalid, fmt.Errorf(
 			"%w: %s: Transit returned unexpected key version",
 			ErrProbeFailed,
 			messageDeepProbeFailed,
-		)
+		))
 	}
 	c.store.publishDeepHealthy()
 	c.recordProbeSuccess(ProbeKindDeep)
@@ -430,7 +436,16 @@ func probeStatus(err error) string {
 	}
 	var openBaoErr *openbao.Error
 	if errors.As(err, &openBaoErr) {
+		if errors.Is(err, openbao.ErrAuthentication) {
+			switch openBaoErr.Class {
+			case openbao.ErrorClassUnauthenticated, openbao.ErrorClassPermissionDenied, openbao.ErrorClassInvalidRequest:
+				return "auth_failed"
+			}
+		}
 		return string(openBaoErr.Class)
+	}
+	if errors.Is(err, openbao.ErrAuthentication) {
+		return "auth_failed"
 	}
 	return probeStatusError
 }

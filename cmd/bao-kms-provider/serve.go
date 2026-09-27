@@ -45,6 +45,7 @@ type runtimeBuilder struct {
 type serveDependencies struct {
 	runtime   *appruntime.Runtime
 	scheduler *status.Scheduler
+	logger    *logging.Logger
 }
 
 func newServeCommand(runtimeConfig *config.Runtime, configPath *string, info version.Info) *cobra.Command {
@@ -107,6 +108,17 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 	if err != nil {
 		return serveDependencies{}, err
 	}
+	logServeEvent(ctx, logger, logMessageServeStart, "")
+	deps, err := b.buildRuntime(ctx, cfg, logger)
+	if err != nil {
+		logServeEvent(ctx, logger, logMessageServeShutdown, "startup_failed")
+	}
+	return deps, err
+}
+
+func (b runtimeBuilder) buildRuntime(
+	ctx context.Context, cfg config.Config, logger *logging.Logger,
+) (serveDependencies, error) {
 	metricsRecorder, err := metrics.NewRecorder()
 	if err != nil {
 		return serveDependencies{}, err
@@ -190,6 +202,9 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 	kmsv2.Register(grpcServer, kmsServer)
 
 	rt, err := appruntime.New(appruntime.Options{
+		OnStarted: func(startCtx context.Context) {
+			logServeEvent(startCtx, logger, logMessageServeReady, "")
+		},
 		Socket: socket.Options{
 			Path: cfg.Server.SocketPath,
 			Mode: mode,
@@ -208,7 +223,7 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 		return serveDependencies{}, err
 	}
 
-	return serveDependencies{runtime: rt, scheduler: scheduler}, nil
+	return serveDependencies{runtime: rt, scheduler: scheduler, logger: logger}, nil
 }
 
 func buildStatusRuntime(
@@ -260,10 +275,17 @@ func buildStatusRuntime(
 	return store, controller, scheduler, nil
 }
 
-func runServe(ctx context.Context, deps serveDependencies) error {
+func runServe(ctx context.Context, deps serveDependencies) (runErr error) {
 	if ctx == nil {
 		return errors.New(messageContextRequired)
 	}
+	defer func() {
+		failure := ""
+		if runErr != nil {
+			failure = "runtime_failed"
+		}
+		logServeEvent(ctx, deps.logger, logMessageServeShutdown, failure)
+	}()
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

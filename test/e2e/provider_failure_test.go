@@ -131,6 +131,12 @@ func TestProviderDisableUpsertDriftFailsClosedE2E(t *testing.T) {
 		t.Fatalf("allow implicit Transit key creation: %v", err)
 	}
 	stack.runClient(ctx, "unsafe-mount-client", kmsClientModeExpectUnhealthy, sampleNotMounted)
+	logs := dockerLogs(ctx, stack.dockerPath, stack.providerName)
+	for _, want := range []string{`"message":"status.probe"`, `"reason":"upsert_allowed"`, `"error_class":"upsert_allowed"`} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("missing %s: %s", want, logs)
+		}
+	}
 }
 
 func TestProviderExpiredJWTFailsClosedE2E(t *testing.T) {

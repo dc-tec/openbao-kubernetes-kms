@@ -42,6 +42,8 @@ var ErrInvalidConfig = errors.New("runtime config invalid")
 
 // Options controls runtime construction.
 type Options struct {
+	// OnStarted runs once after the bound listeners are started. It must not block.
+	OnStarted func(context.Context)
 	// Socket configures the Unix domain listener.
 	Socket socket.Options
 	// GRPCServer is the pre-built gRPC server. The caller is responsible for
@@ -70,6 +72,7 @@ type Runtime struct {
 	metricsListener net.Listener
 	metricsServer   *http.Server
 	shutdownTimeout time.Duration
+	onStarted       func(context.Context)
 
 	live         runtimeLiveness
 	shutdownOnce sync.Once
@@ -98,6 +101,7 @@ func New(opts Options) (*Runtime, error) {
 		socketListener:  socketListener,
 		grpcServer:      opts.GRPCServer,
 		shutdownTimeout: shutdownTimeoutOrDefault(opts.ShutdownTimeout),
+		onStarted:       opts.OnStarted,
 	}
 	if opts.HealthAddress != "" {
 		handler, handlerErr := health.NewHandler(&r.live, opts.Readiness)
@@ -189,6 +193,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 		})
 	}
 
+	if r.onStarted != nil {
+		r.onStarted(sigCtx)
+	}
 	select {
 	case <-sigCtx.Done():
 	case <-groupCtx.Done():

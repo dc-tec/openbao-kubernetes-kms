@@ -29,6 +29,8 @@ type Store struct {
 	encryptionBlocked bool
 	deepProbeOK       bool
 	deepProbed        bool
+	metadataFailure   probeFailure
+	deepFailure       probeFailure
 	state             keyregistry.StateFile
 	registry          keyregistry.Registry
 	active            keyregistry.KeySnapshot
@@ -92,9 +94,11 @@ func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt time.Time)
 	s.active = active
 	s.hasState = true
 	s.metadataOK = true
+	s.metadataFailure = probeFailure{}
 	s.encryptionBlocked = false
 	s.deepProbeOK = true
 	s.deepProbed = true
+	s.deepFailure = probeFailure{}
 	s.updateHealthLocked()
 	s.updatedAt = updatedAt.UTC()
 	return nil
@@ -119,7 +123,12 @@ func (s *Store) publishMetadata(state keyregistry.StateFile, updatedAt time.Time
 	s.hasState = true
 	s.metadataOK = !encryptionBlocked
 	s.encryptionBlocked = encryptionBlocked
+	s.metadataFailure = probeFailure{}
+	if encryptionBlocked {
+		s.metadataFailure = probeFailure{reason: ReasonEncryptionBlocked}
+	}
 	if activeChanged {
+		s.deepFailure = probeFailure{}
 		s.deepProbeOK = false
 		s.deepProbed = false
 	}
@@ -128,7 +137,7 @@ func (s *Store) publishMetadata(state keyregistry.StateFile, updatedAt time.Time
 	return nil
 }
 
-func (s *Store) publishMetadataUnhealthy(updatedAt time.Time) {
+func (s *Store) publishMetadataUnhealthy(updatedAt time.Time, failure probeFailure) {
 	if updatedAt.IsZero() {
 		updatedAt = s.clock.Now()
 	}
@@ -137,6 +146,7 @@ func (s *Store) publishMetadataUnhealthy(updatedAt time.Time) {
 	defer s.mu.Unlock()
 
 	s.metadataOK = false
+	s.metadataFailure = failure
 	s.updateHealthLocked()
 	s.updatedAt = updatedAt.UTC()
 }
@@ -147,15 +157,17 @@ func (s *Store) publishDeepHealthy() {
 
 	s.deepProbeOK = true
 	s.deepProbed = true
+	s.deepFailure = probeFailure{}
 	s.updateHealthLocked()
 }
 
-func (s *Store) publishDeepUnhealthy() {
+func (s *Store) publishDeepUnhealthy(failure probeFailure) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.deepProbeOK = false
 	s.deepProbed = true
+	s.deepFailure = failure
 	s.updateHealthLocked()
 }
 
@@ -260,7 +272,7 @@ func (s *Store) DiagnosticsSnapshot() Diagnostics {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return diagnosticsForState(
+	diagnostics := diagnosticsForState(
 		s.state,
 		s.hasState,
 		s.active,
@@ -270,6 +282,10 @@ func (s *Store) DiagnosticsSnapshot() Diagnostics {
 		s.maxStaleness,
 		s.breaker,
 	)
+	diagnostics.Reasons = s.readinessReasonsLocked(diagnostics.Stale)
+	diagnostics.MetadataErrorClass = s.metadataFailure.errorClass
+	diagnostics.DeepErrorClass = s.deepFailure.errorClass
+	return diagnostics
 }
 
 func (s *Store) staleLocked(now time.Time) bool {
