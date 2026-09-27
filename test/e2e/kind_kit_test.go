@@ -66,6 +66,7 @@ func TestKindGeneratedKitAcceptanceE2E(t *testing.T) {
 		enableKindAPIServerKMS(t, ctx, docker, kubectl, "kind-"+cluster, node)
 		waitKindDirectAPI(t, ctx, docker, node)
 	}
+	t.Log("all three API servers are ready with the generated reader configuration")
 	verifyKindKitWriterRollout(t, ctx, docker, kubectl, "kind-"+cluster, nodes)
 }
 
@@ -99,6 +100,9 @@ func installKindKitNode(
 	gid := strconv.Itoa(17000 + index)
 	runDocker(t, ctx, docker, "exec", node, "groupadd", "--system", "--gid", gid, "openbao-kms-socket")
 	runDocker(t, ctx, docker, "exec", node, "mkdir", "-p", kindKitDir, kindEncryptionConfigDir)
+	// Joined nodes need not retain kubeadm's bootstrap client files. Reuse the
+	// cluster creator's private client configuration, with a direct endpoint below.
+	dockerCopy(t, ctx, docker, os.Getenv("KUBECONFIG"), node+":"+kindKitDir+"/api-client.conf")
 	dockerCopy(t, ctx, docker, archive, node+":"+kindKitDir+"/kit.tar.gz")
 	runDocker(t, ctx, docker, "exec", node, "tar", "-xzf", kindKitDir+"/kit.tar.gz",
 		"-C", kindKitDir, "--strip-components=1")
@@ -214,11 +218,21 @@ func requireKitCheck(t *testing.T, report cli.Report, id string) string {
 
 func waitKindDirectAPI(t *testing.T, ctx context.Context, docker, node string) {
 	t.Helper()
-	waitKindOAuthCondition(t, ctx, "direct API readiness on "+node, func() bool {
-		_, err := runDockerOutput(ctx, docker, "exec", node, "kubectl", "--kubeconfig=/etc/kubernetes/super-admin.conf",
+	deadline, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	for {
+		output, err := runDockerOutput(deadline, docker, "exec", node, "kubectl",
+			"--kubeconfig="+kindKitDir+"/api-client.conf",
 			"--server=https://127.0.0.1:6443", "--request-timeout=5s", "get", "--raw=/readyz")
-		return err == nil
-	})
+		if err == nil {
+			return
+		}
+		select {
+		case <-deadline.Done():
+			t.Fatalf("direct API readiness on %s failed: %v: %s", node, err, strings.TrimSpace(output))
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 func verifyKindKitWriterRollout(
@@ -239,12 +253,13 @@ func verifyKindKitWriterRollout(
 			t.Fatal(err)
 		}
 		dockerCopy(t, ctx, docker, valueFile, writer+":"+kindKitDir+"/value")
-		runDocker(t, ctx, docker, "exec", writer, "kubectl", "--kubeconfig=/etc/kubernetes/super-admin.conf",
+		runDocker(t, ctx, docker, "exec", writer, "kubectl", "--kubeconfig="+kindKitDir+"/api-client.conf",
 			"--server=https://127.0.0.1:6443", "create", "secret", "generic", name, "--from-file=value="+kindKitDir+"/value")
 		assertKindEtcdEncryptedNamed(t, ctx, docker, writer, name, value)
 		for _, reader := range nodes {
 			assertKindKitDirectRead(t, ctx, docker, reader, name, value)
 		}
+		t.Logf("writer %s: stored KMS envelope and direct reads through all three API servers passed", writer)
 	}
 	for _, node := range nodes {
 		restartKindAPIServer(t, ctx, docker, kubectl, contextName, node)
@@ -252,12 +267,13 @@ func verifyKindKitWriterRollout(
 		for index, value := range values {
 			assertKindKitDirectRead(t, ctx, docker, node, fmt.Sprintf("kit-writer-%d", index), value)
 		}
+		t.Logf("API server %s: cold reads of all three Secrets passed", node)
 	}
 }
 
 func assertKindKitDirectRead(t *testing.T, ctx context.Context, docker, node, name, value string) {
 	t.Helper()
-	output, err := runDockerOutput(ctx, docker, "exec", node, "kubectl", "--kubeconfig=/etc/kubernetes/super-admin.conf",
+	output, err := runDockerOutput(ctx, docker, "exec", node, "kubectl", "--kubeconfig="+kindKitDir+"/api-client.conf",
 		"--server=https://127.0.0.1:6443", "get", "secret", name, "-o", "jsonpath={.data.value}")
 	if err != nil {
 		t.Fatalf("direct Secret read through %s failed: %v", node, err)
