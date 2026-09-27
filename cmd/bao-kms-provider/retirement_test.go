@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -171,4 +172,47 @@ func TestRetirementReportsPartialSaveAndCheckpointRecovers(t *testing.T) {
 		t.Fatalf("startup could not repair checkpoint: %v", err)
 	}
 	assertRetirementSavedState(t, cfg.State.Path, loaded.State.CurrentHash, previous.ActiveKeyID)
+}
+
+func TestRetirementConfirmsBehindCheckpointBeforeAdvancing(t *testing.T) {
+	for _, failCheckpoint := range []bool{false, true} {
+		t.Run(fmt.Sprintf("checkpoint_failure_%t", failCheckpoint), func(t *testing.T) {
+			cfg, previous, profile := prepareRetirement(t)
+			ahead, err := keyregistry.NewStateFileFromRecords(
+				previous.ActiveKeyID, previous.Snapshots, previous.Generation+1, previous.CurrentHash,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := keyregistry.SaveStateFile(cfg.State.Path, ahead); err != nil {
+				t.Fatal(err)
+			}
+			if failCheckpoint {
+				blocker := filepath.Join(filepath.Dir(cfg.State.Path), ".registry.json.checkpoint.tmp", "blocker")
+				if err := os.MkdirAll(blocker, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			readProfile := func(context.Context, config.Config) (openbao.KeyProfile, error) { return profile, nil }
+			opts := retirementOptions{BeforeVersion: 2, Apply: true, ExpectedStateHash: ahead.CurrentHash}
+			report, err := runRetirement(t.Context(), cfg, opts, readProfile)
+			if failCheckpoint {
+				if err == nil {
+					t.Fatal("retirement advanced without confirming the prior checkpoint")
+				}
+				loaded, loadErr := loadRegistryStateWithCheckpoint(cfg.State.Path)
+				if loadErr != nil {
+					t.Fatalf("failed retirement left an unrecoverable pair: %v", loadErr)
+				}
+				if loaded.State.CurrentHash != ahead.CurrentHash || loaded.CheckpointHash != previous.CurrentHash {
+					t.Fatal("failed checkpoint repair changed the persistence pair")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertRetirementSavedState(t, cfg.State.Path, report.NextStateHash, previous.ActiveKeyID)
+		})
+	}
 }

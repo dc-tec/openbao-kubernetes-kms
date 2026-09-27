@@ -117,7 +117,17 @@ func runRetirement(
 		if err := ctx.Err(); err != nil {
 			return retirementReport{}, err
 		}
-		if err := (status.FileStateStore{Path: cfg.State.Path}).Save(next); err != nil {
+		store := status.FileStateStore{Path: cfg.State.Path}
+		// Finish an interrupted prior save before advancing another generation.
+		// Otherwise a second checkpoint failure could leave a generation gap.
+		confirmed, err := store.Load()
+		if err != nil {
+			return retirementReport{}, fmt.Errorf("confirm retirement checkpoint: %w", err)
+		}
+		if confirmed.CurrentHash != loaded.State.CurrentHash {
+			return retirementReport{}, fmt.Errorf("state changed before retirement; generate and review a new plan")
+		}
+		if err := store.Save(next); err != nil {
 			return retirementReport{}, fmt.Errorf("save retirement state/checkpoint: %w; inspect state before retrying", err)
 		}
 		report.Applied = true
