@@ -34,6 +34,10 @@ verifiedBy:
 - The Transit policy to OpenBao administrators.
 - etcd and OpenBao backup storage to backup operators.
 
+Host administrators must protect the ancestor directories of socket, state,
+and credential paths. Directory ownership and file checks do not isolate the
+provider from root or another process running under the provider's UID.
+
 ## Attackers
 
 The design considers attackers who can read etcd snapshots and Kubernetes

@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **filesystem:** Require the socket directory to belong to the provider's
+  effective UID. Open state and checkpoint files relative to a pinned directory
+  and validate the opened file before decoding it.
+
 - **observability:** Export Go runtime, process, and build metadata metrics.
   Add a provider-scoped alert for repeated observed process restarts.
 

@@ -133,6 +133,12 @@ The provider checks on load that:
 - `min_available_version` and `min_decryption_version` block no retained
   version.
 
+State and checkpoint reads open the immediate parent without following a
+symlink, then open the file relative to that directory descriptor. Type and
+permission checks apply to the opened file. Keep ancestor directories under
+trusted host administration; these checks do not protect against a host
+administrator or another process running as the provider's user.
+
 During operation:
 
 - pending snapshots decrypt once their metadata is validated; rejected and

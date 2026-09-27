@@ -368,17 +368,9 @@ func ValidateStateProgress(previous StateFile, next StateFile) error {
 
 // LoadStateFile loads and validates local registry state from disk.
 func LoadStateFile(path string, opts StateLoadOptions) (StateFile, Registry, error) {
-	if err := validateStateFilePath(path); err != nil {
-		return StateFile{}, Registry{}, err
-	}
-
-	// #nosec G304 -- registry state path is operator-controlled local configuration.
-	file, err := os.Open(path)
+	file, err := openStateFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return StateFile{}, Registry{}, ErrStateNotFound
-		}
-		return StateFile{}, Registry{}, fmt.Errorf("open registry state: %w", err)
+		return StateFile{}, Registry{}, err
 	}
 	defer func() {
 		_ = file.Close()
@@ -469,17 +461,9 @@ func (c StateCheckpoint) ValidateState(state StateFile) error {
 
 // LoadStateCheckpoint loads and validates the replay checkpoint from disk.
 func LoadStateCheckpoint(path string) (StateCheckpoint, error) {
-	if err := validateStateFilePath(path); err != nil {
-		return StateCheckpoint{}, err
-	}
-
-	// #nosec G304 -- checkpoint path is derived from operator-controlled local state configuration.
-	file, err := os.Open(path)
+	file, err := openStateFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return StateCheckpoint{}, ErrStateNotFound
-		}
-		return StateCheckpoint{}, fmt.Errorf("open registry state checkpoint: %w", err)
+		return StateCheckpoint{}, err
 	}
 	defer func() {
 		_ = file.Close()
@@ -652,26 +636,6 @@ func validateStateHash(hash string) error {
 		return fmt.Errorf("%w: state hash encoding is invalid", ErrStateCorrupt)
 	}
 	return nil
-}
-
-func validateStateFilePath(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("inspect registry state file: %w", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("%w: state file must not be a symlink", ErrStatePermission)
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%w: state file must be regular", ErrStatePermission)
-	}
-	if info.Mode().Perm()&stateFileDisallowedMode != 0 {
-		return fmt.Errorf("%w: state file mode must not include %04o", ErrStatePermission, stateFileDisallowedMode)
-	}
-	return validateStateParent(path)
 }
 
 func validateStateFileWritePath(path string) error {
