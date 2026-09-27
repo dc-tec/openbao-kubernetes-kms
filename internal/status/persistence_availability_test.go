@@ -36,7 +36,7 @@ func TestDeferredObservationPreservesConfirmedKeysAndFreezesProgress(t *testing.
 			local := rotationServer(t, f.store, f.controller, crypto)
 			peerStore := newTestStore(t, f.clock)
 			peerState := rebuildState(t, newTestObserver(t, f.clock, 1, 0), f.transit.profile, f.clock.Now())
-			if err := peerStore.PublishHealthy(peerState, f.clock.Now()); err != nil {
+			if err := peerStore.PublishHealthy(peerState, f.clock.Read()); err != nil {
 				t.Fatal(err)
 			}
 			peer := rotationServer(t, peerStore, nil, crypto)

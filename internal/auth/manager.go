@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/oauth2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
@@ -191,7 +192,7 @@ type Manager struct {
 	lastRenewalAt       time.Time
 	lastErr             error
 	lastRenewalErr      error
-	nextRetryAt         time.Time
+	nextRetryAt         clocktime.Deadline
 	baseRetryBackoff    time.Duration
 	maxRetryBackoff     time.Duration
 	retryJitter         func(time.Duration) time.Duration
@@ -199,13 +200,13 @@ type Manager struct {
 	lifecycle           context.Context
 	refreshTimeout      time.Duration
 	flight              *refreshFlight
-	nextRecoveryAt      time.Time
+	nextRecoveryAt      clocktime.Deadline
 	observer            Observer
 }
 
 type currentToken struct {
 	value     string
-	expiresAt time.Time
+	lifetime  clocktime.Lifetime
 	renewable bool
 }
 
@@ -298,27 +299,27 @@ func (m *Manager) State() State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	now := m.clock.Now()
+	now := m.clock.Read()
 	state := State{
 		AuthMethod:          m.source.SourceInfo().AuthMethod,
 		CertificateSource:   m.source.SourceInfo().CertificateSource,
 		Status:              StatusUnknown,
 		TokenRenewable:      m.current.renewable,
-		TokenExpiresAt:      m.current.expiresAt,
-		TokenTTL:            ttlUntil(now, m.current.expiresAt),
+		TokenExpiresAt:      m.tokenExpiryLocked(now),
+		TokenTTL:            m.current.lifetime.Remaining(now),
 		JWTExpiresAt:        m.lastJWT.Claims.ExpiresAt,
-		JWTTTL:              ttlUntil(now, m.lastJWT.Claims.ExpiresAt),
+		JWTTTL:              m.jwtTTLLocked(now),
 		CertExpiresAt:       m.lastCertificate.ExpiresAt,
-		CertTTL:             ttlUntil(now, m.lastCertificate.ExpiresAt),
+		CertTTL:             ttlUntil(now.Wall, m.lastCertificate.ExpiresAt),
 		LastLoginAt:         m.lastLoginAt,
 		LastRenewalAt:       m.lastRenewalAt,
 		LastError:           safeErrorMessage(m.lastErr),
 		LastRenewalError:    safeErrorMessage(m.lastRenewalErr),
-		NextRetryAt:         m.nextRetryAt,
+		NextRetryAt:         m.nextRetryAt.WallTime(now),
 		ConsecutiveFailures: m.consecutiveFailures,
 		LastTokenSource:     tokenSourceMemory,
 	}
-	if m.current.value != "" && now.Before(m.current.expiresAt) && m.lastErr == nil {
+	if m.current.value != "" && m.current.lifetime.Remaining(now) > 0 && m.lastErr == nil {
 		state.Status = StatusAuthenticated
 		return state
 	}
@@ -328,11 +329,19 @@ func (m *Manager) State() State {
 	return state
 }
 
-func (m *Manager) refreshAtLocked() time.Time {
-	if m.current.expiresAt.IsZero() {
+func (m *Manager) jwtTTLLocked(now clocktime.Reading) time.Duration {
+	remaining := ttlUntil(now.Wall, m.lastJWT.Claims.ExpiresAt)
+	if m.lastJWT.EndpointLifetime.IsSet() {
+		return min(remaining, m.lastJWT.EndpointLifetime.Remaining(now))
+	}
+	return remaining
+}
+
+func (m *Manager) tokenExpiryLocked(now clocktime.Reading) time.Time {
+	if m.current.value == "" {
 		return time.Time{}
 	}
-	return m.current.expiresAt.Add(-m.cfg.LoginBeforeTokenExpiry)
+	return now.Wall.Add(m.current.lifetime.Remaining(now))
 }
 
 type refreshKind int
@@ -361,7 +370,7 @@ type refreshResult struct {
 	err         error
 }
 
-func (m *Manager) refreshActionLocked(forceLogin bool, now time.Time) refreshAction {
+func (m *Manager) refreshActionLocked(forceLogin bool, now clocktime.Reading) refreshAction {
 	action := refreshAction{
 		kind:    refreshKindLogin,
 		cfg:     m.cfg,
@@ -373,7 +382,7 @@ func (m *Manager) refreshActionLocked(forceLogin bool, now time.Time) refreshAct
 		m.current.value != "" &&
 		m.current.renewable &&
 		m.renewalEnabled &&
-		now.Before(m.current.expiresAt) {
+		m.current.lifetime.Remaining(now) > 0 {
 		action.kind = refreshKindRenew
 	}
 	return action
@@ -402,7 +411,7 @@ func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult
 		return refreshResult{err: err}
 	}
 
-	now := action.clock.Now()
+	now := action.clock.Read()
 	token, err := currentTokenFromAuth(login.AuthToken, "", now, true, action.cfg.LoginBeforeTokenExpiry)
 	if err != nil {
 		m.observeLogin(ctx, err)
@@ -414,7 +423,7 @@ func (m *Manager) login(ctx context.Context, action refreshAction) refreshResult
 		token:       token,
 		jwt:         login.JWT,
 		certificate: login.Certificate,
-		loginAt:     now,
+		loginAt:     now.Wall,
 	}
 }
 
@@ -425,7 +434,7 @@ func (m *Manager) renew(ctx context.Context, action refreshAction) (currentToken
 		m.observeRenewal(ctx, publicErr)
 		return currentToken{}, time.Time{}, publicErr
 	}
-	now := action.clock.Now()
+	now := action.clock.Read()
 	token, err := currentTokenFromAuth(authToken, action.current.value, now, false, action.cfg.LoginBeforeTokenExpiry)
 	if err != nil {
 		m.observeRenewal(ctx, err)
@@ -433,18 +442,18 @@ func (m *Manager) renew(ctx context.Context, action refreshAction) (currentToken
 	}
 	m.observeRenewal(ctx, nil)
 
-	return token, now, nil
+	return token, now.Wall, nil
 }
 
 func (m *Manager) applyRefreshResultLocked(result refreshResult) error {
-	now := m.clock.Now()
+	now := m.clock.Read()
 	if result.renewalErr != nil {
 		m.lastRenewalErr = result.renewalErr
 	}
 	if result.err != nil {
 		m.lastErr = result.err
 		m.consecutiveFailures++
-		m.nextRetryAt = now.Add(m.nextRetryBackoffLocked())
+		m.nextRetryAt = clocktime.After(now, m.nextRetryBackoffLocked())
 		return result.err
 	}
 
@@ -463,7 +472,7 @@ func (m *Manager) applyRefreshResultLocked(result refreshResult) error {
 		m.lastRenewalErr = nil
 	}
 	m.lastErr = nil
-	m.nextRetryAt = time.Time{}
+	m.nextRetryAt = clocktime.Deadline{}
 	m.consecutiveFailures = 0
 	return nil
 }
@@ -471,7 +480,7 @@ func (m *Manager) applyRefreshResultLocked(result refreshResult) error {
 func currentTokenFromAuth(
 	token openbao.AuthToken,
 	fallbackValue string,
-	now time.Time,
+	now clocktime.Reading,
 	requireValue bool,
 	minUsableLease time.Duration,
 ) (currentToken, error) {
@@ -491,13 +500,13 @@ func currentTokenFromAuth(
 	}
 	return currentToken{
 		value:     value,
-		expiresAt: now.Add(token.LeaseDuration),
+		lifetime:  clocktime.NewLifetime(now, token.LeaseDuration),
 		renewable: token.Renewable,
 	}, nil
 }
 
-func (m *Manager) retryBlockedLocked(now time.Time) bool {
-	return !m.nextRetryAt.IsZero() && now.Before(m.nextRetryAt)
+func (m *Manager) retryBlockedLocked(now clocktime.Reading) bool {
+	return m.nextRetryAt.Pending(now)
 }
 
 func (m *Manager) nextRetryBackoffLocked() time.Duration {

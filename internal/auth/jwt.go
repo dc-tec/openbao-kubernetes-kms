@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 )
 
 const (
@@ -46,24 +48,19 @@ var (
 	ErrJWTSubjectMismatch = errors.New("jwt subject mismatch")
 )
 
-// Clock abstracts time for token lifecycle tests.
-type Clock interface {
-	Now() time.Time
-}
+// Clock supplies wall time and process-local elapsed time.
+type Clock = clocktime.Clock
 
-// RealClock uses the host wall clock.
-type RealClock struct{}
-
-// Now returns the current UTC time.
-func (RealClock) Now() time.Time {
-	return time.Now().UTC()
-}
+// RealClock uses the host wall and monotonic clocks.
+type RealClock = clocktime.Real
 
 // JWT is one identity token read from disk with locally parsed claims.
 type JWT struct {
 	Raw    string
 	Claims Claims
 	ReadAt time.Time
+	// EndpointLifetime is the optional relative OAuth access-token lifetime.
+	EndpointLifetime clocktime.Lifetime
 }
 
 // Claims contains locally checkable registered JWT claims.

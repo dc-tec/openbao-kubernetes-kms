@@ -4,6 +4,9 @@
 
 ### Bug Fixes
 
+- **clock:** Prevent clock corrections from extending token and cached-status
+  validity or changing retry, discovery, and circuit-breaker cooldowns.
+
 - **cli:** Return the documented usage and configuration exit codes for command
   parsing and configuration inspection. Reject unknown help topics and
   completion subcommands, and remove the unsupported `trace` log level from

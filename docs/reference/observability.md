@@ -220,3 +220,16 @@ logging:
     ttl: 15m
     incidentId: INC-12345
 ```
+
+## Clock corrections and cached health
+
+Status cache age is the greatest age observed from elapsed time or wall time.
+A backward clock correction cannot make the cache younger. Once cached status
+is stale, only a fresh successful metadata probe can restore metadata health;
+the existing deep-probe requirements still apply. A forward correction or host
+suspension can expire the cache early. Status continues to use cached evidence
+and does not contact OpenBao.
+
+Retry, discovery, and circuit-breaker cooldowns use elapsed time. UTC deadline
+fields are projections onto the current wall clock. Token TTL and cache-age
+metrics report the conservative duration used by the corresponding validity check.

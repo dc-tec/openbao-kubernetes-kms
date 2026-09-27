@@ -12,6 +12,14 @@ verifiedBy:
 A release covers only what its release notes and this page list as tested.
 Everything else might work but is outside the tested matrix.
 
+## Unreleased clock handling
+
+Token leases and cached status cannot regain validity after an observed expiry
+through a backward clock correction. Forward corrections can require earlier
+authentication or a fresh probe. Retry and circuit-breaker cooldowns use
+process-local elapsed time. OAuth access tokens must satisfy both their relative
+endpoint lifetime and the absolute JWT expiry claim.
+
 ## Tested matrix
 
 | Component | Tested | Not covered |

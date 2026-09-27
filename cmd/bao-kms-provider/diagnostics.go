@@ -615,7 +615,7 @@ func checkStatusEncryptConsistency(
 		report.Fail(checkStatusEncryptInvariant, "Status/encrypt consistency", safeMessage(err))
 		return
 	}
-	if err := store.PublishHealthy(state, time.Now().UTC()); err != nil {
+	if err := store.PublishHealthy(state, (auth.RealClock{}).Read()); err != nil {
 		report.Fail(checkStatusEncryptInvariant, "Status/encrypt consistency", safeMessage(err))
 		return
 	}

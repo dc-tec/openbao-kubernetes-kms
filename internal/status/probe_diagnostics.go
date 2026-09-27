@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/aad"
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 )
 
@@ -68,7 +68,7 @@ func failureForProbe(err error) probeFailure {
 	return probeFailure{reason: reason, errorClass: class}
 }
 
-func (c *Controller) metadataFailed(now time.Time, reason HealthReason, err error) error {
+func (c *Controller) metadataFailed(now clocktime.Reading, reason HealthReason, err error) error {
 	failure := &probeError{reason: reason, cause: err}
 	c.store.publishMetadataUnhealthy(now, failureForProbe(failure))
 	return failure

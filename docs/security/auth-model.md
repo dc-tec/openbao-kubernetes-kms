@@ -149,3 +149,16 @@ It does not defend against:
 - a malicious provider binary that exfiltrates tokens it sees in memory,
 - OpenBao administrative actions that revoke or modify the role,
 - a compromised host that can read JWT files, certificate chains, PIN files, or process memory directly.
+
+## Clock corrections
+
+The provider measures OpenBao token leases, refresh backoff, and rejected-token
+recovery cooldowns with process-local elapsed time. Token lifetime also uses
+wall time as a conservative bound. A forward clock correction or host suspension
+can cause early expiry; a later backward correction cannot revive that token.
+Successful login or renewal establishes a new lifetime.
+
+JWT and certificate validity use UTC wall time and their configured clock-skew
+leeway. OAuth `expires_in` is a separate relative lifetime bound; it does not
+replace the JWT `exp` claim. Both bounds must leave enough time for login.
+Keep host time synchronized with the issuer and OpenBao.

@@ -21,13 +21,14 @@ import (
 )
 
 type oauthSourceFixture struct {
-	expiresIn   atomic.Int64
-	token       atomic.Value
-	unavailable atomic.Bool
-	requests    atomic.Int32
-	cfg         ManagerConfig
-	endpoint    oauth2.Config
-	clock       *fakeClock
+	beforeResponse func()
+	expiresIn      atomic.Int64
+	token          atomic.Value
+	unavailable    atomic.Bool
+	requests       atomic.Int32
+	cfg            ManagerConfig
+	endpoint       oauth2.Config
+	clock          *fakeClock
 }
 
 func newOAuthSourceFixture(t *testing.T) *oauthSourceFixture {
@@ -42,6 +43,9 @@ func newOAuthSourceFixture(t *testing.T) *oauthSourceFixture {
 	}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		f.requests.Add(1)
+		if f.beforeResponse != nil {
+			f.beforeResponse()
+		}
 		if f.unavailable.Load() {
 			http.Error(w, "issuer response must stay private", http.StatusServiceUnavailable)
 			return
@@ -191,5 +195,50 @@ func assertSharedOAuthStartup(t *testing.T, f *oauthSourceFixture, manager *Mana
 	wg.Wait()
 	if f.requests.Load() != 1 {
 		t.Fatal("concurrent startup requests did not share token acquisition")
+	}
+}
+
+func TestOAuthRelativeLifetimeSurvivesWallRollback(t *testing.T) {
+	f := newOAuthSourceFixture(t)
+	f.expiresIn.Store(90)
+	f.beforeResponse = func() { f.clock.advance(40 * time.Second); f.clock.jumpWall(-time.Hour) }
+	source, err := NewOAuth2LoginSource(f.cfg, f.endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bao := &fakes.OpenBaoAuthClient{}
+	if _, err := source.Login(t.Context(), bao, f.clock); !errors.Is(err, ErrJWTNearExpiry) {
+		t.Fatalf("relative expiry was extended by wall rollback: %v", err)
+	}
+	if len(bao.Logins()) != 0 {
+		t.Fatal("near-expiry OAuth credential reached OpenBao")
+	}
+}
+
+func TestOAuthKeepsSignedExpiryAndReportsRelativeLifetime(t *testing.T) {
+	f := newOAuthSourceFixture(t)
+	f.expiresIn.Store(90)
+	source, err := NewOAuth2LoginSource(f.cfg, f.endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bao := &fakes.OpenBaoAuthClient{LoginResponses: []openbao.AuthToken{
+		{ClientToken: testBaoToken1, LeaseDuration: time.Minute},
+	}}
+	result, err := source.Login(t.Context(), bao, f.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := ParseClaims(f.token.Load().(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.JWT.Claims.ExpiresAt.Equal(original.ExpiresAt) {
+		t.Fatal("signed claim overwritten by relative lifetime")
+	}
+	f.clock.jumpWall(-time.Hour)
+	f.clock.advance(40 * time.Second)
+	if got := result.JWT.EndpointLifetime.Remaining(f.clock.Read()); got != 50*time.Second {
+		t.Fatalf("unexpected relative lifetime after clock correction: %s", got)
 	}
 }
