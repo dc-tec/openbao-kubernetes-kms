@@ -2170,21 +2170,27 @@ func noContainerCommand(namePattern string) string {
 }
 
 func verifySecretAbsent(ctx context.Context, cfg *labConfig, kubeconfig string, secretName string) error {
-	err := quietKubectl(
+	output, err := outputCmdEnv(
 		ctx,
 		cfg,
 		[]string{"KUBECONFIG=" + kubeconfig},
+		"kubectl",
 		"get",
 		"secret",
 		secretName,
 		"-n",
 		"default",
+		"--ignore-not-found",
+		"-o", "name",
 	)
 	if err != nil {
-		fmt.Printf("post-restore Secret %s is absent as expected\n", secretName)
-		return nil
+		return fmt.Errorf("check post-restore Secret %s: %w", secretName, err)
 	}
-	return fmt.Errorf("post-restore Secret still exists after paired restore: %s", secretName)
+	if strings.TrimSpace(string(output)) != "" {
+		return fmt.Errorf("post-restore Secret still exists after paired restore: %s", secretName)
+	}
+	fmt.Printf("post-restore Secret %s is absent as expected\n", secretName)
+	return nil
 }
 
 func verifySystemdUpgradeRollback(ctx context.Context, cfg *labConfig) error {

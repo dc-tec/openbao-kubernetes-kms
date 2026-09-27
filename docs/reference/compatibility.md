@@ -27,11 +27,21 @@ authentication or a fresh probe. Retry and circuit-breaker cooldowns use
 process-local elapsed time. OAuth access tokens must satisfy both their relative
 endpoint lifetime and the absolute JWT expiry claim.
 
-## Tested matrix
+## Candidate qualification
+
+The next preview targets OpenBao `2.7.0` and `2.6.3`, and Kubernetes `1.34.11`,
+`1.35.8`, `1.36.4`, and `1.37.0`. Exact images are pinned in `.ci/versions.yaml`.
+These are qualification targets until the candidate passes the required suites.
+The existing Transit `aes256-gcm96` profile remains the scope; OpenBao external
+Transit keys are outside this qualification.
+
+## Published preview matrix
+
+The following matrix describes `0.1.0-preview.2`.
 
 | Component | Tested | Not covered |
 |---|---|---|
-| Kubernetes | `1.34.3` and `1.35.0`, pinned by Kind node-image digest in `.ci/versions.yaml` | Other `1.34.x` and `1.35.x` patches unless a release lists them; `1.29` to `1.33` might work with KMS v2; below `1.29` is not targeted |
+| Kubernetes | `1.34.3` and `1.35.0`, pinned in the release tag | Other `1.34.x` and `1.35.x` patches unless a release lists them; `1.29` to `1.33` might work with KMS v2; below `1.29` is not targeted |
 | Kubernetes KMS API | v2 | KMS v1 is not implemented |
 | OpenBao | `2.6.0` | Other `2.6.x` until tested and pinned; `2.5.x` |
 | Transit key type | `aes256-gcm96` | Other AEAD types, derived or convergent keys |

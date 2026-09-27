@@ -40,7 +40,7 @@ const (
 	EnvSkipCleanup  = "E2E_SKIP_CLEANUP"
 
 	//nolint:lll // Keep the complete image pin visible to version-policy checks.
-	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.6.0@sha256:900bb64d0671cd1d82b693c56206f7263b582445f3a3bb6ba6e5213f524a6653"
+	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.7.0@sha256:71156a1c6623a5fa3f5e61b0c6a8ead0faf0df29a778339188443551995d1315"
 
 	openBaoListenAddress  = "0.0.0.0:8200"
 	openBaoTLSServerName  = "localhost"

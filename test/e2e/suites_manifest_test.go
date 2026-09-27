@@ -504,7 +504,6 @@ func validateKubernetesPreviewMatrix(t *testing.T, policy versionsPolicy) {
 	releaseGateLines := collectKubernetesReleaseGateLines(t, kubernetes)
 	validateKubernetesRequiredReleaseGateLines(t, releaseGateLines)
 	validateKubernetesPrimaryLine(t, kubernetes, releaseGateLines)
-	validateKubernetesIntendedNextValidation(t, kubernetes)
 	validateKubernetesReleaseGateRows(t, policy.Validation.ReleaseGateRows, releaseGateLines)
 }
 
@@ -517,8 +516,8 @@ func validateKubernetesLinePolicy(t *testing.T, kubernetes kubernetesValidationP
 	if kubernetes.MinimumLine != "1.34" {
 		t.Fatalf("minimumLine = %q, want 1.34", kubernetes.MinimumLine)
 	}
-	if kubernetes.PrimaryLine != "1.34" {
-		t.Fatalf("primaryLine = %q, want 1.34", kubernetes.PrimaryLine)
+	if kubernetes.PrimaryLine != "1.37" {
+		t.Fatalf("primaryLine = %q, want 1.37", kubernetes.PrimaryLine)
 	}
 }
 
@@ -560,13 +559,10 @@ func validateKubernetesRequiredReleaseGateLines(
 ) {
 	t.Helper()
 
-	for _, line := range []string{"1.34", "1.35"} {
+	for _, line := range []string{"1.34", "1.35", "1.36", "1.37"} {
 		if _, ok := releaseGateLines[line]; !ok {
 			t.Fatalf("Kubernetes preview release gate must include line %s", line)
 		}
-	}
-	if _, ok := releaseGateLines["1.36"]; ok {
-		t.Fatalf("Kubernetes 1.36 must remain outside the release gate until a pinned Kind node image exists")
 	}
 }
 
@@ -593,20 +589,6 @@ func validateKubernetesPrimaryLine(
 			kubernetes.KindNodeImageDigest,
 			primary.KindNodeImageDigest,
 		)
-	}
-}
-
-func validateKubernetesIntendedNextValidation(t *testing.T, kubernetes kubernetesValidationPolicy) {
-	t.Helper()
-
-	found136 := false
-	for _, entry := range kubernetes.IntendedNextValidation {
-		if entry.Line == "1.36" && entry.Status == "awaiting-pinned-kind-node-image" {
-			found136 = true
-		}
-	}
-	if !found136 {
-		t.Fatalf("Kubernetes intendedNextValidation must include 1.36 awaiting a pinned Kind node image")
 	}
 }
 

@@ -49,7 +49,7 @@ in
     pkgs.jq
     (exactPackage "Helm" (manifestVersion "helmCli") pkgs.kubernetes-helm)
     (exactPackage "Hugo" hugoVersion pkgs.hugo)
-    (exactPackage "Kind" (manifestVersion "kindCli") pkgs.kind)
+    (exactPackage "Kind" (manifestVersion "kindCli") (import ./.ci/kind.nix { inherit pkgs; }))
     (exactPackage "kubectl" (manifestVersion "kubectlCli") pkgs.kubectl)
     (exactPackage "Node.js" nodeVersion pkgs.nodejs_22)
     pkgs.opentofu

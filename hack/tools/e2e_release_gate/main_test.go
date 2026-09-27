@@ -166,10 +166,11 @@ func TestBuildLaneCommandUsesRunRegex(t *testing.T) {
 
 	joined := strings.Join(command.Args, " ")
 	for _, want := range []string{
-		"--tags=e2e",
-		"--timeout=10m",
+		"-tags=e2e",
+		"-timeout=10m",
+		"-json",
 		"./test/e2e",
-		"-test.run=^TestProviderOpenBaoHAFailoverE2E$",
+		"-run=^TestProviderOpenBaoHAFailoverE2E$",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("command args %q must contain %q", joined, want)
@@ -277,4 +278,50 @@ func writeVersionsFile(t *testing.T, content string) string {
 		t.Fatalf("write versions: %v", err)
 	}
 	return path
+}
+
+func TestGoTestResultsRejectSkippedOrEmptyRuns(t *testing.T) {
+	for _, tc := range []struct {
+		name, results string
+		wantError     bool
+	}{
+		{"pass", `{"Action":"pass","Test":"TestProvider"}`, false},
+		{"empty", `{"Action":"pass"}`, true},
+		{"skip", `{"Action":"skip","Test":"TestProvider"}`, true},
+		{"partial skip", `{"Action":"pass","Test":"TestProvider"}
+{"Action":"skip","Test":"TestOther"}`, true},
+		{"failure", `{"Action":"fail","Test":"TestProvider"}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "results.jsonl")
+			if err := os.WriteFile(path, []byte(tc.results), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := validateGoTestResults(path); (err != nil) != tc.wantError {
+				t.Fatalf("error=%v, wantError=%v", err, tc.wantError)
+			}
+		})
+	}
+}
+
+func TestOpenBaoMatrixSelection(t *testing.T) {
+	path := writeVersionsFile(t, `validation:
+  openbao:
+    previewMatrix:
+      - version: "2.7.0"
+        image: ghcr.io/openbao/openbao:2.7.0@sha256:1111
+      - version: "2.6.3"
+        image: ghcr.io/openbao/openbao:2.6.3@sha256:2222
+`)
+	entries, err := releaseGateOpenBaoMatrix(path, "")
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("matrix=%v, error=%v", entries, err)
+	}
+	entries, err = releaseGateOpenBaoMatrix(path, "2.6.3")
+	if err != nil || len(entries) != 1 || entries[0].Version != "2.6.3" {
+		t.Fatalf("selected=%v, error=%v", entries, err)
+	}
+	if _, err = releaseGateOpenBaoMatrix(path, "2.5.0"); err == nil {
+		t.Fatal("accepted unknown version")
+	}
 }
