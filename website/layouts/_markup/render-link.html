@@ -2,62 +2,41 @@
 {{- $parts := split $dest "#" -}}
 {{- $pathPart := index $parts 0 -}}
 {{- $fragment := "" -}}
-{{- if gt (len $parts) 1 -}}
-  {{- $fragment = index $parts 1 -}}
-{{- end -}}
-
+{{- if gt (len $parts) 1 -}}{{- $fragment = index $parts 1 -}}{{- end -}}
 {{- $href := $dest -}}
-{{- $isAnchor := hasPrefix $dest "#" -}}
-{{- $isExternal := or
-  (hasPrefix $pathPart "http://")
-  (hasPrefix $pathPart "https://")
-  (hasPrefix $pathPart "mailto:")
-  (hasPrefix $pathPart "tel:")
--}}
-
-{{- if and (not $isAnchor) (not $isExternal) -}}
-  {{- if strings.HasSuffix $pathPart ".md" -}}
-    {{- $baseDir := "" -}}
-    {{- if and .Page .Page.File -}}
-      {{- $baseDir = path.Dir .Page.File.Path -}}
+{{- $isExternal := or (hasPrefix $pathPart "http://") (hasPrefix $pathPart "https://") (hasPrefix $pathPart "mailto:") (hasPrefix $pathPart "tel:") -}}
+{{- if and (not (hasPrefix $dest "#")) (not $isExternal) -}}
+  {{- $resolved := $pathPart -}}
+  {{- if and (strings.HasSuffix $pathPart ".md") (not (hasPrefix $pathPart "/")) -}}
+    {{- $resolved = path.Clean (path.Join (path.Dir .Page.File.Path) $pathPart) -}}
+  {{- end -}}
+  {{- $targetSite := .Page.Site -}}
+  {{- if and (eq .Page.Section "contribute") (hasPrefix $resolved "/docs/") -}}
+    {{- range hugo.Sites -}}{{- if eq .Version.Name "next" -}}{{- $targetSite = . -}}{{- end -}}{{- end -}}
+  {{- end -}}
+  {{- if hasPrefix (strings.TrimPrefix "/" $resolved) "contribute/" -}}
+    {{- $targetSite = hugo.Sites.Default -}}
+  {{- end -}}
+  {{- with $targetSite.GetPage $resolved -}}
+    {{- $href = .RelPermalink -}}
+  {{- else -}}
+    {{- if hasPrefix (strings.TrimPrefix "/" $resolved) "docs/" -}}
+      {{- errorf "Documentation link %s has no target in %s (%s)" $dest $targetSite.Version.Name $.Page.RelPermalink -}}
     {{- end -}}
-    {{- $resolved := path.Clean (path.Join $baseDir $pathPart) -}}
-    {{- if strings.HasSuffix $resolved "_index.md" -}}
-      {{- $href = relURL (printf "/%s/" (path.Dir $resolved)) -}}
-    {{- else -}}
-      {{- $href = relURL (printf "/%s/" (strings.TrimSuffix ".md" $resolved)) -}}
-    {{- end -}}
-    {{- if $fragment -}}
-      {{- $href = printf "%s#%s" $href $fragment -}}
-    {{- end -}}
-  {{- else if hasPrefix $pathPart "/" -}}
-    {{- $href = relURL (strings.TrimPrefix "/" $pathPart) -}}
-    {{- if $fragment -}}
-      {{- $href = printf "%s#%s" $href $fragment -}}
-    {{- end -}}
-  {{- else if or (hasPrefix $pathPart "./") (hasPrefix $pathPart "../") -}}
-    {{- $repoBaseDir := "" -}}
-    {{- if and .Page .Page.File -}}
-      {{- $repoBaseDir = path.Dir .Page.File.Path -}}
-    {{- end -}}
-    {{- $resolved := path.Clean (path.Join $repoBaseDir $pathPart) -}}
-    {{- with site.Params.repository -}}
-      {{- if in . "github.com" -}}
-        {{- $href = printf "%s/blob/%s/%s" . site.Params.defaultBranch $resolved -}}
-      {{- else -}}
-        {{- $href = printf "%s/-/blob/%s/%s" . site.Params.defaultBranch $resolved -}}
+    {{- if or (hasPrefix $pathPart "./") (hasPrefix $pathPart "../") -}}
+      {{- $line := index hugo.Data.version_lines $.Page.Site.Version.Name -}}
+      {{- $ref := cond (eq $line.sourceRef "HEAD") $.Page.Site.Params.defaultBranch $line.sourceRef -}}
+      {{- $repoBase := $.Page.File.Path -}}
+      {{- if eq $.Page.Section "contribute" -}}
+        {{- $ref = $.Page.Site.Params.defaultBranch -}}
+        {{- $repoBase = path.Join "docs" $repoBase -}}
       {{- end -}}
-      {{- if $fragment -}}
-        {{- $href = printf "%s#%s" $href $fragment -}}
-      {{- end -}}
+      {{- $repoPath := path.Clean (path.Join (path.Dir $repoBase) $pathPart) -}}
+      {{- $href = printf "%s/blob/%s/%s" $.Page.Site.Params.repository $ref $repoPath -}}
+    {{- else if hasPrefix $pathPart "/" -}}
+      {{- $href = relURL (strings.TrimPrefix "/" $pathPart) -}}
     {{- end -}}
   {{- end -}}
+  {{- if $fragment -}}{{- $href = printf "%s#%s" $href $fragment -}}{{- end -}}
 {{- end -}}
-
-<a
-  href="{{ $href | safeURL }}"
-  {{- with .Title }} title="{{ . }}"{{ end -}}
-  {{- if $isExternal }} target="_blank" rel="noreferrer"{{ end -}}
->
-  {{- .Text | safeHTML -}}
-</a>
+<a href="{{ $href | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}{{ if $isExternal }} target="_blank" rel="noreferrer"{{ end }}>{{ .Text | safeHTML }}</a>

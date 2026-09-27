@@ -9,6 +9,7 @@ DOCS_PROSE_PATHS := \
 	':(glob)test/**/*.md' \
 	hack/harvester/README.md \
 	':(glob)website/content/**/*.md' \
+	':(glob)website/content-versions/**/*.md' \
 	':(glob)website/layouts/**/*.html' \
 	':(glob)website/data/*.yaml' \
 	':(glob).github/ISSUE_TEMPLATE/*.md' \

@@ -1,5 +1,6 @@
 <aside class="sidebar" id="site-sidebar" data-sidebar>
   {{- $defaultSite := hugo.Sites.Default -}}
+  {{- $navigation := partial "navigation-data.html" . -}}
   <div class="sidebar-head">
     <p>Documentation</p>
     <div class="sidebar-head-actions">
@@ -11,7 +12,7 @@
     </div>
   </div>
   <nav aria-label="Documentation">
-    {{ range hugo.Data.navigation.primary }}
+    {{ range $navigation.primary }}
       {{- $group := . -}}
       {{- with $.Site.GetPage (printf "/%s" .url) -}}
       {{- $targetURL := .RelPermalink -}}
@@ -27,7 +28,7 @@
       {{- end -}}
     {{ end }}
     <div class="nav-divider"></div>
-    {{ range hugo.Data.navigation.secondary }}
+    {{ range $navigation.secondary }}
       {{- $group := . -}}
       {{- $targetSite := $defaultSite -}}
       {{- if hasPrefix .url "docs/" }}{{ $targetSite = $.Site }}{{ end -}}

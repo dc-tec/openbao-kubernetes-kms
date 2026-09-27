@@ -1,7 +1,8 @@
 {{- $line := index hugo.Data.version_lines site.Version.Name -}}
-{{- if $line.showNotice -}}
+{{- if and $line.showNotice (eq .Section "docs") -}}
 <aside class="version-notice version-notice-{{ site.Version.Name | anchorize }}" aria-label="Documentation version notice">
   <strong>{{ $line.label }} · {{ $line.state }}</strong>
   <span>{{ $line.notice }}</span>
+  {{ if site.Version.IsDefault }}<a href="{{ "docs/errata/" | relURL }}">Release corrections</a>{{ end }}
 </aside>
 {{- end -}}

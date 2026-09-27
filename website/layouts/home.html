@@ -1,7 +1,7 @@
 {{ define "body" }}
 {{- $line := index hugo.Data.version_lines site.Version.Name -}}
 {{- $versionHome := .Site.Home.RelPermalink -}}
-{{- $getStartedURL := printf "%sdocs/get-started/" $versionHome -}}
+{{- $getStartedURL := printf "%s%s" $versionHome $line.getStarted -}}
 {{- $compatibilityURL := printf "%sdocs/reference/compatibility/" $versionHome -}}
 <main id="main-content" class="home-main home-quiet home-with-sections">
   <section class="home-intro">

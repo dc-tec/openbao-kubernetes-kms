@@ -1,0 +1,272 @@
+primary: [
+  {
+    "title": "Release notes and corrections",
+    "url": "docs/errata/"
+  },
+  {
+    "title": "Start Here",
+    "url": "docs/getting-started/",
+    "items": [
+      {
+        "title": "Overview",
+        "url": "docs/getting-started/overview/"
+      },
+      {
+        "title": "Start Here",
+        "url": "docs/getting-started/"
+      },
+      {
+        "title": "OpenBao Setup",
+        "url": "docs/getting-started/openbao-setup/"
+      },
+      {
+        "title": "Install",
+        "url": "docs/getting-started/install/"
+      },
+      {
+        "title": "Kubernetes Encryption Config",
+        "url": "docs/getting-started/kubernetes-encryption-config/"
+      },
+      {
+        "title": "First Encrypt",
+        "url": "docs/getting-started/first-encrypt/"
+      }
+    ]
+  },
+  {
+    "title": "Deployment",
+    "url": "docs/deployment/",
+    "items": [
+      {
+        "title": "Choosing A Model",
+        "url": "docs/deployment/choosing-a-model/"
+      },
+      {
+        "title": "systemd Deployment",
+        "url": "docs/deployment/systemd/"
+      },
+      {
+        "title": "Deployment",
+        "url": "docs/deployment/"
+      },
+      {
+        "title": "Static Pod Deployment",
+        "url": "docs/deployment/static-pod/"
+      },
+      {
+        "title": "Linux Identity Model",
+        "url": "docs/deployment/linux-identity-model/"
+      },
+      {
+        "title": "Observability Deployment",
+        "url": "docs/deployment/observability/"
+      }
+    ]
+  },
+  {
+    "title": "Operations",
+    "url": "docs/operations/",
+    "items": [
+      {
+        "title": "Rotation",
+        "url": "docs/operations/rotation/"
+      },
+      {
+        "title": "Disaster Recovery",
+        "url": "docs/operations/disaster-recovery/"
+      },
+      {
+        "title": "Upgrade",
+        "url": "docs/operations/upgrade/"
+      },
+      {
+        "title": "Operations",
+        "url": "docs/operations/"
+      },
+      {
+        "title": "Troubleshooting",
+        "url": "docs/operations/troubleshooting/"
+      }
+    ]
+  },
+  {
+    "title": "Security",
+    "url": "docs/security/",
+    "items": [
+      {
+        "title": "Threat Model",
+        "url": "docs/security/threat-model/"
+      },
+      {
+        "title": "Hardening",
+        "url": "docs/security/hardening/"
+      },
+      {
+        "title": "Auth Model",
+        "url": "docs/security/auth-model/"
+      },
+      {
+        "title": "AAD And Decrypt Validation",
+        "url": "docs/security/aad-and-decrypt-validation/"
+      },
+      {
+        "title": "Security",
+        "url": "docs/security/"
+      }
+    ]
+  },
+  {
+    "title": "Reference",
+    "url": "docs/reference/",
+    "items": [
+      {
+        "title": "CLI",
+        "url": "docs/reference/cli/"
+      },
+      {
+        "title": "Configuration",
+        "url": "docs/reference/configuration/"
+      },
+      {
+        "title": "KMS v2 Contract",
+        "url": "docs/reference/kms-v2-contract/"
+      },
+      {
+        "title": "Observability",
+        "url": "docs/reference/observability/"
+      },
+      {
+        "title": "Key ID And AAD",
+        "url": "docs/reference/key-id-and-aad/"
+      },
+      {
+        "title": "Metrics",
+        "url": "docs/reference/metrics/"
+      },
+      {
+        "title": "Reference",
+        "url": "docs/reference/"
+      },
+      {
+        "title": "EncryptionConfiguration",
+        "url": "docs/reference/encryption-config/"
+      },
+      {
+        "title": "Compatibility",
+        "url": "docs/reference/compatibility/"
+      },
+      {
+        "title": "Support Policy",
+        "url": "docs/reference/support-policy/"
+      },
+      {
+        "title": "Release Policy",
+        "url": "docs/reference/release-policy/"
+      },
+      {
+        "title": "Transit Policy Examples",
+        "url": "docs/reference/transit-policy-examples/"
+      }
+    ]
+  },
+  {
+    "title": "Architecture",
+    "url": "docs/architecture/",
+    "items": [
+      {
+        "title": "Overview",
+        "url": "docs/architecture/overview/"
+      },
+      {
+        "title": "Background",
+        "url": "docs/architecture/background/"
+      },
+      {
+        "title": "Transit Key Model",
+        "url": "docs/architecture/transit-key-model/"
+      },
+      {
+        "title": "Rotation Model",
+        "url": "docs/architecture/rotation-model/"
+      },
+      {
+        "title": "Failure Modes",
+        "url": "docs/architecture/failure-modes/"
+      },
+      {
+        "title": "Related Work",
+        "url": "docs/architecture/related-work/"
+      },
+      {
+        "title": "Architecture",
+        "url": "docs/architecture/"
+      }
+    ]
+  },
+  {
+    "title": "Development",
+    "url": "docs/development/",
+    "items": [
+      {
+        "title": "Contributing",
+        "url": "docs/development/contributing/"
+      },
+      {
+        "title": "Code Quality",
+        "url": "docs/development/code-quality/"
+      },
+      {
+        "title": "Testing",
+        "url": "docs/development/testing/"
+      },
+      {
+        "title": "E2E Framework",
+        "url": "docs/development/e2e-framework/"
+      },
+      {
+        "title": "CI And Supply Chain",
+        "url": "docs/development/ci-supply-chain/"
+      },
+      {
+        "title": "Performance Evidence",
+        "url": "docs/development/benchmark-results/"
+      },
+      {
+        "title": "Docs Style Guide",
+        "url": "docs/development/docs-style-guide/"
+      },
+      {
+        "title": "Development",
+        "url": "docs/development/"
+      },
+      {
+        "title": "Docs Site",
+        "url": "docs/development/docs-site/"
+      }
+    ]
+  }
+]
+secondary:
+  - title: Contribute
+    url: contribute/
+    items:
+      - title: Overview
+        url: contribute/
+      - title: Contributing
+        url: contribute/contributing/
+      - title: Local lab
+        url: contribute/local-lab/
+      - title: Code quality
+        url: contribute/code-quality/
+      - title: Testing
+        url: contribute/testing/
+      - title: E2E framework
+        url: contribute/e2e-framework/
+      - title: Performance evidence
+        url: contribute/benchmark-results/
+      - title: CI and supply chain
+        url: contribute/ci-supply-chain/
+      - title: Docs style guide
+        url: contribute/docs-style-guide/
+      - title: Docs site
+        url: contribute/docs-site/

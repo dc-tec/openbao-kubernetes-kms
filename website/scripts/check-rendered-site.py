@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from collections import Counter
@@ -26,6 +27,7 @@ class Document(HTMLParser):
         self.command_blocks: list[str] = []
         self.canonical: str | None = None
         self.is_redirect = False
+        self.search_indexes: list[str] = []
         self.sidebar_hrefs: list[str] = []
         self.navigation_current_hrefs: list[str] = []
         self._navigation_depth = 0
@@ -41,6 +43,8 @@ class Document(HTMLParser):
             self.hrefs.append(values["href"] or "")
 
         classes = (values.get("class") or "").split()
+        if values.get("data-search-index"):
+            self.search_indexes.append(values["data-search-index"] or "")
         if tag == "link" and values.get("rel") == "canonical":
             self.canonical = values.get("href")
         if tag == "meta" and (values.get("http-equiv") or "").lower() == "refresh":
@@ -206,6 +210,50 @@ def validate_navigation(routes: dict[str, Path], documents: dict[Path, Document]
     return errors
 
 
+def validate_version_contract(
+    root: Path, routes: dict[str, Path], documents: dict[Path, Document]
+) -> list[str]:
+    """Keep published-release instructions separate from unreleased behavior."""
+    errors: list[str] = []
+    for route, html_file in routes.items():
+        document = load_document(html_file, documents)
+        if document.is_redirect or "/docs/" not in route:
+            continue
+        is_next = route.startswith("/next/")
+        text = "".join(document.text)
+        expected_notice = "Next · Unreleased" if is_next else "Documentation for 0.1.0-preview.2"
+        if expected_notice not in text:
+            errors.append(f"missing version notice: {route}")
+        expected_index = "/next/index.json" if is_next else "/index.json"
+        if document.search_indexes != [BASE_PATH + expected_index]:
+            errors.append(f"wrong version search index: {route}")
+
+    for route, has_init in (("/docs/reference/cli/", False), ("/next/docs/reference/cli/", True)):
+        if route not in routes:
+            errors.append(f"missing version CLI: {route}")
+            continue
+        document = load_document(routes[route], documents)
+        if ("init" in document.ids) != has_init:
+            errors.append(f"incorrect init availability: {route}")
+
+    for prefix in ("", "next/"):
+        index_file = root / prefix / "index.json"
+        if not index_file.is_file():
+            errors.append(f"missing search index: {index_file}")
+            continue
+        for entry in json.loads(index_file.read_text(encoding="utf-8")):
+            target = normalize_internal_path("/", entry["url"])
+            if target is None:
+                errors.append(f"external search entry: {entry['url']}")
+                continue
+            route, _ = target
+            if route.startswith("/next/") != bool(prefix):
+                errors.append(f"search crosses documentation versions: {prefix}: {route}")
+            if route not in routes or load_document(routes[route], documents).is_redirect:
+                errors.append(f"noncanonical search entry: {route}")
+    return errors
+
+
 def main() -> int:
     global BASE_PATH, PUBLIC_HOST
     if len(sys.argv) != 3:
@@ -226,7 +274,7 @@ def main() -> int:
     documents: dict[Path, Document] = {}
     errors: list[str] = []
 
-    required_routes = ("/", "/docs/", "/404/")
+    required_routes = ("/", "/docs/", "/next/docs/", "/docs/errata/", "/next/docs/configure/oauth2/", "/404/")
     for route in required_routes:
         if route not in routes:
             errors.append(f"missing required route: {route}")
@@ -270,6 +318,7 @@ def main() -> int:
                     errors.append(f"missing fragment: {route}: {href}")
 
     errors.extend(validate_navigation(routes, documents))
+    errors.extend(validate_version_contract(root, routes, documents))
 
     print(
         f"Rendered HTML: {len(html_files)}; "

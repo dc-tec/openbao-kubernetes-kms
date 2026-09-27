@@ -4,9 +4,9 @@
      alternatives lists all of them. Items without a step get no path links. */ -}}
 {{- if eq .Section "docs" -}}
   {{- $home := .Site.Home.RelPermalink -}}
-  {{- range hugo.Data.navigation.primary -}}
+  {{- range (partial "navigation-data.html" .).primary -}}
     {{- $group := . -}}
-    {{- $steps := where $group.items "step" "!=" nil -}}
+    {{- $steps := where ($group.items | default slice) "step" "!=" nil -}}
     {{- range $steps -}}
       {{- if eq $.RelPermalink (printf "%s%s" $home .url) -}}
         {{- $step := .step -}}

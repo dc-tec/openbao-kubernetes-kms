@@ -11,3 +11,19 @@
     "sitemap" (dict "disable" true)
   ) -}}
 {{- end -}}
+
+{{- /* Keep pre-versioning URLs usable without presenting development features
+     as part of the release. Each destination and version is in the ledger. */ -}}
+{{- if eq .Site.Version.Name hugo.Sites.Default.Version.Name -}}
+  {{- range hugo.Data.release_aliases -}}
+    {{- $.AddPage (dict
+      "path" (strings.TrimSuffix "/" .path)
+      "kind" "page"
+      "title" "Redirect"
+      "layout" "redirect"
+      "params" (dict "redirectTo" .target "targetVersion" .version "searchExclude" true)
+      "build" (dict "list" "never" "render" "always" "publishResources" false)
+      "sitemap" (dict "disable" true)
+    ) -}}
+  {{- end -}}
+{{- end -}}

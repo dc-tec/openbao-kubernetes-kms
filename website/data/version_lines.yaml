@@ -3,8 +3,22 @@
   release: "0.1.0-preview.2"
   state: "Preview"
   showNotice: true
+  sourceRef: "0.1.0-preview.2"
+  editRef: "main"
+  contentRoot: "website/content-versions/0.1.x"
+  navigation: navigation_release
+  getStarted: docs/getting-started/
+  editable: true
+  notice: "Documentation for 0.1.0-preview.2, with maintained corrections. Use this preview for evaluation only. Read the release corrections before installation."
+"next":
+  label: "Next"
+  release: "main"
+  state: "Unreleased"
+  showNotice: true
   sourceRef: "HEAD"
   editRef: "main"
   contentRoot: ""
+  navigation: navigation
+  getStarted: docs/get-started/
   editable: true
-  notice: "Preview release line. Use it for labs, staging, and evaluation; do not protect production control planes with it."
+  notice: "Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release."

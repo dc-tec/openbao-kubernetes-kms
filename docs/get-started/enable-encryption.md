@@ -1,6 +1,6 @@
 ---
 title: Enable encryption
-description: "Point kube-apiserver at the provider through an EncryptionConfiguration, restart it one node at a time, and rewrite existing Secrets so they are stored encrypted."
+description: "Stage KMS readers on every API server before enabling encrypted writes in a fresh preview cluster."
 eyebrow: Get started · Step 7
 weight: 80
 verifiedBy:
@@ -10,21 +10,30 @@ verifiedBy:
   - test/e2e/kind_smoke_test.go
 ---
 
-At the end of this step, the API server encrypts new and rewritten Secrets
-through the provider, and still reads any plaintext data through the `identity`
-fallback.
+This procedure enables encryption of new Secrets in a fresh, disposable
+preview cluster. It keeps plaintext objects readable through `identity`.
+It does not migrate existing encrypted data or retire old providers.
 
 ## Before you begin
 
-- The provider runs on every control-plane node and `doctor` passes, from
-  [Run with systemd](/docs/get-started/systemd/) or
-  [Run as a static pod](/docs/get-started/static-pod/).
-- You can restart `kube-apiserver` on each control-plane node, one at a time.
+- Run the provider on every control-plane node and check its health.
+- Record the same provider identity on every node.
+- Identify every API-server endpoint and a kubeconfig that can reach each one
+  directly, with valid TLS verification.
+- Inspect each API server's arguments. If `--encryption-provider-config`
+  already points to a configuration, stop. Do not overwrite it with this
+  fresh-install example.
+- Save the API-server manifests or service configuration so you can restore
+  the configuration before KMS writes begin.
 
-## Step 1: Write the EncryptionConfiguration
+A load-balanced `kubectl` request can reach a different node. The checks below
+must target each API server directly.
 
-Write this file to `/etc/kubernetes/openbao-kms/encryption-config.yaml` on
-every control-plane node, with your provider name in `name`:
+## Step 1: Stage the reader configuration
+
+Write `/etc/kubernetes/openbao-kms/encryption-config.yaml` on every
+control-plane node. Put `identity` first so writes remain plaintext while
+servers acquire the KMS reader:
 
 ```yaml
 apiVersion: apiserver.config.k8s.io/v1
@@ -33,53 +42,46 @@ resources:
   - resources:
       - secrets
     providers:
+      - identity: {}
       - kms:
           apiVersion: v2
           name: openbao-kms-workload-a
           endpoint: unix:///run/openbao-kms/kms.sock
           timeout: 3s
-      - identity: {}
 ```
 
-| Field | Rule |
-|---|---|
-| `kms.apiVersion` | Always `v2`. KMS v1 is not implemented. |
-| `kms.name` | Identity-bearing. Equal to `transit.keyIdScope.providerName` in the provider configuration. Never change it after encryption begins. |
-| `kms.endpoint` | `unix://` plus `server.socketPath` from the provider configuration. |
-| `kms.timeout` | Start with `3s`. Change it only after benchmark and failure testing; see [Reference: EncryptionConfiguration](/docs/reference/encryption-config/). |
-| `identity: {}` | Keeps existing plaintext data readable until Step 5 and verification are complete. |
-| `resources` | Start with `secrets`. Add more resource types later, one at a time. |
+Set `kms.name` to `transit.keyIdScope.providerName` and `kms.endpoint` to
+`unix://` plus `server.socketPath`. Keep those values identical across the
+configuration files. KMS v1 is not implemented.
 
-If you ran [`init`](/docs/get-started/plan-values/#generate-the-files-with-init),
-copy `generated/encryption-config.yaml` instead of writing the file by hand.
-
-Check the file against the provider configuration on each node:
+Run the configuration check on each node:
 
 ```sh
-sudo bao-kms-provider doctor \
+bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
   --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
 
-`doctor` exits with status `0` without a `[fail]` check. It fails if the
-provider name or endpoint does not match the provider configuration.
+Run it with the provider's runtime user and groups where possible. A root
+check does not prove runtime file access. Expect a warning while `identity`
+is first: writes remain plaintext at this stage. Resolve failed checks before
+continuing. `doctor` does not establish API-server integration.
 
-## Step 2: Point kube-apiserver at the file
+## Step 2: Configure every API server
 
-The API server needs the `--encryption-provider-config` flag, read access to
-the file, and access to the provider socket.
+On one control-plane node at a time, add this argument to `kube-apiserver`:
 
-**kubeadm-style control plane.** Edit
-`/etc/kubernetes/manifests/kube-apiserver.yaml` on the first control-plane
-node. Add the flag, and mount the configuration directory and the socket
-directory from the host. This fragment shows only the additions:
+```text
+--encryption-provider-config=/etc/kubernetes/openbao-kms/encryption-config.yaml
+```
+
+The API server needs read access to the file and permission to connect to the
+provider socket. For a kubeadm static pod, mount both host directories:
 
 ```yaml
 spec:
   containers:
-    - command:
-        - kube-apiserver
-        - --encryption-provider-config=/etc/kubernetes/openbao-kms/encryption-config.yaml
+    - name: kube-apiserver
       volumeMounts:
         - name: openbao-kms-encryption
           mountPath: /etc/kubernetes/openbao-kms
@@ -97,54 +99,77 @@ spec:
         type: Directory
 ```
 
-Kubelet restarts the API server when the manifest changes. `kubeadm upgrade`
-regenerates this manifest, so also record the flag and both mounts in the
-kubeadm `ClusterConfiguration` under `apiServer.extraArgs` and
-`apiServer.extraVolumes`.
+This fragment contains additions to the existing manifest. Preserve its
+existing arguments, mounts, and volumes. Kubelet restarts the API server after
+a manifest change. Also record the flag and mounts in your kubeadm
+configuration so a later `kubeadm upgrade` preserves them.
 
-**API server as a host service.** Add the flag to the service's arguments and
-make sure its user can read the file and connect to the socket through the
-`openbao-kms-socket` group, then restart the service. See
-[Security: Linux identity model](/docs/security/linux-identity-model/).
+For a host service, add the argument and restart the service. Its user must
+have socket access through `openbao-kms-socket`.
 
-To have the API server reload the file when it changes, also set
-`--encryption-provider-config-automatic-reload=true`. A reload applies the new
-configuration immediately and reports mistakes only on the next encrypt or
-decrypt call, so treat every change like a restart.
-
-## Step 3: Confirm the first node
-
-On the node you changed, confirm the API server is back and encrypts through
-the provider:
+After each restart, check that node directly:
 
 ```sh
-kubectl get nodes
-kubectl create secret generic openbao-kms-bootstrap-probe --from-literal=value=probe
-kubectl get secret openbao-kms-bootstrap-probe -o jsonpath='{.data.value}' | base64 -d
+API_SERVER=https://control-plane-1.example.com:6443
+kubectl --server="${API_SERVER}" get --raw='/readyz?verbose'
+kubectl --server="${API_SERVER}" get secrets --all-namespaces -o name
 ```
 
-The last command prints `probe`. If the API server does not come back, revert
-the manifest change and check the API server log for KMS errors; see
-[Operate: Troubleshooting](/docs/operate/troubleshooting/).
+Require API-server readiness, including a healthy KMS check, and successful
+reads. Inspect the API-server log if either fails. Do not proceed to the next
+node until the changed node is healthy.
 
-## Step 4: Change the remaining nodes
+**Complete this step on every API server before enabling KMS writes.** An
+unchanged API server cannot decrypt the new ciphertext.
 
-Repeat Step 2 and Step 3 on each remaining control-plane node, one node at a
-time. Every node must use the identical `EncryptionConfiguration`.
+Before Step 3, rollback consists of restoring the saved API-server
+configuration. No KMS writes have been enabled by this procedure yet.
 
-## Step 5: Rewrite existing Secrets
+## Step 3: Enable KMS writes
 
-Kubernetes encrypts on write, so Secrets created before this step are still
-stored in plaintext. Rewrite every Secret to store it through the provider:
+After every server has the KMS reader, change the provider order on one node
+at a time to:
+
+```yaml
+providers:
+  - kms:
+      apiVersion: v2
+      name: openbao-kms-workload-a
+      endpoint: unix:///run/openbao-kms/kms.sock
+      timeout: 3s
+  - identity: {}
+```
+
+Restart that API server, or wait for a successful configuration reload if you
+configured `--encryption-provider-config-automatic-reload=true`. Check its
+readiness and read existing Secrets directly before changing the next node.
+At the end, every API server must use the same KMS-first configuration.
+
+If a problem occurs after KMS writes begin, keep the KMS reader on every
+server. You can restore `identity` to the first position to resume plaintext
+writes, but you must preserve the KMS entry, provider identity, and OpenBao
+key material to read ciphertext already written. Do not restore a
+configuration with no KMS reader.
+
+## Step 4: Check a write through every API server
+
+Create a probe through one API server, then read it through each endpoint:
 
 ```sh
-kubectl get secrets --all-namespaces -o json | kubectl replace -f -
+kubectl --server="${API_SERVER}" create secret generic openbao-kms-bootstrap-probe \
+  --from-literal=value=probe
+kubectl --server="${API_SERVER}" get secret openbao-kms-bootstrap-probe \
+  -o jsonpath='{.data.value}' | base64 -d
 ```
 
-Run the same rewrite for every other resource type you add to `resources`.
-Then restart `kube-apiserver` on one control-plane node and confirm reads
-still succeed before you restart the others.
+The read prints `probe`. Change `API_SERVER` for every node and repeat the
+read. To check writes through the other servers, delete the probe and repeat
+creation through the next endpoint, then repeat the reads through every node.
+Delete the probe when finished.
 
-The `identity` fallback stays in place until
-[Verify encryption](/docs/get-started/verify/) confirms that etcd holds only
-ciphertext.
+Keep `identity` as the second provider throughout this preview evaluation.
+Existing plaintext objects remain readable; they are not rewritten by this
+procedure. A sample probe does not prove complete encryption of the cluster.
+
+Continue with [Verify encryption](/docs/get-started/verify/) to inspect the
+stored probe and provider signals.

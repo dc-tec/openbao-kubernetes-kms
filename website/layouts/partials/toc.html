@@ -1,10 +1,12 @@
 {{ if and (not .Params.hideToc) (gt (len .TableOfContents) 32) }}
 {{- $line := index hugo.Data.version_lines site.Version.Name -}}
+{{- $editPath := path.Join $line.contentRoot .File.Path -}}
+{{- if eq .Section "contribute" -}}{{- $editPath = path.Join "docs" .File.Path -}}{{- end -}}
 <aside class="page-toc">
   <p>On this page</p>
   {{ .TableOfContents }}
   {{ if and $line.editable .File }}
-    <a class="edit-link" href="{{ site.Params.repository }}/edit/{{ $line.editRef }}/{{ path.Join $line.contentRoot .File.Path }}">Edit this page <span>↗</span></a>
+    <a class="edit-link" href="{{ site.Params.repository }}/edit/{{ $line.editRef }}/{{ $editPath }}">Edit this page <span>↗</span></a>
   {{ else }}
     <p class="archive-label">Archived {{ $line.label }} contract</p>
   {{ end }}

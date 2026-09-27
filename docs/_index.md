@@ -6,8 +6,9 @@ weight: 1
 hideChildren: true
 ---
 
-Use the route that matches the work in front of you. This manual describes the
-preview 0.1.x release line.
+Use the route that matches your task. These Next docs describe unreleased
+behavior on `main`. Select the published release line when installing release
+artifacts.
 
 <div class="link-grid">
   <a href="get-started/"><strong>Get started</strong><p>Choose a deployment model, prepare OpenBao, install the provider, and enable encryption.</p></a>

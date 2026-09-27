@@ -1,0 +1,186 @@
+---
+title: "Contributing"
+description: "Repository layout, local development setup, test expectations, code quality rules, wire compatibility commitments, and documentation update policy for bao-kms-provider contributors."
+weight: 10
+---
+
+Use this guide to contribute to `bao-kms-provider`. For operator procedures,
+start with [Start Here](/docs/getting-started/).
+
+## Project Layout
+
+| Area | Value |
+|---|---|
+| Project | `openbao-kubernetes-kms` |
+| Go module | `github.com/dc-tec/openbao-kubernetes-kms` |
+| Binary | `bao-kms-provider` |
+| Go toolchain | `1.26.6` (pinned in `.go-version` and `.ci/versions.yaml`) |
+| CLI and configuration framework | Viper (isolated to `internal/config` and command setup) |
+| Task runner | Makefile |
+| Version policy file | `.ci/versions.yaml` |
+| Development environment | devenv 2.1 or later |
+
+Go package layout:
+
+```text
+cmd/bao-kms-provider
+internal/aad
+internal/auth
+internal/config
+internal/health
+internal/keyregistry
+internal/kmsv2
+internal/logging
+internal/metrics
+internal/openbao
+internal/runtime
+internal/socket
+internal/status
+internal/version
+test/e2e
+test/fakes
+test/kmsconformance
+test/deployment
+```
+
+## Local Development
+
+Install Nix and devenv 2.1 or later. Enter the repository root, then verify the
+pinned toolchain and install the repository-managed tools:
+
+```sh
+devenv test
+devenv tasks run kms:bootstrap
+```
+
+The shell sets `GOTOOLCHAIN=local`. It does not start Docker, Kubernetes,
+OpenBao, or other services. It does not create credentials.
+
+Every pull request must pass the local core gate:
+
+```sh
+devenv tasks run kms:ci-core
+```
+
+This task runs `make ci-core`. Make remains the command contract for local and
+CI checks. Use `devenv shell` when you need an interactive shell. Use
+`devenv --profile editor shell` to add Go language-server and debugger tools.
+
+Run focused end-to-end (E2E) lanes when a change touches OpenBao, Kubernetes,
+deployment, rotation, failure injection, or release packaging behavior. The
+lane commands live in
+[Development: E2E Framework](/docs/development/e2e-framework/).
+
+For deployment sample or package metadata changes, run the focused deployment
+checks:
+
+```sh
+make deployment-samples-check
+make package-build-check
+```
+
+`deployment-samples-check` verifies the systemd unit with the host
+`systemd-analyze` binary when it is installed. `package-build-check` uses the
+pinned nFPM version from `.ci/versions.yaml`/`mk/config.mk` through `go run` and
+builds throwaway `.deb` and `.rpm` packages from a temporary placeholder binary.
+
+## OpenBao Integration Tests
+
+OpenBao integration tests use build tags and remain hermetic. They use in-process
+HTTPS fakes for OpenBao response shapes and do not require external OpenBao
+credentials:
+
+```sh
+go test -tags=integration ./internal/openbao -run TestOpenBaoTransitIntegration -count=1
+```
+
+## OpenBao E2E Tests
+
+OpenBao E2E validation uses the ephemeral continuous integration
+(CI) lane. E2E specs use the Ginkgo v2 and Gomega versions pinned in
+`.ci/versions.yaml`. The `test/e2e/suites.yaml` manifest describes the lanes:
+
+```sh
+make test-e2e-openbao-ci
+```
+
+The OpenBao CI target starts real OpenBao, bootstraps provider auth, runs the
+provider, and exercises the Unix socket with the Kubernetes KMS v2 protobuf
+client.
+
+For the full E2E framework, label routing, suite manifest rules, and report artifacts see [Development: E2E Framework](/docs/development/e2e-framework/).
+
+## Go Code Quality
+
+Implementation follows [Development: Code Quality](/docs/development/code-quality/). Key rules:
+
+- no `map[string]any` in production code,
+- no `map[string]interface{}` in production code,
+- no broad `any` or `interface{}` outside reviewed boundary adapters,
+- Viper stays at the CLI and configuration boundary,
+- OpenBao, configuration, KMS, additional authenticated data (AAD), and registry
+  data use typed structs,
+- decode unknown fields strictly where the parser supports it,
+- no free-form string state machines in internal logic,
+- no panics in request-path code.
+
+## Wire Compatibility
+
+The following surfaces are wire-format commitments:
+
+- Kubernetes provider name behavior,
+- `key_id` derivation,
+- annotation keys and values,
+- AAD canonicalization,
+- historical key lookup behavior,
+- compatibility mode semantics.
+
+Any change to these surfaces requires:
+
+- a documented migration plan,
+- updated golden fixtures,
+- a release note,
+- a compatibility section in [Reference: Compatibility](/docs/reference/compatibility/).
+
+## Redaction Rules
+
+Tests must prove these never appear in logs or command output:
+
+- plaintext,
+- JWTs,
+- OpenBao tokens,
+- full ciphertext,
+- raw Transit key material.
+
+For the full redaction policy see [Reference: Observability: Logs](/docs/reference/observability/#logs) and [Security: Hardening: Logging](/docs/security/hardening/#logging).
+
+## Dependency Policy
+
+Prefer:
+
+- the official Kubernetes KMS protobuf package,
+- official or OpenBao-compatible API clients where practical,
+- Viper for CLI configuration loading and command environment binding,
+- standard library parsers for structured data,
+- small dependencies with clear maintenance status.
+
+Avoid:
+
+- ad hoc string parsing for YAML, JSON, or JWT when a structured-data parser
+  exists,
+- dependencies that log requests by default,
+- dependencies that make Transport Layer Security (TLS) verification difficult
+  to control.
+
+## Documentation Updates
+
+When implementation changes behavior, update documentation in the same change:
+
+- configuration changes update [Reference: Configuration](/docs/reference/configuration/),
+- KMS protocol behavior updates [Reference: KMS v2 Contract](/docs/reference/kms-v2-contract/),
+- `key_id` or AAD changes update [Reference: Key ID And AAD](/docs/reference/key-id-and-aad/),
+- operational changes update the relevant operations or deployment runbook,
+- support and version-envelope changes update [Reference: Compatibility](/docs/reference/compatibility/).
+
+For writing style, page structure, links, and docs verification, see
+[Development: Docs Style Guide](/docs/development/docs-style-guide/).
