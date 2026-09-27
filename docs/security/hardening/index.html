@@ -39,9 +39,13 @@ manifest unchanged. The settings and their purpose are listed in
 and
 <a href=/openbao-kubernetes-kms/docs/get-started/static-pod/#about-the-manifest>Run as a static pod</a>
 . Audit
-changes to configuration and auth material, and upgrade one node at a time.</p><h2 id=auth-material>Auth material</h2><p>Required for JWT auth:</p><ul><li>An OpenBao role that binds issuer, audience, and subject or strong claims,
+changes to configuration and auth material, and upgrade one node at a time.</p><h2 id=auth-material>Auth material</h2><p>Required for JWT auth:</p><ul><li><p>For <code>auth.jwt.source: oauth2</code>, provision the client secret independently of
+the protected API. Use a private regular file and verified HTTPS to the token
+endpoint. Bind the issuer and audience locally and constrain the OpenBao role
+to the intended client identity. See <a href=/openbao-kubernetes-kms/docs/configure/oauth2/>OAuth client credentials</a>
+.</p></li><li><p>An OpenBao role that binds issuer, audience, and subject or strong claims,
 with a short token TTL, a limited maximum TTL, no default policy, and only the
-provider policy.</li><li>A JWT that expires, is checked before login, and is never logged.</li></ul><p>Recommended for JWT auth: an issuer independent of the protected API server,
+provider policy.</p></li><li><p>A JWT that expires, is checked before login, and is never logged.</p></li></ul><p>Recommended for JWT auth: an issuer independent of the protected API server,
 short JWT lifetimes with reliable renewal, <code>auth.jwt.expectedIssuer</code>,
 <code>expectedAudience</code>, and <code>expectedSubject</code> set, issuer key rotation overlap, and
 a documented emergency issuance process.</p><p>Required for certificate auth:</p><ul><li>An OpenBao listener that requests client certificates, and cert auth binding
