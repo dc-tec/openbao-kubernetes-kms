@@ -12,7 +12,7 @@ verifiedBy:
 [Prepare OpenBao](/docs/get-started/openbao/) sets up the default: a JWT role
 using OIDC discovery and the standard policy. This page covers the variants.
 Commands use the shell variables from
-[Plan identity values](/docs/get-started/plan-values/#record-the-values).
+[Prepare OpenBao](/docs/get-started/openbao/#manual-alternative).
 
 The provider accepts a JWT file or obtains a JWT directly through
 [OAuth 2.0 client credentials](/docs/configure/oauth2/). Both sources use the

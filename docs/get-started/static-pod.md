@@ -1,7 +1,7 @@
 ---
 title: Run as a static pod
 description: "Verify and preload the provider image, prepare host files with numeric ownership, validate with doctor, and start the provider as a kubelet-managed static pod on each control-plane node."
-eyebrow: Get started · Step 6
+eyebrow: Get started · Step 7
 weight: 70
 verifiedBy:
   - deploy/static-pod/bao-kms-provider.yaml
@@ -127,19 +127,16 @@ permission; the provider holds a lock file there across restarts.
 
 ## Step 5: Write the provider configuration
 
-Copy the configuration sample from the bundle:
+Use the reviewed output from `init --model static-pod`:
 
 ```sh
-cp config/provider-static-pod.yaml provider.yaml
+cp generated/config.yaml provider.yaml
 ```
 
-Edit `provider.yaml` and replace the sample values in the fields listed in
-[Plan identity values: Provider configuration](/docs/get-started/plan-values/#provider-configuration).
-Set `server.socketGroup` to the value of `SOCKET_GID`, as a quoted string.
-
-If you ran [`init`](/docs/get-started/plan-values/#generate-the-files-with-init)
-with `--model static-pod`, copy `generated/config.yaml` to `provider.yaml`
-instead; it already carries the socket GID.
+Check that `server.socketGroup` equals the target host's `SOCKET_GID`, and that
+the shared fingerprint matches `generated/installation.json`. If host paths or
+the GID differ, regenerate from the resolved values without `--new-key` as
+shown in [Generate installation files](/docs/get-started/plan-values/).
 
 ## Step 6: Place the runtime files
 
@@ -174,17 +171,14 @@ fingerprint. These checks run as root, so file permission problems for UID
 
 ## Step 8: Start the static pod
 
-Edit `static-pod/bao-kms-provider.yaml` from the bundle:
-
-- set `image` to the verified `IMAGE` digest reference,
-- replace the `supplementalGroups` entry `1234` with `SOCKET_GID`.
-
-With `init`, use `generated/bao-kms-provider.yaml`, which already has both.
+Use `generated/bao-kms-provider.yaml` from the same generation as the installed
+configuration. Check its image digest and supplemental socket GID against the
+installation record.
 
 Then hand the manifest to kubelet and wait for readiness:
 
 ```sh
-sudo install -m 0644 -o root -g root static-pod/bao-kms-provider.yaml \
+sudo install -m 0644 -o root -g root generated/bao-kms-provider.yaml \
   /etc/kubernetes/manifests/bao-kms-provider.yaml
 curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/ready
 ```

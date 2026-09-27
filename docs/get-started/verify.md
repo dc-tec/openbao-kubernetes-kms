@@ -1,7 +1,7 @@
 ---
 title: Verify encryption
 description: "Confirm that etcd stores the probe Secret as KMS v2 ciphertext and that every provider reports the same healthy key."
-eyebrow: Get started · Step 8
+eyebrow: Get started · Step 9
 weight: 90
 verifiedBy:
   - test/dev-env/scripts/verify-kms.sh

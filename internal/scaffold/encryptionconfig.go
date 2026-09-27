@@ -42,8 +42,18 @@ type kmsProviderFile struct {
 type emptyObject struct{}
 
 // RenderEncryptionConfig renders the initial EncryptionConfiguration: Secrets
-// encrypted through this provider, with the identity fallback for migration.
+// encrypted through this provider, with the identity reader for plaintext objects.
 func RenderEncryptionConfig(cfg config.Config) ([]byte, error) {
+	return renderEncryptionConfig(cfg, false)
+}
+
+// RenderEncryptionReaderConfig stages KMS reads while identity remains the writer.
+// Install it on every API server before enabling KMS writes in a fresh cluster.
+func RenderEncryptionReaderConfig(cfg config.Config) ([]byte, error) {
+	return renderEncryptionConfig(cfg, true)
+}
+
+func renderEncryptionConfig(cfg config.Config, identityFirst bool) ([]byte, error) {
 	file := encryptionConfigFile{
 		APIVersion: encryptionConfigAPIVersion,
 		Kind:       encryptionConfigKind,
@@ -59,6 +69,10 @@ func RenderEncryptionConfig(cfg config.Config) ([]byte, error) {
 				{Identity: &emptyObject{}},
 			},
 		}},
+	}
+	if identityFirst {
+		providers := file.Resources[0].Providers
+		providers[0], providers[1] = providers[1], providers[0]
 	}
 	return encodeYAML(file)
 }

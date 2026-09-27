@@ -1,8 +1,8 @@
 ---
 title: Prepare OpenBao
 description: "Create the dedicated Transit mount and key, the least-privilege policy, and the JWT auth role the provider logs in with."
-eyebrow: Get started · Step 4
-weight: 40
+eyebrow: Get started · Step 6
+weight: 60
 verifiedBy:
   - deploy/opentofu/openbao-kubernetes-kms/main.tofu
   - cmd/bao-kms-provider/policy.go
@@ -16,8 +16,7 @@ permission.
 
 ## Before you begin
 
-- Choose and record the values from [Plan identity values](/docs/get-started/plan-values/),
-  and set the shell variables from that page in this shell.
+- Generate and review the files from [Generate installation files](/docs/get-started/plan-values/).
 - Use an OpenBao endpoint with valid TLS that serves requests without HTTP
   redirects. For HA, use server-side request forwarding or an endpoint routed
   to the active node.
@@ -27,12 +26,44 @@ permission.
   independently of the protected Kubernetes API server. See
   [Security: Auth model](/docs/security/auth-model/).
 
-{{< callout type="tip" title="Generated with init?" >}}
-If you ran [`init`](/docs/get-started/plan-values/#generate-the-files-with-init),
-review `generated/openbao-setup.sh` and run it instead of Steps 1, 2, 4, and 5.
-It applies `generated/openbao-policy.hcl`, and `init --new-key` already
-generated the lineage ID from Step 3.
-{{< /callout >}}
+## Run the generated setup
+
+Review `generated/openbao-setup.sh` and `generated/openbao-policy.hcl`.
+Set the OpenBao address and CA bundle for the administrator's CLI, then run the
+script once for the new Transit key:
+
+```sh
+export BAO_ADDR=https://bao.example.internal:8200
+export BAO_CACERT=/path/to/openbao-ca.crt
+sh generated/openbao-setup.sh
+```
+
+Use the address and trust bundle for your OpenBao instance. The script applies
+a configured namespace itself. It expects new dedicated mounts and is not a
+reconciliation loop. Investigate any failure before rerunning commands.
+
+`init --new-key` already recorded the key lineage ID in `generated/config.yaml`.
+Do not generate another one or repeat the manual creation steps below. After
+successful setup, continue with the selected systemd or static-pod guide.
+
+## Manual alternative
+
+Use the following reference steps only when managing the OpenBao resources by
+hand or through configuration management. Set these variables from your
+recorded values before running the manual commands:
+
+```sh
+TRANSIT_MOUNT=transit
+KEY_NAME=k8s-workload-a-etcd
+JWT_MOUNT=k8s-workload-a-jwt
+JWT_ROLE=openbao-kms-control-plane
+POLICY_NAME=openbao-kms-workload-a
+JWT_ISSUER=https://issuer.example.internal
+JWT_AUDIENCE=bao-kms-provider
+JWT_SUBJECT=system:openbao-kms:workload-a
+```
+
+Export `BAO_NAMESPACE` as well when using a non-root OpenBao namespace.
 
 {{< callout type="tip" title="Manage OpenBao with OpenTofu" >}}
 The OpenTofu module in `deploy/opentofu/openbao-kubernetes-kms` creates the

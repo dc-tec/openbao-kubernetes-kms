@@ -1,0 +1,24 @@
+# Preview fresh-install values. Replace the example addresses and identities.
+# Generate once with --new-key; reuse generated/config.yaml on other nodes.
+configVersion: v1alpha1
+openbao:
+  address: https://bao.example.internal:8200
+  tlsServerName: bao.example.internal
+  instanceId: bao-prod-a                 # Stable identity, not a hostname.
+auth:
+  jwt:
+    source: file
+    mountPath: auth/k8s-workload-a-jwt
+    role: openbao-kms-control-plane
+    # The host JWT agent must renew without the protected Kubernetes API.
+    expectedIssuer: https://issuer.example.internal
+    expectedAudience: [bao-kms-provider]
+    expectedSubject: system:openbao-kms:workload-a
+transit:
+  mountPath: transit
+  keyName: k8s-workload-a-etcd
+  keyIdScope:
+    providerName: openbao-kms-workload-a
+    clusterId: workload-a
+    transitMountId: transit-prod-primary
+    # Omit keyLineageId only when --new-key creates it for a new Transit key.

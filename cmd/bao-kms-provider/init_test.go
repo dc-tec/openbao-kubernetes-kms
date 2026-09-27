@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +11,8 @@ import (
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/scaffold"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
 )
 
 const initValues = `configVersion: v1alpha1
@@ -81,10 +85,12 @@ func TestInitWritesSystemdFiles(t *testing.T) {
 	}
 
 	modes := map[string]os.FileMode{
-		"config.yaml":            0o640,
-		"encryption-config.yaml": 0o644,
-		"openbao-policy.hcl":     0o644,
-		"openbao-setup.sh":       0o750,
+		"config.yaml":                    0o640,
+		"encryption-config.yaml":         0o644,
+		"encryption-config-readers.yaml": 0o644,
+		"installation.json":              0o640,
+		"openbao-policy.hcl":             0o644,
+		"openbao-setup.sh":               0o750,
 	}
 	for name, mode := range modes {
 		info, err := os.Stat(filepath.Join(out, name))
@@ -217,4 +223,82 @@ func TestInitRejectsInvalidValues(t *testing.T) {
 	noSubject := strings.Replace(valuesWithLineage(), "    expectedSubject: system:openbao-kms:workload-a\n", "", 1)
 	_, err = executeCommand(t, "init", "--values", writeValues(t, noSubject), "--out", filepath.Join(t.TempDir(), "y"))
 	requireExitCode(t, err, cli.ExitConfig)
+}
+
+func TestInitExamplesPreserveIdentityAcrossNodes(t *testing.T) {
+	for _, source := range []string{"file", "oauth2"} {
+		t.Run(source, func(t *testing.T) {
+			values := filepath.Join("..", "..", "deploy", "config", "init-values-"+source+".yaml")
+			first := filepath.Join(t.TempDir(), "first")
+			if _, err := executeCommand(t, "init", "--values", values, "--out", first, "--new-key"); err != nil {
+				t.Fatal(err)
+			}
+			resolved := filepath.Join(first, "config.yaml")
+			cfg, err := config.Load(config.NewRuntime(), config.LoadOptions{Path: resolved})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A second node can use its own socket group without creating a new key identity.
+			cfg.Server.SocketGroup = "1234"
+			if source == "file" {
+				cfg.Auth.JWT.JWTFile = initStaticPodJWTFile
+			}
+			rendered, err := scaffold.RenderProviderConfig(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			second := filepath.Join(t.TempDir(), "second")
+			if _, err := executeCommand(t, "init", "--values", writeValues(t, string(rendered)), "--out", second,
+				"--model", "static-pod", "--image", initImage, "--socket-gid", "1234"); err != nil {
+				t.Fatal(err)
+			}
+			firstRecord := loadInstallationRecord(t, first)
+			secondRecord := loadInstallationRecord(t, second)
+			if firstRecord.IdentityFingerprint != secondRecord.IdentityFingerprint ||
+				firstRecord.KeyLineageID != secondRecord.KeyLineageID {
+				t.Fatal("regeneration for another node changed the shared identity")
+			}
+			if secondRecord.Image != initImage ||
+				secondRecord.SocketGroup != "1234" || secondRecord.RuntimeUser != "65532:65532" {
+				t.Fatalf("missing static-pod installation inputs: %+v", secondRecord)
+			}
+			if firstRecord.Generator != version.BuildInfo() {
+				t.Fatal("record has incorrect build metadata")
+			}
+			if len(secondRecord.Files) != 7 {
+				t.Fatalf("record lists %d files", len(secondRecord.Files))
+			}
+			requireInitEncryptionStages(t, first, cfg)
+			requireInitEncryptionStages(t, second, cfg)
+		})
+	}
+}
+
+func loadInstallationRecord(t *testing.T, dir string) installationRecord {
+	t.Helper()
+	var record installationRecord
+	if err := json.Unmarshal([]byte(readGenerated(t, filepath.Join(dir, initFileInstallation))), &record); err != nil {
+		t.Fatal(err)
+	}
+	return record
+}
+
+func requireInitEncryptionStages(t *testing.T, dir string, cfg config.Config) {
+	t.Helper()
+	readers := readGenerated(t, filepath.Join(dir, initFileEncryptionReaders))
+	writers := readGenerated(t, filepath.Join(dir, initFileEncryptionConfig))
+	if strings.Index(readers, "identity:") > strings.Index(readers, "kms:") ||
+		strings.Index(writers, "identity:") < strings.Index(writers, "kms:") {
+		t.Fatal("reader staging must preserve plaintext writes; activation must put KMS first")
+	}
+	for _, content := range []string{readers, writers} {
+		parsed, err := config.ParseEncryptionConfiguration(bytes.NewBufferString(content))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := config.ValidateEncryptionConfiguration(cfg, parsed,
+			config.EncryptionValidationOptions{AllowIdentityFallback: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

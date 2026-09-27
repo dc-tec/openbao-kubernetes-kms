@@ -1,7 +1,7 @@
 ---
 title: Enable encryption
 description: "Stage KMS readers on every API server before enabling encrypted writes in a fresh preview cluster."
-eyebrow: Get started · Step 7
+eyebrow: Get started · Step 8
 weight: 80
 verifiedBy:
   - deploy/kubernetes/encryption-config.yaml
@@ -49,6 +49,9 @@ resources:
           endpoint: unix:///run/openbao-kms/kms.sock
           timeout: 3s
 ```
+
+If you used `init`, copy `generated/encryption-config-readers.yaml` for this
+phase instead of writing the example by hand.
 
 Set `kms.name` to `transit.keyIdScope.providerName` and `kms.endpoint` to
 `unix://` plus `server.socketPath`. Keep those values identical across the
@@ -127,7 +130,8 @@ configuration. No KMS writes have been enabled by this procedure yet.
 
 ## Step 3: Enable KMS writes
 
-After every server has the KMS reader, change the provider order on one node
+After every server has the KMS reader, install the generated
+`encryption-config.yaml`, or change the provider order on one node
 at a time to:
 
 ```yaml

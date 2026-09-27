@@ -214,10 +214,12 @@ bao-kms-provider init --values values.yaml --out ./generated --new-key
 | File | Contents |
 |---|---|
 | `config.yaml` | The complete provider configuration for every control-plane node. |
-| `encryption-config.yaml` | The `EncryptionConfiguration` with the identity fallback, cross-checked against `config.yaml`. |
+| `encryption-config-readers.yaml` | Phase 1: `identity` first and KMS second. Stage the reader on every API server while writes remain plaintext. |
+| `encryption-config.yaml` | Phase 2: KMS first and `identity` second. Enable writes only after all readers are ready. Both files are cross-checked against `config.yaml`. |
 | `openbao-policy.hcl` | The least-privilege policy, including token renewal. |
 | `openbao-setup.sh` | The `bao` commands for the Transit mount, key, policy, and JWT role, for an administrator to review and run. |
 | `bao-kms-provider.yaml` | Static pod only: the manifest with the image digest and socket GID. |
+| `installation.json` | Generator build metadata, shared fingerprint and lineage ID, model, image when supplied, runtime identity, host paths, generated files, and remaining actions. No credentials or activation success claim. |
 
 `init` prints the identity fingerprint, and the generated lineage ID with
 `--new-key`. It never contacts OpenBao, never writes outside `--out`, and never

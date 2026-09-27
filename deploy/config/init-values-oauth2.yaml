@@ -1,0 +1,29 @@
+# Preview fresh-install values for an independently available OAuth issuer.
+# Generate once with --new-key; reuse generated/config.yaml on other nodes.
+configVersion: v1alpha1
+openbao:
+  address: https://bao.example.internal:8200
+  tlsServerName: bao.example.internal
+  instanceId: bao-prod-a                 # Stable identity, not a hostname.
+auth:
+  jwt:
+    source: oauth2
+    mountPath: auth/k8s-workload-a-jwt
+    role: openbao-kms-control-plane
+    expectedIssuer: https://identity.example.com/realms/platform
+    expectedAudience: [bao-kms-provider]
+    expectedSubject: replace-with-service-account-subject
+    oauth2:
+      tokenUrl: https://identity.example.com/realms/platform/protocol/openid-connect/token
+      clientId: kms-control-plane
+      authMethod: client_secret_basic
+      # Provision this file independently. Never put the secret in these values.
+      clientSecretFile: /etc/openbao-kms/credentials/client-secret
+transit:
+  mountPath: transit
+  keyName: k8s-workload-a-etcd
+  keyIdScope:
+    providerName: openbao-kms-workload-a
+    clusterId: workload-a
+    transitMountId: transit-prod-primary
+    # Omit keyLineageId only when --new-key creates it for a new Transit key.
