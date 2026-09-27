@@ -117,22 +117,30 @@ each <code>key_id</code> and rebuild its AAD. A background watcher computes the 
 snapshot outside the Status path, and the local registry keeps rotation
 decisions across restarts; see
 <a href=/openbao-kubernetes-kms/docs/reference/key-id-and-aad/#local-registry-state>Reference: Key ID and AAD</a>
-.</p><h2 id=startup>Startup</h2><p>The provider binds its socket only after one metadata probe and one deep probe
-succeed, so the API server never sees a socket without a working data path.</p><p>With systemd, the provider is ready before kubelet starts the API server:</p><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
+.</p><h2 id=startup>Startup</h2><p>The provider binds its socket only after its initial metadata and deep probes
+succeed. A later backend or authentication failure can still make it unready;
+use <code>/ready</code> to check the cached health state.</p><p>With systemd, <code>Before=kubelet.service</code> and <code>Type=exec</code> order process execution
+before kubelet when both units start in the same transaction. They do not make
+kubelet wait for provider readiness or require kubelet to start the provider.
+After the executable starts, provider bootstrap and API server startup can
+proceed concurrently. The API server must retry until the KMS path is ready:</p><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
 flowchart TD
     A[&#34;host boot&#34;]
-    B[&#34;network and DNS available&#34;]
-    C[&#34;bao-kms-provider starts&#34;]
-    D[&#34;provider reads config / auth material / CA&#34;]
-    E[&#34;provider authenticates to OpenBao&#34;]
-    F[&#34;provider reads Transit metadata&#34;]
-    G[&#34;provider creates Unix socket&#34;]
-    H[&#34;provider reports ready&#34;]
-    I[&#34;kubelet starts kube-apiserver static pod&#34;]
-    J[&#34;kube-apiserver connects to KMS socket&#34;]
+    B[&#34;network-online.target reached&#34;]
+    C[&#34;provider executable starts&#34;]
+    D[&#34;provider reads config and authenticates&#34;]
+    E[&#34;metadata and deep probes succeed&#34;]
+    F[&#34;provider creates socket and reports ready&#34;]
+    G[&#34;kubelet starts kube-apiserver&#34;]
+    H[&#34;kube-apiserver connects or retries&#34;]
 
-    A --&gt; B --&gt; C --&gt; D --&gt; E --&gt; F --&gt; G --&gt; H --&gt; I --&gt; J
-  </pre></figure><p>With static pods, kubelet starts both pods without ordering them, so the API
+    A --&gt; B --&gt; C
+    C --&gt; D --&gt; E --&gt; F --&gt; H
+    C --&gt; G --&gt; H
+  </pre></figure><p><code>network-online.target</code> does not prove that DNS or OpenBao is reachable.
+The provider retries bootstrap within its configured grace period. A failed
+bootstrap exits and follows the unit&rsquo;s restart policy. The unit does not stop
+kubelet when the provider exits, restarts, or becomes unready.</p><p>With static pods, kubelet starts both pods without ordering them, so the API
 server retries until the socket appears. Test this ordering on your platform:</p><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
 flowchart TD
     A[&#34;host boot&#34;]
