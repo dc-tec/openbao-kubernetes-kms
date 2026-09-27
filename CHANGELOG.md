@@ -4,6 +4,9 @@
 
 ### Bug Fixes
 
+- **test:** Give OAuth expiry assertions a bounded observation window beyond
+  the last token's maximum lifetime, and bound each status RPC by that window.
+
 - **docs:** Document diagnostic check IDs, credential file delivery and symlink
   restrictions, and the defensive meaning of `aad_missing`.
 

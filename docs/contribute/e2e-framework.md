@@ -35,7 +35,7 @@ Kind and kubectl.
 | Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Two-node promotion, pending decrypt and discovery, minimum versions, retirement, writer lock, and rollback rejection. |
 | Upgrade and rollback | `make test-e2e-provider-upgrade-rollback-openbao-ci` | Old and new images over one state volume. |
 | Kind smoke | `make test-e2e-kind-smoke` | Real API server encryption, raw etcd envelopes, restart, and readback. |
-| Kind OAuth | `make test-e2e-kind-oauth2` | Pinned Keycloak, OpenBao OIDC discovery, generated provider static pod, both client authentication methods, secret rotation, issuer outage, and recovery while the protected API is stopped. |
+| Kind OAuth | `make test-e2e-kind-oauth2` | Pinned Keycloak, OpenBao OIDC discovery, generated provider static pod, both client authentication methods, secret rotation, issuer outage, and recovery while the protected API is stopped. Auth-failure waits include the full maximum token TTL, two probe intervals, two login timeouts, and five seconds of scheduling margin. Status, Encrypt, and Decrypt rejection assertions remain required. |
 | Kind convergence | `make test-e2e-kind-convergence` | Three API servers converge through node-local providers. |
 | Kind upgrade | `make test-e2e-kind-upgrade-rollback` | Static pod upgrade and rollback with old Secret readback. |
 | Kind DR runbook | `make test-e2e-kind-dr-runbook` | Raft restore, provider state rehydration, API server restart, and readback. |

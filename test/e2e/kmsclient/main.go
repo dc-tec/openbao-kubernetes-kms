@@ -27,6 +27,7 @@ import (
 const (
 	envKMSSocketPath          = "KMS_SOCKET_PATH"
 	envKMSClientMode          = "KMS_CLIENT_MODE"
+	envKMSAuthFailureWait     = "KMS_AUTH_FAILURE_WAIT"
 	envKMSSamplePath          = "KMS_SAMPLE_PATH"
 	envKMSRotationSamplePath  = "KMS_ROTATION_SAMPLE_PATH"
 	envKMSLoadSoakDuration    = "KMS_LOAD_SOAK_DURATION"
@@ -221,7 +222,11 @@ func expectOutage(ctx context.Context, client kmsapi.KeyManagementServiceClient)
 }
 
 func expectAuthFailure(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
-	expectUnhealthy(ctx, client)
+	wait := durationFromEnv(envKMSAuthFailureWait, 30*time.Second)
+	if err := waitForUnhealthyStatusWithin(ctx, client, wait); err != nil {
+		failf("%v", err)
+	}
+	assertUnhealthyEncrypt(ctx, client)
 	sample := readSample()
 	_, err := client.Decrypt(ctx, &kmsapi.DecryptRequest{
 		Ciphertext: sample.Ciphertext, KeyId: sample.KeyID, Annotations: sample.Annotations,
@@ -231,7 +236,10 @@ func expectAuthFailure(ctx context.Context, client kmsapi.KeyManagementServiceCl
 
 func expectUnhealthy(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
 	waitForUnhealthyStatus(ctx, client)
+	assertUnhealthyEncrypt(ctx, client)
+}
 
+func assertUnhealthyEncrypt(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
 	_, err := client.Encrypt(ctx, &kmsapi.EncryptRequest{
 		Plaintext: []byte(plaintext),
 		Uid:       requestUID,
@@ -756,24 +764,41 @@ func waitForHealthyStatusWithNewKeyID(
 }
 
 func waitForUnhealthyStatus(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
-	deadline := time.Now().Add(30 * time.Second)
+	if err := waitForUnhealthyStatusWithin(ctx, client, 30*time.Second); err != nil {
+		failf("%v", err)
+	}
+}
+
+func waitForUnhealthyStatusWithin(
+	ctx context.Context, client kmsapi.KeyManagementServiceClient, timeout time.Duration,
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
 	var lastErr error
 	var lastHealthz string
-	for time.Now().Before(deadline) {
-		statusResponse, err := client.Status(ctx, &kmsapi.StatusRequest{})
+	for {
+		requestCtx, requestCancel := context.WithTimeout(waitCtx, 3*time.Second)
+		statusResponse, err := client.Status(requestCtx, &kmsapi.StatusRequest{})
+		requestCancel()
 		if err == nil &&
 			statusResponse.GetVersion() == kmsv2.APIVersion &&
 			statusResponse.GetHealthz() == kmsv2.HealthUnhealthy &&
 			statusResponse.GetKeyId() == "" {
-			return
+			return nil
 		}
 		lastErr = err
 		if statusResponse != nil {
 			lastHealthz = statusResponse.GetHealthz()
 		}
-		time.Sleep(250 * time.Millisecond)
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("KMS provider did not report unhealthy status within %s: healthz=%q err=%v: %w",
+				timeout, lastHealthz, lastErr, waitCtx.Err())
+		case <-ticker.C:
+		}
 	}
-	failf("KMS provider did not report unhealthy status: healthz=%q err=%v", lastHealthz, lastErr)
 }
 
 func encrypt(

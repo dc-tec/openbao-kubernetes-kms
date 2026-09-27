@@ -2,12 +2,58 @@ package main
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
 	"google.golang.org/grpc"
 	kmsapi "k8s.io/kms/apis/v2"
 )
+
+func TestUnhealthyWaitObservesTransition(t *testing.T) {
+	calls := 0
+	client := fakeKMSClient{status: func(
+		_ context.Context, _ *kmsapi.StatusRequest, _ ...grpc.CallOption,
+	) (*kmsapi.StatusResponse, error) {
+		calls++
+		response := &kmsapi.StatusResponse{Version: kmsv2.APIVersion, Healthz: kmsv2.HealthUnhealthy}
+		if calls == 1 {
+			// An unhealthy response that retains a key ID is not the required contract.
+			response.KeyId = "still-active"
+		}
+		return response, nil
+	}}
+	if err := waitForUnhealthyStatusWithin(context.Background(), client, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if calls < 2 {
+		t.Fatal("accepted unhealthy status with an active key ID")
+	}
+}
+
+func TestUnhealthyWaitBoundsBlockedRPC(t *testing.T) {
+	client := fakeKMSClient{status: func(
+		ctx context.Context, _ *kmsapi.StatusRequest, _ ...grpc.CallOption,
+	) (*kmsapi.StatusResponse, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	started := time.Now()
+	err := waitForUnhealthyStatusWithin(context.Background(), client, 20*time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline failure, got %v", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("blocked Status RPC escaped the observation budget")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := waitForUnhealthyStatusWithin(ctx, client, time.Minute); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected caller cancellation, got %v", err)
+	}
+}
 
 func TestDecryptSoakWorkerLetsInFlightRequestFinishAfterStop(t *testing.T) {
 	stopCtx, stop := context.WithCancel(context.Background())
