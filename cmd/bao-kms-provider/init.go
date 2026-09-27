@@ -92,7 +92,7 @@ func newInitCommand() *cobra.Command {
 	flags.StringVar(&opts.image, "image", "",
 		"Provider image pinned by digest (static-pod)")
 	flags.Int64Var(&opts.socketGID, "socket-gid", 0,
-		"Numeric host GID of the openbao-kms-socket group (static-pod)")
+		"This node's numeric socket GID; overrides server.socketGroup in values (static-pod)")
 	return cmd
 }
 
@@ -163,9 +163,7 @@ func loadInitValues(opts initOptions) (config.Config, error) {
 	if err != nil {
 		return config.Config{}, err
 	}
-	if err := applyInitHostLayout(&cfg, opts); err != nil {
-		return config.Config{}, err
-	}
+	applyInitHostLayout(&cfg, opts)
 	if err := resolveInitLineage(&cfg, opts.newKey); err != nil {
 		return config.Config{}, err
 	}
@@ -178,7 +176,7 @@ func loadInitValues(opts initOptions) (config.Config, error) {
 	return cfg, nil
 }
 
-func applyInitHostLayout(cfg *config.Config, opts initOptions) error {
+func applyInitHostLayout(cfg *config.Config, opts initOptions) {
 	if cfg.OpenBao.CACertFile == "" {
 		cfg.OpenBao.CACertFile = initDefaultCACertFile
 	}
@@ -192,15 +190,11 @@ func applyInitHostLayout(cfg *config.Config, opts initOptions) error {
 		if cfg.Server.SocketGroup == "" {
 			cfg.Server.SocketGroup = initDefaultSocketGroup
 		}
-		return nil
+		return
 	}
-	gid := strconv.FormatInt(opts.socketGID, 10)
-	if cfg.Server.SocketGroup != "" && cfg.Server.SocketGroup != gid {
-		return fmt.Errorf("server.socketGroup %q does not match --socket-gid %d",
-			cfg.Server.SocketGroup, opts.socketGID)
-	}
-	cfg.Server.SocketGroup = gid
-	return nil
+	// Socket ownership is node-local. The required flag selects this node's GID
+	// when the values come from another node's resolved configuration.
+	cfg.Server.SocketGroup = strconv.FormatInt(opts.socketGID, 10)
 }
 
 func resolveInitLineage(cfg *config.Config, newKey bool) error {

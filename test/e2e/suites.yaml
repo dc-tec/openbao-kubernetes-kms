@@ -37,6 +37,26 @@ releaseGate:
         - kind-dr-runbook
 
 lanes:
+  - id: kind-kit-acceptance
+    name: Generated Static-Pod Kit Acceptance
+    makeTarget: test-e2e-kind-kit-acceptance
+    package: ./test/e2e
+    labelFilter: kind && kmsv2 && installation
+    runRegex: ^TestKindGeneratedKitAcceptanceE2E$
+    prScope: qualification
+    environment: kind
+    isolation: local-cluster
+    timeout: 35m
+    parallelNodes: 1
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+      - E2E_KIND_NODE_IMAGE
+    versionRefs:
+      - validation.openbao.image
+      - validation.kubernetes.kindNodeImage
+    status: active
+    reports: true
+
   - id: kind-oauth2
     name: Kubernetes KMS v2 OAuth Keycloak
     makeTarget: test-e2e-kind-oauth2

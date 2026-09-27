@@ -11,7 +11,6 @@ import (
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
-	"github.com/dc-tec/openbao-kubernetes-kms/internal/scaffold"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
 )
 
@@ -230,7 +229,8 @@ func TestInitExamplesPreserveIdentityAcrossNodes(t *testing.T) {
 		t.Run(source, func(t *testing.T) {
 			values := filepath.Join("..", "..", "deploy", "config", "init-values-"+source+".yaml")
 			first := filepath.Join(t.TempDir(), "first")
-			if _, err := executeCommand(t, "init", "--values", values, "--out", first, "--new-key"); err != nil {
+			if _, err := executeCommand(t, "init", "--values", values, "--out", first, "--new-key",
+				"--model", "static-pod", "--image", initImage, "--socket-gid", "1234"); err != nil {
 				t.Fatal(err)
 			}
 			resolved := filepath.Join(first, "config.yaml")
@@ -239,17 +239,9 @@ func TestInitExamplesPreserveIdentityAcrossNodes(t *testing.T) {
 				t.Fatal(err)
 			}
 			// A second node can use its own socket group without creating a new key identity.
-			cfg.Server.SocketGroup = "1234"
-			if source == "file" {
-				cfg.Auth.JWT.JWTFile = initStaticPodJWTFile
-			}
-			rendered, err := scaffold.RenderProviderConfig(cfg)
-			if err != nil {
-				t.Fatal(err)
-			}
 			second := filepath.Join(t.TempDir(), "second")
-			if _, err := executeCommand(t, "init", "--values", writeValues(t, string(rendered)), "--out", second,
-				"--model", "static-pod", "--image", initImage, "--socket-gid", "1234"); err != nil {
+			if _, err := executeCommand(t, "init", "--values", resolved, "--out", second,
+				"--model", "static-pod", "--image", initImage, "--socket-gid", "2345"); err != nil {
 				t.Fatal(err)
 			}
 			firstRecord := loadInstallationRecord(t, first)
@@ -259,7 +251,7 @@ func TestInitExamplesPreserveIdentityAcrossNodes(t *testing.T) {
 				t.Fatal("regeneration for another node changed the shared identity")
 			}
 			if secondRecord.Image != initImage ||
-				secondRecord.SocketGroup != "1234" || secondRecord.RuntimeUser != "65532:65532" {
+				secondRecord.SocketGroup != "2345" || secondRecord.RuntimeUser != "65532:65532" {
 				t.Fatalf("missing static-pod installation inputs: %+v", secondRecord)
 			}
 			if firstRecord.Generator != version.BuildInfo() {

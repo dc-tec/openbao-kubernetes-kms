@@ -133,6 +133,7 @@ endef
 $(eval $(call kind-e2e-target,test-e2e-kind-smoke,^TestKindKMSV2SmokeE2E$$$$,30m))
 $(eval $(call kind-e2e-target,test-e2e-kind-oauth2,^TestKindOAuth2KeycloakE2E$$$$,25m))
 $(eval $(call kind-e2e-target,test-e2e-kind-convergence,^TestKindMultiControlPlaneConvergenceE2E$$$$,45m))
+$(eval $(call kind-e2e-target,test-e2e-kind-kit-acceptance,^TestKindGeneratedKitAcceptanceE2E$$$$,35m))
 $(eval $(call kind-e2e-target,test-e2e-kind-upgrade-rollback,^TestKindStaticPodUpgradeRollbackE2E$$$$,30m))
 $(eval $(call kind-e2e-target,test-e2e-kind-dr-runbook,^TestKindDRRestoreRunbookE2E$$$$,35m))
 
