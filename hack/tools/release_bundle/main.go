@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/scaffold"
 )
 
 const (
@@ -56,30 +58,35 @@ func parseArgs() (args, error) {
 	flag.StringVar(&cfg.kind, "kind", "", "bundle kind: systemd or static-pod")
 	flag.StringVar(&cfg.output, "output", "", "output tar.gz path")
 	flag.StringVar(&cfg.prefix, "prefix", "", "top-level archive prefix")
-	flag.StringVar(&cfg.binaryPath, "binary", "", "systemd bundle binary path")
+	flag.StringVar(&cfg.binaryPath, "binary", "", "matching Linux architecture binary path")
 	flag.StringVar(&cfg.imageRef, "image-ref", "", "static-pod bundle image reference")
 	flag.Int64Var(&cfg.sourceDateEpoch, "source-date-epoch", 0, "deterministic entry timestamp")
 	flag.Parse()
+	return cfg, validateArgs(cfg)
+}
 
+func validateArgs(cfg args) error {
 	if cfg.kind != kindSystemd && cfg.kind != kindStaticPod {
-		return cfg, errors.New("-kind must be systemd or static-pod")
+		return errors.New("-kind must be systemd or static-pod")
 	}
 	if cfg.output == "" {
-		return cfg, errors.New("-output is required")
+		return errors.New("-output is required")
 	}
 	if cfg.prefix == "" {
-		return cfg, errors.New("-prefix is required")
+		return errors.New("-prefix is required")
 	}
 	if strings.Contains(cfg.prefix, "..") || strings.HasPrefix(cfg.prefix, "/") {
-		return cfg, errors.New("-prefix must be a relative archive path")
+		return errors.New("-prefix must be a relative archive path")
 	}
-	if cfg.kind == kindSystemd && cfg.binaryPath == "" {
-		return cfg, errors.New("-binary is required for systemd bundles")
+	if cfg.binaryPath == "" {
+		return errors.New("-binary is required for every bundle")
 	}
-	if cfg.kind == kindStaticPod && cfg.imageRef == "" {
-		return cfg, errors.New("-image-ref is required for static-pod bundles")
+	if cfg.kind == kindStaticPod {
+		if err := scaffold.ValidateImageDigest(cfg.imageRef); err != nil {
+			return fmt.Errorf("-image-ref: %w", err)
+		}
 	}
-	return cfg, nil
+	return nil
 }
 
 func writeBundle(cfg args) error {
@@ -133,6 +140,8 @@ func bundleEntries(cfg args) []bundleEntry {
 			{name: "README.md", source: "deploy/package/bundles/systemd/README.md", mode: 0o644},
 			{name: "LICENSE", source: "LICENSE", mode: 0o644},
 			{name: "bin/" + binaryName, source: cfg.binaryPath, mode: 0o755},
+			{name: "config/init-values-file.yaml", source: "deploy/config/init-values-file.yaml", mode: 0o644},
+			{name: "config/init-values-oauth2.yaml", source: "deploy/config/init-values-oauth2.yaml", mode: 0o644},
 			{name: "config/provider-systemd.yaml", source: "deploy/config/provider-systemd.yaml", mode: 0o644},
 			{name: "kubernetes/encryption-config.yaml", source: "deploy/kubernetes/encryption-config.yaml", mode: 0o644},
 			{name: "systemd/bao-kms-provider.service", source: "deploy/systemd/bao-kms-provider.service", mode: 0o644},
@@ -143,6 +152,9 @@ func bundleEntries(cfg args) []bundleEntry {
 		return []bundleEntry{
 			{name: "README.md", source: "deploy/package/bundles/static-pod/README.md", mode: 0o644},
 			{name: "LICENSE", source: "LICENSE", mode: 0o644},
+			{name: "bin/" + binaryName, source: cfg.binaryPath, mode: 0o755},
+			{name: "config/init-values-file.yaml", source: "deploy/config/init-values-file.yaml", mode: 0o644},
+			{name: "config/init-values-oauth2.yaml", source: "deploy/config/init-values-oauth2.yaml", mode: 0o644},
 			{name: "config/provider-static-pod.yaml", source: "deploy/config/provider-static-pod.yaml", mode: 0o644},
 			{name: "image-ref.txt", content: cfg.imageRef + "\n", mode: 0o644},
 			{name: "kubernetes/encryption-config.yaml", source: "deploy/kubernetes/encryption-config.yaml", mode: 0o644},

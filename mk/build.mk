@@ -170,13 +170,14 @@ release-bundles: ## Build deterministic systemd and static-pod tarball bundles.
 			-prefix "$(BINARY_NAME)_$(VERSION)_systemd_$${goos}_$${goarch}" \
 			-binary "$$binary" \
 			-source-date-epoch "$$source_date_epoch"; \
-	done; \
-	GOFLAGS="-mod=vendor" "$(GO)" run ./hack/tools/release_bundle \
-		-kind static-pod \
-		-output "$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_static-pod.tar.gz" \
-		-prefix "$(BINARY_NAME)_$(VERSION)_static-pod" \
-		-image-ref "$$image_ref" \
-		-source-date-epoch "$$source_date_epoch"
+		GOFLAGS="-mod=vendor" "$(GO)" run ./hack/tools/release_bundle \
+			-kind static-pod \
+			-output "$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_static-pod_$${goos}_$${goarch}.tar.gz" \
+			-prefix "$(BINARY_NAME)_$(VERSION)_static-pod_$${goos}_$${goarch}" \
+			-binary "$$binary" \
+			-image-ref "$$image_ref" \
+			-source-date-epoch "$$source_date_epoch"; \
+	done
 
 .PHONY: release-distribution
 release-distribution: release-artifacts ## Build release packages and bundles, then refresh checksums.

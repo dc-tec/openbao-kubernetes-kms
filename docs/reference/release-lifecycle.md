@@ -89,7 +89,7 @@ bao-kms-provider_${VERSION}_linux_${GOARCH}                  binary
 bao-kms-provider_${VERSION}_linux_${GOARCH}.deb              systemd package
 bao-kms-provider_${VERSION}_linux_${GOARCH}.rpm              systemd package
 bao-kms-provider_${VERSION}_systemd_linux_${GOARCH}.tar.gz   systemd tarball
-bao-kms-provider_${VERSION}_static-pod.tar.gz                static-pod bundle
+bao-kms-provider_${VERSION}_static-pod_linux_${GOARCH}.tar.gz static-pod kit
 bao-kms-provider-certauth-pkcs11_${VERSION}_${GOOS}_${GOARCH} PKCS#11 host build, when published
 checksums.txt                                                SHA-256 of every artifact
 ```

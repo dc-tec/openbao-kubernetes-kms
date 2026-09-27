@@ -26,9 +26,13 @@ Run `systemctl daemon-reload` to register the unit. The installation leaves
 live configuration and authentication material unchanged. On a new host, it
 does not enable or start the service.
 
-Prepare `/etc/openbao-kms/config.yaml` from the installed example under
-`/usr/share/doc/bao-kms-provider/examples/`. Provision the OpenBao CA bundle and
-JWT, then validate as the service user:
+Copy `config/init-values-file.yaml` or `config/init-values-oauth2.yaml` to a
+private working directory. Set the identity values, then use `bao-kms-provider
+init --values values.yaml --out generated --new-key` once for a new Transit
+key. Reuse `generated/config.yaml` without `--new-key` on other nodes. Review
+the generated OpenBao setup and installation record. Install the generated
+configuration as `/etc/openbao-kms/config.yaml` and provision its CA files
+and independently renewable credential. Validate as the service user:
 
 ```sh
 sudo -u openbao-kms bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
