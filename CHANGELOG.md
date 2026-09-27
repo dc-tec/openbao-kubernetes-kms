@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **policy:** Include token renewal in `policy openbao` output by default,
+  matching `init` and runtime behavior. Add `--include-token-renewal=false` for
+  non-renewable tokens or policies that grant renewal separately.
+
 - **rotation:** Measure activation delay from durable stable observations with
   process-local elapsed time. Wait the full delay after restart or recovery of
   an unconfirmed stable save. Preserve local timestamp ordering after backward

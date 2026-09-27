@@ -26,9 +26,15 @@ The standard policy grants metadata read, encrypt, and decrypt on the key,
 read on `<mount>/config/keys` so the provider can verify `disable_upsert`, and
 update on `sys/capabilities-self` so `doctor` can check the token.
 
-- Keep `auth/token/renew-self` when the role sets `token_no_default_policy=true`
-  and the provider renews its token. Drop it if the provider only logs in
-  again.
+- Generated policies include update on `auth/token/renew-self`, including when
+  the role sets `token_no_default_policy=true`. Both `init` and `policy openbao`
+  include this permission by default.
+- `policy openbao --include-token-renewal=false` omits that stanza. Use it when
+  OpenBao issues non-renewable tokens or another attached policy grants renewal.
+  The provider attempts renewal for renewable tokens and logs in again when
+  renewal fails. It uses login directly for non-renewable tokens. There is no
+  runtime switch for disabling renewal; omitting a permission does not disable
+  the attempt.
 - The provider never calls `auth/token/lookup-self`; grant it only to separate
   diagnostic tooling.
 

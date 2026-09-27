@@ -211,8 +211,11 @@ bao-kms-provider policy openbao --config /etc/openbao-kms/config.yaml
 
 Prints the least-privilege policy for the configured mount and key: metadata
 read, encrypt, decrypt, `disable_upsert` inspection, and
-`sys/capabilities-self`. Add `auth/token/renew-self` when the role disables the
-default policy; see [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
+`sys/capabilities-self`. It includes `auth/token/renew-self` by default, matching
+`init` and the runtime's renewal behavior. Use `--include-token-renewal=false`
+only when tokens are non-renewable or another attached policy grants renewal.
+This flag changes generated policy, not runtime behavior. See
+[Configure: OpenBao auth and policy](/docs/configure/openbao-auth/).
 
 ## version and completion
 
