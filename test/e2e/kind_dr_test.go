@@ -163,6 +163,7 @@ func rehydrateKindProviderRunbookFiles(
 	runDocker(t, ctx, dockerPath, "exec", nodeName, "mkdir", "-p",
 		"/etc/openbao-kms/tls",
 		"/var/lib/openbao-kms/state",
+		filepath.Dir(kindProviderJWTPath),
 		"/run/openbao-kms",
 	)
 	for _, file := range kindProviderRunbookFiles() {

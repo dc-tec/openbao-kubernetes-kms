@@ -115,6 +115,7 @@ install -d -m 0750 -o root -g root /etc/openbao-kms
 install -d -m 0755 -o root -g root /etc/openbao-kms/tls
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state
+install -d -m 0750 -o root -g 65532 /var/lib/openbao-kms/credentials
 install -d -m 0755 -o root -g root /etc/kubernetes/openbao-kms
 printf 'd /run/openbao-kms 2750 65532 ${SOCKET_GID} -\n' > /etc/tmpfiles.d/openbao-kms-static-pod.conf
 systemd-tmpfiles --create /etc/tmpfiles.d/openbao-kms-static-pod.conf
@@ -147,8 +148,13 @@ From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`:
 ```sh
 sudo install -m 0640 -o root -g 65532 provider.yaml /etc/openbao-kms/config.yaml
 sudo install -m 0644 -o root -g root ca.crt /etc/openbao-kms/tls/ca.crt
-sudo install -m 0640 -o root -g 65532 identity.jwt /var/lib/openbao-kms/identity.jwt
+sudo install -m 0640 -o root -g 65532 identity.jwt /var/lib/openbao-kms/credentials/identity.jwt
 ```
+
+The pod mounts the credential directory read-only. Configure the host issuer
+agent to replace `identity.jwt` atomically within that directory and preserve
+its permissions. Keep unrelated files out of this directory. A file-only bind
+mount retains the old JWT after atomic replacement.
 
 ## Step 7: Validate the configuration
 
@@ -213,3 +219,26 @@ the provider's boot path. If any of them is broken, the provider does not
 start and the API server cannot decrypt existing resources. For single-node
 control planes, prefer [Run with systemd](/docs/get-started/systemd/). For the
 full hardening surface, see [Security: Hardening](/docs/security/hardening/).
+
+## Migrate an existing JWT file mount
+
+For manifests that mount `/var/lib/openbao-kms/identity.jwt` as a file, update
+one control-plane node at a time. Schedule an API outage for a single-node
+control plane. The provider must restart once to change its mounts.
+
+1. Create `/var/lib/openbao-kms/credentials` with the permissions in Step 4.
+2. Configure the host issuer agent to publish a current JWT as
+   `/var/lib/openbao-kms/credentials/identity.jwt` with the permissions in Step 6.
+3. Change `auth.jwt.jwtFile` in the host configuration to the new path. Preserve
+   all identity values and the state directory.
+4. Update both the JWT volume and its mount to the credential directory,
+   with hostPath type `Directory` and a read-only mount. Regenerate the manifest
+   with `init --model static-pod` or use the current sample. The generator
+   rejects credential directories that overlap state or socket directories.
+5. Install the updated configuration and manifest. Wait for the new container
+   and HTTP 200 from `/ready`. Verify an existing encrypted resource remains
+   readable before continuing to the next node.
+
+Subsequent atomic JWT replacements do not require a provider restart. This
+path change does not change key IDs, AAD, Transit keys, or encrypted data.
+Existing systemd JWT paths remain supported.

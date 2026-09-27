@@ -6,7 +6,6 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
@@ -173,6 +172,12 @@ func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, erro
 	tlsDir := filepath.Dir(cfg.OpenBao.CACertFile)
 	runDir := filepath.Dir(cfg.Server.SocketPath)
 	stateDir := filepath.Dir(cfg.State.Path)
+	jwtDir := filepath.Dir(cfg.Auth.JWT.JWTFile)
+	if cfg.Auth.JWT.Source != config.JWTSourceOAuth2 {
+		if err := validateJWTCredentialDirectory(jwtDir, runDir, stateDir); err != nil {
+			return podManifest{}, err
+		}
+	}
 	if cfg.Auth.JWT.Source == config.JWTSourceOAuth2 && filepath.Dir(cfg.Auth.JWT.OAuth2.ClientSecretFile) == "/" {
 		return podManifest{}, errors.New("OAuth client secret must be in a dedicated directory, not the host root")
 	}
@@ -213,7 +218,6 @@ func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, erro
 				VolumeMounts: []volumeMount{
 					{Name: "config", MountPath: ProviderConfigPath, ReadOnly: true},
 					{Name: "tls", MountPath: tlsDir, ReadOnly: true},
-					{Name: "jwt", MountPath: cfg.Auth.JWT.JWTFile, ReadOnly: true},
 					{Name: "run", MountPath: runDir},
 					{Name: "state", MountPath: stateDir},
 				},
@@ -237,7 +241,6 @@ func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, erro
 			Volumes: []podVolume{
 				{Name: "config", HostPath: hostPathVolume{Path: ProviderConfigPath, Type: "File"}},
 				{Name: "tls", HostPath: hostPathVolume{Path: tlsDir, Type: "Directory"}},
-				{Name: "jwt", HostPath: hostPathVolume{Path: cfg.Auth.JWT.JWTFile, Type: "File"}},
 				{Name: "run", HostPath: hostPathVolume{Path: runDir, Type: "Directory"}},
 				{Name: "state", HostPath: hostPathVolume{Path: stateDir, Type: "Directory"}},
 			},
@@ -247,15 +250,31 @@ func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, erro
 		if err := configureOAuth2Volumes(&manifest, cfg.Auth.JWT.OAuth2); err != nil {
 			return podManifest{}, err
 		}
+	} else if err := addReadOnlyHostPath(&manifest, "jwt", jwtDir, "Directory"); err != nil {
+		return podManifest{}, err
 	}
 	return manifest, nil
 }
 
+func validateJWTCredentialDirectory(dir, runDir, stateDir string) error {
+	if !filepath.IsAbs(dir) || dir == "/" || pathContains(dir, ProviderConfigPath) {
+		return errors.New("JWT file must be in a dedicated absolute credential directory")
+	}
+	for _, writable := range []string{runDir, stateDir} {
+		if pathContains(dir, writable) || pathContains(writable, dir) {
+			return errors.New("JWT credential directory must not overlap the socket or state directory")
+		}
+	}
+	return nil
+}
+
+func pathContains(parent, child string) bool {
+	relative, err := filepath.Rel(parent, child)
+	return err == nil && filepath.IsLocal(relative)
+}
+
 func configureOAuth2Volumes(manifest *podManifest, cfg config.OAuth2Config) error {
 	// Mount the directory so atomic credential replacement is visible without a restart.
-	manifest.Spec.Volumes = slices.DeleteFunc(manifest.Spec.Volumes, func(v podVolume) bool { return v.Name == "jwt" })
-	container := &manifest.Spec.Containers[0]
-	container.VolumeMounts = slices.DeleteFunc(container.VolumeMounts, func(v volumeMount) bool { return v.Name == "jwt" })
 	credentialDir := filepath.Dir(cfg.ClientSecretFile)
 	if err := addReadOnlyHostPath(manifest, "oauth2-credentials", credentialDir, "Directory"); err != nil {
 		return err
@@ -271,7 +290,7 @@ func addReadOnlyHostPath(manifest *podManifest, name, source, kind string) error
 	for _, mount := range container.VolumeMounts {
 		if mount.MountPath == source {
 			if !mount.ReadOnly {
-				return errors.New("OAuth credential mount conflicts with a writable provider directory")
+				return errors.New("credential mount conflicts with a writable provider directory")
 			}
 			return nil
 		}

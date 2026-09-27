@@ -191,9 +191,11 @@ make test-e2e-kind-smoke
 ```
 
 The target builds and loads the provider image into a pinned Kind cluster. It
-deploys the provider as a static pod and enables kube-apiserver KMS v2
-encryption. It then verifies Secret readback, the raw etcd KMS v2 envelope,
-kube-apiserver restart, and readback after restart.
+deploys the provider with the generated static pod manifest and enables
+kube-apiserver KMS v2 encryption. It verifies Secret readback and the raw etcd
+KMS v2 envelope. It then rejects a retired JWT, atomically replaces the host
+credential, and verifies recovery without restarting the provider. Finally, it
+restarts kube-apiserver and verifies Secret readback.
 
 Run the pinned Kubernetes Kind multi-control-plane convergence lane with:
 
@@ -208,6 +210,9 @@ each node and enables KMS v2 on each kube-apiserver. The verification then:
 - leaves each kube-apiserver as the only serving endpoint in turn;
 - confirms decrypt convergence through each endpoint;
 - restarts each kube-apiserver and confirms Secret readback.
+
+The test moves held manifests outside kubelet's watched directory and checks
+that the held API servers remain stopped during each isolated readback.
 
 Run the pinned Kubernetes Kind static-pod upgrade/rollback lane with:
 

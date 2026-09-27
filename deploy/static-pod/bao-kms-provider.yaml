@@ -50,13 +50,13 @@ spec:
         - name: tls
           mountPath: /etc/openbao-kms/tls
           readOnly: true
-        - name: jwt
-          mountPath: /var/lib/openbao-kms/identity.jwt
-          readOnly: true
         - name: run
           mountPath: /run/openbao-kms
         - name: state
           mountPath: /var/lib/openbao-kms/state
+        - name: jwt
+          mountPath: /var/lib/openbao-kms/credentials
+          readOnly: true
       startupProbe:
         httpGet:
           host: 127.0.0.1
@@ -88,10 +88,6 @@ spec:
       hostPath:
         path: /etc/openbao-kms/tls
         type: Directory
-    - name: jwt
-      hostPath:
-        path: /var/lib/openbao-kms/identity.jwt
-        type: File
     - name: run
       hostPath:
         path: /run/openbao-kms
@@ -99,4 +95,8 @@ spec:
     - name: state
       hostPath:
         path: /var/lib/openbao-kms/state
+        type: Directory
+    - name: jwt
+      hostPath:
+        path: /var/lib/openbao-kms/credentials
         type: Directory

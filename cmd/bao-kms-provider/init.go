@@ -25,6 +25,7 @@ const (
 
 	initDefaultCACertFile  = "/etc/openbao-kms/tls/ca.crt"
 	initDefaultJWTFile     = "/var/lib/openbao-kms/identity.jwt"
+	initStaticPodJWTFile   = "/var/lib/openbao-kms/credentials/identity.jwt"
 	initDefaultSocketGroup = "openbao-kms-socket"
 	initLineageIDBytes     = 16
 
@@ -181,6 +182,9 @@ func applyInitHostLayout(cfg *config.Config, opts initOptions) error {
 	}
 	if cfg.Auth.Method == initAuthMethodJWT && cfg.Auth.JWT.Source == config.JWTSourceFile && cfg.Auth.JWT.JWTFile == "" {
 		cfg.Auth.JWT.JWTFile = initDefaultJWTFile
+		if opts.model == initModelStaticPod {
+			cfg.Auth.JWT.JWTFile = initStaticPodJWTFile
+		}
 	}
 	if opts.model != initModelStaticPod {
 		if cfg.Server.SocketGroup == "" {

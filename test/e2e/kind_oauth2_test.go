@@ -20,8 +20,8 @@ import (
 const (
 	kindOAuthSecretPath = "/etc/openbao-kms/credentials/client-secret"
 	kindOAuthCAPath     = "/etc/openbao-kms/tls/issuer-ca.pem"
-	kindOAuthClientPath = "/usr/local/bin/kms-oauth-e2e-client"
-	kindOAuthSamplePath = "/kms-sample/oauth.json"
+	kindKMSClientPath   = "/usr/local/bin/kms-e2e-client"
+	kindKMSSamplePath   = "/kms-sample/encrypted.json"
 	kindOAuthHoldDir    = "/etc/kubernetes/oauth-e2e-hold"
 )
 
@@ -76,13 +76,13 @@ func TestKindOAuth2KeycloakE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	loadProviderImageIntoKind(t, ctx, kind, cluster, image)
-	pinnedImage := pinKindOAuthImage(t, ctx, docker, node, image)
+	pinnedImage := pinKindProviderImage(t, ctx, docker, node, image)
 	cfg := stageKindOAuthProvider(t, ctx, docker, node, pinnedImage, bao, issuer)
 	waitKindOAuthReady(t, ctx, docker, node)
 	providerID := kindProviderContainerID(t, ctx, docker, node)
 
 	t.Log("client_secret_basic: KMS v2 round trip and Kubernetes Secret encrypted in etcd")
-	runKindOAuthClient(t, ctx, docker, node, kmsClientModeWriteSample)
+	runKindKMSClient(t, ctx, docker, node, kmsClientModeWriteSample)
 	enableKindAPIServerKMS(t, ctx, docker, kubectl, kubeContext, node)
 	secretValue := "oauth-kind-secret-" + strconvTime(time.Now())
 	createKindSecret(t, ctx, kubectl, kubeContext, secretValue)
@@ -95,10 +95,10 @@ func TestKindOAuth2KeycloakE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runKindOAuthClient(t, ctx, docker, node, kmsClientModeExpectAuthFailure)
+	runKindKMSClient(t, ctx, docker, node, kmsClientModeExpectAuthFailure)
 	waitKindOAuthLog(t, ctx, docker, node, "oauth2_rejected")
 	replaceKindOAuthSecret(t, ctx, docker, node, newSecret)
-	runKindOAuthClient(t, ctx, docker, node, kmsClientModeReadSample)
+	runKindKMSClient(t, ctx, docker, node, kmsClientModeReadSample)
 	if kindProviderContainerID(t, ctx, docker, node) != providerID {
 		t.Fatal("credential rotation restarted provider")
 	}
@@ -107,7 +107,7 @@ func TestKindOAuth2KeycloakE2E(t *testing.T) {
 	if err := issuer.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
-	runKindOAuthClient(t, ctx, docker, node, kmsClientModeExpectAuthFailure)
+	runKindKMSClient(t, ctx, docker, node, kmsClientModeExpectAuthFailure)
 	assertKindOAuthLogsRedacted(t, ctx, docker, node, oldSecret, newSecret, secretValue)
 	t.Log("cold provider startup with protected API stopped; no JWT file or Kubernetes credential source")
 	holdKindOAuthComponent(t, ctx, docker, node, "kube-apiserver")
@@ -117,14 +117,14 @@ func TestKindOAuth2KeycloakE2E(t *testing.T) {
 	restoreKindOAuthComponent(t, ctx, docker, node, "bao-kms-provider")
 	waitForKindProviderContainerRestart(t, ctx, docker, node, providerID)
 	waitKindOAuthLog(t, ctx, docker, node, "oauth2_request")
-	runKindOAuthClient(t, ctx, docker, node, kmsClientModeExpectSocketUnavailable)
+	runKindKMSClient(t, ctx, docker, node, kmsClientModeExpectSocketUnavailable)
 
 	t.Log("client_secret_post: recover provider before restoring API, then decrypt existing etcd data")
 	if err := issuer.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
 	waitKindOAuthReady(t, ctx, docker, node)
-	runKindOAuthClient(t, ctx, docker, node, kmsClientModeReadSample)
+	runKindKMSClient(t, ctx, docker, node, kmsClientModeReadSample)
 	output, err := runDockerOutput(ctx, docker, "exec", node, "crictl", "ps", "--name", "^kube-apiserver$", "-q")
 	if err != nil || strings.TrimSpace(output) != "" {
 		t.Fatal("protected API was running during cold provider recovery")
@@ -148,7 +148,7 @@ func assertKindOAuthLogsRedacted(t *testing.T, ctx context.Context, docker, node
 	}
 }
 
-func pinKindOAuthImage(t *testing.T, ctx context.Context, docker, node, image string) string {
+func pinKindProviderImage(t *testing.T, ctx context.Context, docker, node, image string) string {
 	t.Helper()
 	output, err := runDockerOutput(ctx, docker, "exec", node, "ctr", "--namespace=k8s.io", "images", "list")
 	if err != nil {
@@ -205,14 +205,14 @@ func stageKindOAuthProvider(t *testing.T, ctx context.Context, docker, node, ima
 	dockerCopy(t, ctx, docker, filepath.Join(dir, "encryption.yaml"), node+":"+kindEncryptionConfigPath)
 	client := filepath.Join(dir, "kms-client")
 	buildKMSClient(t, ctx, client)
-	dockerCopy(t, ctx, docker, client, node+":"+kindOAuthClientPath)
+	dockerCopy(t, ctx, docker, client, node+":"+kindKMSClientPath)
 	runDocker(t, ctx, docker, "exec", node, "sh", "-c", `set -eu
 chown -R 65532:65532 /etc/openbao-kms /var/lib/openbao-kms
 chmod 0700 /etc/openbao-kms /etc/openbao-kms/credentials /var/lib/openbao-kms /var/lib/openbao-kms/state
 chown 65532:1234 /run/openbao-kms
 chmod 2750 /run/openbao-kms
 chmod 0644 /etc/kubernetes/encryption/openbao-kms/encryption-config.yaml
-chmod 0755 /usr/local/bin/kms-oauth-e2e-client`)
+chmod 0755 /usr/local/bin/kms-e2e-client`)
 	manifestPath := filepath.Join(dir, "pod.yaml")
 	if err := os.WriteFile(manifestPath, manifest, 0o600); err != nil {
 		t.Fatal(err)
@@ -251,10 +251,10 @@ chmod 0600 /etc/openbao-kms/credentials/client-secret.new
 mv /etc/openbao-kms/credentials/client-secret.new /etc/openbao-kms/credentials/client-secret`)
 }
 
-func runKindOAuthClient(t *testing.T, ctx context.Context, docker, node, mode string) {
+func runKindKMSClient(t *testing.T, ctx context.Context, docker, node, mode string) {
 	t.Helper()
 	runDocker(t, ctx, docker, "exec", node, "env", "KMS_SOCKET_PATH="+kindProviderSocketPath,
-		kmsClientModeEnv+"="+mode, kmsSamplePathEnv+"="+kindOAuthSamplePath, kindOAuthClientPath)
+		kmsClientModeEnv+"="+mode, kmsSamplePathEnv+"="+kindKMSSamplePath, kindKMSClientPath)
 }
 
 func waitKindOAuthReady(t *testing.T, ctx context.Context, docker, node string) {

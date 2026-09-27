@@ -50,6 +50,12 @@ during restarts.
 | Security and supply chain | Redaction, fuzzing, static analysis, vulnerability and license scans, SBOM, vendor verification | `make ci-core`, security CI, release workflow |
 | Recovery | Raft restore, state rehydration, etcd pairing, readback after replacement | Kind DR, restore lane, VM validation |
 
+The Kind smoke lane uses the generated static-pod manifest. It retires the JWT
+signing key, revokes provider tokens, checks authentication failure, and then
+atomically replaces the host JWT. Recovery must decrypt the existing KMS
+sample and encrypt new data without restarting the provider. The lane also
+restarts the API server and reads the existing encrypted Secret.
+
 ## Install regression check
 
 `make systemd-install-check` builds a systemd bundle and runs the shell blocks

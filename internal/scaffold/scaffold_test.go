@@ -189,6 +189,43 @@ func TestValidateImageDigest(t *testing.T) {
 	}
 }
 
+func TestStaticPodJWTCredentialDirectory(t *testing.T) {
+	for _, path := range []string{
+		"/identity.jwt",
+		"credentials/identity.jwt",
+		"/etc/openbao-kms/identity.jwt",
+		"/var/lib/openbao-kms/identity.jwt",
+		"/var/lib/openbao-kms/state/identity.jwt",
+		"/var/lib/openbao-kms/state/credentials/identity.jwt",
+		"/run/openbao-kms/identity.jwt",
+		"/run/openbao-kms/credentials/identity.jwt",
+	} {
+		t.Run(path, func(t *testing.T) {
+			cfg := loadConfig(t, staticPodSamplePath)
+			cfg.Auth.JWT.JWTFile = path
+			if _, err := RenderStaticPod(cfg, StaticPodOptions{Image: sampleImage, SocketGID: 1234}); err == nil {
+				t.Fatal("unsafe JWT directory accepted")
+			}
+		})
+	}
+	cfg := loadConfig(t, staticPodSamplePath)
+	// A custom dedicated directory remains supported without relocating its file.
+	cfg.Auth.JWT.JWTFile = "/srv/kms-credentials/identity.jwt"
+	manifest, err := buildStaticPod(cfg, StaticPodOptions{Image: sampleImage, SocketGID: 1234})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, mount := range manifest.Spec.Containers[0].VolumeMounts {
+		if mount.Name == "jwt" {
+			found = mount.ReadOnly && mount.MountPath == "/srv/kms-credentials"
+		}
+	}
+	if !found {
+		t.Fatal("JWT directory must be mounted read-only")
+	}
+}
+
 func TestRenderOpenBaoSetupQuotesValues(t *testing.T) {
 	cfg := loadConfig(t, systemdSamplePath)
 	cfg.OpenBao.Namespace = "admin/workload-a"
