@@ -35,6 +35,7 @@ const (
 	kindEncryptionConfigPath   = kindEncryptionConfigDir + "/encryption-config.yaml"
 	kindProviderStaticPodPath  = "/etc/kubernetes/manifests/bao-kms-provider.yaml"
 	kindAPIServerManifestPath  = "/etc/kubernetes/manifests/kube-apiserver.yaml"
+	kindManifestHoldDir        = "/etc/kubernetes/kms-e2e-hold"
 	kindSecretName             = "obk-kind-smoke"
 	kindControlPlaneNodeSuffix = "-control-plane"
 
@@ -722,8 +723,12 @@ func assertKindSecretReadableThroughOnlyAPIServer(
 	secretValue string,
 ) {
 	t.Helper()
+	t.Logf("verify Secret decryption through only %s", targetNode)
 
 	heldNodes := make([]string, 0, len(nodeNames)-1)
+	defer func() {
+		restoreHeldKindAPIServers(t, ctx, dockerPath, kubectlPath, contextName, heldNodes)
+	}()
 	for _, nodeName := range nodeNames {
 		if nodeName == targetNode {
 			continue
@@ -731,10 +736,14 @@ func assertKindSecretReadableThroughOnlyAPIServer(
 		holdKindAPIServer(t, ctx, dockerPath, nodeName)
 		heldNodes = append(heldNodes, nodeName)
 	}
-	defer restoreHeldKindAPIServers(t, ctx, dockerPath, kubectlPath, contextName, heldNodes)
-
 	waitForKindAPIServer(t, ctx, kubectlPath, contextName)
 	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
+	for _, nodeName := range heldNodes {
+		containerID, err := kindAPIServerContainerID(ctx, dockerPath, nodeName)
+		if err != nil || containerID != "" {
+			t.Fatalf("held kube-apiserver on %s must remain stopped: container=%q, error=%v", nodeName, containerID, err)
+		}
+	}
 }
 
 func holdKindAPIServer(t *testing.T, ctx context.Context, dockerPath string, nodeName string) {
@@ -750,13 +759,14 @@ func holdKindAPIServer(t *testing.T, ctx context.Context, dockerPath string, nod
 	}
 }
 
+// Kubelet reads every non-dot file in the manifest directory, regardless of extension.
+// Move held manifests outside that directory and wait for kubelet to stop the pod.
 const kindHoldAPIServerScript = `set -eu
-hold=/etc/kubernetes/manifests/kube-apiserver.yaml.hold
+mkdir -p ` + kindManifestHoldDir + `
+hold=` + kindManifestHoldDir + `/kube-apiserver.yaml
 if [ ! -f "$hold" ]; then
   mv /etc/kubernetes/manifests/kube-apiserver.yaml "$hold"
 fi
-cid="$(crictl ps --name kube-apiserver -q | head -n1)"
-if [ -n "$cid" ]; then crictl stop "$cid" >/dev/null; fi
 attempt=0
 while [ "$attempt" -lt 60 ]; do
   if [ -z "$(crictl ps --name kube-apiserver -q | head -n1)" ]; then exit 0; fi
@@ -795,7 +805,7 @@ func restoreHeldKindAPIServers(
 }
 
 const kindRestoreAPIServerScript = `set -eu
-hold=/etc/kubernetes/manifests/kube-apiserver.yaml.hold
+hold=` + kindManifestHoldDir + `/kube-apiserver.yaml
 if [ -f "$hold" ]; then
   mv "$hold" /etc/kubernetes/manifests/kube-apiserver.yaml
 fi
@@ -804,7 +814,8 @@ fi
 func backupKindProviderManifest(t *testing.T, ctx context.Context, dockerPath string, nodeName string) {
 	t.Helper()
 
-	_, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "cp", kindProviderStaticPodPath, kindProviderStaticPodPath+".rollback")
+	runDocker(t, ctx, dockerPath, "exec", nodeName, "mkdir", "-p", kindManifestHoldDir)
+	_, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "cp", kindProviderStaticPodPath, kindManifestHoldDir+"/bao-kms-provider.yaml")
 	if err != nil {
 		t.Fatalf("backup provider static pod manifest: %v", err)
 	}
@@ -813,7 +824,7 @@ func backupKindProviderManifest(t *testing.T, ctx context.Context, dockerPath st
 func restoreKindProviderManifest(t *testing.T, ctx context.Context, dockerPath string, nodeName string) {
 	t.Helper()
 
-	_, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "cp", kindProviderStaticPodPath+".rollback", kindProviderStaticPodPath)
+	_, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "cp", kindManifestHoldDir+"/bao-kms-provider.yaml", kindProviderStaticPodPath)
 	if err != nil {
 		t.Fatalf("restore provider static pod manifest: %v", err)
 	}
