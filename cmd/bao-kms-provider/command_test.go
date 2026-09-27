@@ -24,7 +24,7 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	cmd.SetErr(&out)
 	cmd.SetArgs(args)
 
-	err := cmd.Execute()
+	err := executeRootCommand(cmd)
 	return out.String(), err
 }
 

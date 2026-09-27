@@ -4,6 +4,11 @@
 
 ### Bug Fixes
 
+- **cli:** Return the documented usage and configuration exit codes for command
+  parsing and configuration inspection. Reject unknown help topics and
+  completion subcommands, and remove the unsupported `trace` log level from
+  the CLI reference.
+
 - **config:** Reject contradictory probe and staleness intervals, renewal and
   refresh intervals, and duplicate fixed health and metrics endpoints before
   startup. Preserve disabled listeners and dynamically assigned ports.

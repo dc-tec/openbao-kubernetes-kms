@@ -11,7 +11,7 @@ import (
 
 func main() {
 	cmd := newRootCommand(version.BuildInfo())
-	if err := cmd.Execute(); err != nil {
+	if err := executeRootCommand(cmd); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(cli.ProcessExitCode(err))
 	}

@@ -162,6 +162,10 @@ environment overrides, and flags, including the identity fingerprint when all
 identity-bearing values are set. `config schema` prints the JSON Schema, which
 rejects unknown fields and requires `configVersion: v1alpha1`.
 
+`config` can inspect incomplete defaults. It does not validate whether the
+configuration can start the provider. Use `doctor` for validation and local
+and remote checks. An unreadable or malformed configuration file exits with `3`.
+
 ## init
 
 Generates every file that shares the provider's identity values from one
@@ -222,7 +226,7 @@ completion script.
 | Flag | Effect |
 |---|---|
 | `--config <path>` | Configuration file. |
-| `--log-level trace\|debug\|info\|warn\|error` | Overrides `logging.level`. |
+| `--log-level debug\|info\|warn\|error` | Overrides `logging.level`. |
 | `--metrics-address <host:port>` | Overrides `server.metricsAddress`. |
 | `--health-address <host:port>` | Overrides `server.healthAddress`. |
 
@@ -236,3 +240,8 @@ completion script.
 | 3 | Configuration load or validation error |
 | 4 | A diagnostic check failed |
 | 5 | Provider runtime failure |
+
+Unknown commands or flags, unexpected positional arguments, missing flag
+values, and invalid typed flag values exit with `2`. Configuration settings
+that fail validation exit with `3`, including settings supplied through flags.
+Runtime failures after configuration validation exit with `5`.
