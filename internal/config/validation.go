@@ -260,6 +260,7 @@ func validateValues(cfg Config) []ValidationProblem {
 		appendProblem(&problems, "logging.format", "must be json or text")
 	}
 	validateDebugCorrelation(&problems, cfg.Logging)
+	validateRelationships(&problems, cfg)
 
 	return problems
 }

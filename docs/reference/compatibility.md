@@ -85,6 +85,19 @@ owned by the provider's OS user, and retirement must run as that user. See
 
 ## Breaking changes
 
+### Unreleased configuration cross-checks
+
+Configuration validation now rejects a probe interval greater than or equal to
+the status staleness window, a renewal increment less than or equal to the
+token refresh lead time, and duplicate fixed health and metrics endpoints.
+These checks apply to the effective configuration after file, environment,
+and flag overrides. Defaults satisfy all three checks.
+
+Empty listener addresses still disable their listeners, and port `0` still
+requests an available port. Endpoint comparisons do not resolve DNS names or
+detect every wildcard overlap; other bind conflicts remain runtime errors.
+No key identity, encryption format, or persisted state changes are required.
+
 ### Unreleased Transit key-name validation
 
 Configuration and its JSON Schema now enforce the name pattern used by the

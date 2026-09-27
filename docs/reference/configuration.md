@@ -35,8 +35,8 @@ Fields marked **required** have no usable default.
 | `server.socketPath` | `/run/openbao-kms/kms.sock` | Required. Unix socket for the API server; must sit in a safe runtime directory. |
 | `server.socketMode` | `"0660"` | Required. Socket mode; broader modes are rejected. |
 | `server.socketGroup` | none | Required. Socket group, as a name (systemd) or decimal GID (static pod). |
-| `server.metricsAddress` | `127.0.0.1:8081` | Prometheus listener. |
-| `server.healthAddress` | `127.0.0.1:8082` | `/live` and `/ready` listener. |
+| `server.metricsAddress` | `127.0.0.1:8081` | Prometheus listener. A fixed endpoint must differ from `server.healthAddress`. An empty value disables the listener; port `0` requests an available port. |
+| `server.healthAddress` | `127.0.0.1:8082` | `/live` and `/ready` listener. An empty value disables the listener; port `0` requests an available port. |
 | `server.maxConcurrentStatus`, `maxConcurrentEncrypt`, `maxConcurrentDecrypt` | `16`, `32`, `64` | Active handlers per KMS method, `1` to `1024`. Excess calls fail immediately with `ResourceExhausted`; there is no queue. |
 
 ### openbao
@@ -56,7 +56,7 @@ Fields marked **required** have no usable default.
 |---|---|---|
 | `auth.method` | `jwt` | `jwt`, or `cert` in certificate-auth builds; see [Compatibility](/docs/reference/compatibility/#auth-methods). |
 | `auth.loginBeforeTokenExpiry` | `5m` | Inside this window before expiry, a request starts one shared renewal or login while others keep using the valid token. |
-| `auth.tokenRenewalIncrement` | `1h` | TTL requested on renewal. Keep it above `loginBeforeTokenExpiry` and within the role's maximum TTL. |
+| `auth.tokenRenewalIncrement` | `1h` | TTL requested on renewal. Must exceed `auth.loginBeforeTokenExpiry`. Keep it within the role's maximum TTL; OpenBao can grant a shorter TTL. |
 | `auth.loginTimeout` | `0s` | Deadline for one shared renewal or login, including recovery after a rejected token, independent of the request deadline. Also bounds each PKCS#11 session pool wait. `0s` means `max(openbao.timeout, 5s)`; it does not enable an unlimited pool wait. See the native-call limit below. |
 | `auth.jwt.mountPath`, `auth.jwt.role` | none | Required for `jwt`. Mount path including `auth/`, and role name. |
 | `auth.jwt.source` | none | Required for `jwt`: `file` or `oauth2`. |
@@ -120,7 +120,7 @@ auth:
 | `transit.keyIdScope.providerName`, `clusterId`, `transitMountId`, `keyLineageId` | none | Required, identity-bearing. |
 | `state.path` | `/var/lib/openbao-kms/state/key-registry.json` | Absolute path of the local registry state; the checkpoint and lock sit next to it. |
 | `bootstrap.graceTimeout`, `bootstrap.retryInterval` | `60s`, `5s` | How long and how often startup retries its first probes before exiting. |
-| `status.probeInterval` | `30s` | Metadata probe interval, also the per-process limit for unknown-`key_id` discovery. |
+| `status.probeInterval` | `30s` | Metadata probe interval, also the per-process limit for unknown-`key_id` discovery. Must be shorter than `status.statusMaxStaleness`; allow margin for request latency and scheduling. |
 | `status.deepProbeInterval` | `5m` | Encrypt and decrypt probe interval. |
 | `status.statusMaxStaleness` | `2m` | Oldest cached Status that still counts as healthy. |
 | `rotation.mode` | `observed` | Promotion follows observed Transit versions. |
