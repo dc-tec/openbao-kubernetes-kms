@@ -121,8 +121,8 @@ func TestNewClientUsesCAAndServerNameValidation(t *testing.T) {
 	}
 	_, err = mismatchClient.ReadDisableUpsert(context.Background(), testMountPath)
 	var openBaoErr *Error
-	if !errors.As(err, &openBaoErr) || openBaoErr.Class != ErrorClassUnavailable {
-		t.Fatalf("expected unavailable on TLS name mismatch, got %v", err)
+	if !errors.As(err, &openBaoErr) || openBaoErr.Class != ErrorClassTLSFailed {
+		t.Fatalf("expected TLS failure on TLS name mismatch, got %v", err)
 	}
 }
 

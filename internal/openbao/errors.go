@@ -2,8 +2,11 @@
 package openbao
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -32,6 +35,9 @@ const (
 	ErrorClassDecryptFailed    ErrorClass = "decrypt_failed"
 	ErrorClassRateLimited      ErrorClass = "rate_limited"
 	ErrorClassUnavailable      ErrorClass = "unavailable"
+	ErrorClassTLSFailed        ErrorClass = "tls_failed"
+	ErrorClassDNSFailed        ErrorClass = "dns_failed"
+	ErrorClassConnectionFailed ErrorClass = "connection_failed"
 	ErrorClassSealed           ErrorClass = "sealed"
 	ErrorClassUnknown          ErrorClass = "unknown"
 )
@@ -41,6 +47,31 @@ type Error struct {
 	Class      ErrorClass
 	StatusCode int
 	Operation  string
+}
+
+// classifyTransportError inspects typed causes before discarding transport details.
+// Certificate names, destination addresses, and request URLs must not escape.
+func classifyTransportError(err error) ErrorClass {
+	var verificationErr *tls.CertificateVerificationError
+	var authorityErr x509.UnknownAuthorityError
+	var hostnameErr x509.HostnameError
+	var certificateErr x509.CertificateInvalidError
+	var recordErr tls.RecordHeaderError
+	var alertErr tls.AlertError
+	if errors.As(err, &verificationErr) || errors.As(err, &authorityErr) ||
+		errors.As(err, &hostnameErr) || errors.As(err, &certificateErr) ||
+		errors.As(err, &recordErr) || errors.As(err, &alertErr) {
+		return ErrorClassTLSFailed
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return ErrorClassDNSFailed
+	}
+	var connectionErr *net.OpError
+	if errors.As(err, &connectionErr) {
+		return ErrorClassConnectionFailed
+	}
+	return ErrorClassUnavailable
 }
 
 type responseSizeError struct {

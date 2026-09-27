@@ -413,10 +413,13 @@ func doOpenBao(
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return err
+		if errors.Is(err, context.Canceled) {
+			return context.Canceled
 		}
-		return &Error{Class: ErrorClassUnavailable, Operation: operation}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return context.DeadlineExceeded
+		}
+		return &Error{Class: classifyTransportError(err), Operation: operation}
 	}
 	defer func() {
 		_ = resp.Body.Close()

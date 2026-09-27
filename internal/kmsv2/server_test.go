@@ -569,6 +569,41 @@ func TestTransitOpenBaoErrorsPreserveKMSBoundaryClasses(t *testing.T) {
 			errorType: "openbao_sealed",
 		},
 		{
+			name:      "TLS",
+			method:    "encrypt",
+			class:     openbao.ErrorClassTLSFailed,
+			code:      codes.Unavailable,
+			errorType: "openbao_tls_failed",
+		},
+		{
+			name:      "DNS",
+			method:    "decrypt",
+			class:     openbao.ErrorClassDNSFailed,
+			code:      codes.Unavailable,
+			errorType: "openbao_dns_failed",
+		},
+		{
+			name:      "connection",
+			method:    "encrypt",
+			class:     openbao.ErrorClassConnectionFailed,
+			code:      codes.Unavailable,
+			errorType: "openbao_connection_failed",
+		},
+		{
+			name:      "encrypt bad request",
+			method:    "encrypt",
+			class:     openbao.ErrorClassInvalidRequest,
+			code:      codes.InvalidArgument,
+			errorType: "unknown",
+		},
+		{
+			name:      "decrypt bad request",
+			method:    "decrypt",
+			class:     openbao.ErrorClassInvalidRequest,
+			code:      codes.InvalidArgument,
+			errorType: "unknown",
+		},
+		{
 			name:      "decrypt failed",
 			method:    "decrypt",
 			class:     openbao.ErrorClassDecryptFailed,
@@ -613,6 +648,12 @@ func TestTransitOpenBaoErrorsPreserveKMSBoundaryClasses(t *testing.T) {
 				})
 			}
 			assertCode(t, err, tt.code)
+			if tt.code == codes.InvalidArgument {
+				want := "transit " + tt.method + " failed"
+				if got := grpcstatus.Convert(err).Message(); got != want {
+					t.Fatalf("message = %q, want %q", got, want)
+				}
+			}
 			if strings.Contains(err.Error(), "sensitive-key") {
 				t.Fatalf("KMS error leaked OpenBao operation path: %v", err)
 			}

@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **observability:** Distinguish TLS, DNS, and connection failures in redacted
+  OpenBao and KMS error classes, including authentication failures. Keep gRPC
+  status codes unchanged and identify Encrypt failures with the correct operation.
+
 - **auth:** Bound PKCS#11 session pool waits by the effective
   `auth.loginTimeout`, including signer probes and TLS signing. Native calls
   inside the HSM module still require vendor client timeouts.

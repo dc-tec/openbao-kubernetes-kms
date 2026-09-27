@@ -36,6 +36,12 @@ func TestAuthenticationErrorsRetainCauseClassification(t *testing.T) {
 			codes.Unavailable,
 			errorClassOpenBaoUnavailable,
 		},
+		{"TLS", &openbao.Error{Class: openbao.ErrorClassTLSFailed}, codes.Unavailable, errorClassOpenBaoTLSFailed},
+		{"DNS", &openbao.Error{Class: openbao.ErrorClassDNSFailed}, codes.Unavailable, errorClassOpenBaoDNSFailed},
+		{
+			"connection", &openbao.Error{Class: openbao.ErrorClassConnectionFailed},
+			codes.Unavailable, errorClassOpenBaoConnectionFailed,
+		},
 		{"sealed", &openbao.Error{Class: openbao.ErrorClassSealed}, codes.Unavailable, errorClassOpenBaoSealed},
 		{
 			"rate limited",
@@ -48,7 +54,7 @@ func TestAuthenticationErrorsRetainCauseClassification(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := errors.Join(openbao.ErrAuthentication, tc.cause)
-			if code := grpcstatus.Code(transitRPCError(err)); code != tc.code {
+			if code := grpcstatus.Code(transitRPCError(err, methodEncrypt)); code != tc.code {
 				t.Fatalf("code %v, want %v", code, tc.code)
 			}
 			if class := transitErrorClass(err); class != tc.class {
