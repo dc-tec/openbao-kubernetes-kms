@@ -74,6 +74,7 @@ policy:
 validation:
   openbao:
     primary: "2.7.0"
+    upgradeFrom: "2.6.3"
     image: ghcr.io/openbao/openbao:2.7.0@sha256:71156a1c6623a5fa3f5e61b0c6a8ead0faf0df29a778339188443551995d1315
     imageDigest: sha256:71156a1c6623a5fa3f5e61b0c6a8ead0faf0df29a778339188443551995d1315
     digestStatus: pinned
@@ -129,6 +130,8 @@ validation:
         kindNodeImage: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
         kindNodeImageDigest: sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
         releaseGate: true
+  provider:
+    upgradeBaselineImage: ghcr.io/dc-tec/bao-kms-provider:0.1.0-preview.2@sha256:a0e4c9a1d406c9cb7e51e5804beb6c2237f2350e54ac452971e0e53697934e04
   releaseGateRows:
     - name: openbao-2.7.0
       component: openbao

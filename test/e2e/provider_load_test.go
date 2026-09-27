@@ -5,10 +5,13 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dc-tec/openbao-kubernetes-kms/test/e2e/framework"
 )
 
 const (
@@ -32,20 +35,23 @@ type providerResourceSnapshot struct {
 }
 
 func TestProviderLoadSoakE2E(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	duration := providerSoakDuration(t)
+	ctx, cancel := context.WithTimeout(context.Background(), duration+6*time.Minute)
 	defer cancel()
 
 	stack := startProviderFailureStack(t, ctx, "obk-e2e-load-soak", providerFailureStackOptions{
+		Environment: framework.OpenBaoEnvironmentConfig{JWTTTL: duration + time.Hour, JWTTokenTTL: "30s", JWTMaxTTL: "2m"},
 		Config: providerContainerConfigOptions{
-			ProbeInterval:      "1s",
-			DeepProbeInterval:  "5s",
-			StatusMaxStaleness: "15s",
+			ProbeInterval:          "1s",
+			LoginBeforeTokenExpiry: "5s",
+			DeepProbeInterval:      "5s",
+			StatusMaxStaleness:     "15s",
 		},
 	})
 	stack.runClient(ctx, "warmup-client", kmsClientModeWriteSample, sampleReadWrite)
 	before := readProviderResourceSnapshot(t, ctx, stack.dockerPath, stack.providerName)
 
-	stack.runClientWithEnv(ctx, "load-soak-client", kmsClientModeLoadSoak, sampleNotMounted, []string{
+	runProviderSoakWindows(t, ctx, stack, duration, kmsClientModeLoadSoak, []string{
 		kmsLoadSoakDurationEnv + "=20s",
 		kmsLoadSoakWorkersEnv + "=4",
 		kmsLoadSoakMaxP95Env + "=2s",
@@ -57,19 +63,22 @@ func TestProviderLoadSoakE2E(t *testing.T) {
 }
 
 func TestProviderDecryptSoakE2E(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
+	duration := providerSoakDuration(t)
+	ctx, cancel := context.WithTimeout(context.Background(), duration+7*time.Minute)
 	defer cancel()
 
 	stack := startProviderFailureStack(t, ctx, "obk-e2e-decrypt-soak", providerFailureStackOptions{
+		Environment: framework.OpenBaoEnvironmentConfig{JWTTTL: duration + time.Hour, JWTTokenTTL: "30s", JWTMaxTTL: "2m"},
 		Config: providerContainerConfigOptions{
-			ProbeInterval:      "1s",
-			DeepProbeInterval:  "5s",
-			StatusMaxStaleness: "15s",
+			ProbeInterval:          "1s",
+			LoginBeforeTokenExpiry: "5s",
+			DeepProbeInterval:      "5s",
+			StatusMaxStaleness:     "15s",
 		},
 	})
 	before := readProviderResourceSnapshot(t, ctx, stack.dockerPath, stack.providerName)
 
-	stack.runClientWithEnv(ctx, "decrypt-soak-client", kmsClientModeDecryptSoak, sampleNotMounted, []string{
+	runProviderSoakWindows(t, ctx, stack, duration, kmsClientModeDecryptSoak, []string{
 		kmsDecryptSoakDurationEnv + "=30s",
 		kmsDecryptSoakWorkersEnv + "=8",
 		kmsDecryptSoakMaxP95Env + "=2s",
@@ -186,4 +195,33 @@ func assertProviderResourceGrowth(
 			loadSoakPIDGrowthLimit,
 		)
 	}
+}
+
+// Keep each client window bounded while the same provider stays up for the entire soak.
+func runProviderSoakWindows(t *testing.T, ctx context.Context, stack *providerFailureStack,
+	duration time.Duration, mode string, env []string,
+) {
+	t.Helper()
+	deadline := time.Now().Add(duration)
+	for window := 1; ; window++ {
+		stack.runClientWithEnv(ctx, "soak-client", mode, sampleNotMounted, env)
+		resources := readProviderResourceSnapshot(t, ctx, stack.dockerPath, stack.providerName)
+		t.Logf("soak window=%d memory_bytes=%d pids=%d", window, resources.memoryBytes, resources.pids)
+		if !time.Now().Before(deadline) {
+			return
+		}
+	}
+}
+
+func providerSoakDuration(t *testing.T) time.Duration {
+	t.Helper()
+	value := os.Getenv("E2E_SOAK_DURATION")
+	if value == "" {
+		return 0
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 || duration > 24*time.Hour {
+		t.Fatalf("E2E_SOAK_DURATION must be positive and at most 24h: %q", value)
+	}
+	return duration
 }

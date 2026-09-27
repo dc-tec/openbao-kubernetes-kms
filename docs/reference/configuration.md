@@ -59,7 +59,7 @@ Fields marked **required** have no usable default.
 | `auth.tokenRenewalIncrement` | `1h` | TTL requested on renewal. Must exceed `auth.loginBeforeTokenExpiry`. Keep it within the role's maximum TTL; OpenBao can grant a shorter TTL. |
 | `auth.loginTimeout` | `0s` | Deadline for one shared renewal or login, including recovery after a rejected token, independent of the request deadline. Also bounds each PKCS#11 session pool wait. `0s` means `max(openbao.timeout, 5s)`; it does not enable an unlimited pool wait. See the native-call limit below. |
 | `auth.jwt.mountPath`, `auth.jwt.role` | none | Required for `jwt`. Mount path including `auth/`, and role name. |
-| `auth.jwt.source` | none | Required for `jwt`: `file` or `oauth2`. |
+| `auth.jwt.source` | legacy file inference | `file` or `oauth2`. An omitted source selects `file` only when `jwtFile` is set and no `oauth2` section is present. Explicit empty values are invalid. |
 | `auth.jwt.jwtFile` | none | Required for source `file`; forbidden for `oauth2`. Absolute path to a regular file, not a symlink. Re-read before every login. |
 | `auth.jwt.minRemainingTtl` | `2m` | Minimum JWT lifetime left for a login. |
 | `auth.jwt.clockSkewLeeway` | `30s` | Leeway for `nbf`, `iat`, and `exp`. |

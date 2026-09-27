@@ -56,7 +56,7 @@ jobs:
   openbao-e2e:
     name: OpenBao E2E
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 120
     needs: core
     env:
       GOFLAGS: -mod=vendor

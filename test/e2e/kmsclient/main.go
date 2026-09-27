@@ -122,6 +122,7 @@ var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceC
 	modeDecryptStorm:            decryptStorm,
 	modeDecryptSoak:             decryptSoak,
 	modeLoadSoak:                loadSoak,
+	"failover-traffic":          failoverTraffic,
 }
 
 func main() {
@@ -1039,4 +1040,86 @@ func cloneAnnotations(annotations map[string][]byte) map[string][]byte {
 func failf(format string, args ...interface{}) {
 	_, _ = fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
+}
+
+// failoverTraffic keeps requests in flight across the harness's active-node stop.
+func failoverTraffic(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+	waitForHealthyStatus(ctx, client)
+	sample := readSample()
+	if err := failoverRound(ctx, client, sample); err != nil {
+		failf("initial traffic: %v", err)
+	}
+	_, _ = fmt.Fprintln(os.Stdout, "failover_traffic_started")
+	deadline := time.Now().Add(45 * time.Second)
+	lastSuccess := time.Now()
+	maxGap := time.Duration(0)
+	successful, transient := 0, 0
+	for time.Now().Before(deadline) {
+		requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := failoverRound(requestCtx, client, sample)
+		cancel()
+		gap := time.Since(lastSuccess)
+		if gap > maxGap {
+			maxGap = gap
+		}
+		if gap > 20*time.Second {
+			failf("failover traffic did not recover within 20s: %v", err)
+		}
+		if err != nil {
+			switch grpcstatus.Code(err) {
+			case codes.Unavailable, codes.DeadlineExceeded, codes.FailedPrecondition:
+				transient++
+			default:
+				failf("unexpected failover traffic error: %v", err)
+			}
+		} else {
+			successful++
+			lastSuccess = time.Now()
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if successful < 20 || time.Since(lastSuccess) > time.Second {
+		failf("traffic did not settle after failover")
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "failover_traffic successful_rounds=%d transient_errors=%d max_success_gap=%s\n",
+		successful, transient, maxGap)
+}
+
+func failoverRound(ctx context.Context, client kmsapi.KeyManagementServiceClient, sample encryptedSample) error {
+	status, err := client.Status(ctx, &kmsapi.StatusRequest{})
+	if err != nil {
+		return err
+	}
+	if status.GetHealthz() != kmsv2.HealthOK {
+		return grpcstatus.Error(codes.FailedPrecondition, "unhealthy status")
+	}
+	if status.GetKeyId() != sample.KeyID {
+		return fmt.Errorf("key_id changed across failover")
+	}
+	historical, err := client.Decrypt(ctx, &kmsapi.DecryptRequest{
+		Ciphertext: sample.Ciphertext, KeyId: sample.KeyID, Annotations: sample.Annotations,
+	})
+	if err != nil {
+		return err
+	}
+	if string(historical.GetPlaintext()) != plaintext {
+		return fmt.Errorf("historical plaintext mismatch")
+	}
+	encrypted, err := client.Encrypt(ctx, &kmsapi.EncryptRequest{Plaintext: []byte(plaintext), Uid: requestUID})
+	if err != nil {
+		return err
+	}
+	if encrypted.GetKeyId() != sample.KeyID {
+		return fmt.Errorf("encrypt key_id changed across failover")
+	}
+	decrypted, err := client.Decrypt(ctx, &kmsapi.DecryptRequest{
+		Ciphertext: encrypted.GetCiphertext(), KeyId: encrypted.GetKeyId(), Annotations: encrypted.GetAnnotations(),
+	})
+	if err != nil {
+		return err
+	}
+	if string(decrypted.GetPlaintext()) != plaintext {
+		return fmt.Errorf("new plaintext mismatch")
+	}
+	return nil
 }

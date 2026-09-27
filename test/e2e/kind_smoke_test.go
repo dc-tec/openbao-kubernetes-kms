@@ -189,9 +189,10 @@ func TestKindStaticPodUpgradeRollbackE2E(t *testing.T) {
 	if !kindCIEnabled() {
 		t.Skip(envKindCI + "=true is required")
 	}
-	providerImage := os.Getenv(envProviderImage)
-	if providerImage == "" {
-		t.Skip(envProviderImage + " is required")
+	providerImage := os.Getenv(envProviderOldImage)
+	candidateImage := os.Getenv(envProviderImage)
+	if providerImage == "" || candidateImage == "" {
+		t.Fatal("baseline and candidate provider images are required")
 	}
 	nodeImage := os.Getenv(envKindNodeImage)
 	if nodeImage == "" {
@@ -222,10 +223,12 @@ func TestKindStaticPodUpgradeRollbackE2E(t *testing.T) {
 		}
 	})
 
+	requireProviderImageVersionsDiffer(t, ctx, dockerPath, providerImage, candidateImage)
 	createKindCluster(t, ctx, kindPath, clusterName, nodeImage)
 
 	environment = startKindOpenBao(t, ctx)
 	loadProviderImageIntoKind(t, ctx, kindPath, clusterName, providerImage)
+	loadProviderImageIntoKind(t, ctx, kindPath, clusterName, candidateImage)
 	stageKindProvider(t, ctx, dockerPath, nodeName, providerImage, environment)
 	waitForKindProviderSocket(t, ctx, dockerPath, nodeName)
 	enableKindAPIServerKMS(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
@@ -238,9 +241,11 @@ func TestKindStaticPodUpgradeRollbackE2E(t *testing.T) {
 
 	originalProviderID := kindProviderContainerID(t, ctx, dockerPath, nodeName)
 	backupKindProviderManifest(t, ctx, dockerPath, nodeName)
-	applyKindProviderManifestStep(t, ctx, dockerPath, nodeName, "upgrade")
+	pinnedCandidate := pinKindProviderImage(t, ctx, dockerPath, nodeName, candidateImage)
+	applyKindProviderImage(t, ctx, dockerPath, nodeName, pinnedCandidate)
 	waitForKindProviderContainerRestart(t, ctx, dockerPath, nodeName, originalProviderID)
 	waitForKindProviderSocket(t, ctx, dockerPath, nodeName)
+	restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
 	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
 
 	// #nosec G101 -- test token label or Kubernetes object name, not a credential value.
@@ -253,6 +258,7 @@ func TestKindStaticPodUpgradeRollbackE2E(t *testing.T) {
 	restoreKindProviderManifest(t, ctx, dockerPath, nodeName)
 	waitForKindProviderContainerRestart(t, ctx, dockerPath, nodeName, upgradedProviderID)
 	waitForKindProviderSocket(t, ctx, dockerPath, nodeName)
+	restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
 	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
 	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, upgradedSecretName, upgradedSecretValue)
 	restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
@@ -900,24 +906,29 @@ func restoreKindProviderManifest(t *testing.T, ctx context.Context, dockerPath s
 	}
 }
 
-func applyKindProviderManifestStep(
+func applyKindProviderImage(
 	t *testing.T,
 	ctx context.Context,
 	dockerPath string,
 	nodeName string,
-	step string,
+	image string,
 ) {
 	t.Helper()
 
 	manifest := kindFile(ctx, dockerPath, nodeName, kindProviderStaticPodPath)
-	anchor := "      args:\n        - serve\n"
-	mutated := strings.Replace(manifest, anchor,
-		fmt.Sprintf("      env:\n        - name: OPENBAO_KMS_E2E_STATIC_POD_STEP\n          value: %q\n", step)+anchor,
-		1,
-	)
-	if mutated == manifest {
-		t.Fatal("provider static pod args anchor not found")
+	lines := strings.Split(manifest, "\n")
+	replaced := false
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "image:") {
+			lines[i] = line[:len(line)-len(strings.TrimLeft(line, " "))] + fmt.Sprintf("image: %q", image)
+			replaced = true
+			break
+		}
 	}
+	if !replaced {
+		t.Fatal("provider image not found in static pod manifest")
+	}
+	mutated := strings.Join(lines, "\n")
 	staged := filepath.Join(t.TempDir(), "bao-kms-provider.yaml")
 	if err := os.WriteFile(staged, []byte(mutated), 0o600); err != nil {
 		t.Fatalf("write upgraded provider static pod manifest: %v", err)
@@ -1013,7 +1024,6 @@ auth:
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
   jwt:
-    source: file
     mountPath: %q
     role: %q
     jwtFile: %q

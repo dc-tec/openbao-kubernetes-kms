@@ -666,6 +666,18 @@ func (f *OpenBaoEnvironment) StartStoppedContainer(ctx context.Context) error {
 	return f.waitUntilReady(ctx, 45*time.Second)
 }
 
+// UpgradeImage restarts the server with a new image while retaining Raft data and identity.
+func (f *OpenBaoEnvironment) UpgradeImage(ctx context.Context, image string) error {
+	if f.storageVolume == "" || image == "" {
+		return errors.New("OpenBao upgrade requires Raft storage and a target image")
+	}
+	if err := f.StopContainerKeepAddress(ctx); err != nil {
+		return err
+	}
+	f.image = image
+	return f.StartStoppedContainer(ctx)
+}
+
 func (f *OpenBaoEnvironment) RestoreRaftSnapshot(ctx context.Context, storageVolume string, snapshotPath string) error {
 	if f.storageVolume == "" {
 		return fmt.Errorf("OpenBao environment restore requires raft storage")

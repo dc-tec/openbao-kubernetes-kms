@@ -37,12 +37,15 @@ func TestProviderBinaryUpgradeRollbackE2E(t *testing.T) {
 	newSampleEnv := []string{kmsSamplePathEnv + "=" + newBinarySamplePath}
 
 	stack.runClientWithEnv(ctx, "old-write-client", kmsClientModeWriteSample, sampleReadWrite, oldSampleEnv)
+	peer := startRotationPeer(t, ctx, stack)
 
 	stack.restartProvider(ctx, newImage)
 	stack.runClientWithEnv(ctx, "new-read-old-client", kmsClientModeReadSample, sampleReadOnly, oldSampleEnv)
 	stack.runClientWithEnv(ctx, "new-write-client", kmsClientModeWriteSample, sampleReadWrite, newSampleEnv)
 	stack.runClientWithEnv(ctx, "new-read-new-client", kmsClientModeReadSample, sampleReadOnly, newSampleEnv)
 
+	peer.runClientWithEnv(ctx, "mixed-read-new", kmsClientModeReadSample, sampleReadOnly, newSampleEnv)
+	peer.runClientWithEnv(ctx, "mixed-read-old", kmsClientModeReadSample, sampleReadOnly, oldSampleEnv)
 	stack.restartProvider(ctx, oldImage)
 	stack.runClientWithEnv(ctx, "rollback-read-old-client", kmsClientModeReadSample, sampleReadOnly, oldSampleEnv)
 	stack.runClientWithEnv(ctx, "rollback-read-new-client", kmsClientModeReadSample, sampleReadOnly, newSampleEnv)
@@ -59,6 +62,7 @@ func requireProviderImageVersionsDiffer(
 
 	oldVersion := providerImageVersion(t, ctx, dockerPath, oldImage)
 	newVersion := providerImageVersion(t, ctx, dockerPath, newImage)
+	t.Logf("provider upgrade: %s -> %s", oldVersion, newVersion)
 	if oldVersion == newVersion {
 		t.Fatalf("provider image version outputs are identical; expected distinct binaries")
 	}

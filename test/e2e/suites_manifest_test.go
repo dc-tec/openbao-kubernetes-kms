@@ -82,6 +82,11 @@ type versionsPolicy struct {
 }
 
 type openBaoValidationPolicy struct {
+	UpgradeFrom   string `yaml:"upgradeFrom"`
+	PreviewMatrix []struct {
+		Version string `yaml:"version"`
+		Image   string `yaml:"image"`
+	} `yaml:"previewMatrix"`
 	Primary      string `yaml:"primary"`
 	Image        string `yaml:"image"`
 	ImageDigest  string `yaml:"imageDigest"`
@@ -251,14 +256,14 @@ func TestReleaseWorkflowRunsE2EAgainstBuiltImage(t *testing.T) {
 		"E2E_PROVIDER_IMAGE: ${{ needs.prepare.outputs.image }}:release-e2e-${{ needs.prepare.outputs.commit }}",
 		`docker pull "${E2E_PROVIDER_RELEASE_IMAGE}"`,
 		`docker tag "${E2E_PROVIDER_RELEASE_IMAGE}" "${E2E_PROVIDER_IMAGE}"`,
-		`make image IMAGE="${E2E_PROVIDER_OLD_IMAGE}"`,
-		`make image IMAGE="${E2E_PROVIDER_NEW_IMAGE}"`,
 		"make image-certauth-pkcs11-e2e",
 		"make test-e2e-release-preview-openbao",
 	} {
 		requireContains(t, openbao, want, "release OpenBao E2E job")
 	}
 	requireNotContains(t, openbao, "spiffe", "release OpenBao E2E job")
+	requireNotContains(t, openbao, "-e2e-old", "release OpenBao E2E job")
+	requireNotContains(t, openbao, "-e2e-new", "release OpenBao E2E job")
 
 	kind := workflowJobSection(t, workflow, "e2e-kind")
 	for _, want := range []string{

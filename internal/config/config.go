@@ -318,8 +318,28 @@ func Load(runtime *Runtime, opts LoadOptions) (Config, error) {
 	); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
+	if legacyFileJWT(runtime, cfg) {
+		cfg.Auth.JWT.Source = JWTSourceFile
+	}
 
 	return cfg, nil
+}
+
+// Before OAuth support, jwtFile selected the only JWT source. Explicit source
+// values (including null) and OAuth settings must never trigger file inference.
+func legacyFileJWT(runtime *Runtime, cfg Config) bool {
+	if cfg.Auth.Method != "jwt" || cfg.Auth.JWT.JWTFile == "" {
+		return false
+	}
+	if runtime.v.InConfig("auth.jwt.oauth2") {
+		return false
+	}
+	for _, key := range runtime.v.AllKeys() {
+		if key == "auth.jwt.source" || key == "auth.jwt.oauth2" || strings.HasPrefix(key, "auth.jwt.oauth2.") {
+			return false
+		}
+	}
+	return true
 }
 
 // validateDurationInputTypes rejects numeric durations before mapstructure can
