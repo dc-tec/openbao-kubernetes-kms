@@ -125,3 +125,29 @@ the run; no additional provenance service is needed.
 Fresh Harvester lab installations use Raft storage. Existing file-backed lab
 data requires a separate migration before using OpenBao 2.7; changing the
 storage stanza does not migrate data.
+
+## Upgrade and soak qualification
+
+The provider upgrade lane pulls the published image pinned by
+`validation.provider.upgradeBaselineImage`. It reuses the same configuration,
+registry, and checkpoint through upgrade and rollback, and checks reads through
+a peer running the old release. The Kind lane changes the actual static-pod
+image and restarts the API server after each transition before reading Secrets.
+
+Run `make test-e2e-provider-openbao-upgrade` to upgrade the pinned OpenBao
+compatibility version to the primary version with its Raft data intact. This
+checks historical and new ciphertext again after a provider restart. It does
+not qualify an OpenBao binary downgrade or a rolling server-cluster upgrade.
+
+For a longer load run, set `E2E_SOAK_DURATION=30m` and run
+`make test-e2e-provider-load-soak-openbao-ci`. The same provider stays running
+while bounded client windows report latency, errors, memory, and process counts.
+Tokens have a 30-second TTL and a two-minute maximum lifetime to exercise renewal
+and reauthentication. Set `E2E_SOAK_TIMEOUT` above the requested duration plus
+six minutes; its default is 40 minutes. For example, an overnight run uses
+`E2E_SOAK_DURATION=8h E2E_SOAK_TIMEOUT=8h10m`.
+
+The HA lane sends Status, encrypt, and historical/new decrypt requests during
+active-node failure. It permits transient availability errors for at most 20
+seconds between successful rounds and requires healthy traffic at the end.
+The bound is a test acceptance criterion, not an availability guarantee.

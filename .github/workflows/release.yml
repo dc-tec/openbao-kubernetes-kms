@@ -205,7 +205,7 @@ jobs:
   e2e-openbao:
     name: Release Gate OpenBao E2E
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 120
     needs: [prepare, build]
     permissions:
       contents: read
@@ -215,8 +215,6 @@ jobs:
       E2E_PROVIDER_BUILD: "false"
       E2E_PROVIDER_RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
       E2E_PROVIDER_IMAGE: ${{ needs.prepare.outputs.image }}:release-e2e-${{ needs.prepare.outputs.commit }}
-      E2E_PROVIDER_OLD_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-upgrade-old-${{ needs.prepare.outputs.commit }}
-      E2E_PROVIDER_NEW_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-upgrade-new-${{ needs.prepare.outputs.commit }}
       E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE: ${{ needs.prepare.outputs.image }}:e2e-certauth-pkcs11-${{ needs.prepare.outputs.commit }}
     steps:
       - name: Checkout
@@ -241,8 +239,6 @@ jobs:
 
       - name: Build OpenBao validation images
         run: |
-          make image IMAGE="${E2E_PROVIDER_OLD_IMAGE}" VERSION="${{ needs.prepare.outputs.version }}-e2e-old" COMMIT="${{ needs.prepare.outputs.commit }}-old"
-          make image IMAGE="${E2E_PROVIDER_NEW_IMAGE}" VERSION="${{ needs.prepare.outputs.version }}-e2e-new" COMMIT="${{ needs.prepare.outputs.commit }}-new"
           make image-certauth-pkcs11-e2e
 
       - name: Run OpenBao release E2E lanes

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,20 +27,8 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 9*time.Minute)
 	defer cancel()
 
-	dockerPath, err := exec.LookPath(framework.EnvDefault(framework.EnvDockerBinary, "docker"))
-	if err != nil {
-		t.Skipf("%s: %v", framework.ErrDockerUnavailable, err)
-	}
-	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
-	if output, err := exec.CommandContext(
-		ctx,
-		dockerPath,
-		"version",
-		"--format",
-		"{{.Server.Version}}",
-	).CombinedOutput(); err != nil {
-		t.Skipf("%s: %s", framework.ErrDockerUnavailable, strings.TrimSpace(string(output)))
-	}
+	dockerPath := requireDocker(t, ctx)
+	var err error
 
 	prefix := fmt.Sprintf("obk-e2e-ha-%d", time.Now().UnixNano())
 	networkName := prefix + "-net"
@@ -135,9 +122,22 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 		sampleDir,
 		kmsClientModeWriteSample,
 	)
+	trafficName := clientName + "-traffic"
+	t.Cleanup(func() { removeContainer(t, context.Background(), dockerPath, trafficName) })
+	runDocker(t, ctx, dockerPath, "run", "-d", "--name", trafficName, "--network", networkName,
+		"--env", "KMS_SOCKET_PATH="+containerSocketPath, "--env", kmsClientModeEnv+"=failover-traffic",
+		"--volume", volumes.run+":/run/openbao-kms", "--volume", clientPath+":/kms-client:ro",
+		"--volume", sampleDir+":/kms-sample", "--entrypoint", "/kms-client", providerImage)
+	waitForHATraffic(t, ctx, dockerPath, trafficName)
 	if err := environment.StopActiveNode(ctx); err != nil {
 		t.Fatalf("stop OpenBao active node and wait for failover: %v", err)
 	}
+	output, err := runDockerOutput(ctx, dockerPath, "wait", trafficName)
+	logs := dockerLogs(ctx, dockerPath, trafficName)
+	if err != nil || strings.TrimSpace(output) != "0" {
+		t.Fatalf("failover traffic failed: %v: %s\n%s", err, output, logs)
+	}
+	t.Log(logs)
 	runHAKMSClient(
 		t,
 		ctx,
@@ -194,4 +194,16 @@ func runHAKMSClient(
 	if err != nil {
 		t.Fatalf("run HA KMS client mode %s: %v: %s", mode, err, strings.TrimSpace(output))
 	}
+}
+
+func waitForHATraffic(t *testing.T, ctx context.Context, dockerPath, name string) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(dockerLogs(ctx, dockerPath, name), "failover_traffic_started") {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("HA traffic client did not start: %s", dockerLogs(ctx, dockerPath, name))
 }

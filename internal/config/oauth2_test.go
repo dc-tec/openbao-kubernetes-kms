@@ -53,3 +53,29 @@ func TestOAuth2ConfigRequiresUnambiguousSource(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadLegacyFileJWTSource(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, extra string
+		wantFile            bool
+	}{
+		{"legacy file", "", "", true},
+		{"explicit empty", "    source: \"\"\n", "", false},
+		{"null source", "    source: null\n", "", false},
+		{"ambiguous oauth", "", "    oauth2:\n      clientId: test\n", false},
+		{"empty oauth section", "", "    oauth2: {}\n", false},
+		{"explicit oauth", "    source: oauth2\n", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := "configVersion: v1alpha1\nauth:\n  method: jwt\n  jwt:\n    jwtFile: /etc/provider/identity.jwt\n"
+			raw += tc.source + tc.extra
+			cfg, err := Load(NewRuntime(), LoadOptions{Content: []byte(raw)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (cfg.Auth.JWT.Source == JWTSourceFile) != tc.wantFile {
+				t.Fatalf("source=%q, want legacy file=%v", cfg.Auth.JWT.Source, tc.wantFile)
+			}
+		})
+	}
+}

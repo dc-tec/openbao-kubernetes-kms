@@ -27,6 +27,13 @@ authentication or a fresh probe. Retry and circuit-breaker cooldowns use
 process-local elapsed time. OAuth access tokens must satisfy both their relative
 endpoint lifetime and the absolute JWT expiry claim.
 
+## File JWT configuration upgrades
+
+Existing file JWT configurations can omit `auth.jwt.source` when `jwtFile` is
+set and no `oauth2` section is present. The provider retains file authentication
+for these configurations. Empty source values and mixed source settings fail
+validation. OAuth authentication never falls back to a file.
+
 ## Candidate qualification
 
 The next preview targets OpenBao `2.7.0` and `2.6.3`, and Kubernetes `1.34.11`,
