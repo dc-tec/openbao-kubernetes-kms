@@ -20,7 +20,7 @@
 <span aria-current=page>Troubleshooting</span></nav><aside class="version-notice version-notice-01x" aria-label="Documentation version notice"><strong>0.1.x · Preview</strong>
 <span>Preview release line. Use it for labs, staging, and evaluation; do not protect production control planes with it.</span></aside><article class=doc-article><header class=article-header><h1>Troubleshooting</h1><p class=article-lede>Find the failing layer first, then apply the recovery for that symptom: socket, OpenBao, auth, Transit key, key_id and AAD validation, fallback, or static pod.</p><p class=page-meta>Updated 27 September 2026 · 7 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#api-server-cannot-connect-to-kms>API server cannot connect to KMS</a></li><li><a href=#socket-permission-denied>Socket permission denied</a></li><li><a href=#openbao-unavailable-or-sealed>OpenBao unavailable or sealed</a></li><li><a href=#transit-profile-fails-closed>Transit profile fails closed</a></li><li><a href=#auth-login-fails>Auth login fails</a></li><li><a href=#transit-key-missing>Transit key missing</a></li><li><a href=#unknown-key-id>Unknown key ID</a></li><li><a href=#transit-allows-implicit-key-creation>Transit allows implicit key creation</a></li><li><a href=#transit-version-creation-time-changed>Transit version creation time changed</a></li><li><a href=#intermediate-transit-version-metadata-missing>Intermediate Transit version metadata missing</a></li><li><a href=#aad-mismatch>AAD mismatch</a></li><li><a href=#status-key-id-differs-from-encrypt-key-id>Status key ID differs from encrypt key ID</a></li><li><a href=#min_decryption_version-raised-too-early>min_decryption_version raised too early</a></li><li><a href=#static-pod-image-missing>Static pod image missing</a></li><li><a href=#identity-fallback-issues>Identity fallback issues</a></li></ul></nav></details><div class=article-content><p>Find the failing layer before you change configuration or recovery state.
 Start with the checks that change nothing:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>curl -fsS http://127.0.0.1:8082/live
-curl -fsS http://127.0.0.1:8082/ready
+curl -sS -i http://127.0.0.1:8082/ready
 curl -fsS http://127.0.0.1:8081/metrics | grep -E &#39;openbao_kms_status_key_id_hash|openbao_kms_status_cache_age_seconds&#39;
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
@@ -29,7 +29,15 @@ bao-kms-provider doctor \
 in <a href=/openbao-kubernetes-kms/docs/operate/disaster-recovery/#during-an-incident>Disaster recovery: During an incident</a>
 apply to every fix below. For the full catalog of failure modes, see
 <a href=/openbao-kubernetes-kms/docs/architecture/failure-modes/>Architecture: Failure modes</a>
-.</p><h2 id=api-server-cannot-connect-to-kms>API server cannot connect to KMS</h2><p><strong>Signs:</strong> the API server log reports a KMS connection failure, or
+.</p><p>When <code>/ready</code> returns HTTP 503, read <code>reasons</code> and the optional
+<code>metadata_error_class</code> and <code>deep_error_class</code> fields. These report cached
+conditions; the endpoint does not run a new probe. Use the matching
+<code>status.probe</code> warning for the probe kind and failure class. See the
+<a href=/openbao-kubernetes-kms/docs/reference/observability/#endpoints>reason codes</a>
+.</p><p>At the default log level, <code>serve.start</code>, <code>serve.ready</code>, and <code>serve.shutdown</code>
+show startup and exit. A <code>serve.shutdown</code> with <code>startup_failed</code> means setup
+failed before readiness. A <code>key.promoted</code> event identifies the previous and new
+key hashes and Transit versions; wait for the new key&rsquo;s deep probe to pass.</p><h2 id=api-server-cannot-connect-to-kms>API server cannot connect to KMS</h2><p><strong>Signs:</strong> the API server log reports a KMS connection failure, or
 <code>/run/openbao-kms/kms.sock</code> is missing.</p><p><strong>Check</strong> the service (<code>systemctl status bao-kms-provider.service</code>) or the
 static pod (<code>crictl ps --name bao-kms-provider</code>, <code>journalctl -u kubelet</code>), then
 <code>ls -l /run/openbao-kms</code>.</p><p><strong>Fix:</strong></p><ol><li>Start or restart the provider.</li><li>Correct the socket directory owner and mode; see
@@ -40,7 +48,10 @@ permission denied.</p><p><strong>Check:</strong> <code>ls -ld /run/openbao-kms</
 must be group <code>openbao-kms-socket</code> with mode <code>2750</code>, and the socket mode
 <code>0660</code>. For static pods, the socket GID must equal both <code>supplementalGroups</code>
 and <code>server.socketGroup</code>. Restart the provider, then the API server if needed.</p><h2 id=openbao-unavailable-or-sealed>OpenBao unavailable or sealed</h2><p><strong>Signs:</strong> <code>/ready</code> fails, KMS Status is unhealthy, and OpenBao request errors
-or timeouts appear in metrics.</p><p><strong>Check:</strong> <code>bao status</code>, <code>/ready</code>, and <code>doctor</code>.</p><p><strong>Fix:</strong> restore OpenBao reachability, unseal or repair it, and check TLS and
+or timeouts appear in metrics.</p><p><strong>Check:</strong> <code>bao status</code>, <code>/ready</code>, and <code>doctor</code>. Use the KMS log <code>error_class</code>
+to locate transport failures: <code>openbao_tls_failed</code> points to certificate or TLS
+validation, <code>openbao_dns_failed</code> to name resolution, and
+<code>openbao_connection_failed</code> to the listener or network connection.</p><p><strong>Fix:</strong> restore OpenBao reachability, unseal or repair it, and check TLS and
 DNS. Run <code>verify-key</code>. The provider recovers on its own once OpenBao is
 healthy; restart it only if it does not.</p><h2 id=transit-profile-fails-closed>Transit profile fails closed</h2><p><strong>Signs:</strong> <code>/ready</code> fails and <code>doctor</code> or <code>verify-key</code> reports a
 <code>transit.profile</code> failure. Writes fail while cached reads might still work.</p><p><strong>Fix:</strong> read each finding&rsquo;s impact prefix. For <code>cryptographic_safety</code>, restore
