@@ -26,7 +26,7 @@ evaluation. Do not protect production control planes with it.
 | 5 | [Download the release](/docs/get-started/download/) | You have a verified artifact for your deployment model. |
 | 6 | [Run with systemd](/docs/get-started/systemd/) or [Run as a static pod](/docs/get-started/static-pod/) | The provider runs on every control-plane node and passes `doctor`. |
 | 7 | [Enable encryption](/docs/get-started/enable-encryption/) | The API server encrypts through the provider, and existing Secrets are rewritten. |
-| 8 | [Verify encryption](/docs/get-started/verify/) | etcd holds only ciphertext, and the identity fallback is removed. |
+| 8 | [Verify encryption](/docs/get-started/verify/) | The probe is stored as ciphertext and reads through every API server. |
 
 ## What you need
 

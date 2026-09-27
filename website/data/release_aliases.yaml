@@ -1,0 +1,112 @@
+[
+  {
+    "path": "docs/configure/",
+    "target": "docs/configure/",
+    "version": "next"
+  },
+  {
+    "path": "docs/configure/monitor/",
+    "target": "docs/deployment/observability/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/configure/oauth2/",
+    "target": "docs/configure/oauth2/",
+    "version": "next"
+  },
+  {
+    "path": "docs/configure/openbao-auth/",
+    "target": "docs/reference/transit-policy-examples/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/",
+    "target": "docs/getting-started/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/deployment-model/",
+    "target": "docs/deployment/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/download/",
+    "target": "docs/getting-started/install/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/enable-encryption/",
+    "target": "docs/getting-started/kubernetes-encryption-config/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/openbao/",
+    "target": "docs/getting-started/openbao-setup/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/overview/",
+    "target": "docs/getting-started/overview/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/plan-values/",
+    "target": "docs/get-started/plan-values/",
+    "version": "next"
+  },
+  {
+    "path": "docs/get-started/static-pod/",
+    "target": "docs/deployment/static-pod/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/systemd/",
+    "target": "docs/deployment/systemd/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/get-started/verify/",
+    "target": "docs/getting-started/first-encrypt/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/operate/",
+    "target": "docs/operations/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/operate/disaster-recovery/",
+    "target": "docs/operations/disaster-recovery/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/operate/rotation/",
+    "target": "docs/operations/rotation/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/operate/troubleshooting/",
+    "target": "docs/operations/troubleshooting/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/operate/upgrade/",
+    "target": "docs/operations/upgrade/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/reference/release-lifecycle/",
+    "target": "docs/reference/release-policy/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/security/linux-identity-model/",
+    "target": "docs/deployment/linux-identity-model/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/security/verify-release-artifacts/",
+    "target": "docs/security/verify-release-artifacts/",
+    "version": "next"
+  }
+]

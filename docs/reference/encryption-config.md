@@ -59,12 +59,13 @@ and identity or endpoint mismatches. Local encryption keys need names and
 secrets, whose values are redacted from errors. `doctor` does not check key
 lengths or replace the API server's own validation.
 
-## Remove the identity fallback
+## Preview installation scope
 
-Remove `identity` once every targeted object has been rewritten through `kms`.
-Left in place, it lets a future misconfiguration write plaintext; removed too
-early, it leaves unmigrated plaintext objects unreadable. See
-[Verify encryption](/docs/get-started/verify/#step-4-remove-the-identity-fallback).
+The preview guide targets fresh evaluation clusters. Keep `identity` second
+after enabling KMS writes so existing plaintext objects remain readable.
+Migration from an existing encryption configuration and removal of old readers
+are deferred to stable-release planning. Passing `doctor` or checking a sample
+does not establish that every stored object is encrypted.
 
 ## Automatic reload
 

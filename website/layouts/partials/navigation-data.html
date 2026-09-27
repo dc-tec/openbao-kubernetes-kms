@@ -1,0 +1,2 @@
+{{- $line := index hugo.Data.version_lines .Site.Version.Name -}}
+{{- return (index hugo.Data $line.navigation) -}}

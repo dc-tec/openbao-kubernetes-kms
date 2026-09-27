@@ -1,6 +1,6 @@
 ---
 title: Verify encryption
-description: "Confirm that etcd stores Secrets as KMS v2 ciphertext and that every provider reports the same healthy key, then remove the identity fallback."
+description: "Confirm that etcd stores the probe Secret as KMS v2 ciphertext and that every provider reports the same healthy key."
 eyebrow: Get started · Step 8
 weight: 90
 verifiedBy:
@@ -10,9 +10,9 @@ verifiedBy:
 ---
 
 A Secret that reads back through `kubectl` proves only that the API server
-works. This step proves the stored bytes in etcd are ciphertext from the
-provider, then removes the `identity` fallback so plaintext storage can no
-longer be read or written.
+works. This step checks that the probe is stored as ciphertext and that every
+provider is healthy. It does not prove complete encryption of existing data.
+Keep the `identity` reader for plaintext objects in this preview evaluation.
 
 ## Step 1: Create a probe Secret
 
@@ -53,11 +53,6 @@ plaintext appears nowhere in the stored value. The commands assume kubeadm's
 stacked etcd; for external etcd, run `etcdctl` with that cluster's client
 certificates.
 
-Check a sample of the Secrets you rewrote in
-[Enable encryption](/docs/get-started/enable-encryption/#step-5-rewrite-existing-secrets)
-with the same prefix check, replacing `default/openbao-kms-first-encrypt` with
-`<namespace>/<name>`.
-
 ## Step 3: Check the provider on every node
 
 On each control-plane node, check the provider's health endpoints and the
@@ -85,29 +80,17 @@ curl -fsS http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_grpc_requests_tot
 The encrypt counter increases when you write a Secret. Decrypt counts can stay
 flat because the API server serves many reads from its cache.
 
-## Step 4: Remove the identity fallback
-
-Remove the fallback only after Step 2 shows ciphertext for the Secrets you
-rewrote. Any object the configuration targets that is still stored in
-plaintext becomes unreadable once the fallback is gone.
-
-On each control-plane node, delete the `- identity: {}` entry from
-`/etc/kubernetes/openbao-kms/encryption-config.yaml`, so `providers` holds only
-the `kms` entry, then restart or reload `kube-apiserver`. Change one node at a
-time and repeat the read check from Step 1 before moving to the next.
-
-`doctor` with `--encryption-config` warns while the fallback is still present.
-
-## Step 5: Clean up
+## Step 4: Clean up
 
 ```sh
-kubectl delete secret openbao-kms-first-encrypt openbao-kms-bootstrap-probe
+kubectl delete secret openbao-kms-first-encrypt
 ```
 
 {{< checklist title="Finish Get started with" >}}
 - A Secret reads back through `kubectl`, and etcd stores it with the `k8s:enc:kms:v2:<provider-name>:` prefix and no plaintext.
 - Every control-plane node reports `/ready` and the same `key_id` hash.
-- The `EncryptionConfiguration` on every node lists only the `kms` provider.
+- Every API server uses the same KMS-first configuration with `identity` second.
+- The probe reads successfully through each API server directly.
 - Your identity values and the provider identity fingerprint are recorded in configuration management.
 {{< /checklist >}}
 

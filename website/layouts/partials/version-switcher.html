@@ -10,7 +10,7 @@
       {{- $targetSite := . -}}
       {{- $targetURL := printf "%sdocs/" .Home.RelPermalink -}}
       {{- range $current.Rotate "version" -}}
-        {{- if eq .Site.Version.Name $targetSite.Version.Name -}}
+        {{- if and (eq .Site.Version.Name $targetSite.Version.Name) (not .Params.redirectTo) -}}
           {{- $targetURL = .RelPermalink -}}
         {{- end -}}
       {{- end -}}

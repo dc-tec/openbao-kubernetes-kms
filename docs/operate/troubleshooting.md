@@ -264,7 +264,7 @@ An `identity` fallback left in place makes plaintext writes possible after a
 future misconfiguration. Removed too early, it leaves unmigrated plaintext
 objects unreadable.
 
-**Fix:** restore the last known-good `EncryptionConfiguration` and restart or
-reload the API server. Rewrite the remaining resources as in
-[Enable encryption](/docs/get-started/enable-encryption/#step-5-rewrite-existing-secrets),
-verify, then remove the fallback.
+**Fix:** restore the last known-good provider order while retaining every
+reader needed for existing ciphertext. Keep `identity` second during the
+preview evaluation. See [Enable encryption](/docs/get-started/enable-encryption/)
+for the fresh-install scope and rollback boundaries.

@@ -1,14 +1,27 @@
-{{- $target := .Params.redirectTo | relURL -}}
+{{- $targetPath := .Params.redirectTo -}}
+{{- /* The published release retains the original documentation layout. */ -}}
+{{- if eq .Site.Version.Name hugo.Sites.Default.Version.Name -}}
+  {{- with .Site.GetPage (path.Join "/docs" .Path) -}}
+    {{- $targetPath = .Path -}}
+  {{- end -}}
+{{- end -}}
+{{- $targetSite := .Site -}}
+{{- with .Params.targetVersion -}}
+  {{- range hugo.Sites -}}{{- if eq .Version.Name $.Params.targetVersion -}}{{- $targetSite = . -}}{{- end -}}{{- end -}}
+{{- end -}}
+{{- if hasPrefix (strings.TrimPrefix "/" $targetPath) "contribute/" -}}
+  {{- $targetSite = hugo.Sites.Default -}}
+{{- end -}}
+{{- $target := $targetSite.GetPage $targetPath -}}
+{{- if not $target -}}{{- errorf "Redirect %s has no target %s in %s" .RelPermalink $targetPath .Site.Version.Name -}}{{- end -}}
 <!doctype html>
 <html lang="{{ site.Language.Locale }}">
   <head>
     <meta charset="utf-8">
     <meta name="robots" content="noindex">
-    <meta http-equiv="refresh" content="0; url={{ $target }}">
-    <link rel="canonical" href="{{ .Params.redirectTo | absURL }}">
+    <meta http-equiv="refresh" content="0; url={{ $target.RelPermalink }}">
+    <link rel="canonical" href="{{ $target.Permalink }}">
     <title>Redirecting · {{ site.Title }}</title>
   </head>
-  <body>
-    <p>This page moved to <a href="{{ $target }}">{{ .Params.redirectTo | absURL }}</a>.</p>
-  </body>
+  <body><p>This page moved to <a href="{{ $target.RelPermalink }}">{{ $target.Title }}</a>.</p></body>
 </html>

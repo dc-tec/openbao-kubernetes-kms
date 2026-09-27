@@ -26,6 +26,9 @@ contributeURL = "contribute/"
 [versions."0.1.x"]
 weight = 1
 
+[versions.next]
+weight = 2
+
 [[module.mounts]]
 source = "website/content"
 target = "content"
@@ -35,12 +38,19 @@ target = "content"
 [[module.mounts]]
 source = "docs"
 target = "content/docs"
+sites.matrix.versions = ["next"]
 files = ["! adr/**", "! workstreams/**", "! research-notes.md", "! contribute/**"]
+
+[[module.mounts]]
+source = "website/content-versions/0.1.x/docs"
+target = "content/docs"
+sites.matrix.versions = ["0.1.x"]
 
 # Contributor guides publish as a global section at /contribute/.
 [[module.mounts]]
 source = "docs/contribute"
 target = "content/contribute"
+sites.matrix.versions = ["0.1.x"]
 
 [[module.mounts]]
 source = "website/layouts"
