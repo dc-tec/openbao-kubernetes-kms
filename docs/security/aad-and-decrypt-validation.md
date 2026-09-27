@@ -38,8 +38,13 @@ rate-limited metadata lookup; new identities are validated and saved before
 they are accepted.
 
 Failures before the Transit call surface as `key_id_unknown`,
-`key_id_malformed`, `aad_missing`, `aad_mismatch`, or `annotation_invalid`; see
+`key_id_malformed`, `aad_mismatch`, or `annotation_invalid`; see
 [Reference: Observability](/docs/reference/observability/#error-classes).
+
+Missing or empty annotations produce `annotation_invalid`. The retained
+`aad_missing` class describes an unsupported AAD mode in an internal snapshot.
+Normal configuration and persisted-state validation reject that mode before
+requests are served; it is not the class for a request without annotations.
 
 ## AAD is always required
 

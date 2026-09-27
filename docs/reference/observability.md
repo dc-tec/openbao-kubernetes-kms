@@ -159,6 +159,10 @@ routing keys and dashboard groups.
 | Decrypt validation | `key_id_unknown`, `key_id_malformed`, `key_metadata_refresh_failed`, `aad_missing`, `aad_mismatch`, `annotation_invalid` |
 | Request handling | `status_stale`, `protocol_limit`, `concurrency_limit`, `timeout`, `canceled`, `panic`, `unknown` |
 
+Missing or empty decrypt annotations use `annotation_invalid`. `aad_missing`
+is retained for an unsupported AAD mode in an internal snapshot; validated
+configuration and state reject that mode before serving requests.
+
 Token errors keep their cause: local credential failures and rejected logins
 are `auth_failed`, while transport, unavailable, sealed, rate-limited, canceled,
 and timed-out auth calls keep their cause classes. A Transit `403` that persists after the

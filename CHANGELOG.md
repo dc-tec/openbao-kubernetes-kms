@@ -4,6 +4,9 @@
 
 ### Bug Fixes
 
+- **docs:** Document diagnostic check IDs, credential file delivery and symlink
+  restrictions, and the defensive meaning of `aad_missing`.
+
 - **filesystem:** Require the socket directory to belong to the provider's
   effective UID. Open state and checkpoint files relative to a pinned directory
   and validate the opened file before decoding it.

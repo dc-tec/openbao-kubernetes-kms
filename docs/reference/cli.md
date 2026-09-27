@@ -35,21 +35,35 @@ bao-kms-provider doctor \
   --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
 
-| Check | Passes when |
+| Check ID | What it checks |
 |---|---|
-| OpenBao reachable, TLS valid | HTTPS succeeds with the configured CA, and the chain and server name validate. |
-| Local auth material | JWT file: safe permissions, valid claims, and sufficient lifetime. OAuth: a safely permissioned client-secret file (`oauth2.local`); acquisition uses the configured endpoint (`oauth2.acquire`). Certificate: the source is reachable, the certificate is valid, and the signer matches it and signs a probe. |
-| OpenBao auth login | Login with the configured method and role succeeds. |
-| Token policy | The token can read Transit metadata, encrypt, and decrypt, and the checked paths grant no key management, export, backup, restore, rewrap, or mount configuration writes. |
-| Transit key | The key exists with an allowed type, `exportable=false`, `allow_plaintext_backup=false`, and `deletion_allowed=false`. |
-| Upsert | The mount has `disable_upsert=true`. |
-| Encrypt and decrypt | A random, non-secret probe round-trips. |
-| Key ID | Derivation is deterministic, and `Status.key_id` equals `EncryptResponse.key_id`. |
-| Socket path | The directory exists with safe permissions and no unsafe stale path. |
-| EncryptionConfiguration | With `--encryption-config`: the file contains the configured provider name with KMS v2 and the matching socket. Other providers are allowed during migration. |
-| Fallback | Warns while an `identity` fallback remains. |
+| `config.load` | Typed configuration loads. |
+| `config.validate` | Configuration and local filesystem checks pass, including socket parent permissions and target type. |
+| `socket.group` | The configured socket group resolves locally. |
+| `jwt.local` | For JWT files: file safety, claims, and remaining lifetime. Signature verification occurs in OpenBao. |
+| `oauth2.local` | For OAuth: the client-secret file is readable and safely permissioned. |
+| `oauth2.acquire` | For OAuth: token acquisition; a pass also means OpenBao accepted the token. |
+| `auth.cert.pkcs11` | For a certificate build: the configured PKCS#11 source is reachable. |
+| `auth.cert.spiffe` | For a SPIFFE test build: the configured source is reachable. This does not establish release support. |
+| `auth.cert.local` | The certificate identity is locally valid for authentication. |
+| `auth.cert.signer` | The signer matches the certificate and signs a probe. |
+| `kubernetes.encryption_config` | With `--encryption-config`: the configured provider uses KMS v2 and the matching socket. Warns if an `identity` fallback remains. |
+| `openbao.tls` | The CA bundle and TLS client configuration can be loaded. The subsequent login verifies the remote endpoint. |
+| `openbao.auth` | Login with the configured method and role succeeds. |
+| `transit.capabilities` | Required permissions exist, and the checked paths grant no prohibited management capabilities. |
+| `transit.metadata` | The configured Transit key metadata is readable. |
+| `transit.profile` | Key type, derivation, convergence, export, backup, and deletion settings match the supported profile. |
+| `transit.disable_upsert` | The mount has `disable_upsert=true`. |
+| `transit.probe` | A non-secret Transit encrypt/decrypt probe round-trips. |
+| `key_id.deterministic` | Repeated derivation from the same metadata gives the same key ID. |
+| `kms.status_encrypt` | A local diagnostic KMS server returns matching Status and Encrypt key IDs. It does not connect to the running provider's socket. |
 
-`doctor` exits non-zero when any check fails and prints stable check IDs.
+`doctor` exits non-zero when any check fails. Auth-specific checks appear only
+for the configured method and available build. A failed prerequisite stops
+later checks or marks dependent checks as skipped; absent or skipped checks
+are not passes. Run `doctor` under the intended provider identity to inspect
+its access to local files. `serve` also checks socket-directory ownership
+before binding.
 
 The `transit.capabilities` check queries the token's effective capabilities on
 the configured key's configuration, trim, rotate, export, backup, rewrap, and
@@ -76,6 +90,13 @@ Checks the Transit key alone: it exists with an allowed type, derived and
 convergent settings, deletion, export, and plaintext backup match the profile,
 the latest version is usable, and neither `min_encryption_version` nor
 `min_decryption_version` blocks a version the provider needs.
+
+The report shares configuration, auth, capabilities, metadata, profile, upsert,
+and deterministic-key checks with `doctor`. It also reports `registry.state`
+for local state and checkpoint validation and `transit.version_restrictions`
+for retained versions. Missing state or an absent or lagging checkpoint emits
+a warning; without state, version checks cover the latest Transit version.
+`verify-key` omits the encrypt/decrypt and Status/Encrypt probes.
 
 ## rotation-plan
 
