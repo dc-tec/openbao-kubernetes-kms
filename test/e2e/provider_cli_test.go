@@ -71,7 +71,13 @@ func TestProviderCLIHappyPathE2E(t *testing.T) {
 		"activeKeyIdHash:",
 	)
 
-	verifyRotationOutput := stack.runProviderCLI(ctx, "cli-verify-rotation", "verify-rotation", "--config", containerConfigPath)
+	verifyRotationOutput := stack.runProviderCLI(
+		ctx,
+		"cli-verify-rotation",
+		"verify-rotation",
+		"--config",
+		containerConfigPath,
+	)
 	assertOutputContains(
 		t,
 		verifyRotationOutput,
@@ -82,18 +88,50 @@ func TestProviderCLIHappyPathE2E(t *testing.T) {
 		"confidence: limited",
 	)
 
-	doctorJSON := stack.runProviderCLI(ctx, "cli-doctor-json", "doctor", "--config", containerConfigPath, "--output", "json")
-	assertCLIJSONReport(t, doctorJSON, "doctor", "openbao.auth", "pass")
-	assertCLIJSONReport(t, doctorJSON, "doctor", "kms.status_encrypt", "pass")
+	doctorJSON := stack.runProviderCLI(
+		ctx,
+		"cli-doctor-json",
+		"doctor",
+		"--config",
+		containerConfigPath,
+		"--output",
+		"json",
+	)
+	assertCLIJSONReport(t, doctorJSON, "doctor", "openbao.auth")
+	assertCLIJSONReport(t, doctorJSON, "doctor", "kms.status_encrypt")
 
-	verifyKeyJSON := stack.runProviderCLI(ctx, "cli-verify-key-json", "verify-key", "--config", containerConfigPath, "--output", "json")
-	assertCLIJSONReport(t, verifyKeyJSON, "verify-key", "registry.state", "pass")
-	assertCLIJSONReport(t, verifyKeyJSON, "verify-key", "transit.version_restrictions", "pass")
+	verifyKeyJSON := stack.runProviderCLI(
+		ctx,
+		"cli-verify-key-json",
+		"verify-key",
+		"--config",
+		containerConfigPath,
+		"--output",
+		"json",
+	)
+	assertCLIJSONReport(t, verifyKeyJSON, "verify-key", "registry.state")
+	assertCLIJSONReport(t, verifyKeyJSON, "verify-key", "transit.version_restrictions")
 
-	rotationPlanJSON := stack.runProviderCLI(ctx, "cli-rotation-plan-json", "rotation-plan", "--config", containerConfigPath, "--output", "json")
+	rotationPlanJSON := stack.runProviderCLI(
+		ctx,
+		"cli-rotation-plan-json",
+		"rotation-plan",
+		"--config",
+		containerConfigPath,
+		"--output",
+		"json",
+	)
 	assertRotationJSONReport(t, rotationPlanJSON, "rotation-plan", "active")
 
-	verifyRotationJSON := stack.runProviderCLI(ctx, "cli-verify-rotation-json", "verify-rotation", "--config", containerConfigPath, "--output", "json")
+	verifyRotationJSON := stack.runProviderCLI(
+		ctx,
+		"cli-verify-rotation-json",
+		"verify-rotation",
+		"--config",
+		containerConfigPath,
+		"--output",
+		"json",
+	)
 	assertRotationJSONReport(t, verifyRotationJSON, "verify-rotation", "active")
 	assertOutputContains(t, verifyRotationJSON, `"confidence": "limited"`)
 }
@@ -186,12 +224,34 @@ func TestProviderCLIRotationMissingStateFailsClosedE2E(t *testing.T) {
 
 	stack.clearProviderState(ctx)
 
-	rotationPlanOutput := stack.runProviderCLIExpectFailure(ctx, "cli-rotation-plan-missing-state", "rotation-plan", "--config", containerConfigPath)
-	assertOutputContains(t, rotationPlanOutput, "local registry state is absent and cannot be auto-bootstrapped", "latest_version=2")
+	rotationPlanOutput := stack.runProviderCLIExpectFailure(
+		ctx,
+		"cli-rotation-plan-missing-state",
+		"rotation-plan",
+		"--config",
+		containerConfigPath,
+	)
+	assertOutputContains(
+		t,
+		rotationPlanOutput,
+		"local registry state is absent and cannot be auto-bootstrapped",
+		"latest_version=2",
+	)
 	assertOutputNotContains(t, rotationPlanOutput, "activeKeyIdHash:")
 
-	verifyRotationOutput := stack.runProviderCLIExpectFailure(ctx, "cli-verify-rotation-missing-state", "verify-rotation", "--config", containerConfigPath)
-	assertOutputContains(t, verifyRotationOutput, "local registry state is absent and cannot be auto-bootstrapped", "latest_version=2")
+	verifyRotationOutput := stack.runProviderCLIExpectFailure(
+		ctx,
+		"cli-verify-rotation-missing-state",
+		"verify-rotation",
+		"--config",
+		containerConfigPath,
+	)
+	assertOutputContains(
+		t,
+		verifyRotationOutput,
+		"local registry state is absent and cannot be auto-bootstrapped",
+		"latest_version=2",
+	)
 	assertOutputNotContains(t, verifyRotationOutput, "activeKeyIdHash:")
 }
 
@@ -206,7 +266,11 @@ func (s *providerFailureStack) runProviderCLI(ctx context.Context, nameSuffix st
 	return output
 }
 
-func (s *providerFailureStack) runProviderCLIExpectFailure(ctx context.Context, nameSuffix string, args ...string) string {
+func (s *providerFailureStack) runProviderCLIExpectFailure(
+	ctx context.Context,
+	nameSuffix string,
+	args ...string,
+) string {
 	s.t.Helper()
 
 	output, err := s.runProviderCLICommand(ctx, nameSuffix, args...)
@@ -216,20 +280,25 @@ func (s *providerFailureStack) runProviderCLIExpectFailure(ctx context.Context, 
 	return output
 }
 
-func (s *providerFailureStack) runProviderCLICommand(ctx context.Context, nameSuffix string, args ...string) (string, error) {
+func (s *providerFailureStack) runProviderCLICommand(
+	ctx context.Context,
+	nameSuffix string,
+	args ...string,
+) (string, error) {
 	s.t.Helper()
 
 	containerName := s.providerName + "-" + nameSuffix
-	dockerArgs := []string{
+	dockerArgs := make([]string, 0, 15+len(args))
+	dockerArgs = append(dockerArgs,
 		"run", "--rm",
 		"--name", containerName,
 		"--network", s.networkName,
-		"--volume", s.volumes.config + ":/config:ro",
-		"--volume", s.volumes.tls + ":/bao/tls:ro",
-		"--volume", s.volumes.run + ":/run/openbao-kms",
-		"--volume", s.volumes.state + ":/var/lib/openbao-kms/state:ro",
+		"--volume", s.volumes.config+":/config:ro",
+		"--volume", s.volumes.tls+":/bao/tls:ro",
+		"--volume", s.volumes.run+":/run/openbao-kms",
+		"--volume", s.volumes.state+":/var/lib/openbao-kms/state:ro",
 		s.providerImage,
-	}
+	)
 	dockerArgs = append(dockerArgs, args...)
 	output, err := runDockerOutput(ctx, s.dockerPath, dockerArgs...)
 	return strings.TrimSpace(output), err
@@ -265,7 +334,7 @@ type cliJSONCheck struct {
 	Status string `json:"status"`
 }
 
-func assertCLIJSONReport(t *testing.T, output string, name string, checkID string, status string) {
+func assertCLIJSONReport(t *testing.T, output string, name string, checkID string) {
 	t.Helper()
 
 	var report cliJSONReport
@@ -277,8 +346,8 @@ func assertCLIJSONReport(t *testing.T, output string, name string, checkID strin
 	}
 	for _, check := range report.Checks {
 		if check.ID == checkID {
-			if check.Status != status {
-				t.Fatalf("unexpected status for %s: got %q want %q\n%s", checkID, check.Status, status, output)
+			if check.Status != "pass" {
+				t.Fatalf("unexpected status for %s: got %q want %q\n%s", checkID, check.Status, "pass", output)
 			}
 			return
 		}

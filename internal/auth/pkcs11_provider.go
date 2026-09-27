@@ -152,7 +152,8 @@ func validatePKCS11ProviderConfig(cfg PKCS11ProviderConfig) (PKCS11ProviderConfi
 	cfg.TokenLabel = strings.TrimSpace(cfg.TokenLabel)
 	cfg.KeyLabel = strings.TrimSpace(cfg.KeyLabel)
 	cfg.PINFile = strings.TrimSpace(cfg.PINFile)
-	if cfg.CertificateFile == "" || cfg.ModulePath == "" || cfg.TokenLabel == "" || cfg.KeyLabel == "" || cfg.PINFile == "" {
+	if cfg.CertificateFile == "" || cfg.ModulePath == "" || cfg.TokenLabel == "" ||
+		cfg.KeyLabel == "" || cfg.PINFile == "" {
 		return PKCS11ProviderConfig{}, fmt.Errorf("%w: pkcs11 provider settings are required", ErrAuthConfig)
 	}
 	for _, path := range []string{cfg.CertificateFile, cfg.ModulePath, cfg.PINFile} {

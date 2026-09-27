@@ -56,6 +56,18 @@ custom rules below. `.golangci.yml` enables at least `bodyclose`, `errcheck`,
 `gosec`, `govet`, `ineffassign`, `misspell`, `revive`, `staticcheck`,
 `unparam`, and `unused`.
 
+`make ci-core` runs both the default lint pass and `make lint-tagged`.
+The tagged pass uses cgo and enables `certauth_pkcs11`, `certauth_spiffe`,
+`openbao_kms_e2e_spiffe_certauth`, and `e2e`. It checks optional certificate
+sources, test tools, and container/Kind fixtures that the default build omits.
+Including a source in this lint pass does not make it a supported release
+configuration. Keep exceptions local to the fixture operation and explain
+why the input or permission is required.
+
+The core gate also runs `make test-certauth`: race-enabled unit tests for
+certificate authentication, the CLI integration, and the certificate fixture
+tool. These tests use local fixtures and do not require a hardware token.
+
 | Tool | Rules | Location |
 |---|---|---|
 | ast-grep | No broad dynamic types, runtime panics, root contexts in runtime packages, Viper imports or environment reads outside configuration, or concrete OpenBao clients in `internal/kmsv2` | `.ast-grep/rules/architecture`, `.ast-grep/rules/runtime-safety` |

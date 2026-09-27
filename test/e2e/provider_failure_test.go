@@ -133,7 +133,9 @@ func TestProviderDisableUpsertDriftFailsClosedE2E(t *testing.T) {
 	}
 	stack.runClient(ctx, "unsafe-mount-client", kmsClientModeExpectUnhealthy, sampleNotMounted)
 	logs := dockerLogs(ctx, stack.dockerPath, stack.providerName)
-	for _, want := range []string{`"message":"status.probe"`, `"reason":"upsert_allowed"`, `"error_class":"upsert_allowed"`} {
+	for _, want := range []string{
+		`"message":"status.probe"`, `"reason":"upsert_allowed"`, `"error_class":"upsert_allowed"`,
+	} {
 		if !strings.Contains(logs, want) {
 			t.Fatalf("missing %s: %s", want, logs)
 		}
@@ -429,16 +431,18 @@ func startProviderFailureStack(
 		opts.BeforeProviderStart(t, ctx, stack)
 	}
 
-	startProviderContainerWithOptions(t, ctx, dockerPath, providerName, networkName, providerImage, volumes, stack.providerStart)
+	startProviderContainerWithOptions(
+		t,
+		ctx,
+		dockerPath,
+		providerName,
+		networkName,
+		providerImage,
+		volumes,
+		stack.providerStart,
+	)
 	providerStarted = true
 	return stack
-}
-
-func requireProviderFailureImage(t *testing.T) string {
-	t.Helper()
-
-	requireOpenBaoCI(t)
-	return requireProviderImageFromEnv(t, envProviderImage)
 }
 
 func requireOpenBaoCI(t *testing.T) {
@@ -466,7 +470,14 @@ func requireDocker(t *testing.T, ctx context.Context) string {
 	if err != nil {
 		t.Skipf("%s: %v", framework.ErrDockerUnavailable, err)
 	}
-	if output, err := exec.CommandContext(ctx, dockerPath, "version", "--format", "{{.Server.Version}}").CombinedOutput(); err != nil {
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
+	if output, err := exec.CommandContext(
+		ctx,
+		dockerPath,
+		"version",
+		"--format",
+		"{{.Server.Version}}",
+	).CombinedOutput(); err != nil {
 		t.Skipf("%s: %s", framework.ErrDockerUnavailable, strings.TrimSpace(string(output)))
 	}
 	return dockerPath
@@ -497,7 +508,12 @@ chmod 0600 /bao/tls/identity.jwt
 	)
 }
 
-func (s *providerFailureStack) runClient(ctx context.Context, nameSuffix string, mode string, sampleMode sampleMountMode) {
+func (s *providerFailureStack) runClient(
+	ctx context.Context,
+	nameSuffix string,
+	mode string,
+	sampleMode sampleMountMode,
+) {
 	s.t.Helper()
 	s.runClientWithEnv(ctx, nameSuffix, mode, sampleMode, nil)
 }
@@ -508,7 +524,16 @@ func (s *providerFailureStack) restartProvider(ctx context.Context, image string
 		s.t.Fatal("provider restart image is empty")
 	}
 	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
-	startProviderContainerWithOptions(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes, s.providerStart)
+	startProviderContainerWithOptions(
+		s.t,
+		ctx,
+		s.dockerPath,
+		s.providerName,
+		s.networkName,
+		image,
+		s.volumes,
+		s.providerStart,
+	)
 	s.providerImage = image
 }
 
@@ -519,7 +544,16 @@ func (s *providerFailureStack) restartProviderWithEmptyState(ctx context.Context
 	}
 	removeContainer(s.t, ctx, s.dockerPath, s.providerName)
 	s.clearProviderState(ctx)
-	startProviderContainerWithOptions(s.t, ctx, s.dockerPath, s.providerName, s.networkName, image, s.volumes, s.providerStart)
+	startProviderContainerWithOptions(
+		s.t,
+		ctx,
+		s.dockerPath,
+		s.providerName,
+		s.networkName,
+		image,
+		s.volumes,
+		s.providerStart,
+	)
 	s.providerImage = image
 }
 
@@ -643,14 +677,15 @@ func runKMSClientContainer(
 ) {
 	t.Helper()
 
-	args := []string{
+	args := make([]string, 0, 15+2*len(env)+2*len(extraVolumes))
+	args = append(args,
 		"run", "--rm",
 		"--name", clientName,
 		"--network", networkName,
-		"--env", "KMS_SOCKET_PATH=" + containerSocketPath,
-		"--volume", volumes.run + ":/run/openbao-kms",
-		"--volume", clientPath + ":/kms-client:ro",
-	}
+		"--env", "KMS_SOCKET_PATH="+containerSocketPath,
+		"--volume", volumes.run+":/run/openbao-kms",
+		"--volume", clientPath+":/kms-client:ro",
+	)
 	for _, value := range env {
 		args = append(args, "--env", value)
 	}

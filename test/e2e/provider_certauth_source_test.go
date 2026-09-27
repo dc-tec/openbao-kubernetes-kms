@@ -100,7 +100,16 @@ func TestProviderCertAuthSPIREWorkloadAPISourceE2E(t *testing.T) {
 	source := startSPIREProviderSource(t, ctx, stack)
 	probePath := filepath.Join(t.TempDir(), "certauth-spiffe-probe")
 	buildSPIFFECertAuthProbe(t, ctx, probePath)
-	runSPIFFEProviderSourceProbe(t, ctx, dockerPath, providerImage, networkName, source.SocketDir, probePath, testCertAuthSPIFFEID)
+	runSPIFFEProviderSourceProbe(
+		t,
+		ctx,
+		dockerPath,
+		providerImage,
+		networkName,
+		source.SocketDir,
+		probePath,
+		testCertAuthSPIFFEID,
+	)
 }
 
 func TestProviderCertAuthSPIREOpenBaoE2E(t *testing.T) {
@@ -157,6 +166,7 @@ func configureSoftHSMProviderSource(t *testing.T, ctx context.Context, stack *pr
 		"--spiffe-id", stack.environment.CertSPIFFEID,
 	)
 
+	// #nosec G304 -- read the generated public CA from the isolated certificate fixture.
 	caPEM, err := os.ReadFile(filepath.Join(outputDir, "client-ca.pem"))
 	if err != nil {
 		t.Fatalf("read SoftHSM client CA: %v", err)
@@ -195,10 +205,12 @@ func startSPIREProviderSource(t *testing.T, ctx context.Context, stack *provider
 		filepath.Join(rootDir, "agent", "data"),
 		filepath.Join(rootDir, "sockets"),
 	} {
+		// #nosec G301 -- isolated SPIRE fixture directories must be writable by remapped containers.
 		if err := os.MkdirAll(dir, 0o777); err != nil {
 			t.Fatalf("create SPIRE directory %s: %v", dir, err)
 		}
 	}
+	// #nosec G302 -- isolated SPIRE fixture directory must be writable by remapped containers.
 	if err := os.Chmod(rootDir, 0o777); err != nil {
 		t.Fatalf("chmod SPIRE root directory: %v", err)
 	}
@@ -222,7 +234,7 @@ func startSPIREProviderSource(t *testing.T, ctx context.Context, stack *provider
 		serverImage,
 		"run", "-config", "/run/spire/server.conf",
 	)
-	waitForDockerCommand(t, ctx, stack.dockerPath, serverName, 30*time.Second,
+	waitForDockerCommand(t, ctx, stack.dockerPath, serverName,
 		"exec", serverName,
 		"/opt/spire/bin/spire-server", "healthcheck",
 		"-socketPath", spireServerSocketPath,
@@ -245,7 +257,7 @@ func startSPIREProviderSource(t *testing.T, ctx context.Context, stack *provider
 		agentImage,
 		"run", "-config", "/run/spire/agent.conf", "-expandEnv",
 	)
-	waitForDockerCommand(t, ctx, stack.dockerPath, agentName, 30*time.Second,
+	waitForDockerCommand(t, ctx, stack.dockerPath, agentName,
 		"exec", agentName,
 		"/opt/spire/bin/spire-agent", "healthcheck",
 		"-socketPath", spireAgentSocketPath,
@@ -288,7 +300,18 @@ func buildSPIFFECertAuthProbe(t *testing.T, ctx context.Context, outputPath stri
 	if err != nil {
 		t.Fatalf("find go binary: %v", err)
 	}
-	cmd := exec.CommandContext(ctx, goPath, "build", "-trimpath", "-tags", "certauth_spiffe", "-o", outputPath, "./test/e2e/certauthspiffeprobe")
+	// #nosec G204 -- the test harness selects the executable and fixture arguments; no shell expansion is used.
+	cmd := exec.CommandContext(
+		ctx,
+		goPath,
+		"build",
+		"-trimpath",
+		"-tags",
+		"certauth_spiffe",
+		"-o",
+		outputPath,
+		"./test/e2e/certauthspiffeprobe",
+	)
 	cmd.Dir = findRepoRoot(t)
 	cmd.Env = append(os.Environ(),
 		"CGO_ENABLED=0",
@@ -298,6 +321,7 @@ func buildSPIFFECertAuthProbe(t *testing.T, ctx context.Context, outputPath stri
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build SPIFFE cert auth probe: %v: %s", err, strings.TrimSpace(string(output)))
 	}
+	// #nosec G302 -- the generated probe executable must run as the container user.
 	if err := os.Chmod(outputPath, 0o755); err != nil {
 		t.Fatalf("chmod SPIFFE cert auth probe: %v", err)
 	}
@@ -389,9 +413,11 @@ plugins {
     }
 }
 `
+	// #nosec G306 -- non-secret fixture configuration is read by a separate container UID.
 	if err := os.WriteFile(filepath.Join(rootDir, "server.conf"), []byte(serverConfig), 0o644); err != nil {
 		t.Fatalf("write SPIRE server config: %v", err)
 	}
+	// #nosec G306 -- non-secret fixture configuration is read by a separate container UID.
 	if err := os.WriteFile(filepath.Join(rootDir, "agent.conf"), []byte(agentConfig), 0o644); err != nil {
 		t.Fatalf("write SPIRE agent config: %v", err)
 	}
@@ -423,7 +449,7 @@ func generateSPIREJoinToken(t *testing.T, ctx context.Context, dockerPath string
 func waitForSPIREAgentID(t *testing.T, ctx context.Context, dockerPath string, serverName string) string {
 	t.Helper()
 
-	output := waitForDockerCommand(t, ctx, dockerPath, serverName, 30*time.Second,
+	output := waitForDockerCommand(t, ctx, dockerPath, serverName,
 		"exec", serverName,
 		"/opt/spire/bin/spire-server", "agent", "list",
 		"-socketPath", spireServerSocketPath,
@@ -452,7 +478,7 @@ func waitForSPIREWorkloadSVID(
 ) {
 	t.Helper()
 
-	waitForDockerCommand(t, ctx, stack.dockerPath, stack.providerName+"-spire-agent", 30*time.Second,
+	waitForDockerCommand(t, ctx, stack.dockerPath, stack.providerName+"-spire-agent",
 		"run", "--rm",
 		"--network", stack.networkName,
 		"--user", "65532:65532",
@@ -470,12 +496,11 @@ func waitForDockerCommand(
 	ctx context.Context,
 	dockerPath string,
 	logContainerName string,
-	timeout time.Duration,
 	args ...string,
 ) string {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(30 * time.Second)
 	var lastOutput string
 	var lastErr error
 	for time.Now().Before(deadline) {
@@ -494,7 +519,7 @@ func waitForDockerCommand(
 	logs := dockerLogs(context.Background(), dockerPath, logContainerName)
 	t.Fatalf("docker %s did not succeed within %s: %v: %s\ncontainer logs:\n%s",
 		strings.Join(args, " "),
-		timeout,
+		30*time.Second,
 		lastErr,
 		strings.TrimSpace(lastOutput),
 		logs,

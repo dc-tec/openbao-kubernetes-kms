@@ -39,6 +39,7 @@ const (
 	EnvDockerBinary = "DOCKER"
 	EnvSkipCleanup  = "E2E_SKIP_CLEANUP"
 
+	//nolint:lll // Keep the complete image pin visible to version-policy checks.
 	DefaultOpenBaoImage = "ghcr.io/openbao/openbao:2.6.0@sha256:900bb64d0671cd1d82b693c56206f7263b582445f3a3bb6ba6e5213f524a6653"
 
 	openBaoListenAddress  = "0.0.0.0:8200"
@@ -324,47 +325,47 @@ func StartOpenBaoEnvironment(ctx context.Context, cfg OpenBaoEnvironmentConfig) 
 		_ = environment.Close(context.Background())
 		return nil, err
 	}
+	if err := environment.initializeAndBootstrap(ctx, cfg.StartupWait); err != nil {
+		_ = environment.Close(context.Background())
+		return nil, err
+	}
+	return environment, nil
+}
+
+func (f *OpenBaoEnvironment) initializeAndBootstrap(ctx context.Context, startupWait time.Duration) error {
 	bootstrapRequired := true
-	if cfg.StorageVolume == "" {
-		if err := environment.waitUntilReady(ctx, cfg.StartupWait); err != nil {
-			_ = environment.Close(context.Background())
-			return nil, err
+	if f.storageVolume == "" {
+		if err := f.waitUntilReady(ctx, startupWait); err != nil {
+			return err
 		}
 	} else {
-		if err := environment.waitUntilEndpoint(ctx, cfg.StartupWait); err != nil {
-			_ = environment.Close(context.Background())
-			return nil, err
+		if err := f.waitUntilEndpoint(ctx, startupWait); err != nil {
+			return err
 		}
-		initializedNow, err := environment.initializeRaftStorage(ctx)
+		initializedNow, err := f.initializeRaftStorage(ctx)
 		if err != nil {
-			_ = environment.Close(context.Background())
-			return nil, err
+			return err
 		}
 		bootstrapRequired = initializedNow
-		if err := environment.waitUntilReady(ctx, cfg.StartupWait); err != nil {
-			_ = environment.Close(context.Background())
-			return nil, err
+		if err := f.waitUntilReady(ctx, startupWait); err != nil {
+			return err
 		}
 	}
 	if bootstrapRequired {
-		if err := environment.bootstrapNamespace(ctx); err != nil {
-			_ = environment.Close(context.Background())
-			return nil, err
+		if err := f.bootstrapNamespace(ctx); err != nil {
+			return err
 		}
-		if err := environment.bootstrapTransit(ctx); err != nil {
-			_ = environment.Close(context.Background())
-			return nil, err
+		if err := f.bootstrapTransit(ctx); err != nil {
+			return err
 		}
-		if err := environment.bootstrapJWTAuth(ctx); err != nil {
-			_ = environment.Close(context.Background())
-			return nil, err
+		if err := f.bootstrapJWTAuth(ctx); err != nil {
+			return err
 		}
-		if err := environment.bootstrapCertAuth(ctx); err != nil {
-			_ = environment.Close(context.Background())
-			return nil, err
+		if err := f.bootstrapCertAuth(ctx); err != nil {
+			return err
 		}
 	}
-	return environment, nil
+	return nil
 }
 
 func (f *OpenBaoEnvironment) NewClient() (*openbao.Client, error) {
@@ -713,6 +714,10 @@ func (f *OpenBaoEnvironment) RestoreRaftSnapshot(ctx context.Context, storageVol
 	if err := f.unseal(ctx, httpClient); err != nil {
 		return err
 	}
+	return f.restartRestoredContainer(ctx)
+}
+
+func (f *OpenBaoEnvironment) restartRestoredContainer(ctx context.Context) error {
 	if err := f.StopContainerKeepAddress(ctx); err != nil {
 		return err
 	}
@@ -722,7 +727,7 @@ func (f *OpenBaoEnvironment) RestoreRaftSnapshot(ctx context.Context, storageVol
 	if err := f.waitUntilEndpoint(ctx, 45*time.Second); err != nil {
 		return err
 	}
-	httpClient, err = openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 30*time.Second)
+	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 30*time.Second)
 	if err != nil {
 		return err
 	}
@@ -737,6 +742,7 @@ func (f *OpenBaoEnvironment) stopContainer(ctx context.Context, clearName bool) 
 		return nil
 	}
 
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, f.dockerBinary, "rm", "-f", f.containerName)
 	output, err := cmd.CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "No such container") {
@@ -795,11 +801,11 @@ func resolveDockerBinary(binary string) (string, error) {
 		}
 		return binary, nil
 	}
-	path, err := exec.LookPath(binary)
+	resolved, err := exec.LookPath(binary)
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrDockerUnavailable, binary)
 	}
-	return path, nil
+	return resolved, nil
 }
 
 func checkDocker(ctx context.Context, dockerPath string) error {
@@ -838,6 +844,7 @@ func (f *OpenBaoEnvironment) startDevContainer(ctx context.Context, image string
 		"-dev-tls",
 		"-dev-tls-cert-dir=/bao/tls",
 	)
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, f.dockerBinary, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("start OpenBao environment container: %w: %s", err, strings.TrimSpace(string(output)))
@@ -881,6 +888,7 @@ func (f *OpenBaoEnvironment) startRaftStorageContainer(ctx context.Context, imag
 		"server",
 		"-config=/bao/tls/openbao.hcl",
 	)
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, f.dockerBinary, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("start OpenBao raft-storage container: %w: %s", err, strings.TrimSpace(string(output)))
@@ -893,6 +901,7 @@ func (f *OpenBaoEnvironment) prepareStorageVolume(ctx context.Context, image str
 }
 
 func prepareOpenBaoStorageVolume(ctx context.Context, dockerBinary string, image string, storageVolume string) error {
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, dockerBinary,
 		"run", "--rm",
 		"--user", "0:0",
@@ -908,6 +917,7 @@ func prepareOpenBaoStorageVolume(ctx context.Context, dockerBinary string, image
 }
 
 func createOpenBaoStorageVolume(ctx context.Context, dockerBinary string, storageVolume string) error {
+	// #nosec G204 -- the test harness controls Docker and isolated volume names; no shell is used.
 	cmd := exec.CommandContext(ctx, dockerBinary, "volume", "create", storageVolume)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("create OpenBao storage volume: %w: %s", err, strings.TrimSpace(string(output)))
@@ -916,6 +926,7 @@ func createOpenBaoStorageVolume(ctx context.Context, dockerBinary string, storag
 }
 
 func removeOpenBaoStorageVolume(ctx context.Context, dockerBinary string, storageVolume string) error {
+	// #nosec G204 -- the test harness controls Docker and isolated volume names; no shell is used.
 	cmd := exec.CommandContext(ctx, dockerBinary, "volume", "rm", "-f", storageVolume)
 	if output, err := cmd.CombinedOutput(); err != nil && !strings.Contains(string(output), "No such volume") {
 		return fmt.Errorf("remove OpenBao storage volume: %w: %s", err, strings.TrimSpace(string(output)))
@@ -946,6 +957,7 @@ listener "tcp" {
 %s
 }
 `, clientCertConfig)
+	// #nosec G306 -- non-secret fixture config or public certificates must be readable by the container user.
 	if err := os.WriteFile(filepath.Join(dir, "openbao.hcl"), []byte(raw), 0o644); err != nil {
 		return fmt.Errorf("write OpenBao raft storage config: %w", err)
 	}
@@ -997,12 +1009,15 @@ func writeOpenBaoServerTLSFilesForHosts(dir string, dnsNames []string) error {
 	}
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	// #nosec G306 -- non-secret fixture config or public certificates must be readable by the container user.
 	if err := os.WriteFile(filepath.Join(dir, "server.crt"), certPEM, 0o644); err != nil {
 		return fmt.Errorf("write OpenBao TLS certificate: %w", err)
 	}
+	// #nosec G306 -- non-secret fixture config or public certificates must be readable by the container user.
 	if err := os.WriteFile(filepath.Join(dir, "ca.pem"), certPEM, 0o644); err != nil {
 		return fmt.Errorf("write OpenBao TLS CA certificate: %w", err)
 	}
+	// #nosec G306 -- ephemeral TLS fixtures must be readable by the container UID; they are not deployment credentials.
 	if err := os.WriteFile(filepath.Join(dir, "server.key"), keyPEM, 0o644); err != nil {
 		return fmt.Errorf("write OpenBao TLS key: %w", err)
 	}
@@ -1062,9 +1077,11 @@ func writeOpenBaoClientTLSFiles(dir string, spiffeID string) (string, string, er
 	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey)})
+	// #nosec G306 -- ephemeral TLS fixtures must be readable by the container UID; they are not deployment credentials.
 	if err := os.WriteFile(caFile, caPEM, 0o644); err != nil {
 		return "", "", fmt.Errorf("write OpenBao client CA certificate: %w", err)
 	}
+	// #nosec G306 -- ephemeral TLS fixtures must be readable by the container UID; they are not deployment credentials.
 	if err := os.WriteFile(certFile, certPEM, 0o644); err != nil {
 		return "", "", fmt.Errorf("write OpenBao client certificate: %w", err)
 	}
@@ -1192,10 +1209,12 @@ func (f *OpenBaoEnvironment) SaveRaftSnapshot(ctx context.Context, snapshotPath 
 		f.containerName,
 		"bao", "operator", "raft", "snapshot", "save", containerPath,
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, f.dockerBinary, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("save OpenBao raft snapshot: %w: %s", err, strings.TrimSpace(string(output)))
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd = exec.CommandContext(ctx, f.dockerBinary, "cp", f.containerName+":"+containerPath, snapshotPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("copy OpenBao raft snapshot: %w: %s", err, strings.TrimSpace(string(output)))
@@ -1203,7 +1222,10 @@ func (f *OpenBaoEnvironment) SaveRaftSnapshot(ctx context.Context, snapshotPath 
 	return nil
 }
 
-func (f *OpenBaoEnvironment) initializeForRestore(ctx context.Context, httpClient *http.Client) (string, string, error) {
+func (f *OpenBaoEnvironment) initializeForRestore(
+	ctx context.Context,
+	httpClient *http.Client,
+) (string, string, error) {
 	initialized, err := f.isInitialized(ctx, httpClient)
 	if err != nil {
 		return "", "", err
@@ -1244,10 +1266,12 @@ func (f *OpenBaoEnvironment) initializeForRestore(ctx context.Context, httpClien
 func (f *OpenBaoEnvironment) copySnapshotIntoContainer(ctx context.Context, snapshotPath string) error {
 	const containerSnapshotPath = "/tmp/openbao-raft.snap"
 
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, f.dockerBinary, "cp", snapshotPath, f.containerName+":"+containerSnapshotPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("copy OpenBao raft snapshot into restore container: %w: %s", err, strings.TrimSpace(string(output)))
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd = exec.CommandContext(ctx, f.dockerBinary,
 		"exec", "--user", "0:0",
 		f.containerName,
@@ -1268,6 +1292,7 @@ func (f *OpenBaoEnvironment) restoreRaftSnapshotInContainer(ctx context.Context,
 		f.containerName,
 		"bao", "operator", "raft", "snapshot", "restore", "-force", "/tmp/openbao-raft.snap",
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, f.dockerBinary, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("restore OpenBao raft snapshot: %w: %s", err, strings.TrimSpace(string(output)))
@@ -1394,6 +1419,7 @@ func (f *OpenBaoEnvironment) refreshEndpoint(ctx context.Context) error {
 	probeCtx, cancel := context.WithTimeout(ctx, openBaoEndpointProbeWait)
 	defer cancel()
 
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(probeCtx, f.dockerBinary, "port", f.containerName, "8200/tcp")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1425,11 +1451,15 @@ func openBaoReadinessTimeoutError(message string, timeoutErr error, lastErr erro
 }
 
 func (f *OpenBaoEnvironment) probeHealth(ctx context.Context) error {
-	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 2*time.Second)
+	return probeOpenBaoHealth(ctx, f.CACertFile, f.Address+"/v1/sys/health")
+}
+
+func probeOpenBaoHealth(ctx context.Context, caFile, endpoint string) error {
+	httpClient, err := openbao.NewHTTPClient(caFile, openBaoTLSServerName, 2*time.Second)
 	if err != nil {
 		return err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, f.Address+"/v1/sys/health", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
 	}
@@ -1471,10 +1501,20 @@ func (f *OpenBaoEnvironment) bootstrapTransit(ctx context.Context) error {
 	if err := f.write(ctx, httpClient, "sys/mounts/"+f.TransitMount, mountRequestBody{Type: "transit"}); err != nil {
 		return err
 	}
-	if err := f.write(ctx, httpClient, f.TransitMount+"/keys/"+f.TransitKey, transitKeyRequestBody{Type: f.transitKeyType}); err != nil {
+	if err := f.write(
+		ctx,
+		httpClient,
+		f.TransitMount+"/keys/"+f.TransitKey,
+		transitKeyRequestBody{Type: f.transitKeyType},
+	); err != nil {
 		return err
 	}
-	if err := f.write(ctx, httpClient, f.TransitMount+"/config/keys", disableUpsertRequestBody{DisableUpsert: true}); err != nil {
+	if err := f.write(
+		ctx,
+		httpClient,
+		f.TransitMount+"/config/keys",
+		disableUpsertRequestBody{DisableUpsert: true},
+	); err != nil {
 		return err
 	}
 	return nil
@@ -1538,7 +1578,12 @@ func (f *OpenBaoEnvironment) bootstrapCertAuth(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read OpenBao cert-auth client CA: %w", err)
 	}
-	if err := f.write(ctx, httpClient, "sys/auth/"+authMountName(f.CertAuthMount), mountRequestBody{Type: "cert"}); err != nil {
+	if err := f.write(
+		ctx,
+		httpClient,
+		"sys/auth/"+authMountName(f.CertAuthMount),
+		mountRequestBody{Type: "cert"},
+	); err != nil {
 		return err
 	}
 	if err := f.write(ctx, httpClient, path.Join(f.CertAuthMount, "config"), certAuthConfigRequestBody{
@@ -1669,11 +1714,21 @@ func encodeJWTClaims(value jwtClaims) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(encoded), nil
 }
 
-func (f *OpenBaoEnvironment) write(ctx context.Context, httpClient *http.Client, apiPath string, body environmentSetupPayload) error {
+func (f *OpenBaoEnvironment) write(
+	ctx context.Context,
+	httpClient *http.Client,
+	apiPath string,
+	body environmentSetupPayload,
+) error {
 	return f.writeWithNamespace(ctx, httpClient, apiPath, body, f.Namespace)
 }
 
-func (f *OpenBaoEnvironment) writeRoot(ctx context.Context, httpClient *http.Client, apiPath string, body environmentSetupPayload) error {
+func (f *OpenBaoEnvironment) writeRoot(
+	ctx context.Context,
+	httpClient *http.Client,
+	apiPath string,
+	body environmentSetupPayload,
+) error {
 	return f.writeWithNamespace(ctx, httpClient, apiPath, body, "")
 }
 

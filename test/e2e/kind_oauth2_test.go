@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	kindOAuthTokenTTL   = 30 * time.Second
+	kindOAuthTokenTTL = 30 * time.Second
+	// #nosec G101 -- fixture path or Kubernetes object name, not a credential value.
 	kindOAuthSecretPath = "/etc/openbao-kms/credentials/client-secret"
 	kindOAuthCAPath     = "/etc/openbao-kms/tls/issuer-ca.pem"
 	kindKMSClientPath   = "/usr/local/bin/kms-e2e-client"
@@ -271,7 +272,18 @@ func runKindKMSClient(t *testing.T, ctx context.Context, docker, node, mode stri
 func waitKindOAuthReady(t *testing.T, ctx context.Context, docker, node string) {
 	t.Helper()
 	waitKindOAuthCondition(t, ctx, "provider readiness", func() bool {
-		_, err := runDockerOutput(ctx, docker, "exec", node, "curl", "--fail", "--silent", "--max-time", "2", "http://127.0.0.1:8081/ready")
+		_, err := runDockerOutput(
+			ctx,
+			docker,
+			"exec",
+			node,
+			"curl",
+			"--fail",
+			"--silent",
+			"--max-time",
+			"2",
+			"http://127.0.0.1:8081/ready",
+		)
 		return err == nil
 	})
 }
@@ -302,7 +314,16 @@ func waitKindOAuthCondition(t *testing.T, ctx context.Context, description strin
 func holdKindOAuthComponent(t *testing.T, ctx context.Context, docker, node, component string) {
 	t.Helper()
 	// Hold outside the watched directory: kubelet also reads files with .hold suffixes.
-	runDocker(t, ctx, docker, "exec", node, "mv", "/etc/kubernetes/manifests/"+component+".yaml", kindOAuthHoldDir+"/"+component+".yaml")
+	runDocker(
+		t,
+		ctx,
+		docker,
+		"exec",
+		node,
+		"mv",
+		"/etc/kubernetes/manifests/"+component+".yaml",
+		kindOAuthHoldDir+"/"+component+".yaml",
+	)
 	waitKindOAuthCondition(t, ctx, component+" stopped", func() bool {
 		output, err := runDockerOutput(ctx, docker, "exec", node, "crictl", "ps", "--name", "^"+component+"$", "-q")
 		return err == nil && strings.TrimSpace(output) == ""
@@ -311,5 +332,14 @@ func holdKindOAuthComponent(t *testing.T, ctx context.Context, docker, node, com
 
 func restoreKindOAuthComponent(t *testing.T, ctx context.Context, docker, node, component string) {
 	t.Helper()
-	runDocker(t, ctx, docker, "exec", node, "mv", kindOAuthHoldDir+"/"+component+".yaml", "/etc/kubernetes/manifests/"+component+".yaml")
+	runDocker(
+		t,
+		ctx,
+		docker,
+		"exec",
+		node,
+		"mv",
+		kindOAuthHoldDir+"/"+component+".yaml",
+		"/etc/kubernetes/manifests/"+component+".yaml",
+	)
 }

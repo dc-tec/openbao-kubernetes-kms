@@ -32,6 +32,7 @@ const (
 	containerPKCS11ModulePath        = "/usr/lib/softhsm/libsofthsm2.so"
 	containerSoftHSMConfigPath       = "/hsm/softhsm2.conf"
 	containerSPIFFEWorkloadAPISocket = "unix:///run/spire/sockets/agent.sock"
+	// #nosec G101 -- test token label or Kubernetes object name, not a credential value.
 	providerCertAuthPKCS11TokenLabel = "openbao-kms-e2e"
 	providerCertAuthPKCS11KeyLabel   = "openbao-kms-client"
 	providerCertAuthMinRemainingTTL  = "2m"
@@ -58,7 +59,14 @@ func TestProviderContainerFullStackE2E(t *testing.T) {
 	if err != nil {
 		t.Skipf("%s: %v", framework.ErrDockerUnavailable, err)
 	}
-	if output, err := exec.CommandContext(ctx, dockerPath, "version", "--format", "{{.Server.Version}}").CombinedOutput(); err != nil {
+	// #nosec G204 -- the test harness selects the executable and fixture arguments; no shell expansion is used.
+	if output, err := exec.CommandContext(
+		ctx,
+		dockerPath,
+		"version",
+		"--format",
+		"{{.Server.Version}}",
+	).CombinedOutput(); err != nil {
 		t.Skipf("%s: %s", framework.ErrDockerUnavailable, strings.TrimSpace(string(output)))
 	}
 
@@ -112,7 +120,14 @@ func TestProviderContainerFullStackE2E(t *testing.T) {
 	writeProviderContainerConfig(t, filepath.Join(stagingDir, "provider.yaml"), environment)
 	copyFile(t, environment.CACertFile, filepath.Join(stagingDir, "openbao-ca.crt"), 0o644)
 	copyFile(t, environment.JWTFile, filepath.Join(stagingDir, "identity.jwt"), 0o600)
-	populateProviderVolumes(t, ctx, dockerPath, stagingDir, framework.EnvDefault(framework.EnvOpenBaoImage, framework.DefaultOpenBaoImage), volumes)
+	populateProviderVolumes(
+		t,
+		ctx,
+		dockerPath,
+		stagingDir,
+		framework.EnvDefault(framework.EnvOpenBaoImage, framework.DefaultOpenBaoImage),
+		volumes,
+	)
 
 	clientPath := filepath.Join(stagingDir, "kms-client")
 	buildKMSClient(t, ctx, clientPath)
@@ -136,6 +151,11 @@ func TestProviderContainerFullStackE2E(t *testing.T) {
 	}
 	runDocker(t, ctx, dockerPath, "stop", "--time", "20", providerName)
 	logs := dockerLogs(ctx, dockerPath, providerName)
+	assertProviderLifecycleLogs(t, logs)
+}
+
+func assertProviderLifecycleLogs(t *testing.T, logs string) {
+	t.Helper()
 	previous := -1
 	for _, event := range []string{"serve.start", "serve.ready", "serve.shutdown"} {
 		marker := `"message":"` + event + `"`
@@ -213,14 +233,9 @@ type providerSPIFFEAuthConfigOptions struct {
 	TrustDomain       string
 }
 
-func writeProviderContainerConfigWithOptions(
-	t *testing.T,
-	path string,
-	environment *framework.OpenBaoEnvironment,
-	opts providerContainerConfigOptions,
-) {
-	t.Helper()
-
+func defaultProviderContainerConfig(
+	environment *framework.OpenBaoEnvironment, opts providerContainerConfigOptions,
+) providerContainerConfigOptions {
 	if opts.OpenBaoTimeout == "" {
 		opts.OpenBaoTimeout = "5s"
 	}
@@ -260,6 +275,18 @@ func writeProviderContainerConfigWithOptions(
 	if opts.ExpectedSubject == "" {
 		opts.ExpectedSubject = environment.JWTSubject()
 	}
+	return opts
+}
+
+func writeProviderContainerConfigWithOptions(
+	t *testing.T,
+	path string,
+	environment *framework.OpenBaoEnvironment,
+	opts providerContainerConfigOptions,
+) {
+	t.Helper()
+
+	opts = defaultProviderContainerConfig(environment, opts)
 	authConfig := providerJWTAuthConfig(environment, opts)
 	if opts.AuthMethod == providerAuthMethodCert {
 		authConfig = providerCertAuthConfig(environment, opts)
@@ -436,7 +463,10 @@ func providerPKCS11AuthConfig(pkcs11 providerPKCS11AuthConfigOptions) string {
 	)
 }
 
-func providerSPIFFEAuthConfig(environment *framework.OpenBaoEnvironment, spiffe providerSPIFFEAuthConfigOptions) string {
+func providerSPIFFEAuthConfig(
+	environment *framework.OpenBaoEnvironment,
+	spiffe providerSPIFFEAuthConfigOptions,
+) string {
 	if spiffe.WorkloadAPISocket == "" {
 		spiffe.WorkloadAPISocket = containerSPIFFEWorkloadAPISocket
 	}
@@ -503,6 +533,7 @@ func buildKMSClient(t *testing.T, ctx context.Context, outputPath string) {
 	if err != nil {
 		t.Fatalf("find go binary: %v", err)
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, goPath, "build", "-trimpath", "-o", outputPath, "./test/e2e/kmsclient")
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
@@ -513,6 +544,7 @@ func buildKMSClient(t *testing.T, ctx context.Context, outputPath string) {
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build KMS client: %v: %s", err, strings.TrimSpace(string(output)))
 	}
+	// #nosec G302 -- the isolated fixture is shared with or executed by a different container UID.
 	if err := os.Chmod(outputPath, 0o755); err != nil {
 		t.Fatalf("chmod KMS client: %v", err)
 	}
@@ -529,7 +561,16 @@ func startProviderContainer(
 ) {
 	t.Helper()
 
-	startProviderContainerWithOptions(t, ctx, dockerPath, name, networkName, image, volumes, providerContainerStartOptions{})
+	startProviderContainerWithOptions(
+		t,
+		ctx,
+		dockerPath,
+		name,
+		networkName,
+		image,
+		volumes,
+		providerContainerStartOptions{},
+	)
 }
 
 func startProviderContainerWithOptions(
@@ -544,16 +585,17 @@ func startProviderContainerWithOptions(
 ) {
 	t.Helper()
 
-	args := []string{
+	args := make([]string, 0, 19+2*len(opts.Env)+2*len(opts.Volumes))
+	args = append(args,
 		"run", "--detach",
 		"--name", name,
 		"--network", networkName,
 		"--read-only",
-		"--volume", volumes.config + ":/config:ro",
-		"--volume", volumes.tls + ":/bao/tls:ro",
-		"--volume", volumes.run + ":/run/openbao-kms",
-		"--volume", volumes.state + ":/var/lib/openbao-kms/state",
-	}
+		"--volume", volumes.config+":/config:ro",
+		"--volume", volumes.tls+":/bao/tls:ro",
+		"--volume", volumes.run+":/run/openbao-kms",
+		"--volume", volumes.state+":/var/lib/openbao-kms/state",
+	)
 	for _, value := range opts.Env {
 		args = append(args, "--env", value)
 	}
@@ -570,6 +612,7 @@ func startProviderContainerWithOptions(
 func copyFile(t *testing.T, source string, target string, mode os.FileMode) {
 	t.Helper()
 
+	// #nosec G304 -- source and destination paths belong to the caller-controlled test fixture.
 	input, err := os.Open(source)
 	if err != nil {
 		t.Fatalf("open %s: %v", source, err)
@@ -580,6 +623,7 @@ func copyFile(t *testing.T, source string, target string, mode os.FileMode) {
 		}
 	}()
 
+	// #nosec G304 -- source and destination paths belong to the caller-controlled test fixture.
 	output, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
 		t.Fatalf("create %s: %v", target, err)
@@ -625,6 +669,7 @@ func runDocker(t *testing.T, ctx context.Context, dockerPath string, args ...str
 }
 
 func runDockerOutput(ctx context.Context, dockerPath string, args ...string) (string, error) {
+	// #nosec G204 G702 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, dockerPath, args...)
 	output, err := cmd.CombinedOutput()
 	return string(output), err

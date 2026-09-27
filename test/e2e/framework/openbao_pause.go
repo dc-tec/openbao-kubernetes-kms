@@ -24,6 +24,7 @@ func (f *OpenBaoEnvironment) setContainerPaused(ctx context.Context, paused bool
 	if paused {
 		action = "pause"
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, f.dockerBinary, action, f.containerName)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s OpenBao environment container: %w: %s", action, err, strings.TrimSpace(string(output)))

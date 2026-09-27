@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **ci:** Lint certificate and E2E build tags in the core gate. Clean up fixture
+  setup, limit OAuth fixture request bodies, and keep recursive ownership
+  changes within the certificate fixture directory.
+
 - **test:** Give OAuth expiry assertions a bounded observation window beyond
   the last token's maximum lifetime, and bound each status RPC by that window.
 

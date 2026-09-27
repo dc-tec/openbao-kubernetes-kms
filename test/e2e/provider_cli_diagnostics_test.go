@@ -81,7 +81,7 @@ resources:
 		"-c", "cp /src/*.yaml /config/ && chown 65532:65532 /config/*.yaml && chmod 0600 /config/*.yaml")
 	output := stack.runProviderCLI(ctx, "migration", "doctor", "--config", containerConfigPath,
 		"--encryption-config", "/config/migration.yaml", "--output", "json")
-	assertCLIJSONReport(t, output, "doctor", "kubernetes.encryption_config", "pass")
+	assertCLIJSONReport(t, output, "doctor", "kubernetes.encryption_config")
 	assertOutputNotContains(t, output, secret)
 	for _, name := range []string{"missing", "malformed"} {
 		output = stack.runProviderCLIExpectCheckFailure(ctx, name, "doctor", "--config", containerConfigPath,

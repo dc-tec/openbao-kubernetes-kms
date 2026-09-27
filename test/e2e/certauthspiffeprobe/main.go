@@ -28,7 +28,12 @@ func main() {
 
 func run() error {
 	cfg := probeConfig{}
-	flag.StringVar(&cfg.WorkloadAPISocket, "workload-api-socket", "unix:///run/spire/sockets/agent.sock", "SPIFFE Workload API socket")
+	flag.StringVar(
+		&cfg.WorkloadAPISocket,
+		"workload-api-socket",
+		"unix:///run/spire/sockets/agent.sock",
+		"SPIFFE Workload API socket",
+	)
 	flag.StringVar(&cfg.SPIFFEID, "spiffe-id", "spiffe://example.org/openbao-kms/workload-a", "expected SPIFFE ID")
 	flag.StringVar(&cfg.TrustDomain, "trust-domain", "example.org", "expected SPIFFE trust domain")
 	flag.DurationVar(&cfg.Timeout, "timeout", 15*time.Second, "probe timeout")

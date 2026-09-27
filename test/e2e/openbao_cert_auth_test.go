@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("OpenBao Cert Auth CI", Label(framework.LabelOpenBao, framework.LabelCertAuth, framework.LabelCI), func() {
+var _ = Describe("OpenBao Cert Auth CI", func() {
 	It("validates TLS certificate auth against an ephemeral OpenBao environment", func(ctx SpecContext) {
 		if !framework.OpenBaoCIEnabled() {
 			Skip("E2E_OPENBAO_CI=true is required")
@@ -67,7 +67,7 @@ var _ = Describe("OpenBao Cert Auth CI", Label(framework.LabelOpenBao, framework
 		})
 		Expect(err).To(HaveOccurred())
 	}, SpecTimeout(2*time.Minute))
-})
+}, Label(framework.LabelOpenBao, framework.LabelCertAuth, framework.LabelCI))
 
 type staticClientCertificateProvider struct {
 	cert tls.Certificate
