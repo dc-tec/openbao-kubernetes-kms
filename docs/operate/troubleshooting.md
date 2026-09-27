@@ -140,9 +140,10 @@ A recreated key with the same name never decrypts old data.
 
 ## Registry state save failed
 
-When `/ready` reports `state_save_failed`, check free space, filesystem errors,
-mount writability, and the state directory's owner and permissions. Repair the
-storage problem while preserving the registry file and its checkpoint. Do not
+When `/ready` reports `state_save_failed` or `persistence_degraded: true`, check
+free space, filesystem errors, mount writability, and the state directory's
+owner and permissions. Repair the storage problem while preserving the registry
+file and its checkpoint. Do not
 delete either file to bypass the error.
 
 The provider retries the exact attempted transition and validates it against
@@ -152,9 +153,15 @@ failure and require investigation; do not replace them with older copies while
 the provider is running. See [Disaster recovery](/docs/operate/disaster-recovery/)
 for recovery with matching state, checkpoint, and Transit evidence.
 
-During the failure, Encrypt is unavailable. Decrypt can still use keys in the
-last published registry. Confirm `/ready` has returned to HTTP 200 and validate
-reads and writes before resuming a rotation.
+An observation-only save that leaves both files unchanged can keep Encrypt and
+Decrypt available with the published keys. In this case, `/ready` can return
+HTTP 200 with `persistence_degraded: true`. Rotation progress stays unpublished
+until storage recovers. Other save failures stop Encrypt; Decrypt can still use
+keys in the last published registry.
+
+Before resuming a rotation, confirm `/ready` returns HTTP 200 without
+`persistence_degraded`, check that `openbao_kms_rotation_persistence_degraded`
+is `0`, and validate reads and writes.
 
 ## Unknown key ID
 

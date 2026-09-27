@@ -114,6 +114,28 @@ func TestReadyReturns503WhenDiagnosticsUnhealthy(t *testing.T) {
 	}
 }
 
+func TestReadyReportsDeferredPersistenceWithoutOverridingHealth(t *testing.T) {
+	ready := &readyStub{diagnostics: status.Diagnostics{
+		Healthz: kmsv2.HealthOK, ActiveKeyIDHash: probeKeyHash, PersistenceDegraded: true,
+	}}
+	handler := mustHandler(t, &liveStub{}, ready)
+	resp := request(t, handler, http.MethodGet, health.PathReady)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"persistence_degraded":true`) {
+		t.Fatalf("missing healthy persistence warning: %s", resp.Body)
+	}
+	ready.diagnostics.Healthz = kmsv2.HealthUnhealthy
+	resp = request(t, handler, http.MethodGet, health.PathReady)
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatal("persistence warning overrode unhealthy status")
+	}
+	ready.diagnostics.Healthz = kmsv2.HealthOK
+	ready.diagnostics.PersistenceDegraded = false
+	resp = request(t, handler, http.MethodGet, health.PathReady)
+	if resp.Code != http.StatusOK || strings.Contains(resp.Body.String(), "persistence_degraded") {
+		t.Fatalf("recovered response retained warning: %s", resp.Body)
+	}
+}
+
 func TestReadyReturns503WhenProbeReturnsError(t *testing.T) {
 	handler := mustHandler(t, &liveStub{}, &readyStub{err: errors.New("probe failed")})
 

@@ -32,6 +32,13 @@ Status returns the plugin API version, the health state, and the active
 - `key_id` changes only when the rotation state machine promotes a new
   snapshot.
 
+An observation-only persistence failure can keep Status healthy when fresh
+metadata and the last successful deep probe still validate the published keys,
+and both state files remain unchanged. The provider reports this condition
+through readiness diagnostics and a metric. It publishes no new identity or
+promotion until persistence succeeds. Other save failures remain unhealthy.
+See [Persistence failures](/docs/architecture/rotation-model/#persistence-failures).
+
 The provider always keeps this invariant, because Kubernetes discards any
 encrypt response that breaks it and marks the provider unhealthy:
 

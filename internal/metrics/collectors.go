@@ -26,11 +26,17 @@ type diagnosticsCollector struct {
 	statusCacheAge      *prometheus.Desc
 	circuitBreakerState *prometheus.Desc
 	rotationState       *prometheus.Desc
+	persistenceDegraded *prometheus.Desc
 }
 
 func newDiagnosticsCollector(provider StatusProvider) *diagnosticsCollector {
 	return &diagnosticsCollector{
 		provider: provider,
+		persistenceDegraded: prometheus.NewDesc(
+			"openbao_kms_rotation_persistence_degraded",
+			"A pending observation save is deferred; readiness reports current key usability.",
+			nil, nil,
+		),
 		statusKeyIDHash: prometheus.NewDesc(
 			"openbao_kms_status_key_id_hash",
 			"Current active Kubernetes key ID hash.",
@@ -70,10 +76,16 @@ func (c *diagnosticsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.statusCacheAge
 	ch <- c.circuitBreakerState
 	ch <- c.rotationState
+	ch <- c.persistenceDegraded
 }
 
 func (c *diagnosticsCollector) Collect(ch chan<- prometheus.Metric) {
 	diagnostics := c.provider.DiagnosticsSnapshot()
+	degraded := 0.0
+	if diagnostics.PersistenceDegraded {
+		degraded = 1
+	}
+	ch <- prometheus.MustNewConstMetric(c.persistenceDegraded, prometheus.GaugeValue, degraded)
 	if diagnostics.ActiveKeyIDHash != "" {
 		ch <- prometheus.MustNewConstMetric(
 			c.statusKeyIDHash,

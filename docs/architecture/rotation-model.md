@@ -128,9 +128,23 @@ already have encrypted with it.
 ## Persistence failures
 
 The provider writes registry state and its replay checkpoint separately. A save
-can fail after the state file has changed. Until recovery completes, Status and
-readiness remain unhealthy, Encrypt stops, and the last published registry
+can fail after the state file has changed. A failed save normally makes Status
+and readiness unhealthy and stops Encrypt. The last published registry
 continues to serve Decrypt for known keys.
+
+A failed observation-only save can keep Status healthy when both files still
+match the published state, fresh metadata validates every retained key and the
+active encryption version, and the last deep probe succeeded. Only the pending
+observation count and its stable timestamp may differ in the attempted state.
+New identities, promotions, partial writes, and conflicting or missing files
+cannot use this exception. Encrypt keeps the published active key; Decrypt can
+use all previously published keys. Metadata and deep-probe failures still make
+Status unhealthy, and cached metadata still expires normally.
+
+During this exception, `/ready` includes `persistence_degraded: true` and the
+`openbao_kms_rotation_persistence_degraded` metric is `1`. Failed saves continue
+to produce warning logs and failed-probe counters. Repair storage before
+continuing rotation; see [Troubleshooting](/docs/operate/troubleshooting/#registry-state-save-failed).
 
 The running process retains the exact attempted transition. Before publishing
 another state, it checks that both files contain only the last confirmed state
@@ -138,6 +152,12 @@ or that transition, then repeats the save and its durability barriers. Missing
 confirmed files, conflicting hashes, and unexpected generations fail closed.
 Fresh Transit metadata must validate the recovered state before health returns.
 A recovered promotion also requires a deep probe of the new active key.
+
+Deferred retries do not accumulate observations. The attempted observation and
+its timestamp stay fixed until the save completes. After recovery, the next
+observation can promote if the configured count and delay are satisfied. No new
+identity or promotion is published before its own save succeeds. Successful
+state publication clears the persistence warning.
 
 Stable observations stop increasing at the configured threshold. During the
 remaining activation delay, unchanged observations update cached metadata health

@@ -118,6 +118,33 @@ func TestReadinessReasonsTrackBootstrapStalenessAndPromotion(t *testing.T) {
 	f.probeHealthy(t)
 }
 
+func TestDeferredSaveReportsFailureWithoutPromotionOrBackendBackoff(t *testing.T) {
+	f := newDiagnosticFixture(t, 3, time.Minute)
+	f.probeHealthy(t)
+	f.transit.profile = profileForLatest(2, f.clock.Now())
+	if err := f.controller.ProbeOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	f.state.saveErr = errors.New("sensitive storage path")
+	for range 5 {
+		if err := f.controller.ProbeOnce(t.Context()); err == nil {
+			t.Fatal("deferred save did not report failure")
+		}
+		last := f.observations.probes[len(f.observations.probes)-1]
+		if last.Status != "error" || last.Reason != status.ReasonStateSaveFailed ||
+			last.ErrorClass != "state_save_failed" {
+			t.Fatalf("incorrect deferred observation: %+v", last)
+		}
+		if diagnostics := f.store.DiagnosticsSnapshot(); !diagnostics.PersistenceDegraded ||
+			diagnostics.CircuitBreaker.State != status.CircuitBreakerClosed || len(diagnostics.Reasons) != 0 {
+			t.Fatalf("incorrect deferred health: %+v", diagnostics)
+		}
+	}
+	if len(f.observations.promotions) != 0 {
+		t.Fatal("deferred observations emitted a promotion")
+	}
+}
+
 func TestPromotionEventRequiresPersistedPublication(t *testing.T) {
 	f := newDiagnosticFixture(t, 2, time.Minute)
 	f.probeHealthy(t)
