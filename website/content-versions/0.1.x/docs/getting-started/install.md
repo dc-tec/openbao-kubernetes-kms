@@ -159,14 +159,32 @@ The package installs the binary, systemd unit, sysusers and tmpfiles inputs, and
 Use the systemd tarball when native packaging is not available for your host image:
 
 ```sh
-sudo tar -C / -xzf bao-kms-provider_0.1.0-preview.2_systemd_linux_amd64.tar.gz
+VERSION=0.1.0-preview.2
+ARCH=amd64
+tar -xzf "bao-kms-provider_${VERSION}_systemd_linux_${ARCH}.tar.gz"
+cd "bao-kms-provider_${VERSION}_systemd_linux_${ARCH}"
 ```
 
-Then create the `openbao-kms` user, `openbao-kms` group, and
-`openbao-kms-socket` group according to [Deployment: Linux Identity
-Model](/docs/deployment/linux-identity-model/). The tarball contains installable
-files, but the host image remains responsible for distribution-specific user
-and group creation.
+Run the following block in a root shell from that extracted directory. It
+installs the binary and service metadata while preserving live configuration:
+
+```sh
+set -eu
+install -D -o root -g root -m 0755 bin/bao-kms-provider /usr/bin/bao-kms-provider
+install -D -o root -g root -m 0644 systemd/bao-kms-provider.service /usr/lib/systemd/system/bao-kms-provider.service
+install -D -o root -g root -m 0644 sysusers.d/openbao-kms.conf /usr/lib/sysusers.d/openbao-kms.conf
+install -D -o root -g root -m 0644 tmpfiles.d/openbao-kms.conf /usr/lib/tmpfiles.d/openbao-kms.conf
+install -D -o root -g root -m 0644 config/provider-systemd.yaml /usr/share/doc/bao-kms-provider/examples/provider-systemd.yaml
+install -D -o root -g root -m 0644 kubernetes/encryption-config.yaml /usr/share/doc/bao-kms-provider/examples/encryption-config.yaml
+install -D -o root -g root -m 0644 README.md /usr/share/doc/bao-kms-provider/README.md
+install -D -o root -g root -m 0644 LICENSE /usr/share/doc/bao-kms-provider/LICENSE
+systemd-sysusers /usr/lib/sysusers.d/openbao-kms.conf
+systemd-tmpfiles --create /usr/lib/tmpfiles.d/openbao-kms.conf
+```
+
+Apply the directory-permissions correction in the
+[systemd guide](/docs/deployment/systemd/#directory-setup) before starting the
+provider. The tarball is an installation kit, not a root filesystem archive.
 
 ## Install The Static-Pod Bundle
 

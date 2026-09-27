@@ -25,11 +25,18 @@ Apply the persistent tmpfiles override in the
 service. The override also prevents a later tmpfiles run from restoring the
 incorrect group. Preserve any existing operator override.
 
+## systemd tarball layout
+
+The systemd tarball contains a versioned directory with `bin/`, `systemd/`,
+`sysusers.d/`, and `tmpfiles.d/`. Extract it into a working directory and follow
+the [installation commands](/docs/getting-started/install/#install-the-systemd-tarball).
+Do not extract it directly over the root filesystem.
+
 ## Static-pod diagnostic binary
 
 The static-pod bundle does not contain a host diagnostic binary. Obtain the
 same-version systemd tarball for the host architecture and extract its
-`usr/bin/bao-kms-provider` for diagnostics. Do not install its systemd unit or
+`bin/bao-kms-provider` for diagnostics. Do not install its systemd unit or
 host ownership settings for a static-pod deployment.
 
 ## Fresh evaluation clusters
