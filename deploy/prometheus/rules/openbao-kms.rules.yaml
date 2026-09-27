@@ -123,6 +123,16 @@ groups:
           summary: "OpenBao KMS rejected requests at a concurrency limit"
           description: "The provider rejected {{ $labels.method }} requests at its configured concurrency limit on {{ $labels.instance }}."
 
+      - alert: OpenBaoKMSProcessRestarting
+        expr: |
+          (changes(process_start_time_seconds[15m]) > 2)
+          and on (job, instance) (openbao_kms_build_info == 1)
+        labels:
+          severity: warning
+        annotations:
+          summary: "OpenBao KMS process restarted repeatedly"
+          description: "At least three provider process restarts were observed on {{ $labels.instance }} in 15 minutes."
+
       - alert: OpenBaoKMSStaleSocketRemoved
         expr: sum by (job, instance) (increase(openbao_kms_socket_restarts_total[10m])) > 0
         for: 1m

@@ -13,6 +13,7 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/metrics"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
 )
 
 func TestObservabilityOmitsCorrelationFieldsByDefault(t *testing.T) {
@@ -161,7 +162,7 @@ func newTestObservability(t *testing.T, out *bytes.Buffer, correlation debugCorr
 	if err != nil {
 		t.Fatalf("new logger: %v", err)
 	}
-	recorder, err := metrics.NewRecorder()
+	recorder, err := metrics.NewRecorder(version.Info{})
 	if err != nil {
 		t.Fatalf("new metrics recorder: %v", err)
 	}

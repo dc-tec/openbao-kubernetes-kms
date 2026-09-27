@@ -9,6 +9,7 @@ import (
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -68,7 +69,7 @@ type Recorder struct {
 }
 
 // NewRecorder creates an isolated registry with provider metrics.
-func NewRecorder() (*Recorder, error) {
+func NewRecorder(info version.Info) (*Recorder, error) {
 	recorder := &Recorder{
 		registry: prometheus.NewRegistry(),
 		grpcRequests: prometheus.NewCounterVec(
@@ -158,6 +159,9 @@ func NewRecorder() (*Recorder, error) {
 		),
 	}
 	if err := recorder.registerBaseCollectors(); err != nil {
+		return nil, err
+	}
+	if err := recorder.registerRuntimeCollectors(info); err != nil {
 		return nil, err
 	}
 	return recorder, nil

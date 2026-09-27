@@ -110,6 +110,7 @@ func TestPrometheusRuleSampleIsValid(t *testing.T) {
 		"OpenBaoKMSAADValidationErrors",
 		"OpenBaoKMSGRPCLatencyHigh",
 		"OpenBaoKMSConcurrencyRejected",
+		"OpenBaoKMSProcessRestarting",
 	}
 	for _, alert := range requiredAlerts {
 		if !prometheusRulesContainAlert(group.Rules, alert) {
