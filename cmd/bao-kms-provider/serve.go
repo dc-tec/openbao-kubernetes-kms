@@ -119,7 +119,7 @@ func (b runtimeBuilder) build(ctx context.Context, cfg config.Config) (serveDepe
 func (b runtimeBuilder) buildRuntime(
 	ctx context.Context, cfg config.Config, logger *logging.Logger,
 ) (serveDependencies, error) {
-	metricsRecorder, err := metrics.NewRecorder()
+	metricsRecorder, err := metrics.NewRecorder(b.info)
 	if err != nil {
 		return serveDependencies{}, err
 	}

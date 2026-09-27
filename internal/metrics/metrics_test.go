@@ -3,6 +3,7 @@ package metrics_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -11,10 +12,11 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/metrics"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
 )
 
 func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
-	recorder, err := metrics.NewRecorder()
+	recorder, err := metrics.NewRecorder(version.Info{})
 	if err != nil {
 		t.Fatalf("new recorder: %v", err)
 	}
@@ -74,6 +76,36 @@ func TestRecorderScrapeExposesBoundedMetrics(t *testing.T) {
 	}
 }
 
+func TestRecorderRuntimeCollectorsAreIsolated(t *testing.T) {
+	for _, buildVersion := range []string{"test-one", "test-two"} {
+		recorder, err := metrics.NewRecorder(version.Info{
+			Version: buildVersion, Commit: "commit", BuildDate: "date", Dirty: "false",
+		})
+		if err != nil {
+			t.Fatalf("new recorder: %v", err)
+		}
+		output := scrapeMetrics(t, recorder.Handler())
+		for _, metric := range []string{"go_goroutines ", "go_info{", "go_memstats_alloc_bytes "} {
+			if !strings.Contains(output, metric) {
+				t.Errorf("scrape missing runtime metric %q", metric)
+			}
+		}
+		want := `openbao_kms_build_info{build_date="date",commit="commit",dirty="false",version="` + buildVersion + `"} 1`
+		if !strings.Contains(output, want) || strings.Count(output, "\nopenbao_kms_build_info{") != 1 {
+			t.Errorf("build metadata was not isolated to this recorder: %s", output)
+		}
+		if runtime.GOOS == "linux" {
+			for _, metric := range []string{
+				"process_start_time_seconds ", "process_cpu_seconds_total ", "process_resident_memory_bytes ",
+			} {
+				if !strings.Contains(output, metric) {
+					t.Errorf("scrape missing Linux process metric %q", metric)
+				}
+			}
+		}
+	}
+}
+
 func scrapeMetrics(t *testing.T, handler http.Handler) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
@@ -92,7 +124,7 @@ type mutableStatusProvider struct{ diagnostics status.Diagnostics }
 func (p *mutableStatusProvider) DiagnosticsSnapshot() status.Diagnostics { return p.diagnostics }
 
 func TestPersistenceWarningMetricTracksRecovery(t *testing.T) {
-	recorder, err := metrics.NewRecorder()
+	recorder, err := metrics.NewRecorder(version.Info{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -31,6 +31,13 @@ Load the sample rules from `deploy/prometheus/rules/openbao-kms.rules.yaml`,
 and tune their thresholds to your probe cadence, OpenBao latency, token TTLs,
 and API server restart behavior before paging on them.
 
+The `OpenBaoKMSProcessRestarting` alert detects at least three observed process
+restarts in 15 minutes. It matches `process_start_time_seconds` only on targets
+that also expose `openbao_kms_build_info`. Keep `job` and `instance` labels
+stable across restarts. Restarts between scrapes or replacements that change
+these labels can go uncounted. `openbao_kms_socket_restarts_total` counts stale
+socket cleanup, not process restarts.
+
 ## Grafana
 
 Import `deploy/grafana/dashboards/openbao-kms-overview.json` with a Prometheus

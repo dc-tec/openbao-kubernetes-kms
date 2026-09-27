@@ -4,6 +4,9 @@
 
 ### Bug Fixes
 
+- **observability:** Export Go runtime, process, and build metadata metrics.
+  Add a provider-scoped alert for repeated observed process restarts.
+
 - **policy:** Include token renewal in `policy openbao` output by default,
   matching `init` and runtime behavior. Add `--include-token-renewal=false` for
   non-renewable tokens or policies that grant renewal separately.

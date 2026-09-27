@@ -74,6 +74,10 @@ names, request UIDs, and error strings never appear as labels.
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
+| `openbao_kms_build_info` | gauge | `version`, `commit`, `build_date`, `dirty` | `1` for the running binary's build metadata. |
+| `process_start_time_seconds` | gauge | none | Process start time as Unix seconds; changes indicate observed process restarts. |
+| `process_*` | varies | collector-defined | Standard Prometheus process metrics, including CPU, memory, and file descriptors on Linux. Availability depends on the operating system. |
+| `go_*` | varies | collector-defined | Standard Prometheus Go runtime metrics, including goroutines, memory, garbage collection, and Go version. |
 | `openbao_kms_grpc_requests_total` | counter | `method`, `status` | KMS v2 calls (`status`, `encrypt`, `decrypt`) by outcome. |
 | `openbao_kms_grpc_duration_seconds` | histogram | `method` | KMS v2 handler latency. |
 | `openbao_kms_grpc_in_flight` | gauge | `method` | Active handlers per method. |
