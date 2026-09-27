@@ -29,7 +29,13 @@ other&rsquo;s failure.</li><li>It is unhealthy when <code>disable_upsert=true</c
 older than <code>status.statusMaxStaleness</code>.</li><li>After a failed deep probe, the provider retries it following the next
 successful metadata probe, within its circuit breaker, without waiting for
 <code>status.deepProbeInterval</code>.</li><li><code>key_id</code> changes only when the rotation state machine promotes a new
-snapshot.</li></ul><p>The provider always keeps this invariant, because Kubernetes discards any
+snapshot.</li></ul><p>An observation-only persistence failure can keep Status healthy when fresh
+metadata and the last successful deep probe still validate the published keys,
+and both state files remain unchanged. The provider reports this condition
+through readiness diagnostics and a metric. It publishes no new identity or
+promotion until persistence succeeds. Other save failures remain unhealthy.
+See <a href=/openbao-kubernetes-kms/docs/architecture/rotation-model/#persistence-failures>Persistence failures</a>
+.</p><p>The provider always keeps this invariant, because Kubernetes discards any
 encrypt response that breaks it and marks the provider unhealthy:</p><div class=command-block><div class=command-head><div><span>text</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-text>EncryptResponse.key_id == most_recent_healthy_Status.key_id</code></pre></div><h2 id=encrypt>Encrypt</h2><p>Encrypt takes plaintext and a request UID, and returns Transit ciphertext, the
 active <code>key_id</code>, and annotations. Each call uses exactly one active snapshot
 and passes an explicit Transit <code>key_version</code>, so a rotation between the call
