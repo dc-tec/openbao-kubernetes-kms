@@ -68,7 +68,10 @@ the numeric GID from `getent group openbao-kms-socket` in both
 Create `/run/openbao-kms` with a `tmpfiles.d` entry, a privileged install step,
 or a root pre-start helper. `RuntimeDirectory=` alone can assign the wrong
 group. The provider checks the directory at startup and fails closed if it is
-unsafe.
+unsafe. The directory must be owned by the provider's effective UID, must not
+be a symlink, and must not allow group or world write. A non-root provider
+therefore cannot use a root-owned runtime directory. Set its owner during
+installation, before starting the provider.
 
 Mode `2750` lets the owner create and remove the socket and lets the socket
 group traverse the directory. The setgid bit keeps the socket group stable, and

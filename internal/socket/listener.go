@@ -131,6 +131,14 @@ func validateParent(socketPath string) error {
 	if info.Mode().Perm()&0o022 != 0 {
 		return fmt.Errorf("%w: parent must not be group-writable or world-writable", ErrUnsafeParent)
 	}
+	return validateParentOwner(info, os.Geteuid())
+}
+
+func validateParentOwner(info os.FileInfo, uid int) error {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || int64(stat.Uid) != int64(uid) {
+		return fmt.Errorf("%w: parent must be owned by the current user", ErrUnsafeParent)
+	}
 	return nil
 }
 
