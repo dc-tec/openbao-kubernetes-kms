@@ -62,7 +62,10 @@ and `server.socketGroup`. Restart the provider, then the API server if needed.
 **Signs:** `/ready` fails, KMS Status is unhealthy, and OpenBao request errors
 or timeouts appear in metrics.
 
-**Check:** `bao status`, `/ready`, and `doctor`.
+**Check:** `bao status`, `/ready`, and `doctor`. Use the KMS log `error_class`
+to locate transport failures: `openbao_tls_failed` points to certificate or TLS
+validation, `openbao_dns_failed` to name resolution, and
+`openbao_connection_failed` to the listener or network connection.
 
 **Fix:** restore OpenBao reachability, unseal or repair it, and check TLS and
 DNS. Run `verify-key`. The provider recovers on its own once OpenBao is

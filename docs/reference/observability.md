@@ -93,17 +93,25 @@ routing keys and dashboard groups.
 
 | Area | Classes |
 |---|---|
-| OpenBao and auth | `openbao_unavailable`, `openbao_sealed`, `openbao_rate_limited`, `auth_failed`, `transit_key_missing`, `transit_policy_denied` |
+| OpenBao and auth | `openbao_unavailable`, `openbao_tls_failed`, `openbao_dns_failed`, `openbao_connection_failed`, `openbao_sealed`, `openbao_rate_limited`, `auth_failed`, `transit_key_missing`, `transit_policy_denied` |
 | Decrypt validation | `key_id_unknown`, `key_id_malformed`, `key_metadata_refresh_failed`, `aad_missing`, `aad_mismatch`, `annotation_invalid` |
 | Request handling | `status_stale`, `protocol_limit`, `concurrency_limit`, `timeout`, `canceled`, `panic`, `unknown` |
 
 Token errors keep their cause: local credential failures and rejected logins
-are `auth_failed`, while unavailable, sealed, rate-limited, canceled, and
-timed-out auth calls keep those classes. A Transit `403` that persists after the
+are `auth_failed`, while transport, unavailable, sealed, rate-limited, canceled,
+and timed-out auth calls keep their cause classes. A Transit `403` that persists after the
 single recovery attempt, or while recovery is throttled, is
 `transit_policy_denied`, because OpenBao does not always tell a revoked token
 from a policy denial. OpenBao request metrics count both the rejected attempt
 and the retry.
+
+Typed certificate verification and TLS record failures use `openbao_tls_failed`;
+DNS failures use `openbao_dns_failed`; socket connection failures, including
+connection refusal and reset, use `openbao_connection_failed`. These KMS errors
+still return gRPC `Unavailable`. Unrecognized transport failures remain
+`openbao_unavailable`. No destination, certificate, or raw transport error is
+logged. OpenBao request logs and their metric `status` label use `tls_failed`,
+`dns_failed`, and `connection_failed` without the `openbao_` prefix.
 
 ## Alerts
 

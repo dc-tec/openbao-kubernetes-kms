@@ -309,7 +309,7 @@ func (s *Server) Encrypt(
 	})
 	if err != nil {
 		observation.ErrorClass = transitErrorClass(err)
-		return nil, transitRPCError(err)
+		return nil, transitRPCError(err, methodEncrypt)
 	}
 	if len(encrypted.Ciphertext) == 0 {
 		observation.ErrorClass = errorClassUnknown
@@ -397,7 +397,7 @@ func (s *Server) Decrypt(
 	})
 	if err != nil {
 		observation.ErrorClass = transitErrorClass(err)
-		return nil, transitRPCError(err)
+		return nil, transitRPCError(err, methodDecrypt)
 	}
 
 	return &kmsapi.DecryptResponse{Plaintext: slices.Clone(decrypted.Plaintext)}, nil
@@ -525,7 +525,7 @@ func rpcError(err error) error {
 	}
 }
 
-func transitRPCError(err error) error {
+func transitRPCError(err error, method string) error {
 	if err == nil {
 		return nil
 	}
@@ -533,16 +533,16 @@ func transitRPCError(err error) error {
 		return contextRPCError(err)
 	}
 	if authenticationError(err) {
-		return grpcstatus.Error(codes.Unauthenticated, safeCodeMessage(codes.Unauthenticated))
+		return grpcstatus.Error(codes.Unauthenticated, safeCodeMessage(codes.Unauthenticated, method))
 	}
 	code := grpcstatus.Code(err)
 	if code != codes.Unknown {
-		return grpcstatus.Error(code, safeCodeMessage(code))
+		return grpcstatus.Error(code, safeCodeMessage(code, method))
 	}
 	var openBaoErr *openbao.Error
 	if errors.As(err, &openBaoErr) {
 		code = openBaoRPCCode(openBaoErr.Class)
-		return grpcstatus.Error(code, safeCodeMessage(code))
+		return grpcstatus.Error(code, safeCodeMessage(code, method))
 	}
 	return grpcstatus.Error(codes.Unavailable, messageTransitOperationFailed)
 }
@@ -578,7 +578,8 @@ func authenticationError(err error) bool {
 	var apiErr *openbao.Error
 	if errors.As(err, &apiErr) {
 		switch apiErr.Class {
-		case openbao.ErrorClassUnavailable, openbao.ErrorClassSealed, openbao.ErrorClassRateLimited:
+		case openbao.ErrorClassUnavailable, openbao.ErrorClassSealed, openbao.ErrorClassRateLimited,
+			openbao.ErrorClassTLSFailed, openbao.ErrorClassDNSFailed, openbao.ErrorClassConnectionFailed:
 			return false
 		}
 	}
@@ -622,6 +623,12 @@ func openBaoKMSClass(class openbao.ErrorClass) string {
 		return errorClassOpenBaoSealed
 	case openbao.ErrorClassUnavailable:
 		return errorClassOpenBaoUnavailable
+	case openbao.ErrorClassTLSFailed:
+		return errorClassOpenBaoTLSFailed
+	case openbao.ErrorClassDNSFailed:
+		return errorClassOpenBaoDNSFailed
+	case openbao.ErrorClassConnectionFailed:
+		return errorClassOpenBaoConnectionFailed
 	default:
 		return errorClassUnknown
 	}
@@ -685,7 +692,7 @@ func safeLimitMessage(err error) string {
 	}
 }
 
-func safeCodeMessage(code codes.Code) string {
+func safeCodeMessage(code codes.Code, method string) string {
 	switch code {
 	case codes.Canceled:
 		return messageRequestCanceled
@@ -698,6 +705,9 @@ func safeCodeMessage(code codes.Code) string {
 	case codes.NotFound:
 		return messageTransitKeyNotFound
 	case codes.InvalidArgument:
+		if method == methodEncrypt {
+			return "transit encrypt failed"
+		}
 		return messageTransitDecryptFailed
 	case codes.ResourceExhausted:
 		return messageTransitRateLimited
