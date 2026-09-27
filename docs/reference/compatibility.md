@@ -14,6 +14,13 @@ Everything else might work but is outside the tested matrix.
 
 ## Unreleased clock handling
 
+Pending rotation now waits the full activation delay after each restart or after
+recovering an unconfirmed stable-observation save. State files remain readable;
+retained keys and observation counts are preserved. New local event timestamps
+preserve ordering across backward clock corrections. OpenBao creation metadata
+and key IDs retain their existing meaning. Older binaries still use persisted
+wall time for activation, so downgrades do not retain the new delay guarantee.
+
 Token leases and cached status cannot regain validity after an observed expiry
 through a backward clock correction. Forward corrections can require earlier
 authentication or a fresh probe. Retry and circuit-breaker cooldowns use

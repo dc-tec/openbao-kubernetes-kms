@@ -154,11 +154,38 @@ Fresh Transit metadata must validate the recovered state before health returns.
 A recovered promotion also requires a deep probe of the new active key.
 
 Deferred retries do not accumulate observations. The attempted observation and
-its timestamp stay fixed until the save completes. After recovery, the next
-observation can promote if the configured count and delay are satisfied. No new
+its timestamp stay fixed until the save completes. If the stable observation
+was not yet confirmed, recovery starts the full activation delay after the exact
+state is durable and fresh metadata validates it. No new
 identity or promotion is published before its own save succeeds. Successful
 state publication clears the persistence warning.
 
 Stable observations stop increasing at the configured threshold. During the
 remaining activation delay, unchanged observations update cached metadata health
 without rewriting state. Promotion still requires a successful save.
+
+## Activation delay and clock corrections
+
+The running controller measures `rotation.activationDelay` with a process-local
+elapsed-time deadline. It starts the countdown after the required stable
+observations are durably confirmed and fresh metadata validates the pending key.
+Wall-clock changes cannot shorten this delay, and whole-second persisted
+timestamps do not determine promotion eligibility.
+
+After a restart, the provider retains pending keys and observation counts. The
+first successful metadata probe that validates a durable stable candidate starts
+the full activation delay again. Downtime does not count towards that delay.
+Existing keys remain available for decryption. Encrypt continues with the active
+key when its profile and health checks allow it; an encryption minimum that
+blocks that key still blocks Encrypt until promotion.
+
+A different candidate starts its own countdown. Decrypt-triggered discovery
+cannot start or advance the countdown. Failed saves cannot start it, and a
+failed promotion must complete persistence recovery before publication.
+
+`observedAtUnix`, `stableAtUnix`, and `promotedAtUnix` are ordered local event
+timestamps. When the host clock moves backward, newly written stable or promotion
+timestamps are floored at preceding event timestamps. Existing records are not
+rewritten. The `clock.regressed` warning uses the logger's current wall time and
+reports that timestamp ordering was preserved. These local timestamps do not
+change OpenBao creation metadata, key identity, or the elapsed-time countdown.

@@ -96,6 +96,7 @@ type Controller struct {
 	nextRefresh     clocktime.Deadline
 	refreshErr      error
 	pendingCommit   *stateCommit
+	activation      activationWait
 }
 
 // NewController builds a status probe controller and loads persisted registry state when available.
@@ -261,7 +262,7 @@ func (c *Controller) publishObservation(
 		if discover {
 			result, err = c.observer.Discover(state, profile, now.Wall)
 		} else {
-			result, err = c.observer.Observe(state, profile, now.Wall)
+			result, err = c.observer.Observe(state, profile, now.Wall, c.promotionReady(state, profile, now))
 		}
 	} else {
 		assessment := AssessAutoBootstrapState(profile)
@@ -289,6 +290,12 @@ func (c *Controller) publishObservation(
 		return c.metadataFailed(now, ReasonStatePublishFailed, err)
 	}
 	c.pendingCommit = nil
+	if !discover {
+		c.confirmActivation(result.State, profile)
+	}
+	if result.ClockRegressed {
+		c.observeClockRegression(ctx)
+	}
 	c.observePromotion(ctx, previous)
 	c.recordProbeSuccess(ProbeKindMetadata)
 	if result.EncryptionBlocked {

@@ -233,3 +233,9 @@ and does not contact OpenBao.
 Retry, discovery, and circuit-breaker cooldowns use elapsed time. UTC deadline
 fields are projections onto the current wall clock. Token TTL and cache-age
 metrics report the conservative duration used by the corresponding validity check.
+
+`clock.regressed` warns that a new rotation bookkeeping timestamp was floored to
+preserve event order after a wall-clock regression. Its bounded reason is
+`timestamp_order_preserved`. The log timestamp shows current wall time. The
+persisted pending stable timestamp is historical evidence, not the current
+activation deadline; a restart starts the full delay again.

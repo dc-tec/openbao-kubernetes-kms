@@ -11,14 +11,14 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
 )
 
-func TestRotationPromotesAfterStableObservationAndActivationDelay(t *testing.T) {
+func TestRotationRequiresStableObservationsAndControllerPermission(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, 2*time.Minute)
 	profileV1 := profileForLatest(1, clock.Now())
 	profileV2 := profileForLatest(2, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 
-	first, err := observer.Observe(state, profileV2, clock.Now())
+	first, err := observer.Observe(state, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("first observe v2: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestRotationPromotesAfterStableObservationAndActivationDelay(t *testing.T) 
 	assertPendingCount(t, first.State, 1)
 
 	clock.Advance(30 * time.Second)
-	second, err := observer.Observe(first.State, profileV2, clock.Now())
+	second, err := observer.Observe(first.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("second observe v2: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestRotationPromotesAfterStableObservationAndActivationDelay(t *testing.T) 
 	assertPendingCount(t, second.State, 2)
 
 	clock.Advance(30 * time.Second)
-	third, err := observer.Observe(second.State, profileV2, clock.Now())
+	third, err := observer.Observe(second.State, profileV2, clock.Now(), false)
 	if err != nil {
 		t.Fatalf("third observe v2: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestRotationPromotesAfterStableObservationAndActivationDelay(t *testing.T) 
 	}
 
 	clock.Advance(2 * time.Minute)
-	promoted, err := observer.Observe(third.State, profileV2, clock.Now())
+	promoted, err := observer.Observe(third.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("observe after activation delay: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestRotationPromotesAfterStableObservationAndActivationDelay(t *testing.T) 
 	assertActiveVersion(t, promoted.State, 2)
 	assertRetiredVersion(t, promoted.State, 1)
 
-	repeated, err := observer.Observe(promoted.State, profileV2, clock.Now())
+	repeated, err := observer.Observe(promoted.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("repeat active observation: %v", err)
 	}
@@ -71,36 +71,36 @@ func TestRotationRollbackPreservesPendingAndRejectsActiveRollback(t *testing.T) 
 	profileV2 := profileForLatest(2, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 
-	first, err := observer.Observe(state, profileV2, clock.Now())
+	first, err := observer.Observe(state, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("first observe v2: %v", err)
 	}
 	assertPendingCount(t, first.State, 1)
 
-	_, err = observer.Observe(first.State, profileV1, clock.Now())
+	_, err = observer.Observe(first.State, profileV1, clock.Now(), true)
 	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
 		t.Fatalf("expected rollback to reject missing pending metadata: %v", err)
 	}
 	assertPendingCount(t, first.State, 1)
 
-	resumed, err := observer.Observe(first.State, profileV2, clock.Now())
+	resumed, err := observer.Observe(first.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("observe restored pending version: %v", err)
 	}
 	assertPendingCount(t, resumed.State, 2)
 
 	fastObserver := newTestObserver(t, clock, 1, 0)
-	pending, err := fastObserver.Observe(resumed.State, profileV2, clock.Now())
+	pending, err := fastObserver.Observe(resumed.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("fast observe v2: %v", err)
 	}
-	promoted, err := fastObserver.Observe(pending.State, profileV2, clock.Now())
+	promoted, err := fastObserver.Observe(pending.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("fast promote v2: %v", err)
 	}
 	assertActiveVersion(t, promoted.State, 2)
 
-	_, err = fastObserver.Observe(promoted.State, profileV1, clock.Now())
+	_, err = fastObserver.Observe(promoted.State, profileV1, clock.Now(), true)
 	if !errors.Is(err, status.ErrVersionRollback) {
 		t.Fatalf("expected active rollback rejection, got %v", err)
 	}
@@ -113,18 +113,18 @@ func TestRotationRestartDuringPendingUsesPersistedObservationCount(t *testing.T)
 	profileV2 := profileForLatest(2, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 
-	first, err := observer.Observe(state, profileV2, clock.Now())
+	first, err := observer.Observe(state, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("first observe v2: %v", err)
 	}
-	second, err := observer.Observe(first.State, profileV2, clock.Now())
+	second, err := observer.Observe(first.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("second observe v2: %v", err)
 	}
 	assertPendingCount(t, second.State, 2)
 
 	restartedObserver := newTestObserver(t, clock, 3, time.Minute)
-	third, err := restartedObserver.Observe(second.State, profileV2, clock.Now())
+	third, err := restartedObserver.Observe(second.State, profileV2, clock.Now(), false)
 	if err != nil {
 		t.Fatalf("third observe after restart: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestRotationRestartDuringPendingUsesPersistedObservationCount(t *testing.T)
 	}
 
 	clock.Advance(time.Minute)
-	promoted, err := restartedObserver.Observe(third.State, profileV2, clock.Now())
+	promoted, err := restartedObserver.Observe(third.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("observe after delay: %v", err)
 	}
@@ -152,14 +152,14 @@ func TestRotationAdvancesWhenEncryptionMinimumBlocksActiveVersion(t *testing.T) 
 	profileV2 := profileForLatest(2, clock.Now())
 	profileV2.MinEncryptionVersion = 2
 
-	pending, err := observer.Observe(state, profileV2, clock.Now())
+	pending, err := observer.Observe(state, profileV2, clock.Now(), false)
 	if err != nil {
 		t.Fatalf("observe encryption minimum during activation delay: %v", err)
 	}
 	assertActiveVersion(t, pending.State, 1)
 	assertPendingCount(t, pending.State, 1)
 	clock.Advance(time.Minute)
-	promoted, err := observer.Observe(pending.State, profileV2, clock.Now())
+	promoted, err := observer.Observe(pending.State, profileV2, clock.Now(), true)
 	if err != nil || !promoted.Promoted {
 		t.Fatalf("promote after activation delay: %+v, %v", promoted, err)
 	}
@@ -181,18 +181,19 @@ func TestDiscoveryCannotAdvancePromotionAndRetainsPendingIdentity(t *testing.T) 
 	if err != nil || repeated.State.CurrentHash != discovered.State.CurrentHash || repeated.Promoted {
 		t.Fatalf("discovery advanced promotion: %+v, %v", repeated, err)
 	}
-	first, err := observer.Observe(repeated.State, profile, clock.Now())
+	first, err := observer.Observe(repeated.State, profile, clock.Now(), false)
 	if err != nil || first.Promoted {
 		t.Fatalf("discovery started activation delay: %v", err)
 	}
 	assertPendingCount(t, first.State, 1)
 	changed := profileForLatest(2, base)
 	changed.VersionCreationTimes[1].CreatedAt = base.Add(time.Hour)
-	if _, err := observer.Observe(first.State, changed, clock.Now()); !errors.Is(err, status.ErrTransitMetadataInvalid) {
+	_, err = observer.Observe(first.State, changed, clock.Now(), true)
+	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
 		t.Fatalf("pending identity replacement accepted: %v", err)
 	}
 	clock.Advance(time.Minute)
-	promoted, err := observer.Observe(first.State, profile, clock.Now())
+	promoted, err := observer.Observe(first.State, profile, clock.Now(), true)
 	if err != nil || !promoted.Promoted {
 		t.Fatalf("promotion failed after recovery: %v", err)
 	}
@@ -213,7 +214,7 @@ func TestRollbackOptionCannotBypassRetainedIdentityValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = permissive.Observe(state, profileForLatest(1, clock.Now()), clock.Now())
+	_, err = permissive.Observe(state, profileForLatest(1, clock.Now()), clock.Now(), true)
 	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
 		t.Fatalf("rollback flag bypassed retained metadata validation: %v", err)
 	}
@@ -225,17 +226,17 @@ func TestRotationRejectsMetadataThatCannotServeHistoricalVersion(t *testing.T) {
 	profileV1 := profileForLatest(1, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 	profileV2 := profileForLatest(2, clock.Now())
-	pending, err := observer.Observe(state, profileV2, clock.Now())
+	pending, err := observer.Observe(state, profileV2, clock.Now(), false)
 	if err != nil {
 		t.Fatalf("observe pending v2: %v", err)
 	}
-	promoted, err := observer.Observe(pending.State, profileV2, clock.Now())
+	promoted, err := observer.Observe(pending.State, profileV2, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("promote v2: %v", err)
 	}
 	profileV2.MinDecryptionVersion = 2
 
-	_, err = observer.Observe(promoted.State, profileV2, clock.Now())
+	_, err = observer.Observe(promoted.State, profileV2, clock.Now(), true)
 	if !errors.Is(err, status.ErrTransitKeyUnusable) {
 		t.Fatalf("expected historical version unusable error, got %v", err)
 	}
@@ -315,7 +316,7 @@ func TestRotationRejectsPersistedStateScopeDrift(t *testing.T) {
 		t.Fatalf("new drifted observer: %v", err)
 	}
 
-	_, err = drifted.Observe(state, profileV1, clock.Now())
+	_, err = drifted.Observe(state, profileV1, clock.Now(), true)
 	if !errors.Is(err, status.ErrConfigInvalid) {
 		t.Fatalf("expected scope drift to fail closed, got %v", err)
 	}
@@ -359,7 +360,7 @@ func TestRotationRejectsPersistedNamespaceScopeDrift(t *testing.T) {
 		t.Fatalf("new drifted observer: %v", err)
 	}
 
-	_, err = drifted.Observe(state, profileV1, clock.Now())
+	_, err = drifted.Observe(state, profileV1, clock.Now(), true)
 	if !errors.Is(err, status.ErrConfigInvalid) {
 		t.Fatalf("expected namespace scope drift to fail closed, got %v", err)
 	}
@@ -382,7 +383,7 @@ func TestRotationCanonicalizesSubsecondCreationTime(t *testing.T) {
 
 	reobserved := profileForLatest(1, clock.Now())
 	reobserved.VersionCreationTimes[0].CreatedAt = active.TransitVersionCreatedAt.Add(250 * time.Millisecond)
-	result, err := observer.Observe(state, reobserved, clock.Now())
+	result, err := observer.Observe(state, reobserved, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("observe same Unix-second creation time: %v", err)
 	}
@@ -399,7 +400,7 @@ func TestRotationRejectsActiveVersionCreationTimeDrift(t *testing.T) {
 	driftedProfile := profileForLatest(1, clock.Now())
 	driftedProfile.VersionCreationTimes[0].CreatedAt = driftedProfile.VersionCreationTimes[0].CreatedAt.Add(time.Hour)
 
-	_, err := observer.Observe(state, driftedProfile, clock.Now())
+	_, err := observer.Observe(state, driftedProfile, clock.Now(), true)
 	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
 		t.Fatalf("expected Transit creation time drift to fail closed, got %v", err)
 	}

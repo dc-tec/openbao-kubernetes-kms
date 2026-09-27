@@ -185,7 +185,7 @@ func replayContractStates(t *testing.T, clock *fakeClock) (keyregistry.StateFile
 
 	observer := newTestObserver(t, clock, 1, 0)
 	initial := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
-	promoted, err := observer.Observe(initial, profileForLatest(2, clock.Now()), clock.Now())
+	promoted, err := observer.Observe(initial, profileForLatest(2, clock.Now()), clock.Now(), true)
 	if err != nil {
 		t.Fatalf("promote v2: %v", err)
 	}

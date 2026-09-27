@@ -31,7 +31,7 @@ func TestStateCompatibilityGoldenFixtures(t *testing.T) {
 		t.Fatalf("discover fixture state: %v", err)
 	}
 	assertStateMatchesFixture(t, discovered.State, pendingStateFixturePath)
-	promoted, err := observer.Observe(initial, profileForLatest(2, base), clock.Now())
+	promoted, err := observer.Observe(initial, profileForLatest(2, base), clock.Now(), true)
 	if err != nil {
 		t.Fatalf("promote fixture state: %v", err)
 	}

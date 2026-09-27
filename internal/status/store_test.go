@@ -54,7 +54,7 @@ func TestStoreLookupIncludesPendingSnapshotsWithoutActivatingThem(t *testing.T) 
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, 2*time.Minute)
 	state := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
-	result, err := observer.Observe(state, profileForLatest(2, clock.Now()), clock.Now())
+	result, err := observer.Observe(state, profileForLatest(2, clock.Now()), clock.Now(), true)
 	if err != nil {
 		t.Fatalf("observe pending rotation: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestStoreDiagnosticsExposeRedactedConsistencyState(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 3, 2*time.Minute)
 	state := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
-	result, err := observer.Observe(state, profileForLatest(2, clock.Now()), clock.Now())
+	result, err := observer.Observe(state, profileForLatest(2, clock.Now()), clock.Now(), true)
 	if err != nil {
 		t.Fatalf("observe pending rotation: %v", err)
 	}

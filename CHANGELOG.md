@@ -4,6 +4,11 @@
 
 ### Bug Fixes
 
+- **rotation:** Measure activation delay from durable stable observations with
+  process-local elapsed time. Wait the full delay after restart or recovery of
+  an unconfirmed stable save. Preserve local timestamp ordering after backward
+  clock corrections and report a bounded `clock.regressed` warning.
+
 - **clock:** Prevent clock corrections from extending token and cached-status
   validity or changing retry, discovery, and circuit-breaker cooldowns.
 

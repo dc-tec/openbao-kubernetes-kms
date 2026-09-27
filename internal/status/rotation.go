@@ -42,6 +42,8 @@ type ObservationResult struct {
 	Pending  bool
 	// EncryptionBlocked means the current active version is below the observed encryption minimum.
 	EncryptionBlocked bool
+	// ClockRegressed means a newly written bookkeeping timestamp was floored.
+	ClockRegressed bool
 }
 
 // Observer promotes new Transit versions only after stable observation and activation delay.
@@ -119,12 +121,15 @@ func (o *Observer) RebuildState(profile openbao.KeyProfile, now time.Time) (keyr
 }
 
 // Observe advances rotation state for one successful metadata observation.
+// For a positive activation delay, promotionReady must come from a process-local
+// deadline started only after the stable candidate was durably confirmed.
 func (o *Observer) Observe(
 	state keyregistry.StateFile,
 	profile openbao.KeyProfile,
 	now time.Time,
+	promotionReady bool,
 ) (ObservationResult, error) {
-	return o.observe(state, profile, now, true)
+	return o.observe(state, profile, now, true, promotionReady)
 }
 
 // Discover retains metadata-validated keys for decrypt without advancing
@@ -132,7 +137,7 @@ func (o *Observer) Observe(
 func (o *Observer) Discover(
 	state keyregistry.StateFile, profile openbao.KeyProfile, now time.Time,
 ) (ObservationResult, error) {
-	return o.observe(state, profile, now, false)
+	return o.observe(state, profile, now, false, false)
 }
 
 func (o *Observer) observe(
@@ -140,6 +145,7 @@ func (o *Observer) observe(
 	profile openbao.KeyProfile,
 	now time.Time,
 	advance bool,
+	promotionReady bool,
 ) (ObservationResult, error) {
 	if err := state.Validate(); err != nil {
 		return ObservationResult{}, err
@@ -170,7 +176,7 @@ func (o *Observer) observe(
 	if profile.LatestVersion <= active.TransitVersion {
 		return ObservationResult{State: state, EncryptionBlocked: profile.MinEncryptionVersion > active.TransitVersion}, nil
 	}
-	return o.observeNewerVersion(state, profile, now, advance)
+	return o.observeNewerVersion(state, profile, now, advance, promotionReady)
 }
 
 func (o *Observer) observeNewerVersion(
@@ -178,6 +184,7 @@ func (o *Observer) observeNewerVersion(
 	profile openbao.KeyProfile,
 	now time.Time,
 	advance bool,
+	promotionReady bool,
 ) (ObservationResult, error) {
 	active, err := state.ActiveSnapshot()
 	if err != nil {
@@ -212,7 +219,7 @@ func (o *Observer) observeNewerVersion(
 	if err != nil {
 		return ObservationResult{}, err
 	}
-	if advance && pendingReady(pendingRecord, o.policy.ActivationDelay, now) {
+	if advance && o.promotionAllowed(pendingRecord, promotionReady) {
 		promoted, promoteErr := promotePendingRecord(state, records, pendingRecord, now)
 		if promoteErr != nil {
 			return ObservationResult{}, promoteErr
@@ -220,10 +227,20 @@ func (o *Observer) observeNewerVersion(
 		if err := validateProfileForState(profile, promoted); err != nil {
 			return ObservationResult{}, err
 		}
-		return ObservationResult{State: promoted, Changed: true, Promoted: true}, nil
+		return ObservationResult{
+			State: promoted, Changed: true, Promoted: true,
+			ClockRegressed: now.Unix() < max(pendingRecord.ObservedAtUnix, pendingRecord.StableAtUnix),
+		}, nil
 	}
 
-	return pendingObservation(state, records, profile, profile.MinEncryptionVersion > active.TransitVersion)
+	result, err := pendingObservation(state, records, profile, profile.MinEncryptionVersion > active.TransitVersion)
+	result.ClockRegressed = result.Changed && pendingRecord.StableAtUnix > now.Unix()
+	return result, err
+}
+
+func (o *Observer) promotionAllowed(record keyregistry.SnapshotStateRecord, ready bool) bool {
+	return record.StableAtUnix != 0 && record.StableObservationCount >= o.policy.RequireStableObservationCount &&
+		(o.policy.ActivationDelay == 0 || ready)
 }
 
 func pendingObservation(
@@ -539,18 +556,10 @@ func upsertPendingRecord(
 		pending.ObservedAtUnix = now.Unix()
 	}
 	if advance && pending.StableObservationCount >= stableThreshold && pending.StableAtUnix == 0 {
-		pending.StableAtUnix = now.Unix()
+		pending.StableAtUnix = max(now.Unix(), pending.ObservedAtUnix)
 	}
 	records = append(records, pending)
 	return orderedRecords(state.ActiveKeyID, records), pending, nil
-}
-
-func pendingReady(record keyregistry.SnapshotStateRecord, activationDelay time.Duration, now time.Time) bool {
-	if record.StableAtUnix == 0 {
-		return false
-	}
-	stableAt := time.Unix(record.StableAtUnix, 0).UTC()
-	return !now.Before(stableAt.Add(activationDelay))
 }
 
 func promotePendingRecord(
@@ -605,7 +614,7 @@ func promotePendingRecord(
 		recordTime(pending.ObservedAtUnix),
 		recordTime(pending.StableAtUnix),
 		pending.StableObservationCount,
-		now,
+		time.Unix(max(now.Unix(), pending.ObservedAtUnix, pending.StableAtUnix), 0).UTC(),
 	)
 	promotedRecords = append(promotedRecords, activeRecord)
 	return nextStateFromRecords(

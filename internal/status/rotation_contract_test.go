@@ -19,22 +19,22 @@ func TestRotationSequencePromotesOnceAndConverges(t *testing.T) {
 	assertRotationStateInvariantCatalog(t, state)
 
 	promotions := 0
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions, false)
 	assertActiveVersion(t, state, 1)
 	assertPendingCount(t, state, 1)
 
 	clock.Advance(30 * time.Second)
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions, false)
 	assertActiveVersion(t, state, 1)
 	assertPendingCount(t, state, 2)
 
 	clock.Advance(30 * time.Second)
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions, false)
 	assertActiveVersion(t, state, 1)
 	assertPendingCount(t, state, 3)
 
 	clock.Advance(2 * time.Minute)
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions, true)
 	assertActiveVersion(t, state, 2)
 	assertRetiredVersion(t, state, 1)
 	if promotions != 1 {
@@ -52,15 +52,15 @@ func TestRotationSequencePreservesPendingAcrossMetadataRollback(t *testing.T) {
 	state := rebuildState(t, observer, profileV1, clock.Now())
 	promotions := 0
 
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions, true)
 	assertActiveVersion(t, state, 1)
 	assertPendingCount(t, state, 1)
 
-	if _, err := observer.Observe(state, profileV1, clock.Now()); !errors.Is(err, status.ErrTransitMetadataInvalid) {
+	if _, err := observer.Observe(state, profileV1, clock.Now(), true); !errors.Is(err, status.ErrTransitMetadataInvalid) {
 		t.Fatalf("pending identity disappeared without rejection: %v", err)
 	}
 	assertRotationStateInvariantCatalog(t, state)
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions, true)
 	assertActiveVersion(t, state, 2)
 	assertRetiredVersion(t, state, 1)
 	if promotions != 1 {
@@ -76,18 +76,18 @@ func TestRotationSequenceRestartPreservesPendingObservationState(t *testing.T) {
 	state := rebuildState(t, observer, profileV1, clock.Now())
 	promotions := 0
 
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions, false)
 	assertPendingCount(t, state, 1)
 
 	restarted := newTestObserver(t, clock, 2, time.Minute)
-	state, promotions = observeContractStep(t, restarted, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, restarted, state, profileV2, clock.Now(), promotions, false)
 	assertPendingCount(t, state, 2)
 	if promotions != 0 {
 		t.Fatalf("restart promoted before activation delay: %d", promotions)
 	}
 
 	clock.Advance(time.Minute)
-	state, promotions = observeContractStep(t, restarted, state, profileV2, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, restarted, state, profileV2, clock.Now(), promotions, true)
 	assertActiveVersion(t, state, 2)
 	if promotions != 1 {
 		t.Fatalf("expected promotion after restarted delay, got %d", promotions)
@@ -101,10 +101,10 @@ func TestRotationSequenceRejectsRollbackAfterPromotion(t *testing.T) {
 	profileV2 := profileForLatest(2, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 
-	state, _ = observeContractStep(t, observer, state, profileV2, clock.Now(), 0)
+	state, _ = observeContractStep(t, observer, state, profileV2, clock.Now(), 0, true)
 	assertActiveVersion(t, state, 2)
 
-	_, err := observer.Observe(state, profileV1, clock.Now())
+	_, err := observer.Observe(state, profileV1, clock.Now(), true)
 	if !errors.Is(err, status.ErrVersionRollback) {
 		t.Fatalf("expected active rollback rejection, got %v", err)
 	}
@@ -120,15 +120,15 @@ func TestRotationSequenceRejectsOlderMetadataAfterNewerPromotion(t *testing.T) {
 	state := rebuildState(t, observer, profileV1, clock.Now())
 	promotions := 0
 
-	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions)
-	state, promotions = observeContractStep(t, observer, state, profileV3, clock.Now(), promotions)
+	state, promotions = observeContractStep(t, observer, state, profileV2, clock.Now(), promotions, true)
+	state, promotions = observeContractStep(t, observer, state, profileV3, clock.Now(), promotions, true)
 	assertActiveVersion(t, state, 3)
 	assertRetiredVersion(t, state, 2)
 	if promotions != 2 {
 		t.Fatalf("expected two promotions before rollback check, got %d", promotions)
 	}
 
-	_, err := observer.Observe(state, profileV2, clock.Now())
+	_, err := observer.Observe(state, profileV2, clock.Now(), true)
 	if !errors.Is(err, status.ErrVersionRollback) {
 		t.Fatalf("expected stale older metadata rejection, got %v", err)
 	}
@@ -146,7 +146,7 @@ func TestRotationSequenceRejectsMissingIntermediateVersionMetadata(t *testing.T)
 	}
 	state := rebuildState(t, observer, profileV1, clock.Now())
 
-	_, err := observer.Observe(state, profileV3, clock.Now())
+	_, err := observer.Observe(state, profileV3, clock.Now(), true)
 	if !errors.Is(err, status.ErrTransitMetadataInvalid) {
 		t.Fatalf("expected missing intermediate metadata to fail closed, got %v", err)
 	}
@@ -160,7 +160,7 @@ func TestRotationSequenceRetainsSkippedIntermediateVersionsWhenMetadataComplete(
 	profileV3 := profileForLatest(3, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 
-	state, promotions := observeContractStep(t, observer, state, profileV3, clock.Now(), 0)
+	state, promotions := observeContractStep(t, observer, state, profileV3, clock.Now(), 0, true)
 	assertActiveVersion(t, state, 3)
 	assertRetiredVersion(t, state, 2)
 	assertRetiredVersion(t, state, 1)
@@ -176,11 +176,11 @@ func TestRotationSequenceRejectsBlockedHistoricalVersionAfterPromotion(t *testin
 	profileV2 := profileForLatest(2, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 
-	state, _ = observeContractStep(t, observer, state, profileV2, clock.Now(), 0)
+	state, _ = observeContractStep(t, observer, state, profileV2, clock.Now(), 0, true)
 	assertActiveVersion(t, state, 2)
 	profileV2.MinDecryptionVersion = 2
 
-	_, err := observer.Observe(state, profileV2, clock.Now())
+	_, err := observer.Observe(state, profileV2, clock.Now(), true)
 	if !errors.Is(err, status.ErrTransitKeyUnusable) {
 		t.Fatalf("expected blocked historical version to fail closed, got %v", err)
 	}
@@ -194,10 +194,11 @@ func observeContractStep(
 	profile openbao.KeyProfile,
 	now time.Time,
 	promotions int,
+	promotionReady bool,
 ) (keyregistry.StateFile, int) {
 	t.Helper()
 
-	result, err := observer.Observe(previous, profile, now)
+	result, err := observer.Observe(previous, profile, now, promotionReady)
 	if err != nil {
 		t.Fatalf("observe latest version %d: %v", profile.LatestVersion, err)
 	}
@@ -322,7 +323,7 @@ func assertConvergedObservationIdempotent(
 ) {
 	t.Helper()
 
-	result, err := observer.Observe(state, profile, now)
+	result, err := observer.Observe(state, profile, now, true)
 	if err != nil {
 		t.Fatalf("observe converged version %d: %v", profile.LatestVersion, err)
 	}

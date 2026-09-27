@@ -225,6 +225,7 @@ func (f diagnosticFixture) probeHealthy(t *testing.T) {
 }
 
 type probeRecorder struct {
+	clockRegressions int
 	store            *status.Store
 	probes           []status.ProbeObservation
 	promotions       []status.PromotionObservation
@@ -247,3 +248,5 @@ func assertReadinessReasons(t *testing.T, store *status.Store, want ...status.He
 		t.Fatalf("reasons = %v, want %v", got, want)
 	}
 }
+
+func (r *probeRecorder) ObserveClockRegression(context.Context) { r.clockRegressions++ }

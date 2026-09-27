@@ -135,3 +135,15 @@ func profileFailureReason(err error) HealthReason {
 	}
 	return ReasonProfileInvalid
 }
+
+// ClockRegressionObserver receives a bounded warning when local rotation
+// timestamps need ordering correction. Logger timestamps retain actual wall time.
+type ClockRegressionObserver interface {
+	ObserveClockRegression(context.Context)
+}
+
+func (c *Controller) observeClockRegression(ctx context.Context) {
+	if observer, ok := c.probeObserver.(ClockRegressionObserver); ok {
+		observer.ObserveClockRegression(ctx)
+	}
+}
