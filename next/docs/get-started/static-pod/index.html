@@ -29,8 +29,7 @@ API server might need the provider before those objects are readable.
 Everything the provider needs comes from host files.</p><h2 id=before-you-begin>Before you begin</h2><ul><li>Download and verify the static-pod bundle in
 <a href=/openbao-kubernetes-kms/next/docs/get-started/download/>Download the release</a>
 , and keep that shell with
-<code>VERSION</code>, <code>ARCH</code>, <code>REPO</code>, and <code>WORKFLOW_IDENTITY</code> set.</li><li>Download and verify the systemd tarball of the same release as well. You use
-its <code>bao-kms-provider</code> binary on the host to run <code>doctor</code>.</li><li>Have the values from <a href=/openbao-kubernetes-kms/next/docs/get-started/plan-values/>Plan identity values</a>
+<code>VERSION</code>, <code>ARCH</code>, <code>REPO</code>, and <code>WORKFLOW_IDENTITY</code> set.</li><li>Have the values from <a href=/openbao-kubernetes-kms/next/docs/get-started/plan-values/>Plan identity values</a>
 and the lineage ID from <a href=/openbao-kubernetes-kms/next/docs/get-started/openbao/>Prepare OpenBao</a>
 .</li><li>Obtain the OpenBao CA bundle as <code>ca.crt</code> and the provider host JWT as
 <code>identity.jwt</code>. The JWT must be renewable without the protected API server.</li></ul><p>For native <a href=/openbao-kubernetes-kms/next/docs/configure/oauth2/>OAuth 2.0 client credentials</a>
@@ -38,15 +37,12 @@ and the lineage ID from <a href=/openbao-kubernetes-kms/next/docs/get-started/op
 <code>auth.jwt.source: oauth2</code> and generate the manifest with <code>init --model static-pod</code>.
 Stage the client secret and issuer CA bundle instead of <code>identity.jwt</code>.
 The generated pod mounts the credential directory read-only for secret rotation.</p><ul><li>Use a kubeadm-style control plane that runs <code>kube-apiserver</code> as a static pod
-on containerd.</li></ul><h2 id=step-1-extract-the-bundle>Step 1: Extract the bundle</h2><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>tar -xzf &#34;bao-kms-provider_${VERSION}_static-pod.tar.gz&#34;
-cd &#34;bao-kms-provider_${VERSION}_static-pod&#34;
+on containerd.</li></ul><h2 id=step-1-extract-the-bundle>Step 1: Extract the bundle</h2><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>tar -xzf &#34;bao-kms-provider_${VERSION}_static-pod_linux_${ARCH}.tar.gz&#34;
+cd &#34;bao-kms-provider_${VERSION}_static-pod_linux_${ARCH}&#34;
 cat image-ref.txt</code></pre></div><p><code>image-ref.txt</code> holds the provider image reference, ending in
-<code>@sha256:&lt;digest></code>. Place the diagnostic binary from the systemd tarball on the
-host:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>tar -xzf &#34;../bao-kms-provider_${VERSION}_systemd_linux_${ARCH}.tar.gz&#34; \
-  --strip-components=2 &#34;bao-kms-provider_${VERSION}_systemd_linux_${ARCH}/bin/bao-kms-provider&#34;
-sudo install -o root -g root -m 0755 bao-kms-provider /usr/bin/bao-kms-provider</code></pre></div><h2 id=step-2-verify-the-provider-image>Step 2: Verify the provider image</h2><p>Set <code>IMAGE</code> to the digest reference, replacing <code>&lt;digest></code> with the digest from
-<code>image-ref.txt</code>, then verify the image signature from the release workflow and
-its build provenance from the reusable build workflow:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>IMAGE=&#34;ghcr.io/dc-tec/bao-kms-provider@sha256:&lt;digest&gt;&#34;
+<code>@sha256:&lt;digest></code>. The kit includes the matching Linux binary for <code>init</code>,
+<code>config</code>, and diagnostics. Install it on the host:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo install -o root -g root -m 0755 bin/bao-kms-provider /usr/bin/bao-kms-provider</code></pre></div><h2 id=step-2-verify-the-provider-image>Step 2: Verify the provider image</h2><p>Read <code>IMAGE</code> from the verified kit, then verify the image signature from the release workflow and
+its build provenance from the reusable build workflow:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>IMAGE=$(cat image-ref.txt)
 
 cosign verify \
   --new-bundle-format=true \
@@ -69,7 +65,7 @@ SOCKET_GID=$(getent group openbao-kms-socket | cut -d: -f3)
 echo &#34;${SOCKET_GID}&#34;</code></pre></div><p>Create the directories with numeric ownership for the container user <code>65532</code>,
 and a tmpfiles entry that recreates the socket directory under <code>/run</code> after
 every reboot:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo sh -eu -c &#34;
-install -d -m 0750 -o root -g root /etc/openbao-kms
+install -d -m 0750 -o root -g 65532 /etc/openbao-kms
 install -d -m 0755 -o root -g root /etc/openbao-kms/tls
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state
@@ -88,18 +84,24 @@ sudo install -m 0640 -o root -g 65532 identity.jwt /var/lib/openbao-kms/credenti
 agent to replace <code>identity.jwt</code> atomically within that directory and preserve
 its permissions. Keep unrelated files out of this directory. A file-only bind
 mount retains the old JWT after atomic replacement.</p><h2 id=step-7-validate-the-configuration>Step 7: Validate the configuration</h2><p>Resolve the configuration, check the Transit key profile, and run the full
-bootstrap check against OpenBao:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo bao-kms-provider config --config /etc/openbao-kms/config.yaml
-sudo bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
-sudo bao-kms-provider doctor --config /etc/openbao-kms/config.yaml</code></pre></div><p>Each command exits with status <code>0</code>, and neither <code>verify-key</code> nor <code>doctor</code>
+bootstrap check against OpenBao:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo setpriv --reuid=65532 --regid=65532 --groups=&#34;$SOCKET_GID&#34; \
+  bao-kms-provider config --config /etc/openbao-kms/config.yaml
+sudo setpriv --reuid=65532 --regid=65532 --groups=&#34;$SOCKET_GID&#34; \
+  bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
+sudo setpriv --reuid=65532 --regid=65532 --groups=&#34;$SOCKET_GID&#34; \
+  bao-kms-provider doctor --config /etc/openbao-kms/config.yaml</code></pre></div><p>Each command exits with status <code>0</code>, and neither <code>verify-key</code> nor <code>doctor</code>
 reports a <code>[fail]</code> check. Every control-plane node must print the same identity
-fingerprint. These checks run as root, so file permission problems for UID
-<code>65532</code> show up only when the pod starts in the next step.</p><h2 id=step-8-start-the-static-pod>Step 8: Start the static pod</h2><p>Use <code>generated/bao-kms-provider.yaml</code> from the same generation as the installed
+fingerprint. These commands require <code>setpriv</code> from util-linux. They check host
+file access under the provider UID and groups. A root-only check does not prove
+that the provider can read its files.</p><h2 id=step-8-start-the-static-pod>Step 8: Start the static pod</h2><p>Use <code>generated/bao-kms-provider.yaml</code> from the same generation as the installed
 configuration. Check its image digest and supplemental socket GID against the
 installation record.</p><p>Then hand the manifest to kubelet and wait for readiness:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo install -m 0644 -o root -g root generated/bao-kms-provider.yaml \
   /etc/kubernetes/manifests/bao-kms-provider.yaml
 curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/ready</code></pre></div><p><code>/ready</code> returns HTTP 200 and <code>/run/openbao-kms/kms.sock</code> exists. If the pod
 does not become ready, inspect it with <code>sudo crictl ps -a --name bao-kms-provider</code>
-and <code>sudo crictl logs &lt;container-id></code>. The provider is ready for
+and <code>sudo crictl logs &lt;container-id></code>. Probe the running socket as the same identity:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo setpriv --reuid=65532 --regid=65532 --groups=&#34;$SOCKET_GID&#34; \
+  bao-kms-provider probe --socket /run/openbao-kms/kms.sock</code></pre></div><p>Status, Encrypt, and Decrypt must pass. This is a live provider check; API-server
+activation is checked separately. Continue with
 <a href=/openbao-kubernetes-kms/next/docs/get-started/enable-encryption/>Enable encryption</a>
 once it runs on every
 control-plane node.</p><h2 id=about-the-manifest>About the manifest</h2><p>The maintained manifest is <code>deploy/static-pod/bao-kms-provider.yaml</code>. The

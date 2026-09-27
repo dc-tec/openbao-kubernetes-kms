@@ -1,0 +1,98 @@
+<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Provision an independent Keycloak service account, bind its identity in OpenBao, and install its client secret on provider hosts."><meta name=robots content="noindex,follow"><title>Provision a Keycloak client · Next · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/configure/keycloak/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="Provision a Keycloak client · OpenBao Kubernetes KMS"><meta property="og:description" content="Provision an independent Keycloak service account, bind its identity in OpenBao, and install its client secret on provider hosts."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/configure/keycloak/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
+<span></span><span></span><span></span>
+</button>
+<a class=brand href=/openbao-kubernetes-kms/next/ aria-label="OpenBao KMS documentation home"><img class=brand-logo src=/openbao-kubernetes-kms/img/brand/logo.svg alt>
+<span class=brand-name>OpenBao <b>KMS</b></span></a><nav class=top-nav id=primary-navigation aria-label=Primary><a href=/openbao-kubernetes-kms/next/docs/ aria-current=location>Docs</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></nav><div class=header-actions><button class=search-trigger type=button aria-haspopup=dialog data-search-open>
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<span>Search</span>
+<kbd>⌘ K</kbd></button><div class=github-actions><a class=github-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2A10 10 0 008.84 21.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94.0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64.0.0.84-.27 2.75 1.02A9.58 9.58.0 0112 6.82c.85.0 1.7.12 2.5.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68.0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg>
+</a><a class=stargazers-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="View OpenBao KMS stars on GitHub" data-stargazers data-endpoint=https://api.github.com/repos/dc-tec/openbao-kubernetes-kms data-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.2l-5.56 2.92 1.06-6.2L3 9.53l6.22-.9L12 3z"/></svg>
+<span class=stargazer-count data-stargazer-count hidden></span></a></div></div></div></header><button class=nav-scrim type=button aria-label="Close navigation" data-nav-close></button><div class=docs-shell><aside class=sidebar id=site-sidebar data-sidebar><div class=sidebar-head><p>Documentation</p><div class=sidebar-head-actions><details class=version-switcher><summary aria-label="Documentation version, currently Next"><span>Next</span>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary><div class=version-menu><a href=/openbao-kubernetes-kms/docs/><span>0.1.x</span>
+<small>Preview</small>
+</a><a href=/openbao-kubernetes-kms/next/docs/configure/keycloak/ aria-current=page><span>Next</span>
+<small>Unreleased</small></a></div></details><button class=sidebar-collapse type=button aria-controls=site-sidebar aria-expanded=true title="Collapse sidebar" data-sidebar-collapse>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg>
+<span class=sr-only data-sidebar-collapse-label>Collapse sidebar</span></button></div></div><nav aria-label=Documentation><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/get-started/><span>Get started</span></a></div><div class="nav-group is-active"><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/configure/><span>Configure</span></a><div class=nav-children><a href=/openbao-kubernetes-kms/next/docs/configure/>Overview</a><a href=/openbao-kubernetes-kms/next/docs/configure/openbao-auth/>OpenBao auth and policy</a><a href=/openbao-kubernetes-kms/next/docs/configure/oauth2/>OAuth 2.0 client credentials</a><a class=is-current href=/openbao-kubernetes-kms/next/docs/configure/keycloak/ aria-current=page>Provision a Keycloak client</a><a href=/openbao-kubernetes-kms/next/docs/configure/monitor/>Monitor the provider</a></div></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/operate/><span>Operate</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/security/><span>Security</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/reference/><span>Reference</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/architecture/><span>Architecture</span></a></div><div class=nav-divider></div><details class=nav-secondary-group><summary class=nav-secondary>Contribute</summary><div class=nav-children><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/>Docs site</a></div></details></nav></aside><main class=doc-main id=main-content><nav class=breadcrumbs aria-label=Breadcrumb><a href=/openbao-kubernetes-kms/next/>Home</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/next/docs/>Documentation</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/next/docs/configure/>Configure</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<span aria-current=page>Provision a Keycloak client</span></nav><aside class="version-notice version-notice-next" aria-label="Documentation version notice"><strong>Next · Unreleased</strong>
+<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>Provision a Keycloak client</h1><p class=article-lede>Provision an independent Keycloak service account, bind its identity in OpenBao, and install its client secret on provider hosts.</p><p class=page-meta>Updated 27 September 2026 · 4 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#before-provisioning>Before provisioning</a></li><li><a href=#create-the-client>Create the client</a></li><li><a href=#install-the-credential>Install the credential</a></li><li><a href=#verify-renewal-and-recovery>Verify renewal and recovery</a></li></ul></nav></details><div class=article-content><p>Use this recipe with an existing Keycloak realm that remains available while
+the protected Kubernetes API is stopped. The provider&rsquo;s Keycloak qualification
+covers the client-credentials flow, both client authentication methods,
+credential replacement, issuer outages, and cold provider recovery. It does
+not qualify your issuer deployment, database, network, or backup process.
+See <a href=/openbao-kubernetes-kms/next/docs/configure/oauth2/>OAuth client credentials</a>
+for the protocol and
+<a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a>
+for the pinned test targets.</p><h2 id=before-provisioning>Before provisioning</h2><p>Use the selected release&rsquo;s <code>deploy/config/keycloak-client.json</code> and
+<code>deploy/config/init-values-oauth2.yaml</code>. The client profile enables service
+accounts, disables browser and password grants, adds the <code>bao-kms-provider</code>
+audience, and selects a five-minute access-token lifetime. Give this client
+no realm administration roles. OpenBao authorizes its bound subject through
+the generated provider policy.</p><p>The following Bash commands require the matching Keycloak Admin CLI
+(<code>kcadm.sh</code>), <code>jq</code>, <code>curl</code>, and a realm administrator. Configure their TLS trust
+for your issuer before starting. Do not disable certificate verification.
+Run without shell tracing. The temporary Admin CLI configuration contains
+administrator tokens and must not be copied to provider hosts.</p><h2 id=create-the-client>Create the client</h2><p>Set the public HTTPS server URL, realm, and administrator name. The CLI prompts
+for the administrator password:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>set -euo pipefail
+umask 077
+KC_SERVER=https://identity.example.com
+KC_REALM=platform
+KC_ADMIN=realm-admin
+KC_WORK=$(mktemp -d)
+trap &#39;rm -rf &#34;$KC_WORK&#34;&#39; EXIT
+KC_CONFIG=&#34;$KC_WORK/kcadm.config&#34;
+kcadm.sh config credentials --config &#34;$KC_CONFIG&#34; \
+  --server &#34;$KC_SERVER&#34; --realm &#34;$KC_REALM&#34; --user &#34;$KC_ADMIN&#34;
+
+CLIENT_UUID=$(kcadm.sh create clients --config &#34;$KC_CONFIG&#34; -r &#34;$KC_REALM&#34; \
+  -f deploy/config/keycloak-client.json -i)
+SUBJECT=$(kcadm.sh get &#34;clients/$CLIENT_UUID/service-account-user&#34; \
+  --config &#34;$KC_CONFIG&#34; -r &#34;$KC_REALM&#34; --fields id | jq -er &#39;.id&#39;)
+
+curl --fail --silent --show-error \
+  &#34;$KC_SERVER/realms/$KC_REALM/.well-known/openid-configuration&#34; &gt; &#34;$KC_WORK/discovery.json&#34;
+jq &#39;{issuer, token_endpoint}&#39; &#34;$KC_WORK/discovery.json&#34;
+printf &#39;Service-account subject: %s\n&#39; &#34;$SUBJECT&#34;</code></pre></div><p>Client creation must succeed once. If the client already exists, stop and
+review its settings and ownership before reusing it. Do not recreate it:
+the service-account subject can change. The subject is the service-account
+user ID, not the client ID or the client resource UUID.</p><p>Record the discovery document&rsquo;s <code>issuer</code> and <code>token_endpoint</code>, the returned
+subject, client ID <code>kms-control-plane</code>, and audience <code>bao-kms-provider</code> in the
+OAuth values file. Keep <code>authMethod: client_secret_basic</code>. The qualified
+alternative is <code>client_secret_post</code>; do not configure a fallback between them.
+The five-minute token lifetime exceeds the default two-minute
+<code>minRemainingTtl</code>. Recheck this relationship if realm policy changes it.</p><h2 id=install-the-credential>Install the credential</h2><p>Write the secret into the private temporary directory without displaying it:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>kcadm.sh get &#34;clients/$CLIENT_UUID/client-secret&#34; --config &#34;$KC_CONFIG&#34; \
+  -r &#34;$KC_REALM&#34; --fields value | jq -er &#39;.value | select(length &gt; 0)&#39; &gt; &#34;$KC_WORK/client-secret&#34;</code></pre></div><p>Transfer this file through the credential provisioning channel that works
+without the protected API. Never add it to values YAML, Git, a command argument,
+or a Kubernetes Secret in the protected cluster.</p><p>On a systemd host, after creating the service identity:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo install -d -o root -g openbao-kms -m 0750 /etc/openbao-kms/credentials
+sudo install -o root -g openbao-kms -m 0640 client-secret /etc/openbao-kms/credentials/client-secret.new
+sudo mv /etc/openbao-kms/credentials/client-secret.new /etc/openbao-kms/credentials/client-secret</code></pre></div><p>For a static-pod host, use numeric group <code>65532</code> instead of <code>openbao-kms</code>.
+Keep the temporary file on the same filesystem as the destination so the
+rename is atomic. Restrict the containing directory to root and the provider
+identity. The generated pod mounts this directory read-only; do not bind-mount
+the secret file alone. Remove the transferred staging copy after installation.</p><p>Generate the installation files, then have the OpenBao administrator review
+and apply <code>openbao-setup.sh</code>. The resulting JWT role binds the recorded issuer,
+audience, and subject. Keycloak&rsquo;s CA trust for the token endpoint and OpenBao&rsquo;s
+CA trust for JWT discovery are separate inputs; configure both when needed.</p><h2 id=verify-renewal-and-recovery>Verify renewal and recovery</h2><p>Run <code>doctor</code> under the provider identity. Its <code>oauth2.acquire</code> and
+<code>openbao.auth</code> checks must pass. Check the actual running provider separately;
+a successful local diagnostic does not establish API-server activation.</p><p>In a disposable acceptance environment, verify:</p><ol><li>The provider continues through OpenBao token renewal and fresh login.</li><li>An issuer outage prevents fresh login without switching to another source.</li><li>After issuer recovery, a cold provider starts while the protected API is stopped.</li><li>After atomic client-secret replacement, fresh login succeeds and stored data
+remains readable. An already-issued OpenBao token does not prove the new
+client secret works; use a fresh diagnostic login.</li></ol><p>Use your Keycloak credential rotation policy to control overlap. This recipe
+does not promise overlap when regenerating a client secret. Disabling a client
+does not revoke OpenBao tokens it already obtained. Recovery requires the
+issuer database and signing keys, client identity, host secret, TLS trust, and
+OpenBao to remain available independently of the protected API.</p><p>For administrator operations, see the upstream
+<a href=https://www.keycloak.org/docs/latest/server_admin/index.html#admin-cli target=_blank rel=noreferrer>Keycloak Admin CLI guide</a>
+and <a href=https://www.keycloak.org/docs-api/latest/rest-api/index.html#_get_adminrealmsrealmclientsclient_uuidservice_account_user target=_blank rel=noreferrer>service-account user API</a>
+.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#before-provisioning>Before provisioning</a></li><li><a href=#create-the-client>Create the client</a></li><li><a href=#install-the-credential>Install the credential</a></li><li><a href=#verify-renewal-and-recovery>Verify renewal and recovery</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/configure/keycloak.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/next/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<label class=sr-only for=site-search>Search documentation</label>
+<input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
+<button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog></body></html>
