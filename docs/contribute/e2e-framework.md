@@ -151,3 +151,21 @@ The HA lane sends Status, encrypt, and historical/new decrypt requests during
 active-node failure. It permits transient availability errors for at most 20
 seconds between successful rounds and requires healthy traffic at the end.
 The bound is a test acceptance criterion, not an availability guarantee.
+
+## Pre-release qualification workflow
+
+Run **Provider Qualification** manually against the candidate branch or commit.
+The workflow also runs when a pull request changes its definition. It builds one
+JWT provider image and one PKCS#11 test image, then reuses those images across:
+
+- The full provider suite on both pinned OpenBao versions.
+- The full Kind suite on all four Kubernetes versions with primary OpenBao.
+- Kind smoke and provider upgrade/rollback on all four Kubernetes versions with
+  compatibility OpenBao.
+- The OpenBao server upgrade and a 30-minute load soak on primary OpenBao.
+
+The workflow summary records the provider commit and image IDs. Test artifacts
+contain versions, executed tests, failures, and latency/resource measurements.
+The matrix does not establish Kubernetes cluster-upgrade support. The extended
+VM systemd/static-pod recovery campaign and overnight soak remain separate
+qualification steps before the release decision.

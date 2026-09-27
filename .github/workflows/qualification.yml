@@ -1,0 +1,171 @@
+name: Provider Qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/qualification.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qualification-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Candidate images and matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    outputs:
+      openbao: ${{ steps.matrix.outputs.openbao }}
+      kind: ${{ steps.matrix.outputs.kind }}
+      primary: ${{ steps.matrix.outputs.primary }}
+    env:
+      E2E_PROVIDER_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:qualification-${{ github.sha }}
+      E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:qualification-pkcs11-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-repo-tools
+        with:
+          bootstrap-tools: "false"
+      - name: Resolve pinned matrix
+        id: matrix
+        run: |
+          set -euo pipefail
+          openbao="$(go run ./hack/tools/e2e_release_gate -group openbao -matrix)"
+          kubernetes="$(go run ./hack/tools/e2e_release_gate -group kind -matrix)"
+          kind="$(jq -cn --argjson b "${openbao}" --argjson k "${kubernetes}" '{include: [$b.include[] as $bao | $k.include[] | . + $bao]}')"
+          {
+            echo "openbao=${openbao}"
+            echo "kind=${kind}"
+            echo "primary=$(awk '$1 == "primary:" {gsub(/"/, "", $2); print $2; exit}' .ci/versions.yaml)"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Build candidate images once
+        run: |
+          make image IMAGE="${E2E_PROVIDER_IMAGE}" COMMIT="${GITHUB_SHA}"
+          make image-certauth-pkcs11-e2e COMMIT="${GITHUB_SHA}"
+          mkdir -p artifacts/qualification
+          docker save -o artifacts/qualification/provider.tar "${E2E_PROVIDER_IMAGE}"
+          docker save -o artifacts/qualification/provider-pkcs11.tar "${E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE}"
+          {
+            echo "Provider source: ${GITHUB_SHA}"
+            docker image inspect --format '{{.Id}} {{json .RepoTags}}' "${E2E_PROVIDER_IMAGE}" "${E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qualification-provider
+          path: artifacts/qualification/provider.tar
+          retention-days: 7
+          compression-level: 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qualification-pkcs11
+          path: artifacts/qualification/provider-pkcs11.tar
+          retention-days: 7
+          compression-level: 1
+
+  openbao:
+    name: OpenBao ${{ matrix.openbao_version }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.build.outputs.openbao) }}
+    env:
+      E2E_PROVIDER_BUILD: "false"
+      E2E_PROVIDER_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:qualification-${{ github.sha }}
+      E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:qualification-pkcs11-${{ github.sha }}
+      E2E_OPENBAO_VERSION: ${{ matrix.openbao_version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-repo-tools
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: qualification-*
+          merge-multiple: true
+          path: artifacts/qualification
+      - name: Load candidate images
+        run: |
+          docker load -i artifacts/qualification/provider.tar
+          docker load -i artifacts/qualification/provider-pkcs11.tar
+      - name: Run provider suite
+        run: make test-e2e-release-preview-openbao
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: results-openbao-${{ matrix.openbao_version }}
+          path: artifacts/e2e/
+          retention-days: 14
+
+  kind:
+    name: Kubernetes ${{ matrix.kubernetes_version }} / OpenBao ${{ matrix.openbao_version }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.build.outputs.kind) }}
+    env:
+      E2E_PROVIDER_BUILD: "false"
+      E2E_PROVIDER_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:qualification-${{ github.sha }}
+      E2E_PROVIDER_OLD_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:qualification-baseline
+      E2E_OPENBAO_IMAGE: ${{ matrix.openbao_image }}
+      E2E_KUBERNETES_LINE: ${{ matrix.kubernetes_line }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-repo-tools
+      - uses: ./.github/actions/install-kind
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: qualification-provider
+          path: artifacts/qualification
+      - run: docker load -i artifacts/qualification/provider.tar
+      - name: Full Kind suite on primary OpenBao
+        if: matrix.openbao_version == needs.build.outputs.primary
+        run: make test-e2e-release-preview-kind
+      - name: Smoke and real provider upgrade on compatibility OpenBao
+        if: matrix.openbao_version != needs.build.outputs.primary
+        run: |
+          set -euo pipefail
+          make test-e2e-provider-baseline
+          go run ./hack/tools/e2e_release_gate -group kind -ginkgo "${GITHUB_WORKSPACE}/bin/ginkgo" -lane kind-smoke
+          go run ./hack/tools/e2e_release_gate -group kind -ginkgo "${GITHUB_WORKSPACE}/bin/ginkgo" -lane kind-upgrade-rollback
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: results-kind-${{ matrix.kubernetes_line }}-openbao-${{ matrix.openbao_version }}
+          path: artifacts/e2e/
+          retention-days: 14
+
+  soak:
+    name: Server upgrade and 30-minute soak
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      E2E_PROVIDER_BUILD: "false"
+      E2E_PROVIDER_IMAGE: ghcr.io/${{ github.repository_owner }}/bao-kms-provider:qualification-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-repo-tools
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: qualification-provider
+          path: artifacts/qualification
+      - run: docker load -i artifacts/qualification/provider.tar
+      - name: Run server upgrade and load qualification
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/e2e/qualification
+          make test-e2e-provider-openbao-upgrade 2>&1 | tee artifacts/e2e/qualification/server-upgrade.log
+          E2E_SOAK_DURATION=30m make test-e2e-provider-load-soak-openbao-ci 2>&1 | tee artifacts/e2e/qualification/soak.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: results-server-upgrade-soak
+          path: artifacts/e2e/
+          retention-days: 14

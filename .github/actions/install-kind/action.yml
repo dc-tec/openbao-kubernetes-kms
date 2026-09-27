@@ -22,7 +22,7 @@ runs:
       run: |
         set -euo pipefail
 
-        install_dir="${INSTALL_DIR_INPUT/#\~/$HOME}"
+        install_dir="$(realpath -m "${INSTALL_DIR_INPUT/#\~/$HOME}")"
         arch="$(go env GOARCH)"
         bin="kind-linux-${arch}"
 
@@ -34,8 +34,8 @@ runs:
         fi
 
         install -d "${install_dir}"
-        curl -fsSLo "${bin}" "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/${bin}"
-        curl -fsSLo "${bin}.sha256sum" "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/${bin}.sha256sum"
+        curl --retry 3 --retry-delay 2 --retry-max-time 60 -fsSLo "${bin}" "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/${bin}"
+        curl --retry 3 --retry-delay 2 --retry-max-time 60 -fsSLo "${bin}.sha256sum" "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/${bin}.sha256sum"
         sha256sum -c "${bin}.sha256sum"
         install -m 0755 "${bin}" "${install_dir}/kind"
 
