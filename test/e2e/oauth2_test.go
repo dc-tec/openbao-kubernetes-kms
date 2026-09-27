@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("OAuth client credentials", Label(framework.LabelOpenBao, framework.LabelTransit, framework.LabelCI), func() {
+var _ = Describe("OAuth client credentials", func() {
 	It("authenticates without Kubernetes and recovers after issuer and credential failures", func(ctx SpecContext) {
 		if !framework.OpenBaoCIEnabled() {
 			Skip("E2E_OPENBAO_CI=true is required")
@@ -45,12 +45,14 @@ var _ = Describe("OAuth client credentials", Label(framework.LabelOpenBao, frame
 		DeferCleanup(func() { Expect(os.RemoveAll(dir)).To(Succeed()) })
 		caPath := filepath.Join(dir, "ca.pem")
 		secretPath := filepath.Join(dir, "secret")
-		Expect(os.WriteFile(caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: fixture.server.Certificate().Raw}), 0o600)).To(Succeed())
+		caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: fixture.server.Certificate().Raw})
+		Expect(os.WriteFile(caPath, caPEM, 0o600)).To(Succeed())
 		Expect(os.WriteFile(secretPath, []byte("initial-secret"), 0o600)).To(Succeed())
 		source, err := auth.NewOAuth2LoginSource(auth.ManagerConfig{
 			MountPath: environment.AuthMount, Role: environment.AuthRole,
 			MinJWTRemainingTTL: time.Minute, LoginBeforeTokenExpiry: 30 * time.Second, TokenRenewalIncrement: time.Hour,
-			ExpectedIssuer: environment.JWTIssuer(), ExpectedAudience: []string{environment.JWTAudience()}, ExpectedSubject: environment.JWTSubject(),
+			ExpectedIssuer: environment.JWTIssuer(), ExpectedAudience: []string{environment.JWTAudience()},
+			ExpectedSubject: environment.JWTSubject(),
 		}, oauth2.Config{
 			TokenURL: fixture.server.URL + "/token", ClientID: "kms-provider", ClientSecretFile: secretPath,
 			AuthMethod: oauth2.ClientSecretBasic, CACertFile: caPath, Timeout: 5 * time.Second,
@@ -58,7 +60,9 @@ var _ = Describe("OAuth client credentials", Label(framework.LabelOpenBao, frame
 		Expect(err).NotTo(HaveOccurred())
 		bao, err := environment.NewAuthClient()
 		Expect(err).NotTo(HaveOccurred())
-		manager, err := auth.NewManagerWithSource(auth.LifecycleConfig{LoginBeforeTokenExpiry: 30 * time.Second, TokenRenewalIncrement: time.Hour},
+		manager, err := auth.NewManagerWithSource(auth.LifecycleConfig{
+			LoginBeforeTokenExpiry: 30 * time.Second, TokenRenewalIncrement: time.Hour,
+		},
 			source, bao, auth.ManagerOptions{LifecycleContext: ctx, RefreshTimeout: 5 * time.Second})
 		Expect(err).NotTo(HaveOccurred())
 		client, err := environment.NewClientWithTokenSource(manager)
@@ -83,7 +87,7 @@ var _ = Describe("OAuth client credentials", Label(framework.LabelOpenBao, frame
 		Expect(err).To(HaveOccurred())
 		Expect(errors.Is(err, auth.ErrAuthFailed)).To(BeTrue())
 	}, SpecTimeout(2*time.Minute))
-})
+}, Label(framework.LabelOpenBao, framework.LabelTransit, framework.LabelCI))
 
 type oauthIssuerFixture struct {
 	server       *httptest.Server
@@ -107,6 +111,7 @@ func startOAuthIssuer(environment *framework.OpenBaoEnvironment) *oauthIssuerFix
 			http.Error(w, "invalid_client", http.StatusUnauthorized)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		if err := r.ParseForm(); err != nil || r.PostForm.Get("grant_type") != "client_credentials" {
 			http.Error(w, "invalid_request", http.StatusBadRequest)
 			return
@@ -121,6 +126,7 @@ func startOAuthIssuer(environment *framework.OpenBaoEnvironment) *oauthIssuerFix
 			jwt = strings.Join(parts[:2], ".") + ".YmFk"
 		}
 		w.Header().Set("Content-Type", "application/json")
+		// #nosec G117 -- the OAuth fixture intentionally returns its ephemeral token in the protocol response.
 		_ = json.NewEncoder(w).Encode(struct {
 			AccessToken string `json:"access_token"`
 			TokenType   string `json:"token_type"`

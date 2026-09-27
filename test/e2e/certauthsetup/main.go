@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"net/url"
 	"os"
@@ -57,9 +58,19 @@ func run() error {
 	flag.StringVar(&cfg.TokenLabel, "token-label", "openbao-kms-e2e", "SoftHSM token label")
 	flag.StringVar(&cfg.KeyLabel, "key-label", "openbao-kms-client", "PKCS#11 key label")
 	flag.StringVar(&cfg.PINFile, "pin-file", "/bao/tls/pkcs11-pin", "PIN file to write for the provider")
-	flag.StringVar(&cfg.CertificateFile, "certificate-file", "/bao/tls/client-chain.pem", "client certificate chain to write for the provider")
+	flag.StringVar(
+		&cfg.CertificateFile,
+		"certificate-file",
+		"/bao/tls/client-chain.pem",
+		"client certificate chain to write for the provider",
+	)
 	flag.StringVar(&cfg.CAFile, "ca-file", "/out/client-ca.pem", "client CA certificate to write for OpenBao cert auth")
-	flag.StringVar(&cfg.SPIFFEID, "spiffe-id", "spiffe://example.org/openbao-kms/workload-a", "SPIFFE URI SAN for the client certificate")
+	flag.StringVar(
+		&cfg.SPIFFEID,
+		"spiffe-id",
+		"spiffe://example.org/openbao-kms/workload-a",
+		"SPIFFE URI SAN for the client certificate",
+	)
 	flag.IntVar(&cfg.OwnerUserID, "owner-uid", defaultOwnerUserID, "provider runtime UID")
 	flag.IntVar(&cfg.OwnerGroupID, "owner-gid", defaultOwnerGroupID, "provider runtime GID")
 	flag.Parse()
@@ -132,6 +143,7 @@ slots.removable = false
 }
 
 func initializeToken(cfg setupConfig, pin string, soPIN string) error {
+	// #nosec G204 -- fixed SoftHSM utility arguments initialize an isolated test token.
 	cmd := exec.Command(
 		"softhsm2-util",
 		"--init-token",
@@ -235,17 +247,22 @@ func chownRecursive(path string, uid int, gid int) error {
 		return fmt.Errorf("stat %s: %w", path, err)
 	}
 	if !info.IsDir() {
-		if err := os.Chown(path, uid, gid); err != nil {
+		if err := os.Lchown(path, uid, gid); err != nil {
 			return fmt.Errorf("chown %s: %w", path, err)
 		}
 		return nil
 	}
-	return filepath.WalkDir(path, func(current string, _ os.DirEntry, walkErr error) error {
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return fs.WalkDir(root.FS(), ".", func(name string, _ fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if err := os.Chown(current, uid, gid); err != nil {
-			return fmt.Errorf("chown %s: %w", current, err)
+		if err := root.Lchown(name, uid, gid); err != nil {
+			return fmt.Errorf("chown fixture entry %s: %w", name, err)
 		}
 		return nil
 	})
@@ -284,6 +301,7 @@ func writePEMFile(path string, mode os.FileMode, blocks ...*pem.Block) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
+	// #nosec G304 -- paths select files inside the caller-owned certificate fixture.
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil {
 		return err

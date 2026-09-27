@@ -30,6 +30,11 @@ lint: docs-check versions-check verify-e2e-manifest verify-fmt test-ast lint-ast
 	@if command -v "$(STATICCHECK)" >/dev/null 2>&1; then "$(STATICCHECK)" ./...; else printf '%s\n' 'staticcheck not installed; skipping staticcheck.'; fi
 	@if command -v "$(GOLANGCI_LINT)" >/dev/null 2>&1; then "$(GOLANGCI_LINT)" run; else printf '%s\n' 'golangci-lint not installed; skipping golangci-lint.'; fi
 
+.PHONY: lint-tagged
+lint-tagged: ## Lint certificate sources and E2E code, including validation-only SPIFFE paths.
+	@CGO_ENABLED=1 "$(GOLANGCI_LINT)" run --max-same-issues=0 --max-issues-per-linter=0 \
+		--build-tags=certauth_pkcs11,certauth_spiffe,openbao_kms_e2e_spiffe_certauth,e2e
+
 .PHONY: verify-devenv
 verify-devenv: ## Verify the pinned devenv toolchain contract.
 	@bash hack/dev/verify-devenv.sh
@@ -44,6 +49,11 @@ test: ## Run Go tests.
 .PHONY: test-race
 test-race: ## Run race-enabled Go tests.
 	@"$(GO)" test -race ./...
+
+.PHONY: test-certauth
+test-certauth: ## Run certificate auth and fixture unit tests with the race detector.
+	@CGO_ENABLED=1 "$(GO)" test -race -tags=certauth_pkcs11,certauth_spiffe,openbao_kms_e2e_spiffe_certauth \
+		./internal/auth ./cmd/bao-kms-provider ./test/e2e/certauthsetup
 
 .PHONY: tidy
 tidy: ## Run go mod tidy.

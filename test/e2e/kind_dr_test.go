@@ -66,6 +66,7 @@ func TestKindDRRestoreRunbookE2E(t *testing.T) {
 	waitForKindProviderSocket(t, ctx, dockerPath, nodeName)
 	enableKindAPIServerKMS(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
 
+	// #nosec G101 -- Kubernetes object name, not a credential or secret value.
 	secretName := "obk-kind-dr"
 	secretValue := "kind-dr-secret-" + strconvTime(time.Now())
 	createKindSecretNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
@@ -89,6 +90,7 @@ func TestKindDRRestoreRunbookE2E(t *testing.T) {
 	restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
 	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
 
+	// #nosec G101 -- Kubernetes object name, not a credential or secret value.
 	restoredSecretName := "obk-kind-dr-restored"
 	restoredSecretValue := "kind-dr-restored-secret-" + strconvTime(time.Now())
 	createKindSecretNamed(t, ctx, kubectlPath, contextName, restoredSecretName, restoredSecretValue)
@@ -140,7 +142,17 @@ func waitForKindProviderContainerGone(t *testing.T, ctx context.Context, dockerP
 
 	deadline := time.Now().Add(2 * time.Minute)
 	for time.Now().Before(deadline) {
-		output, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "crictl", "ps", "--name", "^bao-kms-provider$", "-q")
+		output, err := runDockerOutput(
+			ctx,
+			dockerPath,
+			"exec",
+			nodeName,
+			"crictl",
+			"ps",
+			"--name",
+			"^bao-kms-provider$",
+			"-q",
+		)
 		if err == nil && strings.TrimSpace(output) == "" {
 			return
 		}

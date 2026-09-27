@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -112,22 +110,11 @@ func StartOpenBaoHAEnvironment(ctx context.Context, cfg OpenBaoHAEnvironmentConf
 	if baseCfg.NetworkName == "" {
 		return nil, fmt.Errorf("OpenBao HA environment requires a Docker network")
 	}
-	artifactDir, err := EnsureArtifactDir()
+	certDir, err := prepareOpenBaoHATLSDirectory()
 	if err != nil {
-		return nil, fmt.Errorf("prepare e2e artifact directory: %w", err)
+		return nil, err
 	}
-	artifactDir, err = filepath.Abs(artifactDir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve e2e artifact directory: %w", err)
-	}
-	certDir, err := os.MkdirTemp(artifactDir, "openbao-ha-tls-")
-	if err != nil {
-		return nil, fmt.Errorf("create OpenBao HA TLS directory: %w", err)
-	}
-	if err := os.Chmod(certDir, 0o777); err != nil {
-		_ = os.RemoveAll(certDir)
-		return nil, fmt.Errorf("make OpenBao HA TLS directory container-readable: %w", err)
-	}
+
 	suffix, err := randomHex(6)
 	if err != nil {
 		_ = os.RemoveAll(certDir)
@@ -171,6 +158,27 @@ func StartOpenBaoHAEnvironment(ctx context.Context, cfg OpenBaoHAEnvironmentConf
 		return nil, err
 	}
 	return environment, nil
+}
+
+func prepareOpenBaoHATLSDirectory() (string, error) {
+	artifactDir, err := EnsureArtifactDir()
+	if err != nil {
+		return "", fmt.Errorf("prepare e2e artifact directory: %w", err)
+	}
+	artifactDir, err = filepath.Abs(artifactDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve e2e artifact directory: %w", err)
+	}
+	certDir, err := os.MkdirTemp(artifactDir, "openbao-ha-tls-")
+	if err != nil {
+		return "", fmt.Errorf("create OpenBao HA TLS directory: %w", err)
+	}
+	// #nosec G302 -- isolated fixture directory accepts TLS files from rootless or remapped containers.
+	if err := os.Chmod(certDir, 0o777); err != nil {
+		_ = os.RemoveAll(certDir)
+		return "", fmt.Errorf("make OpenBao HA TLS directory container-readable: %w", err)
+	}
+	return certDir, nil
 }
 
 func (h *OpenBaoHAEnvironment) ProviderAddress() string {
@@ -220,21 +228,7 @@ func (h *OpenBaoHAEnvironment) start(ctx context.Context, startupWait time.Durat
 	if err := h.startNode(ctx, 0); err != nil {
 		return err
 	}
-	if err := h.withNode(0, func() error {
-		if err := h.waitUntilEndpoint(ctx, startupWait); err != nil {
-			return err
-		}
-		if _, err := h.initializeRaftStorage(ctx); err != nil {
-			return err
-		}
-		if err := h.waitUntilReady(ctx, startupWait); err != nil {
-			return err
-		}
-		if err := h.bootstrapTransit(ctx); err != nil {
-			return err
-		}
-		return h.bootstrapJWTAuth(ctx)
-	}); err != nil {
+	if err := h.withNode(0, func() error { return h.bootstrapLeader(ctx, startupWait) }); err != nil {
 		return h.nodeStartupError(ctx, 0, err)
 	}
 	for index := 1; index < len(h.nodes); index++ {
@@ -265,6 +259,22 @@ func (h *OpenBaoHAEnvironment) start(ctx context.Context, startupWait time.Durat
 	return h.waitJWTLoginThroughNode(ctx, h.providerNodeIndex, defaultOpenBaoHAClusterWaitTimeout)
 }
 
+func (h *OpenBaoHAEnvironment) bootstrapLeader(ctx context.Context, startupWait time.Duration) error {
+	if err := h.waitUntilEndpoint(ctx, startupWait); err != nil {
+		return err
+	}
+	if _, err := h.initializeRaftStorage(ctx); err != nil {
+		return err
+	}
+	if err := h.waitUntilReady(ctx, startupWait); err != nil {
+		return err
+	}
+	if err := h.bootstrapTransit(ctx); err != nil {
+		return err
+	}
+	return h.bootstrapJWTAuth(ctx)
+}
+
 func (h *OpenBaoHAEnvironment) writeHAConfigs(nodeNames []string) error {
 	for index, node := range h.nodes {
 		leaderNodes := nodeNames[:1]
@@ -293,6 +303,7 @@ func (h *OpenBaoHAEnvironment) startNode(ctx context.Context, index int) error {
 		"server",
 		"-config=" + configPath,
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, h.dockerBinary, args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("start OpenBao HA node %s: %w: %s", node.name, err, strings.TrimSpace(string(output)))
@@ -389,6 +400,7 @@ func (h *OpenBaoHAEnvironment) raftPeers(ctx context.Context) (map[string]raftPe
 		h.nodes[0].name,
 		"bao", "operator", "raft", "list-peers", "-format=json",
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, h.dockerBinary, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -468,6 +480,7 @@ func (h *OpenBaoHAEnvironment) survivorDiagnostics(ctx context.Context) string {
 	for index := 1; index < len(h.nodes); index++ {
 		node := h.nodes[index]
 		_, _ = fmt.Fprintf(&out, "== %s status ==\n", node.name)
+		// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 		status := exec.CommandContext(
 			ctx,
 			h.dockerBinary,
@@ -484,6 +497,7 @@ func (h *OpenBaoHAEnvironment) survivorDiagnostics(ctx context.Context) string {
 			_, _ = fmt.Fprintf(&out, "status failed: %v: %s\n", err, strings.TrimSpace(string(output)))
 		}
 		_, _ = fmt.Fprintf(&out, "== %s logs ==\n", node.name)
+		// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 		logs := exec.CommandContext(ctx, h.dockerBinary, "logs", "--tail", "40", node.name)
 		if output, err := logs.CombinedOutput(); err == nil {
 			_, _ = out.Write(bytes.TrimSpace(output))
@@ -581,6 +595,7 @@ func (h *OpenBaoHAEnvironment) appendDockerDiagnostic(
 	label string,
 	args ...string,
 ) {
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, h.dockerBinary, args...)
 	output, err := cmd.CombinedOutput()
 	if len(bytes.TrimSpace(output)) > 0 {
@@ -593,37 +608,14 @@ func (h *OpenBaoHAEnvironment) appendDockerDiagnostic(
 }
 
 func (h *OpenBaoHAEnvironment) probeHealthStandbyOK(ctx context.Context) error {
-	httpClient, err := openbao.NewHTTPClient(h.CACertFile, openBaoTLSServerName, 2*time.Second)
-	if err != nil {
-		return err
-	}
-	request, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		h.Address+"/v1/sys/health?standbyok=true",
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, response.Body)
-		_ = response.Body.Close()
-	}()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("OpenBao HA health status %d", response.StatusCode)
-	}
-	return nil
+	return probeOpenBaoHealth(ctx, h.CACertFile, h.Address+"/v1/sys/health?standbyok=true")
 }
 
 func (h *OpenBaoHAEnvironment) removeContainer(ctx context.Context, name string) error {
 	if name == "" || h.dockerBinary == "" {
 		return nil
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, h.dockerBinary, "rm", "-f", name)
 	output, err := cmd.CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "No such container") {
@@ -636,6 +628,7 @@ func (h *OpenBaoHAEnvironment) removeVolume(ctx context.Context, name string) er
 	if name == "" || h.dockerBinary == "" {
 		return nil
 	}
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, h.dockerBinary, "volume", "rm", "-f", name)
 	output, err := cmd.CombinedOutput()
 	if err != nil && !strings.Contains(string(output), "No such volume") {
@@ -671,6 +664,7 @@ listener "tcp" {
   tls_key_file = "/bao/tls/server.key"
 }
 `, nodeName, nodeName, nodeName, retryJoin.String())
+	// #nosec G306 -- non-secret fixture configuration is read by a separate container UID.
 	if err := os.WriteFile(filepath.Join(dir, nodeName+".hcl"), []byte(raw), 0o644); err != nil {
 		return fmt.Errorf("write OpenBao HA raft storage config: %w", err)
 	}

@@ -26,16 +26,17 @@ const (
 	envKubectlBinary = "KUBECTL"
 	envKindNodeImage = "E2E_KIND_NODE_IMAGE"
 
-	kindProviderConfigPath     = "/etc/openbao-kms/config.yaml"
-	kindProviderCAPath         = "/etc/openbao-kms/tls/ca.crt"
-	kindProviderJWTPath        = "/var/lib/openbao-kms/credentials/identity.jwt"
-	kindProviderSocketPath     = "/run/openbao-kms/kms.sock"
-	kindProviderStatePath      = "/var/lib/openbao-kms/state/key-registry.json"
-	kindEncryptionConfigDir    = "/etc/kubernetes/encryption/openbao-kms"
-	kindEncryptionConfigPath   = kindEncryptionConfigDir + "/encryption-config.yaml"
-	kindProviderStaticPodPath  = "/etc/kubernetes/manifests/bao-kms-provider.yaml"
-	kindAPIServerManifestPath  = "/etc/kubernetes/manifests/kube-apiserver.yaml"
-	kindManifestHoldDir        = "/etc/kubernetes/kms-e2e-hold"
+	kindProviderConfigPath    = "/etc/openbao-kms/config.yaml"
+	kindProviderCAPath        = "/etc/openbao-kms/tls/ca.crt"
+	kindProviderJWTPath       = "/var/lib/openbao-kms/credentials/identity.jwt"
+	kindProviderSocketPath    = "/run/openbao-kms/kms.sock"
+	kindProviderStatePath     = "/var/lib/openbao-kms/state/key-registry.json"
+	kindEncryptionConfigDir   = "/etc/kubernetes/encryption/openbao-kms"
+	kindEncryptionConfigPath  = kindEncryptionConfigDir + "/encryption-config.yaml"
+	kindProviderStaticPodPath = "/etc/kubernetes/manifests/bao-kms-provider.yaml"
+	kindAPIServerManifestPath = "/etc/kubernetes/manifests/kube-apiserver.yaml"
+	kindManifestHoldDir       = "/etc/kubernetes/kms-e2e-hold"
+	// #nosec G101 -- fixture path or Kubernetes object name, not a credential value.
 	kindSecretName             = "obk-kind-smoke"
 	kindControlPlaneNodeSuffix = "-control-plane"
 
@@ -147,6 +148,7 @@ func TestKindMultiControlPlaneConvergenceE2E(t *testing.T) {
 		waitForKindAPIServerContainer(t, ctx, dockerPath, nodeName)
 	}
 
+	// #nosec G101 -- fixture path or Kubernetes object name, not a credential value.
 	secretName := "obk-kind-mcp"
 	secretValue := "kind-mcp-secret-" + strconvTime(time.Now())
 	createKindSecretNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
@@ -155,11 +157,31 @@ func TestKindMultiControlPlaneConvergenceE2E(t *testing.T) {
 		assertKindEtcdEncryptedNamed(t, ctx, dockerPath, nodeName, secretName, secretValue)
 	}
 	for _, nodeName := range nodeNames {
-		assertKindSecretReadableThroughOnlyAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeNames, nodeName, secretName, secretValue)
+		assertKindSecretReadableThroughOnlyAPIServer(
+			t,
+			ctx,
+			dockerPath,
+			kubectlPath,
+			contextName,
+			nodeNames,
+			nodeName,
+			secretName,
+			secretValue,
+		)
 	}
 	for _, nodeName := range nodeNames {
 		restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
-		assertKindSecretReadableThroughOnlyAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeNames, nodeName, secretName, secretValue)
+		assertKindSecretReadableThroughOnlyAPIServer(
+			t,
+			ctx,
+			dockerPath,
+			kubectlPath,
+			contextName,
+			nodeNames,
+			nodeName,
+			secretName,
+			secretValue,
+		)
 	}
 }
 
@@ -208,6 +230,7 @@ func TestKindStaticPodUpgradeRollbackE2E(t *testing.T) {
 	waitForKindProviderSocket(t, ctx, dockerPath, nodeName)
 	enableKindAPIServerKMS(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
 
+	// #nosec G101 -- test token label or Kubernetes object name, not a credential value.
 	secretName := "obk-kind-upgrade"
 	secretValue := "kind-upgrade-secret-" + strconvTime(time.Now())
 	createKindSecretNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
@@ -220,6 +243,7 @@ func TestKindStaticPodUpgradeRollbackE2E(t *testing.T) {
 	waitForKindProviderSocket(t, ctx, dockerPath, nodeName)
 	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
 
+	// #nosec G101 -- test token label or Kubernetes object name, not a credential value.
 	upgradedSecretName := "obk-kind-upgrade-after"
 	upgradedSecretValue := "kind-upgrade-after-secret-" + strconvTime(time.Now())
 	createKindSecretNamed(t, ctx, kubectlPath, contextName, upgradedSecretName, upgradedSecretValue)
@@ -248,7 +272,14 @@ func requireToolOrSkip(t *testing.T, ctx context.Context, binary string) string 
 		t.Skipf("%s is not available: %v", binary, err)
 	}
 	if binary == framework.EnvDefault(framework.EnvDockerBinary, "docker") {
-		if output, err := exec.CommandContext(ctx, path, "version", "--format", "{{.Server.Version}}").CombinedOutput(); err != nil {
+		// #nosec G204 -- resolved test tool path is invoked directly with fixed version arguments.
+		if output, err := exec.CommandContext(
+			ctx,
+			path,
+			"version",
+			"--format",
+			"{{.Server.Version}}",
+		).CombinedOutput(); err != nil {
 			t.Skipf("%s: %s", framework.ErrDockerUnavailable, strings.TrimSpace(string(output)))
 		}
 	}
@@ -279,16 +310,16 @@ func createKindMultiControlPlaneCluster(
 ) {
 	t.Helper()
 
-	var config strings.Builder
-	config.WriteString("kind: Cluster\n")
-	config.WriteString("apiVersion: kind.x-k8s.io/v1alpha4\n")
-	config.WriteString("nodes:\n")
+	var clusterConfig strings.Builder
+	clusterConfig.WriteString("kind: Cluster\n")
+	clusterConfig.WriteString("apiVersion: kind.x-k8s.io/v1alpha4\n")
+	clusterConfig.WriteString("nodes:\n")
 	for range controlPlaneCount {
-		config.WriteString("- role: control-plane\n")
+		clusterConfig.WriteString("- role: control-plane\n")
 	}
 
 	configPath := filepath.Join(t.TempDir(), "kind-cluster.yaml")
-	if err := os.WriteFile(configPath, []byte(config.String()), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(clusterConfig.String()), 0o600); err != nil {
 		t.Fatalf("write Kind multi-control-plane config: %v", err)
 	}
 	output, err := runOutput(ctx, kindPath,
@@ -324,12 +355,12 @@ func startKindOpenBao(t *testing.T, ctx context.Context) *framework.OpenBaoEnvir
 func startKindOpenBaoWithConfig(
 	t *testing.T,
 	ctx context.Context,
-	config framework.OpenBaoEnvironmentConfig,
+	environmentConfig framework.OpenBaoEnvironmentConfig,
 ) *framework.OpenBaoEnvironment {
 	t.Helper()
 
-	config.NetworkName = "kind"
-	environment, err := framework.StartOpenBaoEnvironment(ctx, config)
+	environmentConfig.NetworkName = "kind"
+	environment, err := framework.StartOpenBaoEnvironment(ctx, environmentConfig)
 	if errors.Is(err, framework.ErrDockerUnavailable) {
 		t.Skip(err.Error())
 	}
@@ -367,7 +398,12 @@ func stageKindProvider(
 	stagingDir := t.TempDir()
 	writeKindProviderConfig(t, filepath.Join(stagingDir, "provider.yaml"), environment)
 	pinnedImage := pinKindProviderImage(t, ctx, dockerPath, nodeName, providerImage)
-	writeKindProviderStaticPod(t, filepath.Join(stagingDir, "bao-kms-provider.yaml"), filepath.Join(stagingDir, "provider.yaml"), pinnedImage)
+	writeKindProviderStaticPod(
+		t,
+		filepath.Join(stagingDir, "bao-kms-provider.yaml"),
+		filepath.Join(stagingDir, "provider.yaml"),
+		pinnedImage,
+	)
 	writeKindEncryptionConfig(t, filepath.Join(stagingDir, "encryption-config.yaml"))
 	copyFile(t, environment.CACertFile, filepath.Join(stagingDir, "ca.crt"), 0o644)
 	copyFile(t, environment.JWTFile, filepath.Join(stagingDir, "identity.jwt"), 0o600)
@@ -382,15 +418,28 @@ func stageKindProvider(
 	dockerCopy(t, ctx, dockerPath, filepath.Join(stagingDir, "provider.yaml"), nodeName+":"+kindProviderConfigPath)
 	dockerCopy(t, ctx, dockerPath, filepath.Join(stagingDir, "ca.crt"), nodeName+":"+kindProviderCAPath)
 	dockerCopy(t, ctx, dockerPath, filepath.Join(stagingDir, "identity.jwt"), nodeName+":"+kindProviderJWTPath)
-	dockerCopy(t, ctx, dockerPath, filepath.Join(stagingDir, "encryption-config.yaml"), nodeName+":"+kindEncryptionConfigPath)
+	dockerCopy(
+		t,
+		ctx,
+		dockerPath,
+		filepath.Join(stagingDir, "encryption-config.yaml"),
+		nodeName+":"+kindEncryptionConfigPath,
+	)
 	runDocker(t, ctx, dockerPath, "exec", nodeName, "sh", "-c", kindProviderPermissionsScript)
-	dockerCopy(t, ctx, dockerPath, filepath.Join(stagingDir, "bao-kms-provider.yaml"), nodeName+":"+kindProviderStaticPodPath)
+	dockerCopy(
+		t,
+		ctx,
+		dockerPath,
+		filepath.Join(stagingDir, "bao-kms-provider.yaml"),
+		nodeName+":"+kindProviderStaticPodPath,
+	)
 }
 
 const kindProviderPermissionsScript = `set -eu
 chown -R 65532:65532 /etc/openbao-kms /var/lib/openbao-kms
 chown -R 65532:1234 /run/openbao-kms
-chmod 0700 /etc/openbao-kms /etc/openbao-kms/tls /var/lib/openbao-kms /var/lib/openbao-kms/state /var/lib/openbao-kms/credentials
+chmod 0700 /etc/openbao-kms /etc/openbao-kms/tls
+chmod 0700 /var/lib/openbao-kms /var/lib/openbao-kms/state /var/lib/openbao-kms/credentials
 chmod 2750 /run/openbao-kms
 chmod 0600 /etc/openbao-kms/config.yaml /var/lib/openbao-kms/credentials/identity.jwt
 if [ -f /var/lib/openbao-kms/state/key-registry.json ]; then chmod 0600 /var/lib/openbao-kms/state/key-registry.json; fi
@@ -444,7 +493,9 @@ func enableKindAPIServerKMS(
 		waitForKindAPIServerContainer(t, ctx, dockerPath, nodeName)
 	}
 	if err := waitForKindAPIServerReady(ctx, kubectlPath, contextName); err != nil {
-		t.Fatalf("kube-apiserver did not become ready: %v\nkube-apiserver status:\n%s\nkube-apiserver logs:\n%s\nprovider status:\n%s\nprovider logs:\n%s\nnode logs:\n%s\npatched manifest:\n%s",
+		t.Fatalf("kube-apiserver did not become ready: %v\nkube-apiserver status:\n%s\n"+
+			"kube-apiserver logs:\n%s\nprovider status:\n%s\nprovider logs:\n%s\n"+
+			"node logs:\n%s\npatched manifest:\n%s",
 			err,
 			kindContainerStatus(ctx, dockerPath, nodeName, "kube-apiserver"),
 			kindContainerLogs(ctx, dockerPath, nodeName, "kube-apiserver"),
@@ -468,7 +519,8 @@ func patchKindAPIServerManifest(manifest string) (string, error) {
 		return "", fmt.Errorf("kube-apiserver command anchor not found")
 	}
 
-	mountAnchor := "    - mountPath: /usr/share/ca-certificates\n      name: usr-share-ca-certificates\n      readOnly: true\n"
+	mountAnchor := "    - mountPath: /usr/share/ca-certificates\n" +
+		"      name: usr-share-ca-certificates\n      readOnly: true\n"
 	manifest = strings.Replace(manifest, mountAnchor, mountAnchor+
 		"    - mountPath: "+kindEncryptionConfigDir+"\n      name: openbao-kms-encryption\n      readOnly: true\n"+
 		"    - mountPath: /run/openbao-kms\n      name: openbao-kms-run\n", 1)
@@ -477,9 +529,11 @@ func patchKindAPIServerManifest(manifest string) (string, error) {
 		return "", fmt.Errorf("kube-apiserver volumeMount anchor not found")
 	}
 
-	volumeAnchor := "  - hostPath:\n      path: /usr/share/ca-certificates\n      type: DirectoryOrCreate\n    name: usr-share-ca-certificates\n"
+	volumeAnchor := "  - hostPath:\n      path: /usr/share/ca-certificates\n" +
+		"      type: DirectoryOrCreate\n    name: usr-share-ca-certificates\n"
 	manifest = strings.Replace(manifest, volumeAnchor, volumeAnchor+
-		"  - hostPath:\n      path: "+kindEncryptionConfigDir+"\n      type: DirectoryOrCreate\n    name: openbao-kms-encryption\n"+
+		"  - hostPath:\n      path: "+kindEncryptionConfigDir+"\n"+
+		"      type: DirectoryOrCreate\n    name: openbao-kms-encryption\n"+
 		"  - hostPath:\n      path: /run/openbao-kms\n      type: Directory\n    name: openbao-kms-run\n", 1)
 	if !strings.Contains(manifest, "path: "+kindEncryptionConfigDir) ||
 		!strings.Contains(manifest, "path: /run/openbao-kms") {
@@ -669,10 +723,10 @@ func waitForKindAPIServerContainerRestart(
 	dockerPath string,
 	nodeName string,
 	previousID string,
-) string {
+) {
 	t.Helper()
 
-	return waitForKindAPIServerContainerID(t, ctx, dockerPath, nodeName, previousID)
+	_ = waitForKindAPIServerContainerID(t, ctx, dockerPath, nodeName, previousID)
 }
 
 func waitForKindAPIServerContainerID(
@@ -815,7 +869,15 @@ func backupKindProviderManifest(t *testing.T, ctx context.Context, dockerPath st
 	t.Helper()
 
 	runDocker(t, ctx, dockerPath, "exec", nodeName, "mkdir", "-p", kindManifestHoldDir)
-	_, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "cp", kindProviderStaticPodPath, kindManifestHoldDir+"/bao-kms-provider.yaml")
+	_, err := runDockerOutput(
+		ctx,
+		dockerPath,
+		"exec",
+		nodeName,
+		"cp",
+		kindProviderStaticPodPath,
+		kindManifestHoldDir+"/bao-kms-provider.yaml",
+	)
 	if err != nil {
 		t.Fatalf("backup provider static pod manifest: %v", err)
 	}
@@ -824,7 +886,15 @@ func backupKindProviderManifest(t *testing.T, ctx context.Context, dockerPath st
 func restoreKindProviderManifest(t *testing.T, ctx context.Context, dockerPath string, nodeName string) {
 	t.Helper()
 
-	_, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "cp", kindManifestHoldDir+"/bao-kms-provider.yaml", kindProviderStaticPodPath)
+	_, err := runDockerOutput(
+		ctx,
+		dockerPath,
+		"exec",
+		nodeName,
+		"cp",
+		kindManifestHoldDir+"/bao-kms-provider.yaml",
+		kindProviderStaticPodPath,
+	)
 	if err != nil {
 		t.Fatalf("restore provider static pod manifest: %v", err)
 	}
@@ -880,7 +950,17 @@ func waitForKindProviderContainerRestart(
 
 	deadline := time.Now().Add(2 * time.Minute)
 	for time.Now().Before(deadline) {
-		output, err := runDockerOutput(ctx, dockerPath, "exec", nodeName, "crictl", "ps", "--name", "^bao-kms-provider$", "-q")
+		output, err := runDockerOutput(
+			ctx,
+			dockerPath,
+			"exec",
+			nodeName,
+			"crictl",
+			"ps",
+			"--name",
+			"^bao-kms-provider$",
+			"-q",
+		)
 		if err == nil {
 			currentID := strings.TrimSpace(output)
 			if currentID != "" && currentID != previousID {
@@ -1030,6 +1110,7 @@ func dockerCopy(t *testing.T, ctx context.Context, dockerPath string, source str
 }
 
 func runOutput(ctx context.Context, binary string, args ...string) (string, error) {
+	// #nosec G204 G702 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
 	cmd := exec.CommandContext(ctx, binary, args...)
 	output, err := cmd.CombinedOutput()
 	return string(output), err

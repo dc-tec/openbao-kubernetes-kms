@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("OpenBao Transit CI", Label(framework.LabelOpenBao, framework.LabelTransit, framework.LabelCI), func() {
+var _ = Describe("OpenBao Transit CI", func() {
 	It("validates Transit behavior against an ephemeral OpenBao environment", func(ctx SpecContext) {
 		if !framework.OpenBaoCIEnabled() {
 			Skip("E2E_OPENBAO_CI=true is required")
@@ -151,7 +151,7 @@ var _ = Describe("OpenBao Transit CI", Label(framework.LabelOpenBao, framework.L
 		_, err = loginJWT(ctx, authClient, environment, newJWT)
 		Expect(err).NotTo(HaveOccurred())
 	}, SpecTimeout(90*time.Second))
-})
+}, Label(framework.LabelOpenBao, framework.LabelTransit, framework.LabelCI))
 
 func loginJWT(
 	ctx context.Context,

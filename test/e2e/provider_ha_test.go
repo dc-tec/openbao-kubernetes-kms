@@ -32,7 +32,14 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 	if err != nil {
 		t.Skipf("%s: %v", framework.ErrDockerUnavailable, err)
 	}
-	if output, err := exec.CommandContext(ctx, dockerPath, "version", "--format", "{{.Server.Version}}").CombinedOutput(); err != nil {
+	// #nosec G204 -- executable and fixture arguments come from the test harness, including fixed setup scripts.
+	if output, err := exec.CommandContext(
+		ctx,
+		dockerPath,
+		"version",
+		"--format",
+		"{{.Server.Version}}",
+	).CombinedOutput(); err != nil {
 		t.Skipf("%s: %s", framework.ErrDockerUnavailable, strings.TrimSpace(string(output)))
 	}
 
@@ -93,7 +100,14 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 	)
 	copyFile(t, environment.CACertFile, filepath.Join(stagingDir, "openbao-ca.crt"), 0o644)
 	copyFile(t, environment.JWTFile, filepath.Join(stagingDir, "identity.jwt"), 0o600)
-	populateProviderVolumes(t, ctx, dockerPath, stagingDir, framework.EnvDefault(framework.EnvOpenBaoImage, framework.DefaultOpenBaoImage), volumes)
+	populateProviderVolumes(
+		t,
+		ctx,
+		dockerPath,
+		stagingDir,
+		framework.EnvDefault(framework.EnvOpenBaoImage, framework.DefaultOpenBaoImage),
+		volumes,
+	)
 
 	clientPath := filepath.Join(stagingDir, "kms-client")
 	buildKMSClient(t, ctx, clientPath)
@@ -101,6 +115,7 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 	if err := os.Mkdir(sampleDir, 0o700); err != nil {
 		t.Fatalf("create sample directory: %v", err)
 	}
+	// #nosec G302 -- the isolated fixture is shared with or executed by a different container UID.
 	if err := os.Chmod(sampleDir, 0o777); err != nil {
 		t.Fatalf("make sample directory container-writable: %v", err)
 	}
@@ -108,12 +123,45 @@ func TestProviderOpenBaoHAFailoverE2E(t *testing.T) {
 	startProviderContainer(t, ctx, dockerPath, providerName, networkName, providerImage, volumes)
 	providerStarted = true
 
-	runHAKMSClient(t, ctx, dockerPath, clientName, networkName, providerImage, volumes, clientPath, sampleDir, kmsClientModeWriteSample)
+	runHAKMSClient(
+		t,
+		ctx,
+		dockerPath,
+		clientName,
+		networkName,
+		providerImage,
+		volumes,
+		clientPath,
+		sampleDir,
+		kmsClientModeWriteSample,
+	)
 	if err := environment.StopActiveNode(ctx); err != nil {
 		t.Fatalf("stop OpenBao active node and wait for failover: %v", err)
 	}
-	runHAKMSClient(t, ctx, dockerPath, clientName, networkName, providerImage, volumes, clientPath, sampleDir, kmsClientModeReadSample)
-	runHAKMSClient(t, ctx, dockerPath, clientName, networkName, providerImage, volumes, clientPath, sampleDir, kmsClientModeFullStack)
+	runHAKMSClient(
+		t,
+		ctx,
+		dockerPath,
+		clientName,
+		networkName,
+		providerImage,
+		volumes,
+		clientPath,
+		sampleDir,
+		kmsClientModeReadSample,
+	)
+	runHAKMSClient(
+		t,
+		ctx,
+		dockerPath,
+		clientName,
+		networkName,
+		providerImage,
+		volumes,
+		clientPath,
+		sampleDir,
+		kmsClientModeFullStack,
+	)
 }
 
 func runHAKMSClient(

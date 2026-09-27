@@ -49,6 +49,7 @@ func verifyKindJWTRotation(t *testing.T, ctx context.Context, docker, node strin
 		t.Fatal("JWT replacement restarted the provider")
 	}
 	for _, path := range []string{bao.JWTFile, replacement} {
+		// #nosec G304 -- read the generated JWT fixture for the atomic-rotation test.
 		credential, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

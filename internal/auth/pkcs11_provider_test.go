@@ -14,6 +14,7 @@ import (
 
 func TestReadPKCS11PINFileRejectsUnsafeMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pin")
+	// #nosec G306 -- this negative test verifies rejection of a world-readable PIN file.
 	if err := os.WriteFile(path, []byte("1234\n"), 0o644); err != nil {
 		t.Fatalf("write pin fixture: %v", err)
 	}
@@ -123,6 +124,7 @@ func validPKCS11ProviderConfig(t *testing.T) PKCS11ProviderConfig {
 	t.Helper()
 
 	dir := t.TempDir()
+	// #nosec G101 -- labels identify an ephemeral test token; they are not credentials.
 	return PKCS11ProviderConfig{
 		CertificateFile: filepath.Join(dir, "client-chain.pem"),
 		ModulePath:      filepath.Join(dir, "pkcs11.so"),
