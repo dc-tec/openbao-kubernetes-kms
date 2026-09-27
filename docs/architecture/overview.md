@@ -139,26 +139,36 @@ decisions across restarts; see
 
 ## Startup
 
-The provider binds its socket only after one metadata probe and one deep probe
-succeed, so the API server never sees a socket without a working data path.
+The provider binds its socket only after its initial metadata and deep probes
+succeed. A later backend or authentication failure can still make it unready;
+use `/ready` to check the cached health state.
 
-With systemd, the provider is ready before kubelet starts the API server:
+With systemd, `Before=kubelet.service` and `Type=exec` order process execution
+before kubelet when both units start in the same transaction. They do not make
+kubelet wait for provider readiness or require kubelet to start the provider.
+After the executable starts, provider bootstrap and API server startup can
+proceed concurrently. The API server must retry until the KMS path is ready:
 
 ```mermaid
 flowchart TD
     A["host boot"]
-    B["network and DNS available"]
-    C["bao-kms-provider starts"]
-    D["provider reads config / auth material / CA"]
-    E["provider authenticates to OpenBao"]
-    F["provider reads Transit metadata"]
-    G["provider creates Unix socket"]
-    H["provider reports ready"]
-    I["kubelet starts kube-apiserver static pod"]
-    J["kube-apiserver connects to KMS socket"]
+    B["network-online.target reached"]
+    C["provider executable starts"]
+    D["provider reads config and authenticates"]
+    E["metadata and deep probes succeed"]
+    F["provider creates socket and reports ready"]
+    G["kubelet starts kube-apiserver"]
+    H["kube-apiserver connects or retries"]
 
-    A --> B --> C --> D --> E --> F --> G --> H --> I --> J
+    A --> B --> C
+    C --> D --> E --> F --> H
+    C --> G --> H
 ```
+
+`network-online.target` does not prove that DNS or OpenBao is reachable.
+The provider retries bootstrap within its configured grace period. A failed
+bootstrap exits and follows the unit's restart policy. The unit does not stop
+kubelet when the provider exits, restarts, or becomes unready.
 
 With static pods, kubelet starts both pods without ordering them, so the API
 server retries until the socket appears. Test this ordering on your platform:

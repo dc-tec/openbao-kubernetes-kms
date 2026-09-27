@@ -172,16 +172,17 @@ and [Reference: CLI](/docs/reference/cli/#doctor).
 ```sh
 systemctl enable --now bao-kms-provider.service
 systemctl status bao-kms-provider.service
+curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/ready
 ```
 
-`systemctl status` reports the service as active, and
-`/run/openbao-kms/kms.sock` exists. The provider is ready for
-[Enable encryption](/docs/get-started/enable-encryption/) once it runs on every
-control-plane node.
+Wait for HTTP 200 from `/ready` and confirm
+`/run/openbao-kms/kms.sock` exists. With `Type=exec`, systemd can report the
+process as active before authentication and initial probes finish. Continue to
+[Enable encryption](/docs/get-started/enable-encryption/) once the provider is
+ready on every control-plane node.
 
-If the service does not become active, check these common first-start causes:
+If the service does not become ready, check these common first-start causes:
 
-- the service starts after kubelet or the API server,
 - the socket directory group is not `openbao-kms-socket`,
 - `ProtectSystem` blocks a configuration or auth material path,
 - the CA bundle path is missing,
@@ -195,13 +196,19 @@ settings that matter for the control-plane boot path:
 
 | Setting | Purpose |
 |---|---|
-| `Before=kubelet.service` | Starts the provider before kubelet starts a static-pod API server on kubeadm-style hosts. |
-| `ConditionPathExists=` | Skips start until the configuration is staged. The provider validates the selected authentication source during startup. |
+| `Before=kubelet.service` | Orders process execution before kubelet when both units start together. It does not require kubelet to start this unit. |
+| `Type=exec` | Completes startup ordering after successful execution of the provider binary. It does not wait for the KMS socket or `/ready`. |
+| `ConditionPathExists=` | Skips a start attempt when the configuration is absent; start the unit after staging it. The provider validates the selected authentication source during startup. |
 | `ConditionPathIsDirectory=/run/openbao-kms` | Requires the socket directory that tmpfiles creates. |
 | `User=openbao-kms`, `SupplementaryGroups=openbao-kms-socket` | Runs without root; the socket group is how the API server connects. |
 | `Restart=always` with start limits | Restarts transient failures without hiding a fast crash loop. |
 | `ProtectSystem=strict`, `ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state` | Makes the host read-only except the socket directory and non-secret registry state. |
 | `CapabilityBoundingSet=`, `NoNewPrivileges=true` | Runs without Linux capabilities or privilege escalation. |
+
+Enable the provider on every control-plane host. A missing, disabled, failed,
+or unready provider does not prevent kubelet from starting. The API server
+must retry its KMS connection during bootstrap; the unit does not gate or stop
+kubelet on readiness. Before a planned API server restart, check `/ready`.
 
 `network-online.target` orders the start but does not prove DNS, routing, or
 OpenBao are reachable. The provider retries its initial checks for
