@@ -42,3 +42,7 @@ Continue only if `doctor` exits with status `0` without a `[fail]` check.
 Follow [Run with systemd](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/systemd/)
 for configuration, file ownership, validation, and service start. Verify the
 artifact first with [Download the release](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/download/).
+
+After the service starts, run `sudo -u openbao-kms bao-kms-provider probe` to
+check Status, Encrypt, and Decrypt through its live Unix socket. Repeat on
+every node before API-server activation.

@@ -71,6 +71,22 @@ freshness. The metric prints one line, such as
 same hash. Different hashes mean the nodes disagree about the active key;
 stop and investigate before you continue.
 
+Run `probe` through each node's actual Unix socket, using the intended socket
+client identity. For a systemd installation:
+
+```sh
+sudo -u openbao-kms bao-kms-provider probe --socket /run/openbao-kms/kms.sock --output json
+```
+
+For static pods, use the UID and groups shown in
+[Run as a static pod](/docs/get-started/static-pod/#step-8-start-the-static-pod).
+All Status, Encrypt, and Decrypt checks must pass. Record the successful
+`kms.key_id` value from one node, then require it on the other nodes with
+`--expected-key-id`. Different active keys can indicate identity drift or
+rotation that has not converged. Do not change lineage values to force a match.
+A local `doctor` pass, a root-only permission check, and a skipped check do not
+substitute for this live result.
+
 To confirm that encrypt calls reach the provider, check the request counter:
 
 ```sh
