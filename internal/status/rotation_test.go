@@ -208,7 +208,8 @@ func TestRollbackOptionCannotBypassRetainedIdentityValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	permissive, err := status.NewObserver(status.SnapshotScope{
-		ProviderName: active.ProviderName, ClusterID: active.ClusterID, OpenBaoInstanceID: active.OpenBaoInstanceID,
+		IdentityFingerprint: testIdentityFingerprint,
+		ProviderName:        active.ProviderName, ClusterID: active.ClusterID, OpenBaoInstanceID: active.OpenBaoInstanceID,
 		TransitMountID: active.TransitMountID, TransitKeyLineageID: active.TransitKeyLineageID, AADMode: active.AADMode,
 	}, status.RotationPolicy{RequireStableObservationCount: 1, RejectVersionRollback: false})
 	if err != nil {
@@ -301,6 +302,7 @@ func TestRotationRejectsPersistedStateScopeDrift(t *testing.T) {
 	profileV1 := profileForLatest(1, clock.Now())
 	state := rebuildState(t, observer, profileV1, clock.Now())
 	drifted, err := status.NewObserver(status.SnapshotScope{
+		IdentityFingerprint: testIdentityFingerprint,
 		ProviderName:        "openbao-kms-workload-a",
 		ClusterID:           "workload-b",
 		OpenBaoInstanceID:   "bao-prod-a",
@@ -325,6 +327,7 @@ func TestRotationRejectsPersistedStateScopeDrift(t *testing.T) {
 func TestRotationRejectsPersistedNamespaceScopeDrift(t *testing.T) {
 	clock := newFakeClock()
 	observer, err := status.NewObserver(status.SnapshotScope{
+		IdentityFingerprint: testIdentityFingerprint,
 		ProviderName:        "openbao-kms-workload-a",
 		ClusterID:           "workload-a",
 		OpenBaoInstanceID:   "bao-prod-a",
@@ -344,6 +347,7 @@ func TestRotationRejectsPersistedNamespaceScopeDrift(t *testing.T) {
 	state := rebuildState(t, observer, profileV1, clock.Now())
 
 	drifted, err := status.NewObserver(status.SnapshotScope{
+		IdentityFingerprint: testIdentityFingerprint,
 		ProviderName:        "openbao-kms-workload-a",
 		ClusterID:           "workload-a",
 		OpenBaoInstanceID:   "bao-prod-a",

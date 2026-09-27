@@ -1,8 +1,9 @@
 {
-  "schemaVersion": "keyregistry.openbao-kms/v1alpha1",
+  "schemaVersion": "keyregistry.openbao-kms/v1alpha2",
+  "identityFingerprint": "cfg1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "generation": 2,
-  "previousHash": "krs1.DqMdjGGzCtdXlX6PD1Z5bcj4EyeiEzFav7vchElfAMo",
-  "currentHash": "krs1.evEbhkz0ZC9-duP2_n0HgzZ3szBdAPtktM6iSYw1On4",
+  "previousHash": "krs1.9-fz5pQFzhSS72pb0qvCzeEJ3fnqQhwETsx1LEHB8Us",
+  "currentHash": "krs1.jzzQze2o23vs5afOEts-09XozaWcNTmWpGAdu37P0FE",
   "activeKeyId": "obk2.ImmpIXr3v4Fw4Im7457LAJiZdLOqK2dL6Nm3DEk-KEY",
   "snapshots": [
     {

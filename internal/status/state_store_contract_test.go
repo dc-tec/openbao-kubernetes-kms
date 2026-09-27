@@ -208,7 +208,9 @@ func sameGenerationAlternateState(
 	active.KubernetesKeyID = ""
 	active.State = keyregistry.StateActive
 
-	alternate, err := keyregistry.NewStateFile(active, nil, promoted.Generation, initial.CurrentHash)
+	alternate, err := keyregistry.NewStateFile(
+		active, nil, promoted.Generation, initial.CurrentHash, testIdentityFingerprint,
+	)
 	if err != nil {
 		t.Fatalf("new same-generation alternate state: %v", err)
 	}

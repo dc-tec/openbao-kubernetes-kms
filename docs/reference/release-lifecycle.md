@@ -52,8 +52,8 @@ Tags follow SemVer without a leading `v`, for example `0.1.0`.
 - Major releases break configuration, `key_id`, annotations, AAD
   canonicalization, support policy, or migration behavior.
 
-Before beta, minor releases can break those surfaces; the release notes then
-describe the impact, and wire-format changes come with a migration. From beta
+Before beta, preview releases can break those surfaces; the release notes then
+describe the impact and whether migration or a fresh installation is required. From beta
 on, `key_id`, annotations, and AAD follow the
 [compatibility promises](/docs/reference/compatibility/#compatibility-promises).
 

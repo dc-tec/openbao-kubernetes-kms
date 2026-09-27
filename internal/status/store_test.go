@@ -176,6 +176,7 @@ func newTestObserver(t *testing.T, clock *fakeClock, stableCount int, delay time
 	t.Helper()
 
 	observer, err := status.NewObserver(status.SnapshotScope{
+		IdentityFingerprint: testIdentityFingerprint,
 		ProviderName:        "openbao-kms-workload-a",
 		ClusterID:           "workload-a",
 		OpenBaoInstanceID:   "bao-prod-a",

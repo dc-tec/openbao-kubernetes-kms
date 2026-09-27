@@ -13,7 +13,7 @@ func TestStaleStatusHidesKeyIDButRetainsHistoricalDecryptLookup(t *testing.T) {
 	clock := newFakeClock()
 	store := newTestStore(t, clock)
 	active, retired := contractSnapshots(t, clock.Now())
-	state, err := keyregistry.NewStateFile(active, []keyregistry.KeySnapshot{retired}, 1, "")
+	state, err := keyregistry.NewStateFile(active, []keyregistry.KeySnapshot{retired}, 1, "", testIdentityFingerprint)
 	if err != nil {
 		t.Fatalf("new state file: %v", err)
 	}

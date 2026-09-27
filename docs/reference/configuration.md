@@ -135,11 +135,14 @@ auth:
 
 `transit.keyIdScope.providerName`, `clusterId`, `transitMountId`, and
 `keyLineageId`, `openbao.instanceId`, `openbao.namespace`, `transit.mountPath`,
-`transit.keyName`, and the `EncryptionConfiguration` provider name feed every
-`key_id` and AAD. Changing one after encryption begins can make existing data
-unreadable, so treat them as immutable; a change needs a migration plan.
-`bao-kms-provider config` prints an identity fingerprint over them to compare
-across nodes without exposing the values.
+`transit.keyName`, and the `EncryptionConfiguration` provider name are immutable
+after encryption begins. The logical scope values feed `key_id` and AAD;
+the encryption provider name must match `transit.keyIdScope.providerName`.
+The configuration fingerprint also covers the physical Transit mount path and
+key name. The registry binds that fingerprint to reject backend path changes;
+those paths do not enter `key_id` or AAD directly.
+`bao-kms-provider config` prints the fingerprint for comparison across nodes
+without exposing the values. See [Key ID and AAD](/docs/reference/key-id-and-aad/).
 
 ## Validation
 

@@ -19,7 +19,7 @@ func retirementState(t *testing.T) keyregistry.StateFile {
 	active.KubernetesKeyID = ""
 	v2 := historicalSnapshot(active)
 	v1 := historicalSnapshot(v2)
-	state, err := keyregistry.NewStateFile(active, []keyregistry.KeySnapshot{v1, v2}, 1, "")
+	state, err := keyregistry.NewStateFile(active, []keyregistry.KeySnapshot{v1, v2}, 1, "", testIdentityFingerprint)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,9 @@ func TestStateProgressRejectsLossOfDecryptableSnapshots(t *testing.T) {
 					activeID = active.KubernetesKeyID
 					records = append(records, keyregistry.SnapshotStateRecordFromSnapshot(active))
 				}
-				next, err := keyregistry.NewStateFileFromRecords(activeID, records, 2, previous.CurrentHash)
+				next, err := keyregistry.NewStateFileFromRecords(
+					activeID, records, 2, previous.CurrentHash, testIdentityFingerprint,
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -136,7 +138,9 @@ func TestStateProgressPreservesRemovedRecords(t *testing.T) {
 				}
 				records = append(records, record)
 			}
-			next, err := keyregistry.NewStateFileFromRecords(previous.ActiveKeyID, records, 3, previous.CurrentHash)
+			next, err := keyregistry.NewStateFileFromRecords(
+				previous.ActiveKeyID, records, 3, previous.CurrentHash, testIdentityFingerprint,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -152,7 +156,9 @@ func TestStateProgressPreservesPendingDecryptEligibility(t *testing.T) {
 	records := append([]keyregistry.SnapshotStateRecord(nil), base.Snapshots...)
 	// Exercise retention independently of version ordering.
 	records[1].State = string(keyregistry.StatePending)
-	previous, err := keyregistry.NewStateFileFromRecords(base.ActiveKeyID, records, 2, base.CurrentHash)
+	previous, err := keyregistry.NewStateFileFromRecords(
+		base.ActiveKeyID, records, 2, base.CurrentHash, testIdentityFingerprint,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +170,9 @@ func TestStateProgressPreservesPendingDecryptEligibility(t *testing.T) {
 			} else {
 				nextRecords[1].State = target
 			}
-			next, err := keyregistry.NewStateFileFromRecords(previous.ActiveKeyID, nextRecords, 3, previous.CurrentHash)
+			next, err := keyregistry.NewStateFileFromRecords(
+				previous.ActiveKeyID, nextRecords, 3, previous.CurrentHash, testIdentityFingerprint,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -186,7 +194,9 @@ func TestRetirementRejectsActiveRemovalAndPendingRotation(t *testing.T) {
 	}
 	records := append([]keyregistry.SnapshotStateRecord(nil), previous.Snapshots...)
 	records[1].State = string(keyregistry.StatePending)
-	pending, err := keyregistry.NewStateFileFromRecords(previous.ActiveKeyID, records, 2, previous.CurrentHash)
+	pending, err := keyregistry.NewStateFileFromRecords(
+		previous.ActiveKeyID, records, 2, previous.CurrentHash, testIdentityFingerprint,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

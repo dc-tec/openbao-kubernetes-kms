@@ -240,30 +240,21 @@ func TestKindStaticPodUpgradeRollbackE2E(t *testing.T) {
 	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
 
 	originalProviderID := kindProviderContainerID(t, ctx, dockerPath, nodeName)
+	before := kindPersistenceHashes(t, ctx, dockerPath, nodeName)
 	backupKindProviderManifest(t, ctx, dockerPath, nodeName)
 	pinnedCandidate := pinKindProviderImage(t, ctx, dockerPath, nodeName, candidateImage)
 	applyKindProviderImage(t, ctx, dockerPath, nodeName, pinnedCandidate)
+	waitKindOAuthLog(t, ctx, dockerPath, nodeName, legacyStateRejection)
+	if after := kindPersistenceHashes(t, ctx, dockerPath, nodeName); after != before {
+		t.Fatal("rejected static-pod upgrade changed legacy registry or checkpoint")
+	}
+
+	restoreKindProviderManifest(t, ctx, dockerPath, nodeName)
 	waitForKindProviderContainerRestart(t, ctx, dockerPath, nodeName, originalProviderID)
 	waitForKindProviderSocket(t, ctx, dockerPath, nodeName)
 	restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
 	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
-
-	// #nosec G101 -- test token label or Kubernetes object name, not a credential value.
-	upgradedSecretName := "obk-kind-upgrade-after"
-	upgradedSecretValue := "kind-upgrade-after-secret-" + strconvTime(time.Now())
-	createKindSecretNamed(t, ctx, kubectlPath, contextName, upgradedSecretName, upgradedSecretValue)
-	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, upgradedSecretName, upgradedSecretValue)
-
-	upgradedProviderID := kindProviderContainerID(t, ctx, dockerPath, nodeName)
-	restoreKindProviderManifest(t, ctx, dockerPath, nodeName)
-	waitForKindProviderContainerRestart(t, ctx, dockerPath, nodeName, upgradedProviderID)
-	waitForKindProviderSocket(t, ctx, dockerPath, nodeName)
-	restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
-	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
-	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, upgradedSecretName, upgradedSecretValue)
-	restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
-	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, secretName, secretValue)
-	assertKindSecretReadableNamed(t, ctx, kubectlPath, contextName, upgradedSecretName, upgradedSecretValue)
+	assertKindEtcdEncryptedNamed(t, ctx, dockerPath, nodeName, secretName, secretValue)
 }
 
 func kindCIEnabled() bool {
@@ -1165,4 +1156,14 @@ func kindFile(ctx context.Context, dockerPath string, nodeName string, path stri
 		return strings.TrimSpace(output)
 	}
 	return strings.TrimSpace(output)
+}
+
+func kindPersistenceHashes(t *testing.T, ctx context.Context, docker, node string) string {
+	t.Helper()
+	output, err := runDockerOutput(ctx, docker, "exec", node, "sha256sum",
+		kindProviderStatePath, kindProviderStatePath+".checkpoint")
+	if err != nil || strings.TrimSpace(output) == "" {
+		t.Fatalf("hash Kind provider persistence: %v", err)
+	}
+	return output
 }

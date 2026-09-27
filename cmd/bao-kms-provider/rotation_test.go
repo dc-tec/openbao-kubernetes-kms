@@ -148,7 +148,7 @@ func testCommandState(t *testing.T) keyregistry.StateFile {
 	t.Helper()
 
 	cfg := loadCommandConfig(t)
-	observer, err := status.NewObserver(snapshotScope(cfg), rotationPolicy(cfg))
+	observer, err := newRotationObserver(cfg)
 	if err != nil {
 		t.Fatalf("new observer: %v", err)
 	}

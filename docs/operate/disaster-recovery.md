@@ -36,6 +36,11 @@ etcd backup might still need.
 
 ## Local registry state
 
+Restore only state supported by the installed release. Preview.3 rejects
+unbound state from earlier previews; recovery is not a way to upgrade that
+state. Preserve the original installation and use its matching artifacts.
+See [Compatibility](/docs/reference/compatibility/#preview3-fresh-installation-boundary).
+
 The provider can create its registry state on first start only for an
 unrotated Transit key (`latest_version` 1). After any rotation, a node without
 its state file and checkpoint fails closed; restore both from backup or copy

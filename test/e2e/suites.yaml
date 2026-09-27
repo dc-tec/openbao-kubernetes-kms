@@ -355,7 +355,7 @@ lanes:
     reports: true
 
   - id: openbao-provider-upgrade-rollback-ci
-    name: OpenBao Provider Binary Upgrade Rollback CI
+    name: OpenBao Provider Legacy State Rejection and Rollback
     makeTarget: test-e2e-provider-upgrade-rollback-openbao-ci
     package: ./test/e2e
     labelFilter: openbao && kmsv2 && upgrade && rollback && ci
@@ -376,7 +376,7 @@ lanes:
     reports: true
 
   - id: kind-upgrade-rollback
-    name: Kubernetes KMS v2 Kind Static-Pod Upgrade Rollback
+    name: Kubernetes KMS v2 Kind Legacy State Rejection and Rollback
     makeTarget: test-e2e-kind-upgrade-rollback
     package: ./test/e2e
     labelFilter: kind && kmsv2 && upgrade && rollback

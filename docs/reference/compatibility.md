@@ -12,11 +12,29 @@ verifiedBy:
 A release covers only what its release notes and this page list as tested.
 Everything else might work but is outside the tested matrix.
 
+## Preview.3 fresh-installation boundary
+
+`0.1.0-preview.3` requires a fresh disposable installation with a new Transit key
+and provider identity. In-place upgrades from earlier previews are unsupported.
+The provider rejects the older registry schema without rewriting its state or
+checkpoint. Keep an existing preview installation on its matching artifacts;
+do not erase its registry, checkpoint, or key material to bypass the check.
+
+The new registry schema binds the configuration identity fingerprint, including
+the Transit key name and mount path. Earlier state did not record these values,
+so their original configuration cannot be verified retrospectively. There is no
+automatic adoption or migration command. KMS `key_id` derivation, annotations,
+and AAD bytes remain unchanged.
+
+Qualification verifies that a preview.2 upgrade attempt is rejected, its state
+is preserved, and returning to preview.2 can still read its existing data.
+It does not qualify an upgrade to preview.3 or a downgrade of preview.3 state.
+
 ## Unreleased clock handling
 
 Pending rotation now waits the full activation delay after each restart or after
-recovering an unconfirmed stable-observation save. State files remain readable;
-retained keys and observation counts are preserved. New local event timestamps
+recovering an unconfirmed stable-observation save. Within the current state
+schema, retained keys and observation counts are preserved. New local event timestamps
 preserve ordering across backward clock corrections. OpenBao creation metadata
 and key IDs retain their existing meaning. Older binaries still use persisted
 wall time for activation, so downgrades do not retain the new delay guarantee.
@@ -99,8 +117,8 @@ version:
 - decryption of historical `key_id` values,
 - the JSON report shape of report-style CLI commands.
 
-Until then, minor releases can break these surfaces, and each break comes with
-a migration guide; see
+Until then, preview releases can break these surfaces. Release notes describe
+the impact and whether migration is supported or a fresh installation is required; see
 [Release and support lifecycle](/docs/reference/release-lifecycle/#versioning).
 
 ## Operator retirement
@@ -169,12 +187,10 @@ trigger a metadata read, bounded by the request timeout and
 `status.probeInterval`, which never counts toward promotion. State transitions
 keep pending identities alongside active and retired ones.
 
-`key_id` derivation, AAD bytes, annotations, and the state schema are
-unchanged, and no Kubernetes data rewrite is needed. Pause rotation, upgrade
-every provider, and confirm all nodes report the same active `key_id` before
-the next rotation. Older binaries ignore pending versions for decryption, so
-never roll a node back while another node might have encrypted with its pending
-version.
+These rotation corrections retain `key_id` derivation, AAD bytes, and
+annotations. The separate state-binding change requires a fresh preview.3
+installation. Confirm all nodes report the same active `key_id` before the
+next rotation. Older binaries do not implement all current rotation guarantees.
 
 ### What counts as breaking
 

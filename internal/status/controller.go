@@ -438,6 +438,9 @@ func (c *Controller) loadState() error {
 	if err != nil {
 		return err
 	}
+	if err := c.observer.validateStateScope(state); err != nil {
+		return err
+	}
 	return c.store.LoadState(state)
 }
 

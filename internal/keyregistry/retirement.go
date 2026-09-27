@@ -34,7 +34,9 @@ func RetireVersions(previous StateFile, beforeVersion int) (StateFile, error) {
 	}
 	// This constructor is the only supported transition that intentionally drops
 	// decrypt eligibility. Normal rotation uses ValidateStateProgress instead.
-	return NewStateFileFromRecords(previous.ActiveKeyID, records, previous.Generation+1, previous.CurrentHash)
+	return NewStateFileFromRecords(
+		previous.ActiveKeyID, records, previous.Generation+1, previous.CurrentHash, previous.IdentityFingerprint,
+	)
 }
 
 func validateRetainedSnapshots(previous StateFile, next StateFile) error {
