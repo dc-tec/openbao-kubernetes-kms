@@ -18,27 +18,30 @@ primary:
       - title: Choose a deployment model
         url: docs/get-started/deployment-model/
         step: 2
-      - title: Plan identity values
-        url: docs/get-started/plan-values/
+      - title: Choose credentials
+        url: docs/get-started/credentials/
         step: 3
-      - title: Prepare OpenBao
-        url: docs/get-started/openbao/
-        step: 4
       - title: Download the release
         url: docs/get-started/download/
+        step: 4
+      - title: Generate installation files
+        url: docs/get-started/plan-values/
         step: 5
+      - title: Prepare OpenBao
+        url: docs/get-started/openbao/
+        step: 6
       - title: Run with systemd
         url: docs/get-started/systemd/
-        step: 6
+        step: 7
       - title: Run as a static pod
         url: docs/get-started/static-pod/
-        step: 6
+        step: 7
       - title: Enable encryption
         url: docs/get-started/enable-encryption/
-        step: 7
+        step: 8
       - title: Verify encryption
         url: docs/get-started/verify/
-        step: 8
+        step: 9
   - title: Configure
     description: "Set up OpenBao authentication and policy variants, and monitor the provider."
     url: docs/configure/

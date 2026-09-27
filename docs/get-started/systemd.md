@@ -1,8 +1,8 @@
 ---
 title: Run with systemd
 description: "Install the provider as a hardened systemd service on each control-plane node, configure it, validate it with doctor, and start it."
-eyebrow: Get started · Step 6
-weight: 60
+eyebrow: Get started · Step 7
+weight: 70
 verifiedBy:
   - deploy/systemd/bao-kms-provider.service
   - deploy/package/linux
@@ -19,8 +19,8 @@ runs as the non-root `openbao-kms` user, listens on
 - Download and verify the artifact in
   [Download the release](/docs/get-started/download/), and keep that shell with
   `VERSION` and `ARCH` set.
-- Have the values from [Plan identity values](/docs/get-started/plan-values/)
-  and the lineage ID from [Prepare OpenBao](/docs/get-started/openbao/).
+- Have the reviewed output from [Generate installation files](/docs/get-started/plan-values/)
+  and complete [Prepare OpenBao](/docs/get-started/openbao/).
 - Obtain the OpenBao CA bundle as `ca.crt` and the provider host JWT as
   `identity.jwt` from your identity provisioning process. The JWT must be
   renewable without the protected API server.
@@ -106,21 +106,16 @@ in `/usr/lib/tmpfiles.d/openbao-kms.conf`, unless it holds other local changes.
 
 ## Step 3: Write the provider configuration
 
-Copy the installed example to a working file:
+Copy the configuration from your reviewed installation directory:
 
 ```sh
-cp /usr/share/doc/bao-kms-provider/examples/provider-systemd.yaml provider.yaml
+cp generated/config.yaml provider.yaml
 ```
 
-Edit `provider.yaml` and replace the sample values in the fields listed in
-[Plan identity values: Provider configuration](/docs/get-started/plan-values/#provider-configuration)
-with your recorded values.
-
-Keep the other fields at their sample values unless you have a reason to change
-them; see [Reference: Configuration](/docs/reference/configuration/).
-
-If you ran [`init`](/docs/get-started/plan-values/#generate-the-files-with-init),
-copy `generated/config.yaml` to `provider.yaml` instead of editing the sample.
+Compare its fingerprint with `generated/installation.json` and your recorded
+cluster identity. Keep the resolved values for subsequent nodes. For manual
+configuration, use the packaged example and the
+[configuration reference](/docs/reference/configuration/).
 
 ## Step 4: Place the runtime files
 

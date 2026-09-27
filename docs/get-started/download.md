@@ -1,16 +1,25 @@
 ---
 title: Download the release
 description: "Choose the release artifact for your deployment model, then download it and verify its checksum, signature, and build provenance."
-eyebrow: Get started · Step 5
-weight: 50
+eyebrow: Get started · Step 4
+weight: 40
 verifiedBy:
   - .github/workflows/release.yml
   - hack/tools/release_bundle/main.go
   - deploy/package/bundles
 ---
 
-Download the one artifact your deployment model needs and verify it before it
-reaches a control-plane node. The next step installs it.
+Choose one artifact version for the whole installation. Verify it before it
+reaches a control-plane node.
+
+These Next docs describe the upcoming `init` workflow. The published
+`0.1.0-preview.2` artifacts lack `init` and native OAuth. For those artifacts,
+use the released documentation from the version selector. To evaluate Next,
+use the binary, image, and installation kit built from the same selected
+candidate commit; see [Contributing](/contribute/contributing/).
+
+The download commands below apply after selecting a published release that
+contains the features you intend to use.
 
 ## Choose the artifact
 
@@ -36,7 +45,7 @@ Set `VERSION` to the release you install, `ARCH` to `amd64` or `arm64`, and
 the checksum check covers only the selected artifact:
 
 ```sh
-VERSION=0.1.0-preview.2
+VERSION=REPLACE_WITH_SELECTED_RELEASE
 ARCH=amd64
 ARTIFACT="bao-kms-provider_${VERSION}_systemd_linux_${ARCH}.tar.gz"
 REPO=dc-tec/openbao-kubernetes-kms

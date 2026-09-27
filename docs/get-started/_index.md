@@ -21,12 +21,13 @@ evaluation. Do not protect production control planes with it.
 |---|---|---|
 | 1 | [What the provider does](/docs/get-started/overview/) | You know what the provider protects, what it does not, and whether your platform fits. |
 | 2 | [Choose a deployment model](/docs/get-started/deployment-model/) | You pick systemd or static pod for the control-plane nodes. |
-| 3 | [Plan identity values](/docs/get-started/plan-values/) | You have recorded every name and identity value the later steps reuse. |
-| 4 | [Prepare OpenBao](/docs/get-started/openbao/) | OpenBao holds the Transit key, the policy, and the JWT role. |
-| 5 | [Download the release](/docs/get-started/download/) | You have a verified artifact for your deployment model. |
-| 6 | [Run with systemd](/docs/get-started/systemd/) or [Run as a static pod](/docs/get-started/static-pod/) | The provider runs on every control-plane node and passes `doctor`. |
-| 7 | [Enable encryption](/docs/get-started/enable-encryption/) | The API server encrypts through the provider, and existing Secrets are rewritten. |
-| 8 | [Verify encryption](/docs/get-started/verify/) | The probe is stored as ciphertext and reads through every API server. |
+| 3 | [Choose credentials](/docs/get-started/credentials/) | The issuer and credential renewal work independently of the protected API. |
+| 4 | [Download the release](/docs/get-started/download/) | You select one version and the matching binary or image. |
+| 5 | [Generate installation files](/docs/get-started/plan-values/) | One values file produces matching configs, policy, setup commands, and an installation record. |
+| 6 | [Prepare OpenBao](/docs/get-started/openbao/) | An administrator reviews and runs the generated setup once. |
+| 7 | [Run with systemd](/docs/get-started/systemd/) or [Run as a static pod](/docs/get-started/static-pod/) | The provider runs on every control-plane node and passes local diagnostics. |
+| 8 | [Enable encryption](/docs/get-started/enable-encryption/) | Every API server gets a KMS reader before any enables KMS writes. |
+| 9 | [Verify encryption](/docs/get-started/verify/) | The probe is stored as ciphertext and reads through every API server. |
 
 ## What you need
 

@@ -29,10 +29,12 @@ const (
 	initDefaultSocketGroup = "openbao-kms-socket"
 	initLineageIDBytes     = 16
 
-	initFileConfig           = "config.yaml"
-	initFileEncryptionConfig = "encryption-config.yaml"
-	initFileSetupScript      = "openbao-setup.sh"
-	initFileStaticPod        = "bao-kms-provider.yaml"
+	initFileConfig            = "config.yaml"
+	initFileEncryptionConfig  = "encryption-config.yaml"
+	initFileEncryptionReaders = "encryption-config-readers.yaml"
+	initFileInstallation      = "installation.json"
+	initFileSetupScript       = "openbao-setup.sh"
+	initFileStaticPod         = "bao-kms-provider.yaml"
 )
 
 var (
@@ -246,6 +248,14 @@ func renderInitFiles(cfg config.Config, opts initOptions) ([]initFile, error) {
 		return nil, err
 	}
 
+	readerConfig, err := scaffold.RenderEncryptionReaderConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkGeneratedFiles(providerConfig, readerConfig); err != nil {
+		return nil, err
+	}
+
 	var policy bytes.Buffer
 	policyOpts := scaffold.PolicyOptions{IncludeTokenRenewal: true}
 	if err := scaffold.WriteOpenBaoPolicy(&policy, cfg, policyOpts); err != nil {
@@ -264,7 +274,11 @@ func renderInitFiles(cfg config.Config, opts initOptions) ([]initFile, error) {
 		},
 		{
 			name: initFileEncryptionConfig, mode: 0o644, content: encryptionConfig,
-			purpose: "Kubernetes EncryptionConfiguration with the identity fallback",
+			purpose: "phase 2: KMS writes after every API server has the reader",
+		},
+		{
+			name: initFileEncryptionReaders, mode: 0o644, content: readerConfig,
+			purpose: "phase 1: KMS reader with plaintext writes",
 		},
 		{
 			name: scaffold.PolicyFileName, mode: 0o644, content: policy.Bytes(),
@@ -286,6 +300,15 @@ func renderInitFiles(cfg config.Config, opts initOptions) ([]initFile, error) {
 			purpose: "static pod manifest for /etc/kubernetes/manifests",
 		})
 	}
+	files = append(files, initFile{
+		name: initFileInstallation, mode: 0o640,
+		purpose: "installation record and remaining operator actions",
+	})
+	record, err := renderInstallationRecord(cfg, opts, files)
+	if err != nil {
+		return nil, err
+	}
+	files[len(files)-1].content = record
 	return files, nil
 }
 
@@ -356,5 +379,5 @@ func printInitSummary(out io.Writer, opts initOptions, cfg config.Config, finger
 		_, _ = fmt.Fprintf(out, "keyLineageId: %s (generated; record it with your values file)\n",
 			cfg.Transit.KeyIDScope.KeyLineageID)
 	}
-	_, _ = fmt.Fprintf(out, "\nNext: review %s and have an OpenBao administrator run it.\n", initFileSetupScript)
+	_, _ = fmt.Fprintf(out, "\nNext: review %s and its remainingActions before installation.\n", initFileInstallation)
 }
