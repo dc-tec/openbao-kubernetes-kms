@@ -33,7 +33,7 @@ func TestFileStateStoreRejectsRollbackBelowCheckpoint(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 1, 0)
 	stateV1 := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
-	promoted, err := observer.Observe(stateV1, profileForLatest(2, clock.Now()), clock.Now())
+	promoted, err := observer.Observe(stateV1, profileForLatest(2, clock.Now()), clock.Now(), true)
 	if err != nil {
 		t.Fatalf("promote v2: %v", err)
 	}

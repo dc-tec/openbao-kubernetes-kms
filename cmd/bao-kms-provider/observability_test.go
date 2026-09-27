@@ -210,3 +210,20 @@ func TestObservabilityLogsProbeCausesAndPromotionsAtDefaultLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestClockRegressionDiagnosticIsVisibleAtDefaultLevel(t *testing.T) {
+	var out bytes.Buffer
+	observer := newTestObservability(t, &out, debugCorrelation{})
+	logger, err := logging.New(logging.Options{Level: "info", Format: logging.FormatJSON, Output: &out})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observer.logger = logger
+	observer.ObserveClockRegression(t.Context())
+	output := out.String()
+	for _, value := range []string{"clock.regressed", "timestamp_order_preserved", "WARN"} {
+		if !strings.Contains(output, value) {
+			t.Fatalf("missing clock regression diagnostic %q: %s", value, output)
+		}
+	}
+}

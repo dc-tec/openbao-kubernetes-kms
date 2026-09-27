@@ -483,7 +483,7 @@ func TestControllerLoadsPersistedPendingState(t *testing.T) {
 	clock := newFakeClock()
 	observer := newTestObserver(t, clock, 2, time.Minute)
 	state := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
-	pending, err := observer.Observe(state, profileForLatest(2, clock.Now()), clock.Now())
+	pending, err := observer.Observe(state, profileForLatest(2, clock.Now()), clock.Now(), true)
 	if err != nil {
 		t.Fatalf("observe pending: %v", err)
 	}

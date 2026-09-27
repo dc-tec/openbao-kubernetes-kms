@@ -51,21 +51,17 @@ func TestDeferredObservationPreservesConfirmedKeysAndFreezesProgress(t *testing.
 				t.Fatal(err)
 			}
 			recovered, _ := f.store.State()
-			if count == 1 {
-				assertActiveVersion(t, recovered, 1)
-				assertPendingCount(t, recovered, 3)
-			} else {
-				assertActiveVersion(t, recovered, 2)
-				assertReadinessReasons(t, f.store, status.ReasonDeepProbePending)
-			}
+			assertActiveVersion(t, recovered, 1)
+			assertPendingCount(t, recovered, 3)
+
 			if f.store.DiagnosticsSnapshot().PersistenceDegraded {
 				t.Fatal("recovery retained the persistence warning")
 			}
 			if err := f.disk.Confirm(recovered); err != nil {
 				t.Fatal(err)
 			}
-			// A failed stable-at write retains its original timestamp. The
-			// recovery probe can promote only after the exact save succeeds.
+			// Recovery starts a full elapsed delay after the stable state is
+			// durable; time spent retrying its failed save does not count.
 			f.clock.Advance(time.Minute)
 			if err := f.controller.ProbeOnce(t.Context()); err != nil {
 				t.Fatal(err)
@@ -127,7 +123,7 @@ func alterPersistenceEvidence(t *testing.T, f persistenceFixture, damage string)
 		return
 	}
 	before, _ := f.store.State()
-	next, err := newTestObserver(t, f.clock, 3, time.Minute).Observe(before, f.transit.profile, f.clock.Now())
+	next, err := newTestObserver(t, f.clock, 3, time.Minute).Observe(before, f.transit.profile, f.clock.Now(), true)
 	if err != nil {
 		t.Fatal(err)
 	}

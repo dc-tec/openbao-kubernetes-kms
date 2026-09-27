@@ -20,7 +20,7 @@ func TestRetirementAllowsVersionRestrictionsAndSubsequentRotation(t *testing.T) 
 	previous := rebuildState(t, observer, profile, base)
 	oldID := previous.Snapshots[1].KubernetesKeyID
 	profile.MinDecryptionVersion = 2
-	if _, err := observer.Observe(previous, profile, base); !errors.Is(err, status.ErrTransitKeyUnusable) {
+	if _, err := observer.Observe(previous, profile, base, true); !errors.Is(err, status.ErrTransitKeyUnusable) {
 		t.Fatalf("restriction without operator retirement must fail: %v", err)
 	}
 	retired, err := keyregistry.RetireVersions(previous, 2)
@@ -38,7 +38,7 @@ func TestRetirementAllowsVersionRestrictionsAndSubsequentRotation(t *testing.T) 
 	// Simulate Transit trimming the now-retired version after the provider restarts.
 	profile.MinAvailableVersion = 2
 	profile.VersionCreationTimes = profile.VersionCreationTimes[1:]
-	observed, err := observer.Observe(restarted, profile, base)
+	observed, err := observer.Observe(restarted, profile, base, true)
 	if err != nil {
 		t.Fatalf("retirement did not permit version restriction: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestRetirementAllowsVersionRestrictionsAndSubsequentRotation(t *testing.T) 
 	later.MinAvailableVersion = 2
 	later.VersionCreationTimes = later.VersionCreationTimes[1:]
 	clock.Advance(time.Minute)
-	next, err := observer.Observe(observed.State, later, clock.Now())
+	next, err := observer.Observe(observed.State, later, clock.Now(), true)
 	if err != nil {
 		t.Fatalf("subsequent rotation failed: %v", err)
 	}

@@ -243,3 +243,10 @@ var (
 	_ auth.Observer           = observability{}
 	_ status.ProbeObserver    = observability{}
 )
+
+func (o observability) ObserveClockRegression(ctx context.Context) {
+	o.logger.Warn(ctx, "clock.regressed",
+		logging.String(logging.FieldOperation, "rotation"),
+		logging.String(logging.FieldReason, "timestamp_order_preserved"),
+	)
+}

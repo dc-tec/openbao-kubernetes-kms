@@ -124,7 +124,7 @@ auth:
 | `status.deepProbeInterval` | `5m` | Encrypt and decrypt probe interval. |
 | `status.statusMaxStaleness` | `2m` | Oldest cached Status that still counts as healthy. |
 | `rotation.mode` | `observed` | Promotion follows observed Transit versions. |
-| `rotation.activationDelay` | `2m` | Wait after stable observation before promotion. |
+| `rotation.activationDelay` | `2m` | Full elapsed-time wait after durable stable observation. Restarts wait the full delay again after metadata validation. |
 | `rotation.requireStableObservationCount` | `3` | Successful observations needed before promotion. |
 | `rotation.rejectVersionRollback` | `true` | Reject a Transit `latest_version` that moves backwards. |
 | `logging.level`, `logging.format` | `info`, `json` | Log level and format. |
