@@ -85,6 +85,19 @@ owned by the provider's OS user, and retirement must run as that user. See
 
 ## Breaking changes
 
+### Unreleased Transit key-name validation
+
+Configuration and its JSON Schema now enforce the name pattern used by the
+OpenBao 2.6 Transit key-metadata endpoint. Names start and end with an ASCII
+letter, digit, or underscore; interior characters can also be dots or hyphens.
+Previously accepted names outside this pattern now fail configuration
+validation, including `.` and `..`, whitespace, and URL delimiters.
+
+Valid names, key IDs, AAD, annotations, and state formats are unchanged. The
+provider does not rewrite names. Treat a name change as an identity change;
+do not rename an existing configuration to bypass validation without checking
+the backend key and existing encrypted data.
+
 ### Unreleased static-pod JWT mount correction
 
 New static-pod scaffolds place file JWTs in

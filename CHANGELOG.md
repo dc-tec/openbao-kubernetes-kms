@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **config:** Validate Transit key names against the OpenBao metadata-path
+  contract. Reject ambiguous path segments and unsupported names before startup,
+  and escape OpenBao request paths once without rewriting identity values.
+
 - **rotation:** Preserve service during failed observation-only saves when the
   published keys remain valid and both persistence files are unchanged. Report
   deferred saves through readiness diagnostics and a persistence warning metric.

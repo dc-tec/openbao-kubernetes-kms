@@ -389,6 +389,30 @@ func TestClientResolvePreservesBasePath(t *testing.T) {
 	}
 }
 
+func TestTransitRequestEscapesPathOnce(t *testing.T) {
+	// Exercise URL serialization independently of the narrower config name
+	// policy. Escaping must neither double-encode a segment nor create a query.
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/base path/v1/team transit/keys/key ?#" || r.URL.RawQuery != "" {
+			t.Errorf("request changed path segments: %s", r.URL)
+		}
+		if r.RequestURI != "/base%20path/v1/team%20transit/keys/key%20%3F%23" {
+			t.Errorf("incorrect wire path: %s", r.RequestURI)
+		}
+		_, _ = w.Write([]byte(`{"data":{"name":"key ?#","type":"aes256-gcm96","latest_version":1}}`))
+	}))
+	t.Cleanup(server.Close)
+	client, err := NewClientWithHTTPClient(ClientConfig{
+		Address: server.URL + "/base%20path", TokenSource: StaticTokenSource{TokenValue: testToken},
+	}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ReadKeyProfile(t.Context(), "team transit", "key ?#"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestClientObservesSafeOpenBaoRequestID(t *testing.T) {
 	observer := &fakeRequestObserver{}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
