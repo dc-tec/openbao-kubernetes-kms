@@ -172,7 +172,14 @@ curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/re
 
 Wait for HTTP 200 from `/ready` and confirm
 `/run/openbao-kms/kms.sock` exists. With `Type=exec`, systemd can report the
-process as active before authentication and initial probes finish. Continue to
+process as active before authentication and initial probes finish. Check the
+running socket as the service user:
+
+```sh
+sudo -u openbao-kms bao-kms-provider probe --socket /run/openbao-kms/kms.sock
+```
+
+Status, Encrypt, and Decrypt must pass. Continue to
 [Enable encryption](/docs/get-started/enable-encryption/) once the provider is
 ready on every control-plane node.
 

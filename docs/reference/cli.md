@@ -80,6 +80,40 @@ Transit profile findings carry the `cryptographic_safety` or
 `api_server_availability` impact class described in
 [Compatibility](/docs/reference/compatibility/#required-openbao-features).
 
+## probe
+
+Connect to the running provider's Unix socket and perform a KMS v2 Status,
+Encrypt, and Decrypt round trip with fresh random probe bytes:
+
+```sh
+bao-kms-provider probe --socket /run/openbao-kms/kms.sock --output json
+```
+
+This command does not load provider configuration, credentials, or persisted
+state. It does not log in directly to OpenBao. Unix permissions govern access;
+run it with the intended socket client's UID and groups. A root invocation
+reports a warning because it cannot prove non-root access.
+
+| Flag | Purpose |
+|---|---|
+| `--socket` | Absolute Unix socket path. Default: `/run/openbao-kms/kms.sock`. The final path component must be a socket, not a symlink. |
+| `--timeout` | Deadline for the whole probe. Default: `10s`. |
+| `--expected-key-id` | Require the active key ID reported by a verified peer after rotation converges. |
+| `--output text\|json` | Report format. Default: `text`. |
+
+The report separates caller identity, socket path, healthy Status, Encrypt,
+Decrypt, and active key agreement. The `kms.key_id` check contains the validated
+non-secret key ID. A failed check exits non-zero and identifies a corrective
+action. Raw server errors, plaintext, ciphertext, and annotations are omitted.
+If a rotation changes the key between Status and Encrypt, wait for convergence
+and retry. The command writes no files and retains no sample ciphertext.
+
+A successful probe establishes a live provider round trip under the caller's
+identity. It does not establish the provider's credential file access,
+Kubernetes integration, old-data decryptability, or migration completion.
+Use `doctor` under the provider identity for local/authentication checks, then
+perform the per-API-server activation and cold-read checks.
+
 ## verify-key
 
 ```sh

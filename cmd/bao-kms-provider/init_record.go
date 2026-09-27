@@ -48,7 +48,7 @@ func renderInstallationRecord(cfg config.Config, opts initOptions, files []initF
 			"Provision independently renewable credentials and TLS trust on each node before starting the provider.",
 			"Install the matching artifact on each node. Set file ownership for its runtime user and socket group.",
 			"Run doctor with the runtime user and groups. " +
-				"Check the running provider and compare identity fingerprints across nodes.",
+				"Run probe against each live socket and compare identity fingerprints and active key IDs across nodes.",
 			"Install encryption-config-readers.yaml on every API server. " +
 				"Verify readiness and reads through each endpoint directly.",
 			"Only after all readers are ready, " +

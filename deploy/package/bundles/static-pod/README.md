@@ -76,7 +76,9 @@ not prove that the running provider or Kubernetes API server works.
 
 Install `generated/bao-kms-provider.yaml` under `/etc/kubernetes/manifests/`
 only after reviewing it. Wait for HTTP 200 from `http://127.0.0.1:8082/ready`
-on every node. Stage `encryption-config-readers.yaml` on every API server
+on every node. Run `bao-kms-provider probe` under UID/GID `65532` with the
+supplemental socket GID to check the running socket. Status, Encrypt, and
+Decrypt must pass. Stage `encryption-config-readers.yaml` on every API server
 before promoting any server to `encryption-config.yaml`. Retain `identity`.
 Verify readiness and Secret reads/writes through every API server directly.
 

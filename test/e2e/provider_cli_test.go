@@ -25,6 +25,10 @@ func TestProviderCLIHappyPathE2E(t *testing.T) {
 		},
 	})
 	stack.runClient(ctx, "write-client", kmsClientModeWriteSample, sampleReadWrite)
+	probeOutput := stack.runProviderCLI(ctx, "cli-live-probe", "probe", "--output", "json")
+	assertCLIJSONReport(t, probeOutput, "probe", "kms.status")
+	assertCLIJSONReport(t, probeOutput, "probe", "kms.decrypt")
+	assertCLIJSONReport(t, probeOutput, "probe", "kms.key_id")
 
 	configOutput := stack.runProviderCLI(ctx, "cli-config", "config", "--config", containerConfigPath)
 	assertOutputContains(t, configOutput, "identityFingerprint:")

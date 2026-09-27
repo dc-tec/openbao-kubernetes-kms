@@ -154,15 +154,19 @@ Resolve the configuration, check the Transit key profile, and run the full
 bootstrap check against OpenBao:
 
 ```sh
-sudo bao-kms-provider config --config /etc/openbao-kms/config.yaml
-sudo bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
-sudo bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
+sudo setpriv --reuid=65532 --regid=65532 --groups="$SOCKET_GID" \
+  bao-kms-provider config --config /etc/openbao-kms/config.yaml
+sudo setpriv --reuid=65532 --regid=65532 --groups="$SOCKET_GID" \
+  bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
+sudo setpriv --reuid=65532 --regid=65532 --groups="$SOCKET_GID" \
+  bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
 ```
 
 Each command exits with status `0`, and neither `verify-key` nor `doctor`
 reports a `[fail]` check. Every control-plane node must print the same identity
-fingerprint. These checks run as root, so file permission problems for UID
-`65532` show up only when the pod starts in the next step.
+fingerprint. These commands require `setpriv` from util-linux. They check host
+file access under the provider UID and groups. A root-only check does not prove
+that the provider can read its files.
 
 ## Step 8: Start the static pod
 
@@ -180,7 +184,15 @@ curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/re
 
 `/ready` returns HTTP 200 and `/run/openbao-kms/kms.sock` exists. If the pod
 does not become ready, inspect it with `sudo crictl ps -a --name bao-kms-provider`
-and `sudo crictl logs <container-id>`. The provider is ready for
+and `sudo crictl logs <container-id>`. Probe the running socket as the same identity:
+
+```sh
+sudo setpriv --reuid=65532 --regid=65532 --groups="$SOCKET_GID" \
+  bao-kms-provider probe --socket /run/openbao-kms/kms.sock
+```
+
+Status, Encrypt, and Decrypt must pass. This is a live provider check; API-server
+activation is checked separately. Continue with
 [Enable encryption](/docs/get-started/enable-encryption/) once it runs on every
 control-plane node.
 
