@@ -53,6 +53,9 @@ API server is stopped. Images are pinned by digest in `.ci/versions.yaml`.
 This qualifies the tested Keycloak flow; other providers and issuer deployment
 topologies require their own validation.
 
+For the maintained Keycloak client setup, see
+[Provision a Keycloak client](/docs/configure/keycloak/).
+
 ## Configure the source
 
 Register a confidential client with permission to request a token for the

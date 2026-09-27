@@ -53,7 +53,9 @@ Never store the client secret itself in that file or a command argument.
 The [OAuth guide](/docs/configure/oauth2/) describes the supported protocol,
 file ownership, credential rotation, issuer outages, and the tested Keycloak
 flow. It also distinguishes issuer-token acquisition from OpenBao token renewal.
-Use only issuer-specific support claims covered by that qualification.
+Follow [Provision a Keycloak client](/docs/configure/keycloak/) for client setup
+and secret placement. Use only issuer-specific support claims covered by
+qualification.
 
 Native OAuth and `init` are unreleased relative to preview.2. Use a candidate
 built from the selected Next commit when evaluating this workflow. For
