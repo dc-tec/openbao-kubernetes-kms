@@ -2,8 +2,8 @@ package status
 
 import (
 	"fmt"
-	"time"
 
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
@@ -37,7 +37,7 @@ func (c *Controller) saveState(previous keyregistry.StateFile, hasPrevious bool,
 	return c.stateStore.Save(next)
 }
 
-func (c *Controller) stateSaveFailed(now time.Time, profile openbao.KeyProfile, cause error) error {
+func (c *Controller) stateSaveFailed(now clocktime.Reading, profile openbao.KeyProfile, cause error) error {
 	err := fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, cause)
 	if c.deferObservation(now, profile) {
 		// Keep reporting the failed save through probe logs and counters, even
@@ -48,14 +48,14 @@ func (c *Controller) stateSaveFailed(now time.Time, profile openbao.KeyProfile, 
 	return c.metadataFailed(now, ReasonStateSaveFailed, err)
 }
 
-func (c *Controller) deferObservation(now time.Time, profile openbao.KeyProfile) bool {
+func (c *Controller) deferObservation(now clocktime.Reading, profile openbao.KeyProfile) bool {
 	commit := c.pendingCommit
 	if commit == nil || commit.previous == nil || !observationOnly(*commit.previous, commit.next) {
 		return false
 	}
 	// Discovery revalidates all retained keys and refuses an unseen newer key.
 	// It cannot advance observations or promote while persistence is deferred.
-	validated, err := c.observer.Discover(*commit.previous, profile, now)
+	validated, err := c.observer.Discover(*commit.previous, profile, now.Wall)
 	if err != nil || validated.Changed || validated.EncryptionBlocked {
 		return false
 	}

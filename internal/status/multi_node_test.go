@@ -312,7 +312,7 @@ func TestProbeSerializationPreservesPromotionHealthAndRequestDeadline(t *testing
 	store := newTestStore(t, clock)
 	observer := newTestObserver(t, clock, 1, 0)
 	initial := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
-	if err := store.PublishHealthy(initial, clock.Now()); err != nil {
+	if err := store.PublishHealthy(initial, clock.Read()); err != nil {
 		t.Fatal(err)
 	}
 	metadata := &gatedDeepTransit{

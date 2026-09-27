@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/aad"
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
@@ -19,7 +20,7 @@ func TestStoreCurrentBecomesUnhealthyWhenStale(t *testing.T) {
 	state := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
 	store := newTestStore(t, clock)
 
-	if err := store.PublishHealthy(state, clock.Now()); err != nil {
+	if err := store.PublishHealthy(state, clock.Read()); err != nil {
 		t.Fatalf("publish healthy: %v", err)
 	}
 	current, err := store.Current(context.Background())
@@ -59,7 +60,7 @@ func TestStoreLookupIncludesPendingSnapshotsWithoutActivatingThem(t *testing.T) 
 	}
 	pendingKeyID := pendingKeyID(t, result.State)
 	store := newTestStore(t, clock)
-	if err := store.PublishHealthy(result.State, clock.Now()); err != nil {
+	if err := store.PublishHealthy(result.State, clock.Read()); err != nil {
 		t.Fatalf("publish pending state: %v", err)
 	}
 
@@ -86,7 +87,7 @@ func TestStoreDiagnosticsExposeRedactedConsistencyState(t *testing.T) {
 	}
 	pendingID := pendingKeyID(t, result.State)
 	store := newTestStore(t, clock)
-	if err := store.PublishHealthy(result.State, clock.Now()); err != nil {
+	if err := store.PublishHealthy(result.State, clock.Read()); err != nil {
 		t.Fatalf("publish pending state: %v", err)
 	}
 	store.UpdateCircuitBreaker(status.CircuitBreakerSnapshot{
@@ -124,7 +125,7 @@ func TestStoreConcurrentPublicationAndReads(t *testing.T) {
 	v1 := rebuildState(t, observer, profileForLatest(1, clock.Now()), clock.Now())
 	v2 := rebuildState(t, observer, profileForLatest(2, clock.Now()), clock.Now())
 	store := newTestStore(t, clock)
-	if err := store.PublishHealthy(v1, clock.Now()); err != nil {
+	if err := store.PublishHealthy(v1, clock.Read()); err != nil {
 		t.Fatalf("publish initial state: %v", err)
 	}
 
@@ -148,10 +149,10 @@ func TestStoreConcurrentPublicationAndReads(t *testing.T) {
 	}
 	for i := 0; i < 100; i++ {
 		if i%2 == 0 {
-			if err := store.PublishHealthy(v1, clock.Now()); err != nil {
+			if err := store.PublishHealthy(v1, clock.Read()); err != nil {
 				t.Fatalf("publish v1: %v", err)
 			}
-		} else if err := store.PublishHealthy(v2, clock.Now()); err != nil {
+		} else if err := store.PublishHealthy(v2, clock.Read()); err != nil {
 			t.Fatalf("publish v2: %v", err)
 		}
 	}
@@ -242,8 +243,9 @@ func profileForLatest(latest int, base time.Time) openbao.KeyProfile {
 }
 
 type fakeClock struct {
-	mu  sync.Mutex
-	now time.Time
+	mu      sync.Mutex
+	now     time.Time
+	elapsed time.Duration
 }
 
 func newFakeClock() *fakeClock {
@@ -260,4 +262,11 @@ func (c *fakeClock) Advance(duration time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.now = c.now.Add(duration)
+	c.elapsed += duration
+}
+
+func (c *fakeClock) Read() clocktime.Reading {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return clocktime.Reading{Wall: c.now.UTC(), Elapsed: c.elapsed}
 }

@@ -1,6 +1,10 @@
 package status
 
-import "time"
+import (
+	"time"
+
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
+)
 
 const (
 	defaultCircuitBreakerFailureThreshold = 3
@@ -38,7 +42,7 @@ type circuitBreaker struct {
 	state               CircuitBreakerState
 	consecutiveFailures int
 	openedAt            time.Time
-	openUntil           time.Time
+	openUntil           clocktime.Deadline
 	lastFailureAt       time.Time
 }
 
@@ -58,11 +62,11 @@ func newCircuitBreaker(opts CircuitBreakerOptions) circuitBreaker {
 	}
 }
 
-func (b *circuitBreaker) allow(now time.Time) bool {
+func (b *circuitBreaker) allow(now clocktime.Reading) bool {
 	if b.state != CircuitBreakerOpen {
 		return true
 	}
-	if !now.Before(b.openUntil) {
+	if !b.openUntil.Pending(now) {
 		b.state = CircuitBreakerClosed
 		return true
 	}
@@ -73,21 +77,21 @@ func (b *circuitBreaker) recordSuccess() {
 	b.state = CircuitBreakerClosed
 	b.consecutiveFailures = 0
 	b.openedAt = time.Time{}
-	b.openUntil = time.Time{}
+	b.openUntil = clocktime.Deadline{}
 	b.lastFailureAt = time.Time{}
 }
 
-func (b *circuitBreaker) recordFailure(now time.Time) {
+func (b *circuitBreaker) recordFailure(now clocktime.Reading) {
 	b.consecutiveFailures++
-	b.lastFailureAt = now.UTC()
+	b.lastFailureAt = now.Wall
 	if b.consecutiveFailures >= b.failureThreshold {
 		b.state = CircuitBreakerOpen
-		b.openedAt = now.UTC()
-		b.openUntil = now.Add(b.openDuration).UTC()
+		b.openedAt = now.Wall
+		b.openUntil = clocktime.After(now, b.openDuration)
 	}
 }
 
-func (b circuitBreaker) snapshot() CircuitBreakerSnapshot {
+func (b circuitBreaker) snapshot(now clocktime.Reading) CircuitBreakerSnapshot {
 	state := b.state
 	if state == "" {
 		state = CircuitBreakerClosed
@@ -96,7 +100,7 @@ func (b circuitBreaker) snapshot() CircuitBreakerSnapshot {
 		State:               state,
 		ConsecutiveFailures: b.consecutiveFailures,
 		OpenedAt:            b.openedAt,
-		OpenUntil:           b.openUntil,
+		OpenUntil:           b.openUntil.WallTime(now),
 		LastFailureAt:       b.lastFailureAt,
 	}
 }

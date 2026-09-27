@@ -48,8 +48,8 @@ func diagnosticsForState(
 	active keyregistry.KeySnapshot,
 	healthz string,
 	updatedAt time.Time,
-	now time.Time,
-	maxStaleness time.Duration,
+	age time.Duration,
+	stale bool,
 	breaker CircuitBreakerSnapshot,
 ) Diagnostics {
 	diagnostics := Diagnostics{
@@ -59,7 +59,7 @@ func diagnosticsForState(
 		CircuitBreaker: normalizedCircuitBreakerSnapshot(breaker),
 	}
 	if !updatedAt.IsZero() {
-		diagnostics.CacheAge = now.Sub(updatedAt)
+		diagnostics.CacheAge = age
 	}
 	if !hasState {
 		diagnostics.Healthz = kmsv2.HealthUnhealthy
@@ -72,7 +72,7 @@ func diagnosticsForState(
 	diagnostics.ActiveKeyIDHash = aad.HashValue(active.KubernetesKeyID)
 	diagnostics.ActiveTransitVersion = active.TransitVersion
 	diagnostics.RotationState = RotationStateActive
-	diagnostics.Stale = updatedAt.IsZero() || now.Sub(updatedAt) > maxStaleness
+	diagnostics.Stale = stale
 	if diagnostics.Healthz == kmsv2.HealthOK && diagnostics.Stale {
 		diagnostics.Healthz = kmsv2.HealthUnhealthy
 	}

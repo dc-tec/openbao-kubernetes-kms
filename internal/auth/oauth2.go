@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/oauth2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
@@ -39,7 +40,7 @@ func (s *OAuth2LoginSource) SourceInfo() SourceInfo {
 // Login acquires, checks, and exchanges a JWT within the manager's shared deadline.
 func (s *OAuth2LoginSource) Login(ctx context.Context, client OpenBaoAuthClient, clock Clock) (LoginResult, error) {
 	clock = clockOrReal(clock)
-	requestedAt := clock.Now()
+	requestedAt := clock.Read()
 	token, err := s.issuer.Token(ctx)
 	if err != nil {
 		return LoginResult{}, err
@@ -52,9 +53,13 @@ func (s *OAuth2LoginSource) Login(ctx context.Context, client OpenBaoAuthClient,
 	if err != nil {
 		return LoginResult{}, err
 	}
-	// Respect the shorter lifetime if the endpoint expires the token before its exp claim.
-	if token.ExpiresIn > 0 && requestedAt.Add(token.ExpiresIn).Before(claims.ExpiresAt) {
-		claims.ExpiresAt = requestedAt.Add(token.ExpiresIn)
+	var lifetime clocktime.Lifetime
+	// The relative endpoint lifetime and the signed absolute claim are separate bounds.
+	if token.ExpiresIn > 0 {
+		lifetime = clocktime.NewLifetime(requestedAt, token.ExpiresIn)
+		if lifetime.Remaining(clock.Read()) <= s.cfg.MinJWTRemainingTTL {
+			return LoginResult{}, ErrJWTNearExpiry
+		}
 	}
 	if err := ValidateClaims(claims, JWTValidationOptions{
 		MinRemainingTTL: s.cfg.MinJWTRemainingTTL, ClockSkewLeeway: s.cfg.ClockSkewLeeway,
@@ -69,5 +74,7 @@ func (s *OAuth2LoginSource) Login(ctx context.Context, client OpenBaoAuthClient,
 	if err != nil {
 		return LoginResult{}, publicAuthError(err)
 	}
-	return LoginResult{AuthToken: result, JWT: JWT{Raw: token.AccessToken, Claims: claims, ReadAt: clock.Now()}}, nil
+	return LoginResult{AuthToken: result, JWT: JWT{
+		Raw: token.AccessToken, Claims: claims, ReadAt: clock.Now(), EndpointLifetime: lifetime,
+	}}, nil
 }

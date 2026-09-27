@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
 )
@@ -24,7 +25,8 @@ type Store struct {
 	clock               Clock
 	maxStaleness        time.Duration
 	healthz             string
-	updatedAt           time.Time
+	updatedAt           clocktime.Reading
+	freshness           clocktime.Lifetime
 	metadataOK          bool
 	encryptionBlocked   bool
 	deepProbeOK         bool
@@ -78,13 +80,13 @@ func (s *Store) LoadState(state keyregistry.StateFile) error {
 }
 
 // PublishHealthy atomically publishes state after all required checks succeed.
-func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt time.Time) error {
+func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt clocktime.Reading) error {
 	active, registry, err := runtimeRegistry(state)
 	if err != nil {
 		return err
 	}
-	if updatedAt.IsZero() {
-		updatedAt = s.clock.Now()
+	if updatedAt.Wall.IsZero() {
+		updatedAt = s.clock.Read()
 	}
 
 	s.mu.Lock()
@@ -102,17 +104,20 @@ func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt time.Time)
 	s.deepProbed = true
 	s.deepFailure = probeFailure{}
 	s.updateHealthLocked()
-	s.updatedAt = updatedAt.UTC()
+	s.updatedAt = updatedAt
+	s.freshness = clocktime.NewLifetime(updatedAt, s.maxStaleness)
 	return nil
 }
 
-func (s *Store) publishMetadata(state keyregistry.StateFile, updatedAt time.Time, encryptionBlocked bool) error {
+func (s *Store) publishMetadata(
+	state keyregistry.StateFile, updatedAt clocktime.Reading, encryptionBlocked bool,
+) error {
 	active, registry, err := runtimeRegistry(state)
 	if err != nil {
 		return err
 	}
-	if updatedAt.IsZero() {
-		updatedAt = s.clock.Now()
+	if updatedAt.Wall.IsZero() {
+		updatedAt = s.clock.Read()
 	}
 
 	s.mu.Lock()
@@ -136,13 +141,14 @@ func (s *Store) publishMetadata(state keyregistry.StateFile, updatedAt time.Time
 		s.deepProbed = false
 	}
 	s.updateHealthLocked()
-	s.updatedAt = updatedAt.UTC()
+	s.updatedAt = updatedAt
+	s.freshness = clocktime.NewLifetime(updatedAt, s.maxStaleness)
 	return nil
 }
 
-func (s *Store) publishMetadataUnhealthy(updatedAt time.Time, failure probeFailure) {
-	if updatedAt.IsZero() {
-		updatedAt = s.clock.Now()
+func (s *Store) publishMetadataUnhealthy(updatedAt clocktime.Reading, failure probeFailure) {
+	if updatedAt.Wall.IsZero() {
+		updatedAt = s.clock.Read()
 	}
 
 	s.mu.Lock()
@@ -151,10 +157,11 @@ func (s *Store) publishMetadataUnhealthy(updatedAt time.Time, failure probeFailu
 	s.metadataOK = false
 	s.metadataFailure = failure
 	s.updateHealthLocked()
-	s.updatedAt = updatedAt.UTC()
+	s.updatedAt = updatedAt
+	s.freshness = clocktime.NewLifetime(updatedAt, s.maxStaleness)
 }
 
-func (s *Store) publishDeferredObservation(expectedHash string, updatedAt time.Time) bool {
+func (s *Store) publishDeferredObservation(expectedHash string, updatedAt clocktime.Reading) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.hasState || s.state.CurrentHash != expectedHash || !s.deepProbed || !s.deepProbeOK {
@@ -164,7 +171,8 @@ func (s *Store) publishDeferredObservation(expectedHash string, updatedAt time.T
 	s.metadataFailure = probeFailure{}
 	s.encryptionBlocked = false
 	s.persistenceDegraded = true
-	s.updatedAt = updatedAt.UTC()
+	s.updatedAt = updatedAt
+	s.freshness = clocktime.NewLifetime(updatedAt, s.maxStaleness)
 	s.updateHealthLocked()
 	return true
 }
@@ -214,8 +222,8 @@ func (s *Store) Current(ctx context.Context) (kmsv2.CachedStatus, error) {
 		return kmsv2.CachedStatus{}, err
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if !s.hasState {
 		return kmsv2.CachedStatus{Healthz: kmsv2.HealthUnhealthy}, nil
@@ -223,7 +231,7 @@ func (s *Store) Current(ctx context.Context) (kmsv2.CachedStatus, error) {
 
 	healthz := s.healthz
 	healthz = normalizedHealth(healthz)
-	if healthz == kmsv2.HealthOK && s.staleLocked(s.clock.Now()) {
+	if healthz == kmsv2.HealthOK && s.staleLocked(s.clock.Read()) {
 		healthz = kmsv2.HealthUnhealthy
 	}
 
@@ -287,17 +295,19 @@ func (s *Store) Diagnostics(ctx context.Context) (Diagnostics, error) {
 
 // DiagnosticsSnapshot returns a redacted local view without requiring a request context.
 func (s *Store) DiagnosticsSnapshot() Diagnostics {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
+	now := s.clock.Read()
+	stale := s.staleLocked(now)
 	diagnostics := diagnosticsForState(
 		s.state,
 		s.hasState,
 		s.active,
 		s.healthz,
-		s.updatedAt,
-		s.clock.Now(),
-		s.maxStaleness,
+		s.updatedAt.Wall,
+		s.freshness.Age(now),
+		stale,
 		s.breaker,
 	)
 	diagnostics.Reasons = s.readinessReasonsLocked(diagnostics.Stale)
@@ -307,11 +317,11 @@ func (s *Store) DiagnosticsSnapshot() Diagnostics {
 	return diagnostics
 }
 
-func (s *Store) staleLocked(now time.Time) bool {
-	if s.updatedAt.IsZero() {
+func (s *Store) staleLocked(now clocktime.Reading) bool {
+	if s.updatedAt.Wall.IsZero() {
 		return true
 	}
-	return now.Sub(s.updatedAt) > s.maxStaleness
+	return s.freshness.Remaining(now) < 0
 }
 
 func (s *Store) updateHealthLocked() {

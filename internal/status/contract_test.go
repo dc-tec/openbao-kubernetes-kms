@@ -17,7 +17,7 @@ func TestStaleStatusHidesKeyIDButRetainsHistoricalDecryptLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new state file: %v", err)
 	}
-	if err := store.PublishHealthy(state, clock.Now()); err != nil {
+	if err := store.PublishHealthy(state, clock.Read()); err != nil {
 		t.Fatalf("publish healthy state: %v", err)
 	}
 

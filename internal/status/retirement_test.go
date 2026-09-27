@@ -72,7 +72,7 @@ func TestRetirementAllowsVersionRestrictionsAndSubsequentRotation(t *testing.T) 
 func assertRetirementStatus(t *testing.T, clock *fakeClock, state keyregistry.StateFile, removedID string) {
 	t.Helper()
 	store := newTestStore(t, clock)
-	if err := store.PublishHealthy(state, clock.Now()); err != nil {
+	if err := store.PublishHealthy(state, clock.Read()); err != nil {
 		t.Fatal(err)
 	}
 	current, err := store.Current(context.Background())

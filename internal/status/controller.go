@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
@@ -92,7 +93,7 @@ type Controller struct {
 	probeObserver   ProbeObserver
 	probeGate       chan struct{}
 	refreshInterval time.Duration
-	nextRefresh     time.Time
+	nextRefresh     clocktime.Deadline
 	refreshErr      error
 	pendingCommit   *stateCommit
 }
@@ -172,11 +173,11 @@ func (c *Controller) RefreshForDecrypt(ctx context.Context, keyID string) error 
 			return nil
 		}
 	}
-	now := c.clock.Now()
-	if now.Before(c.nextRefresh) {
+	now := c.clock.Read()
+	if c.nextRefresh.Pending(now) {
 		return c.refreshErr
 	}
-	c.nextRefresh = now.Add(c.refreshInterval)
+	c.nextRefresh = clocktime.After(now, c.refreshInterval)
 	err := c.probeOnce(ctx, true)
 	c.refreshErr = err
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -222,7 +223,7 @@ func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 	if err := contextErr(ctx); err != nil {
 		return err
 	}
-	now := c.clock.Now()
+	now := c.clock.Read()
 	if !c.allowProbe(ProbeKindMetadata, now) {
 		return c.metadataFailed(now, ReasonCircuitBreakerOpen,
 			fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen))
@@ -248,7 +249,7 @@ func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 }
 
 func (c *Controller) publishObservation(
-	ctx context.Context, profile openbao.KeyProfile, now time.Time, discover bool,
+	ctx context.Context, profile openbao.KeyProfile, now clocktime.Reading, discover bool,
 ) error {
 	state, hasState, err := c.stateForObservation()
 	if err != nil {
@@ -258,9 +259,9 @@ func (c *Controller) publishObservation(
 	var result ObservationResult
 	if hasState {
 		if discover {
-			result, err = c.observer.Discover(state, profile, now)
+			result, err = c.observer.Discover(state, profile, now.Wall)
 		} else {
-			result, err = c.observer.Observe(state, profile, now)
+			result, err = c.observer.Observe(state, profile, now.Wall)
 		}
 	} else {
 		assessment := AssessAutoBootstrapState(profile)
@@ -271,7 +272,7 @@ func (c *Controller) publishObservation(
 				assessment.Reason,
 			))
 		}
-		rebuilt, rebuildErr := c.observer.RebuildState(profile, now)
+		rebuilt, rebuildErr := c.observer.RebuildState(profile, now.Wall)
 		err = rebuildErr
 		result = ObservationResult{State: rebuilt, Changed: true}
 	}
@@ -317,7 +318,7 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 	if err := contextErr(ctx); err != nil {
 		return err
 	}
-	now := c.clock.Now()
+	now := c.clock.Read()
 	if !c.allowProbe(ProbeKindDeep, now) {
 		return c.deepFailed(ReasonCircuitBreakerOpen,
 			fmt.Errorf("%w: %s", ErrCircuitBreakerOpen, messageCircuitBreakerOpen))
@@ -360,20 +361,26 @@ func (c *Controller) DeepProbeOnce(ctx context.Context) (err error) {
 	return nil
 }
 
-func (c *Controller) allowProbe(kind ProbeKind, now time.Time) bool {
+func (c *Controller) allowProbe(kind ProbeKind, now clocktime.Reading) bool {
 	c.breakerMu.Lock()
 	allowed := c.breakerForKind(kind).allow(now)
-	snapshot := aggregateCircuitBreakerSnapshots(c.metadataBreaker.snapshot(), c.deepBreaker.snapshot())
+	reading := c.clock.Read()
+	snapshot := aggregateCircuitBreakerSnapshots(
+		c.metadataBreaker.snapshot(reading), c.deepBreaker.snapshot(reading),
+	)
 	c.breakerMu.Unlock()
 
 	c.store.UpdateCircuitBreaker(snapshot)
 	return allowed
 }
 
-func (c *Controller) recordProbeFailure(kind ProbeKind, now time.Time) {
+func (c *Controller) recordProbeFailure(kind ProbeKind, now clocktime.Reading) {
 	c.breakerMu.Lock()
 	c.breakerForKind(kind).recordFailure(now)
-	snapshot := aggregateCircuitBreakerSnapshots(c.metadataBreaker.snapshot(), c.deepBreaker.snapshot())
+	reading := c.clock.Read()
+	snapshot := aggregateCircuitBreakerSnapshots(
+		c.metadataBreaker.snapshot(reading), c.deepBreaker.snapshot(reading),
+	)
 	c.breakerMu.Unlock()
 
 	c.store.UpdateCircuitBreaker(snapshot)
@@ -382,7 +389,10 @@ func (c *Controller) recordProbeFailure(kind ProbeKind, now time.Time) {
 func (c *Controller) recordProbeSuccess(kind ProbeKind) {
 	c.breakerMu.Lock()
 	c.breakerForKind(kind).recordSuccess()
-	snapshot := aggregateCircuitBreakerSnapshots(c.metadataBreaker.snapshot(), c.deepBreaker.snapshot())
+	reading := c.clock.Read()
+	snapshot := aggregateCircuitBreakerSnapshots(
+		c.metadataBreaker.snapshot(reading), c.deepBreaker.snapshot(reading),
+	)
 	c.breakerMu.Unlock()
 
 	c.store.UpdateCircuitBreaker(snapshot)
@@ -397,8 +407,8 @@ func (c *Controller) breakerForKind(kind ProbeKind) *circuitBreaker {
 
 func (c *Controller) publishCircuitBreakerState() {
 	c.store.UpdateCircuitBreaker(aggregateCircuitBreakerSnapshots(
-		c.metadataBreaker.snapshot(),
-		c.deepBreaker.snapshot(),
+		c.metadataBreaker.snapshot(c.clock.Read()),
+		c.deepBreaker.snapshot(c.clock.Read()),
 	))
 }
 

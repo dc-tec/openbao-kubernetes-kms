@@ -1,22 +1,14 @@
 // Package status maintains the cheap KMS Status view and rotation observation state.
 package status
 
-import "time"
+import clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 
-// Clock is the time source used by cache staleness and rotation tests.
-type Clock interface {
-	Now() time.Time
-}
-
-type realClock struct{}
-
-func (realClock) Now() time.Time {
-	return time.Now().UTC()
-}
+// Clock supplies wall time and process-local elapsed time.
+type Clock = clocktime.Clock
 
 func clockOrReal(clock Clock) Clock {
 	if clock == nil {
-		return realClock{}
+		return clocktime.Real{}
 	}
 	return clock
 }

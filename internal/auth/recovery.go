@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
 )
 
 var errRefreshSuperseded = errors.New("token refresh superseded")
@@ -29,8 +31,8 @@ func (m *Manager) ensureToken(ctx context.Context, forceLogin bool) (currentToke
 			return currentToken{}, err
 		}
 		m.mu.Lock()
-		now := m.clock.Now()
-		if !forceLogin && m.current.value != "" && now.Before(m.current.expiresAt) {
+		now := m.clock.Read()
+		if !forceLogin && m.current.value != "" && m.current.lifetime.Remaining(now) > 0 {
 			m.startEarlyRefreshLocked(now)
 			token := m.current
 			m.mu.Unlock()
@@ -62,8 +64,8 @@ func (m *Manager) ensureToken(ctx context.Context, forceLogin bool) (currentToke
 	}
 }
 
-func (m *Manager) startEarlyRefreshLocked(now time.Time) {
-	if !now.Before(m.refreshAtLocked()) && !m.retryBlockedLocked(now) && m.flight == nil {
+func (m *Manager) startEarlyRefreshLocked(now clocktime.Reading) {
+	if m.current.lifetime.Remaining(now) <= m.cfg.LoginBeforeTokenExpiry && !m.retryBlockedLocked(now) && m.flight == nil {
 		m.startRefreshLocked(false)
 	}
 }
@@ -80,7 +82,7 @@ func (m *Manager) waitForRefresh(ctx context.Context, flight *refreshFlight) err
 }
 
 func (m *Manager) startRefreshLocked(forceLogin bool) {
-	action := m.refreshActionLocked(forceLogin, m.clock.Now())
+	action := m.refreshActionLocked(forceLogin, m.clock.Read())
 	flight := &refreshFlight{done: make(chan struct{}), kind: action.kind}
 	m.flight = flight
 	go m.runRefresh(action, flight)
@@ -122,14 +124,14 @@ func (m *Manager) RecoverToken(ctx context.Context, token string) (string, error
 	}
 	m.mu.Lock()
 	if token != "" && token == m.current.value {
-		now := m.clock.Now()
-		if now.Before(m.nextRecoveryAt) {
+		now := m.clock.Read()
+		if m.nextRecoveryAt.Pending(now) {
 			m.mu.Unlock()
 			return "", nil
 		}
 		m.current = currentToken{}
 		m.lastErr = publicAuthError(ErrTokenUnavailable)
-		m.nextRecoveryAt = now.Add(tokenRecoveryInterval)
+		m.nextRecoveryAt = clocktime.After(now, tokenRecoveryInterval)
 	}
 	m.mu.Unlock()
 	return m.Token(ctx)
