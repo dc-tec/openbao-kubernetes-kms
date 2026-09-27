@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	kindOAuthTokenTTL   = 30 * time.Second
 	kindOAuthSecretPath = "/etc/openbao-kms/credentials/client-secret"
 	kindOAuthCAPath     = "/etc/openbao-kms/tls/issuer-ca.pem"
 	kindKMSClientPath   = "/usr/local/bin/kms-e2e-client"
@@ -59,7 +60,7 @@ func TestKindOAuth2KeycloakE2E(t *testing.T) {
 	})
 	bao := startKindOpenBaoWithConfig(t, ctx, framework.OpenBaoEnvironmentConfig{
 		JWTIssuer: issuer.Issuer, JWTAudience: issuer.Audience, JWTSubject: issuer.Subject,
-		JWTTokenTTL: "30s", JWTMaxTTL: "30s",
+		JWTTokenTTL: kindOAuthTokenTTL.String(), JWTMaxTTL: kindOAuthTokenTTL.String(),
 	})
 	t.Cleanup(func() {
 		cleanup, done := context.WithTimeout(context.Background(), 20*time.Second)
@@ -95,7 +96,7 @@ func TestKindOAuth2KeycloakE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runKindKMSClient(t, ctx, docker, node, kmsClientModeExpectAuthFailure)
+	runKindOAuthAuthFailure(t, ctx, docker, node, cfg)
 	waitKindOAuthLog(t, ctx, docker, node, "oauth2_rejected")
 	replaceKindOAuthSecret(t, ctx, docker, node, newSecret)
 	runKindKMSClient(t, ctx, docker, node, kmsClientModeReadSample)
@@ -107,7 +108,7 @@ func TestKindOAuth2KeycloakE2E(t *testing.T) {
 	if err := issuer.Stop(ctx); err != nil {
 		t.Fatal(err)
 	}
-	runKindKMSClient(t, ctx, docker, node, kmsClientModeExpectAuthFailure)
+	runKindOAuthAuthFailure(t, ctx, docker, node, cfg)
 	assertKindOAuthLogsRedacted(t, ctx, docker, node, oldSecret, newSecret, secretValue)
 	t.Log("cold provider startup with protected API stopped; no JWT file or Kubernetes credential source")
 	holdKindOAuthComponent(t, ctx, docker, node, "kube-apiserver")
@@ -249,6 +250,16 @@ func replaceKindOAuthSecret(t *testing.T, ctx context.Context, docker, node, sec
 chown 65532:65532 /etc/openbao-kms/credentials/client-secret.new
 chmod 0600 /etc/openbao-kms/credentials/client-secret.new
 mv /etc/openbao-kms/credentials/client-secret.new /etc/openbao-kms/credentials/client-secret`)
+}
+
+// Allow the full last token lifetime, probe scheduling, two bounded auth
+// attempts, and container scheduling margin. Never weaken the rejection checks.
+func runKindOAuthAuthFailure(t *testing.T, ctx context.Context, docker, node string, cfg config.Config) {
+	t.Helper()
+	wait := kindOAuthTokenTTL + 2*cfg.Status.ProbeInterval + 2*cfg.Auth.LoginTimeout + 5*time.Second
+	runDocker(t, ctx, docker, "exec", node, "env", "KMS_SOCKET_PATH="+kindProviderSocketPath,
+		"KMS_AUTH_FAILURE_WAIT="+wait.String(), kmsClientModeEnv+"="+kmsClientModeExpectAuthFailure,
+		kmsSamplePathEnv+"="+kindKMSSamplePath, kindKMSClientPath)
 }
 
 func runKindKMSClient(t *testing.T, ctx context.Context, docker, node, mode string) {
