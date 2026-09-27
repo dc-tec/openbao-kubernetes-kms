@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **observability:** Report cached readiness reasons and probe failure classes.
+  Log persisted key promotions and serve startup, readiness, and shutdown events
+  without raw backend errors or key identities.
+
 - **observability:** Distinguish TLS, DNS, and connection failures in redacted
   OpenBao and KMS error classes, including authentication failures. Keep gRPC
   status codes unchanged and identify Encrypt failures with the correct operation.

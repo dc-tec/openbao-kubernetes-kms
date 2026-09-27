@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -129,4 +130,25 @@ func (f *fakeBootstrapProbe) DeepProbeOnce(context.Context) error {
 		return f.err
 	}
 	return nil
+}
+
+func TestBuildFailureLogsLifecycleWithoutRawError(t *testing.T) {
+	var out bytes.Buffer
+	builder := runtimeBuilder{logWriter: &out}
+	cfg := config.Config{Logging: config.LoggingConfig{Level: "info", Format: "json"}}
+	cfg.Server.SocketMode = "sensitive invalid mode"
+	if _, err := builder.build(context.Background(), cfg); err == nil {
+		t.Fatal("build unexpectedly succeeded")
+	}
+	logs := out.String()
+	for _, want := range []string{
+		`"message":"serve.start"`, `"message":"serve.shutdown"`, `"error_class":"startup_failed"`,
+	} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("missing %s: %s", want, logs)
+		}
+	}
+	if strings.Contains(logs, "serve.ready") || strings.Contains(logs, "sensitive") {
+		t.Fatalf("failed startup claimed readiness or exposed input: %s", logs)
+	}
 }

@@ -121,6 +121,13 @@ func TestProviderTransitRotationE2E(t *testing.T) {
 	}
 
 	stack.runClientWithEnv(ctx, "rotation-client", kmsClientModeExpectRotationPromotion, sampleReadWrite, rotationEnv)
+	logs := dockerLogs(ctx, stack.dockerPath, stack.providerName)
+	if strings.Count(logs, `"message":"key.promoted"`) != 1 ||
+		!strings.Contains(logs, `"previous_transit_key_version":1`) ||
+		!strings.Contains(logs, `"transit_key_version":2`) {
+		t.Fatalf("missing promotion event: %s", logs)
+	}
+	stack.assertProviderLogsDoNotContain(ctx, stack.environment.TransitKey)
 
 	if err := stack.environment.RestoreRaftSnapshot(ctx, rollbackVolume, snapshotPath); err != nil {
 		t.Fatalf("restore pre-rotation OpenBao raft snapshot: %v", err)

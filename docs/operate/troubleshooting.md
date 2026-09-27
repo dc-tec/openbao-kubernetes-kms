@@ -14,7 +14,7 @@ Start with the checks that change nothing:
 
 ```sh
 curl -fsS http://127.0.0.1:8082/live
-curl -fsS http://127.0.0.1:8082/ready
+curl -sS -i http://127.0.0.1:8082/ready
 curl -fsS http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_status_key_id_hash|openbao_kms_status_cache_age_seconds'
 bao-kms-provider doctor \
   --config /etc/openbao-kms/config.yaml \
@@ -26,6 +26,17 @@ On a healthy node both endpoints return HTTP 200, the metrics show the active
 in [Disaster recovery: During an incident](/docs/operate/disaster-recovery/#during-an-incident)
 apply to every fix below. For the full catalog of failure modes, see
 [Architecture: Failure modes](/docs/architecture/failure-modes/).
+
+When `/ready` returns HTTP 503, read `reasons` and the optional
+`metadata_error_class` and `deep_error_class` fields. These report cached
+conditions; the endpoint does not run a new probe. Use the matching
+`status.probe` warning for the probe kind and failure class. See the
+[reason codes](/docs/reference/observability/#endpoints).
+
+At the default log level, `serve.start`, `serve.ready`, and `serve.shutdown`
+show startup and exit. A `serve.shutdown` with `startup_failed` means setup
+failed before readiness. A `key.promoted` event identifies the previous and new
+key hashes and Transit versions; wait for the new key's deep probe to pass.
 
 ## API server cannot connect to KMS
 

@@ -17,12 +17,16 @@ import (
 const (
 	observationStatusOK = "ok"
 
-	logMessageAuthLogin   = "auth.login"
-	logMessageAuthRenewal = "auth.renewal"
-	logMessageKMSRequest  = "kms.request"
-	logMessageOpenBao     = "openbao.request"
-	logMessageSocketStale = "socket.stale_removed"
-	logMessageStatusProbe = "status.probe"
+	logMessageAuthLogin     = "auth.login"
+	logMessageAuthRenewal   = "auth.renewal"
+	logMessageKMSRequest    = "kms.request"
+	logMessageOpenBao       = "openbao.request"
+	logMessageSocketStale   = "socket.stale_removed"
+	logMessageStatusProbe   = "status.probe"
+	logMessageKeyPromotion  = "key.promoted"
+	logMessageServeStart    = "serve.start"
+	logMessageServeReady    = "serve.ready"
+	logMessageServeShutdown = "serve.shutdown"
 
 	logOperationAuthLogin   = "auth.login"
 	logOperationAuthRenewal = "auth.renewal"
@@ -186,11 +190,36 @@ func (o observability) ObserveStatusProbe(ctx context.Context, obs status.ProbeO
 		logging.String(logging.FieldProbeKind, string(obs.Kind)),
 		logging.DurationMilliseconds(logging.FieldDurationMS, obs.Duration),
 	}
+	attrs = appendStringAttr(attrs, logging.FieldReason, string(obs.Reason))
+	attrs = appendStringAttr(attrs, logging.FieldErrorClass, obs.ErrorClass)
 	if obs.Status == observationStatusOK {
 		o.logger.Debug(ctx, logMessageStatusProbe, attrs...)
 		return
 	}
 	o.logger.Warn(ctx, logMessageStatusProbe, attrs...)
+}
+
+func (o observability) ObserveKeyPromotion(ctx context.Context, obs status.PromotionObservation) {
+	o.logger.Info(ctx, logMessageKeyPromotion,
+		logging.String(logging.FieldOperation, logMessageKeyPromotion),
+		logging.String(logging.FieldStatus, observationStatusOK),
+		logging.String(logging.FieldPreviousKeyIDHash, obs.PreviousKeyIDHash),
+		logging.String(logging.FieldKeyIDHash, obs.KeyIDHash),
+		logging.Int(logging.FieldPreviousTransitKeyVersion, obs.PreviousTransitVersion),
+		logging.Int(logging.FieldTransitKeyVersion, obs.TransitVersion),
+	)
+}
+
+func logServeEvent(ctx context.Context, logger *logging.Logger, event string, failure string) {
+	attrs := []slog.Attr{logging.String(logging.FieldOperation, event)}
+	if failure != "" {
+		logger.Error(ctx, event, append(attrs,
+			logging.String(logging.FieldStatus, "error"),
+			logging.String(logging.FieldErrorClass, failure),
+		)...)
+		return
+	}
+	logger.Info(ctx, event, append(attrs, logging.String(logging.FieldStatus, observationStatusOK))...)
 }
 
 func (o observability) ObserveSocketRestart(ctx context.Context) {

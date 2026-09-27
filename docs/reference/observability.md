@@ -27,6 +27,32 @@ setup and the dashboard, see [Configure: Monitor the provider](/docs/configure/m
 `/ready` can fail while API server reads still succeed from its cache, which
 makes it the earliest warning.
 
+The response is a cached view; requesting `/ready` does not contact OpenBao.
+An unhealthy response includes `reasons`, a list of bounded condition codes.
+`metadata_error_class` and `deep_error_class`, when present, identify the last
+failed or skipped probe. Successful probes clear their own failure details.
+A healthy response has an empty `reasons` list. For example:
+
+```json
+{"status":"unavailable","healthz":"unhealthy","cache_age_ms":120,"stale":false,"rotation_state":"active","reasons":["metadata_read_failed"],"metadata_error_class":"tls_failed"}
+```
+
+| Reason | Condition or action |
+|---|---|
+| `state_unavailable` | No active registry state is loaded, or metadata cannot safely rebuild missing state. |
+| `status_stale` | The cached metadata observation is absent or older than `status.statusMaxStaleness`. |
+| `metadata_unverified` | Loaded state has not passed a metadata probe. |
+| `upsert_check_failed`, `metadata_read_failed` | An OpenBao read failed. Use the probe error class to identify transport, auth, or API failures. |
+| `upsert_allowed` | Set Transit `disable_upsert` to `true`. |
+| `profile_invalid`, `version_rollback` | Restore the required Transit profile or investigate a metadata rollback. |
+| `state_save_failed`, `state_publish_failed` | Inspect state storage permissions, capacity, and registry validity. |
+| `encryption_blocked` | The active version is below the encryption minimum. Promotion must complete before writes resume. |
+| `deep_probe_pending` | The active key has not passed its required encrypt/decrypt probe. |
+| `deep_probe_failed`, `deep_probe_invalid` | The round trip failed or returned an invalid version or oversized ciphertext. |
+| `circuit_breaker_open` | A probe was skipped during dependency backoff. |
+| `probe_failed` | A probe failed without a more specific condition code. |
+| `diagnostics_unavailable` | The readiness handler could not read local diagnostics. |
+
 ## Metrics
 
 Labels hold only bounded values. `key_id` values are exported as
@@ -72,12 +98,14 @@ warnings. These fields are stable across preview patch releases:
 | Field | Meaning |
 |---|---|
 | `ts`, `level` | RFC 3339 timestamp and level (`debug`, `info`, `warn`, `error`). |
-| `message` | Event name: `kms.request`, `openbao.request`, `auth.login`, `auth.renewal`, `status.probe`, or `socket.stale_removed`. |
+| `message` | Event name: `kms.request`, `openbao.request`, `auth.login`, `auth.renewal`, `status.probe`, `key.promoted`, `serve.start`, `serve.ready`, `serve.shutdown`, or `socket.stale_removed`. |
 | `operation` | `kms.encrypt`, `kms.decrypt`, `kms.status`, or the event name. |
 | `openbao_operation` | The OpenBao call for `openbao.request` events. |
 | `status`, `duration_ms` | Outcome (`ok`, `error`) and latency. |
 | `key_id_hash`, `transit_key_version` | Hash of the active `key_id` and the Transit version used. |
 | `error_class` | One of the [error classes](#error-classes). |
+| `reason` | Bounded failure condition on `status.probe`; uses the readiness codes above. |
+| `previous_key_id_hash`, `previous_transit_key_version` | Previous active key on `key.promoted`. The current key uses `key_id_hash` and `transit_key_version`. |
 | `probe_kind`, `healthz` | Probe kind (`metadata`, `deep`) and KMS Status health value. |
 | `panic_recovered`, `panic_type` | Present after a recovered panic; the panic value is never logged. |
 | `openbao_request_id`, `request_uid_hash`, `debug_correlation_incident`, `debug_correlation_expires_at` | Present only during [debug correlation](#debug-correlation). |
@@ -86,9 +114,22 @@ Logs never contain plaintext, JWTs, OpenBao tokens, full ciphertext, key
 material, full annotation maps, or, by default, raw OpenBao paths and key
 names.
 
+At the default `info` level, `serve.start` marks the start of runtime setup.
+`serve.ready` follows successful bootstrap probes and listener startup. It is a
+startup event; use `/ready` or KMS Status for ongoing health. `serve.shutdown`
+follows startup failure or runtime exit. Failures use `startup_failed` or
+`runtime_failed` without raw error details. Invalid configuration or logging
+settings can fail before structured logging starts.
+
+`key.promoted` logs once when a previously active key changes, after state is
+saved and published. Bootstrap, pending observations, and failed state saves do
+not emit promotion events. The new key still needs its deep probe before
+Encrypt becomes available. Probe failures log at warning level with `reason`
+and `error_class`; successful periodic probes remain at debug level.
+
 ## Error classes
 
-Every failed operation carries one stable `error_class`. Use them as alert
+Failed KMS calls carry a bounded `error_class`. Use these classes as alert
 routing keys and dashboard groups.
 
 | Area | Classes |
@@ -112,6 +153,15 @@ still return gRPC `Unavailable`. Unrecognized transport failures remain
 `openbao_unavailable`. No destination, certificate, or raw transport error is
 logged. OpenBao request logs and their metric `status` label use `tls_failed`,
 `dns_failed`, and `connection_failed` without the `openbao_` prefix.
+
+Status probe logs and readiness probe error fields use the OpenBao classes
+without a prefix: `invalid_request`, `unauthenticated`, `permission_denied`,
+`not_found`, `decrypt_failed`, `rate_limited`, `unavailable`, `sealed`,
+`tls_failed`, `dns_failed`, `connection_failed`, and `unknown`. Rejected logins
+and local credential failures use `auth_failed`; cancellation and deadlines use
+`canceled` and `timeout`. Local state or validation failures use their readiness
+reason code as the error class. Raw OpenBao responses and local filesystem
+errors are never copied into probe log fields or readiness responses.
 
 ## Alerts
 

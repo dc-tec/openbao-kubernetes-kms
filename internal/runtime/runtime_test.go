@@ -64,7 +64,9 @@ func TestRunServesGRPCAndHealthAndShutsDownCleanly(t *testing.T) {
 		RotationState:        status.RotationStateActive,
 	}}
 
+	started := make(chan struct{}, 1)
 	rt, err := runtime.New(runtime.Options{
+		OnStarted: func(context.Context) { started <- struct{}{} },
 		Socket: socket.Options{
 			Path: socketPath,
 			Mode: socketMode,
@@ -87,12 +89,22 @@ func TestRunServesGRPCAndHealthAndShutsDownCleanly(t *testing.T) {
 		t.Fatal("expected health listener address")
 	}
 
+	select {
+	case <-started:
+		t.Fatal("start callback ran before Run")
+	default:
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
 	runErr := make(chan error, 1)
 	go func() { runErr <- rt.Run(ctx) }()
 
+	select {
+	case <-started:
+	case <-time.After(dialDeadline):
+		t.Fatal("start callback absent")
+	}
 	dialKMSAndCallStatus(t, socketPath, active.KubernetesKeyID)
 	checkHealthEndpoint(t, healthAddr, health.PathLive, http.StatusOK)
 	checkHealthEndpoint(t, healthAddr, health.PathReady, http.StatusOK)
@@ -108,6 +120,14 @@ func TestRunServesGRPCAndHealthAndShutsDownCleanly(t *testing.T) {
 		t.Fatal("Run did not return within shutdown deadline")
 	}
 
+	if err := rt.Run(context.Background()); err == nil {
+		t.Fatal("second Run unexpectedly succeeded")
+	}
+	select {
+	case <-started:
+		t.Fatal("start callback ran more than once")
+	default:
+	}
 	if _, err := os.Stat(socketPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("socket file should be unlinked after shutdown, stat err=%v", err)
 	}

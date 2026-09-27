@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,4 +184,41 @@ type readyStub struct {
 
 func (r *readyStub) Ready(_ context.Context) (status.Diagnostics, error) {
 	return r.diagnostics, r.err
+}
+
+func TestReadyIncludesBoundedProbeReasonsAndClearsThem(t *testing.T) {
+	ready := &readyStub{diagnostics: status.Diagnostics{
+		Healthz: kmsv2.HealthUnhealthy, ActiveKeyIDHash: probeKeyHash,
+		Reasons:            []status.HealthReason{status.ReasonMetadataReadFailed, status.ReasonDeepProbeFailed},
+		MetadataErrorClass: "tls_failed", DeepErrorClass: "permission_denied",
+	}}
+	handler := mustHandler(t, &liveStub{}, ready)
+	resp := request(t, handler, http.MethodGet, health.PathReady)
+	var body struct {
+		Reasons            []status.HealthReason `json:"reasons"`
+		MetadataErrorClass string                `json:"metadata_error_class"`
+		DeepErrorClass     string                `json:"deep_error_class"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Code != http.StatusServiceUnavailable || len(body.Reasons) != 2 ||
+		body.MetadataErrorClass != "tls_failed" || body.DeepErrorClass != "permission_denied" {
+		t.Fatalf("failed readiness body: %s", resp.Body.String())
+	}
+	ready.diagnostics.Healthz = kmsv2.HealthOK
+	ready.diagnostics.Reasons = []status.HealthReason{}
+	ready.diagnostics.MetadataErrorClass = ""
+	ready.diagnostics.DeepErrorClass = ""
+	resp = request(t, handler, http.MethodGet, health.PathReady)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"reasons":[]`) ||
+		strings.Contains(resp.Body.String(), "error_class") {
+		t.Fatalf("recovered readiness body: %s", resp.Body.String())
+	}
+	ready.err = errors.New("sensitive token and backend URL")
+	resp = request(t, handler, http.MethodGet, health.PathReady)
+	if !strings.Contains(resp.Body.String(), "diagnostics_unavailable") ||
+		strings.Contains(resp.Body.String(), "sensitive") {
+		t.Fatalf("unredacted diagnostic failure: %s", resp.Body.String())
+	}
 }

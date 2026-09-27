@@ -134,6 +134,17 @@ func TestProviderContainerFullStackE2E(t *testing.T) {
 		logs := dockerLogs(context.Background(), dockerPath, providerName)
 		t.Fatalf("run KMS client container: %v: %s\nprovider logs:\n%s", err, strings.TrimSpace(output), logs)
 	}
+	runDocker(t, ctx, dockerPath, "stop", "--time", "20", providerName)
+	logs := dockerLogs(ctx, dockerPath, providerName)
+	previous := -1
+	for _, event := range []string{"serve.start", "serve.ready", "serve.shutdown"} {
+		marker := `"message":"` + event + `"`
+		offset := strings.Index(logs, marker)
+		if offset <= previous || strings.Count(logs, marker) != 1 {
+			t.Fatalf("missing or unordered lifecycle event %s: %s", event, logs)
+		}
+		previous = offset
+	}
 }
 
 type providerVolumes struct {
