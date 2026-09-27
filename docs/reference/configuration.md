@@ -60,7 +60,7 @@ Fields marked **required** have no usable default.
 | `auth.loginTimeout` | `0s` | Deadline for one shared renewal or login, including recovery after a rejected token, independent of the request deadline. Also bounds each PKCS#11 session pool wait. `0s` means `max(openbao.timeout, 5s)`; it does not enable an unlimited pool wait. See the native-call limit below. |
 | `auth.jwt.mountPath`, `auth.jwt.role` | none | Required for `jwt`. Mount path including `auth/`, and role name. |
 | `auth.jwt.source` | none | Required for `jwt`: `file` or `oauth2`. |
-| `auth.jwt.jwtFile` | none | Required for source `file`; forbidden for `oauth2`. Re-read before every login. |
+| `auth.jwt.jwtFile` | none | Required for source `file`; forbidden for `oauth2`. Absolute path to a regular file, not a symlink. Re-read before every login. |
 | `auth.jwt.minRemainingTtl` | `2m` | Minimum JWT lifetime left for a login. |
 | `auth.jwt.clockSkewLeeway` | `30s` | Leeway for `nbf`, `iat`, and `exp`. |
 | `auth.jwt.expectedIssuer`, `expectedAudience`, `expectedSubject` | empty | Local claim checks before login. Issuer and at least one audience are required for source `oauth2`. |
@@ -75,7 +75,7 @@ Fields marked **required** have no usable default.
 | `auth.cert.name` | empty | OpenBao cert role name; empty lets OpenBao try every role. |
 | `auth.cert.minRemainingTtl` | `24h` | Minimum certificate lifetime left for a login. |
 | `auth.cert.clockSkewLeeway` | `30s` | Leeway for certificate validity. |
-| `auth.cert.pkcs11.certificateFile`, `modulePath`, `tokenLabel`, `keyLabel`, `pinFile` | none | Required for `pkcs11`. The certificate file holds only PEM `CERTIFICATE` blocks; the PIN file is an absolute, regular, provider-only file with one line. |
+| `auth.cert.pkcs11.certificateFile`, `modulePath`, `tokenLabel`, `keyLabel`, `pinFile` | none | Required for `pkcs11`. The certificate file holds only PEM `CERTIFICATE` blocks; the PIN file is an absolute, regular file with one line, not a symlink. See [credential file permissions](/docs/configure/openbao-auth/#credential-files). |
 | `auth.cert.pkcs11.maxSessions` | none | At least `2` for `pkcs11`. |
 
 After a `401` or `403`, the provider logs in again and retries the request

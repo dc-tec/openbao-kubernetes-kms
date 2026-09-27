@@ -58,6 +58,28 @@ access to other keys or paths.
 configuration; review its paths before applying it. See
 [Reference: CLI](/docs/reference/cli/#policy-openbao).
 
+## Credential files
+
+JWT files, OAuth client-secret files, and PKCS#11 PIN files must be regular
+files at absolute paths. Symlinks are rejected, including the symlinks commonly
+used by Kubernetes projected volumes. Use mode `0600`, or `0640` only with a
+trusted group that needs credential access. Group write, group execute, and
+all world permissions are rejected. Keep parent directories under trusted
+host administration.
+
+A node-local credential helper must write a new regular file in the same
+private directory, set its owner and permissions, then atomically rename it
+over the configured name. Mount that directory into a container so replacement
+files remain visible; a single-file bind mount keeps the old inode. JWT and
+OAuth credentials are reread before login. The PKCS#11 PIN is read when the
+certificate provider is constructed, so restart the provider after changing it.
+
+Credential delivery and recovery must work while the protected Kubernetes API
+is unavailable. Copying a projected token into a regular file satisfies the
+file format requirement but does not remove its issuer or renewal dependency.
+See [Security: Auth model](/docs/security/auth-model/#jwt-source-options) and
+[Static pod credential delivery](/docs/get-started/static-pod/).
+
 ## JWT key sources
 
 The default JWT config uses OIDC discovery. To use a JSON Web Key Set URL
