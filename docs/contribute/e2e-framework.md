@@ -128,6 +128,25 @@ storage stanza does not migrate data.
 
 ## Upgrade and soak qualification
 
+Run `make test-e2e-kind-kit-acceptance` for the installation acceptance check.
+It packages the selected image's binary with the real static-pod kit inputs,
+executes the kit's host preparation block on three disposable control-plane
+nodes, and runs `init` with one shared identity and separate socket GIDs. It
+installs the generated OpenBao policy and runs `doctor` and the live socket
+`probe` under UID/GID `65532` with each node's socket group.
+
+The check stages the generated reader configuration on every API server before
+enabling writers one at a time. It verifies stored KMS envelopes and reads each
+test Secret directly through all three API servers with TLS verification, then
+repeats the reads after clearing their caches. Provider Qualification runs this
+check once on the primary Kubernetes/OpenBao pair. The compatibility matrix
+remains a separate check.
+
+This lane builds an installation kit from the candidate image and checkout.
+The release workflow separately tests the exact archives selected for
+publication. Authentication uses the controlled host-JWT fixture; this lane
+does not qualify a host credential agent or an existing-cluster migration.
+
 The provider upgrade lane pulls the published preview.2 image pinned by
 `validation.provider.upgradeBaselineImage`. The candidate must reject its
 unbound state without changing the registry or checkpoint. Returning to

@@ -238,11 +238,13 @@ bao-kms-provider init --values values.yaml --out ./generated --new-key
 | `--new-key` | Generate `transit.keyIdScope.keyLineageId` for a Transit key you are about to create. Rejected if the values file already sets one. |
 | `--policy-name <name>` | OpenBao policy name. Default: `openbao-kms-<clusterId>`. |
 | `--image <ref>` | Static pod only, required. The provider image pinned by `@sha256` digest. |
-| `--socket-gid <gid>` | Static pod only, required. Numeric host GID of `openbao-kms-socket`. |
+| `--socket-gid <gid>` | Static pod only, required. This node's numeric socket GID; overrides `server.socketGroup` in the values file. |
 
 `init` fills the documented host paths for an omitted `openbao.caCertFile`,
-`auth.jwt.jwtFile` for source `file`, and `server.socketGroup`, then validates the result as
-`serve` would. With JWT auth it also needs `auth.jwt.expectedIssuer`,
+`auth.jwt.jwtFile` for source `file`, and `server.socketGroup`. For static pods,
+`--socket-gid` selects the local group even when the values contain another
+node's group. `init` then validates the result as `serve` would.
+With JWT auth it also needs `auth.jwt.expectedIssuer`,
 `expectedAudience`, and `expectedSubject`, because the OpenBao role binds them.
 
 | File | Contents |

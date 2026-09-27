@@ -52,6 +52,8 @@ bao-kms-provider init --values values.yaml --out generated --new-key \
 For another node, use `generated/config.yaml` as the input, select a new output
 directory, and omit `--new-key`. Set that node's socket GID. Compare the shared
 fingerprint and lineage in `installation.json`; they must match across nodes.
+The required `--socket-gid` flag replaces the input configuration's socket
+group for that node. It does not change the shared identity.
 
 Review `openbao-policy.hcl` and `openbao-setup.sh`, then apply them through the
 OpenBao administrator. Place the generated configuration at

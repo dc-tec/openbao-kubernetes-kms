@@ -14,6 +14,12 @@ hash-linked successor. Copy the registry and checkpoint together when restoring
 from backup or a healthy peer. A divergent higher-generation registry cannot
 replace a surviving checkpoint.
 
+For static-pod setup, `init --socket-gid` now selects the current node's socket
+group when reusing another node's generated values. The shared identity and
+key lineage remain unchanged. Generated-kit acceptance covers three API
+servers with different socket GIDs, runtime diagnostics, staged activation,
+and cold Secret reads.
+
 ## Operator-Controlled Key Retirement
 
 `retire-versions` plans removal of obsolete historical versions from local
