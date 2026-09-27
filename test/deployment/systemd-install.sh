@@ -52,6 +52,8 @@ export VERSION
 cd "$work"
 # Source the documented extraction so its cd also selects the installation directory.
 source "$work/extract.sh"
+extract_commands README.md systemd-bundle-install > "$work/archive-install.sh"
+cmp "$work/install.sh" "$work/archive-install.sh"
 bash "$work/install.sh"
 if [[ "${APPLY_PREVIEW_FIX:-false}" == true ]]; then
   extract_commands "$repo/docs/get-started/systemd.md" systemd-preview-permissions > "$work/permissions.sh"
@@ -60,6 +62,14 @@ fi
 
 # Run the documented initial file placement with non-secret fixtures.
 cp config/provider-systemd.yaml provider.yaml
+if [[ -f config/init-values-file.yaml ]]; then
+  for source in file oauth2; do
+    bao-kms-provider init --values "config/init-values-$source.yaml" --out "$work/$source" --new-key
+    bao-kms-provider init --values "$work/$source/config.yaml" --out "$work/$source-node2"
+    cmp "$work/$source/installation.json" "$work/$source-node2/installation.json"
+  done
+  cp "$work/file/config.yaml" provider.yaml
+fi
 printf 'test CA fixture\n' > ca.crt
 printf 'test JWT fixture\n' > identity.jwt
 bash "$work/runtime.sh"

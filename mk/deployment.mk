@@ -43,12 +43,13 @@ systemd-install-check: ## Exercise the documented tarball installation in a disp
 	digest="$$(awk '/^  imageBuilderBaseDigest:/{print $$2}' .ci/versions.yaml)"; \
 	tmp="$$(mktemp -d)"; \
 	trap 'rm -rf "$$tmp"' EXIT; \
-	docker build --iidfile "$$tmp/image-id" \
+	docker build --platform "$(IMAGE_PLATFORM)" --iidfile "$$tmp/image-id" \
 		--build-arg "BUILDER_IMAGE=$$builder@$$digest" \
 		-f test/deployment/Dockerfile.systemd-install test/deployment; \
-	docker run --rm --network=none --user 0:0 \
+	docker run --rm --platform "$(IMAGE_PLATFORM)" --network=none --user 0:0 \
 		--mount "type=bind,source=$(CURDIR),target=/src,readonly" \
-		--env KMS_INSTALL_TEST_CONTAINER=1 \
+		--env KMS_INSTALL_TEST_CONTAINER=1 --env "BUNDLE_ARCHIVE=$(BUNDLE_ARCHIVE)" \
+		--env "APPLY_PREVIEW_FIX=$(APPLY_PREVIEW_FIX)" \
 		--workdir /src \
 		"$$(cat "$$tmp/image-id")" bash test/deployment/systemd-install.sh
 

@@ -509,6 +509,40 @@ jobs:
           path: dist/reproducibility-report.md
           retention-days: 30
 
+  installation-artifacts:
+    name: Install release archives (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [prepare, verify-artifacts]
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+      - uses: ./.github/actions/setup-repo-tools
+        with:
+          bootstrap-tools: "false"
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+        with:
+          platforms: arm64
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-byte-verified-assets
+          path: dist/primary
+      - name: Install the archives selected for publication
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          for model in systemd static-pod; do
+            make "${model}-install-check" IMAGE_PLATFORM="linux/${ARCH}" \
+              BUNDLE_ARCHIVE="dist/primary/bao-kms-provider_${VERSION}_${model}_linux_${ARCH}.tar.gz"
+          done
+
   promote:
     name: Promote And Publish
     runs-on: ubuntu-24.04
@@ -521,6 +555,7 @@ jobs:
       - e2e-openbao
       - e2e-kind
       - verify-artifacts
+      - installation-artifacts
     environment:
       name: release-publish
     permissions:
