@@ -116,7 +116,7 @@ auth:
 
 | Field | Default | Meaning |
 |---|---|---|
-| `transit.mountPath`, `transit.keyName` | none | Required, identity-bearing. The key name is one path segment without `/` or `%`. |
+| `transit.mountPath`, `transit.keyName` | none | Required, identity-bearing. A key name starts and ends with an ASCII letter, digit, or underscore. Interior characters can also include dots and hyphens. |
 | `transit.keyIdScope.providerName`, `clusterId`, `transitMountId`, `keyLineageId` | none | Required, identity-bearing. |
 | `state.path` | `/var/lib/openbao-kms/state/key-registry.json` | Absolute path of the local registry state; the checkpoint and lock sit next to it. |
 | `bootstrap.graceTimeout`, `bootstrap.retryInterval` | `60s`, `5s` | How long and how often startup retries its first probes before exiting. |

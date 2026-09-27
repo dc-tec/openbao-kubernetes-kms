@@ -10,10 +10,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// Match OpenBao's framework.GenericNameRegex used by Transit key metadata paths.
+var transitKeyNamePattern = regexp.MustCompile(`^[A-Za-z0-9_]([A-Za-z0-9_.-]*[A-Za-z0-9_])?$`)
 
 const (
 	configFingerprintDomain = "openbao-kubernetes-kms/config-identity/v1"
@@ -526,12 +530,12 @@ func validateIdentifier(problems *[]ValidationProblem, field string, value strin
 }
 
 func validateTransitKeyName(problems *[]ValidationProblem, value string) {
-	validateIdentifier(problems, "transit.keyName", value)
 	if value == "" {
 		return
 	}
-	if strings.ContainsAny(value, "/%") {
-		appendProblem(problems, "transit.keyName", "must be a single OpenBao path segment without / or %")
+	if !transitKeyNamePattern.MatchString(value) {
+		appendProblem(problems, "transit.keyName",
+			"must start and end with an ASCII letter, digit, or underscore; interior characters may also be dots or hyphens")
 	}
 }
 

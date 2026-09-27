@@ -618,8 +618,9 @@ func parseAddress(address string) (*url.URL, error) {
 
 func transitPath(mountPath string, operation string, keyName string) string {
 	mount := strings.Trim(mountPath, "/")
-	key := url.PathEscape(keyName)
-	return path.Join(mount, operation, key)
+	// Configuration validates the segments. Keep their original values here;
+	// URL.String escapes the complete path once in resolveOpenBao.
+	return path.Join(mount, operation, keyName)
 }
 
 func transitConfigPath(mountPath string) string {
