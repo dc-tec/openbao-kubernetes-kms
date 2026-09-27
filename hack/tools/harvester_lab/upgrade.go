@@ -146,3 +146,85 @@ func requireDifferentImages(ctx context.Context, cfg *labConfig, baseline, candi
 	}
 	return nil
 }
+
+// verifyRejectedDowngrade leaves the candidate installed, including on failure.
+func verifyRejectedDowngrade(
+	ctx context.Context, cfg *labConfig, check kubeadmCheck,
+	installBaseline, restoreCandidate, waitRejection func(context.Context) error,
+) (resultErr error) {
+	secret, cleanup, err := createTrackedSecret(ctx, cfg, check, "downgrade-"+check.suffix)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	if err := verifyRemoteSecretEnvelope(ctx, cfg, check.host, secret.name, secret.path); err != nil {
+		return err
+	}
+	defer func() {
+		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		defer cancel()
+		if err := restoreCandidate(recoveryCtx); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("restore candidate after rejected downgrade: %w", err))
+			return
+		}
+		if err := verifyRemoteSecretEnvelope(recoveryCtx, cfg, check.host, secret.name, secret.path); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("cold read after restoring candidate: %w", err))
+		}
+	}()
+	// Quiesce the writer so any file change is attributable to the old release.
+	if err := stopProviderForRestore(ctx, cfg, check); err != nil {
+		return err
+	}
+	before, err := remotePersistenceHashes(ctx, cfg, check.host)
+	if err != nil {
+		return err
+	}
+	if err := installBaseline(ctx); err != nil {
+		return err
+	}
+	if err := waitRejection(ctx); err != nil {
+		return err
+	}
+	after, err := remotePersistenceHashes(ctx, cfg, check.host)
+	if err != nil {
+		return err
+	}
+	if before != after {
+		return errors.New("rejected downgrade changed the registry or checkpoint")
+	}
+	fmt.Printf("published baseline rejected bound state without changing either file on %s\n", check.host)
+	return nil
+}
+
+func remotePersistenceHashes(ctx context.Context, cfg *labConfig, host string) (string, error) {
+	output, err := sshLabOutput(ctx, cfg, host, "sudo sha256sum /var/lib/openbao-kms/state/key-registry.json "+
+		"/var/lib/openbao-kms/state/key-registry.json.checkpoint")
+	if err != nil {
+		return "", err
+	}
+	if len(strings.Fields(string(output))) != 4 {
+		return "", errors.New("registry/checkpoint hashes were not returned")
+	}
+	return string(output), nil
+}
+
+func waitSystemdStateRejection(ctx context.Context, cfg *labConfig, host string) error {
+	// systemctl restart creates a new invocation. Scope the journal to that
+	// invocation so an earlier failed deployment cannot satisfy this assertion.
+	command := `id=$(sudo systemctl show bao-kms-provider.service -p InvocationID --value); ` +
+		`test -n "$id" && sudo journalctl --no-pager -o cat _SYSTEMD_INVOCATION_ID="$id" | ` +
+		`grep -F 'unknown field' | grep -F 'identityFingerprint' >/dev/null`
+	return waitRemoteCommand(ctx, cfg, host, "published baseline state rejection", time.Minute,
+		"sh -c "+shellQuote(command))
+}
+
+func waitStaticPodStateRejection(ctx context.Context, cfg *labConfig, host, image string) error {
+	crictl := "sudo crictl --config /dev/null --runtime-endpoint unix:///run/containerd/containerd.sock"
+	command := "id=$(" + crictl + " ps -a --name '^bao-kms-provider$' -o json | jq -r --arg image " +
+		shellQuote(image) + ` '.containers | map(select(.image.image == $image and .state == "CONTAINER_EXITED"))` +
+		` | sort_by(.createdAt) | last | .id // empty'); ` +
+		`test -n "$id" && ` + crictl + ` logs "$id" 2>&1 | ` +
+		`grep -F 'unknown field' | grep -F 'identityFingerprint' >/dev/null`
+	return waitRemoteCommand(ctx, cfg, host, "published baseline state rejection", 3*time.Minute,
+		"sh -c "+shellQuote(command))
+}

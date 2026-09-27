@@ -30,31 +30,44 @@ func TestProviderBinaryUpgradeRollbackE2E(t *testing.T) {
 	dockerPath := requireDocker(t, ctx)
 	requireProviderImageVersionsDiffer(t, ctx, dockerPath, oldImage, newImage)
 
-	stack := startProviderFailureStack(t, ctx, "obk-e2e-provider-upgrade", providerFailureStackOptions{
-		ProviderImage: oldImage,
+	t.Run("reject-unbound-state", func(t *testing.T) {
+		verifyProviderStateBoundary(t, ctx, oldImage, newImage, legacyStateRejection)
+	})
+	t.Run("reject-bound-state-downgrade", func(t *testing.T) {
+		verifyProviderStateBoundary(t, ctx, newImage, oldImage, "unknown field")
+	})
+}
+
+func verifyProviderStateBoundary(t *testing.T, ctx context.Context, initialImage, rejectedImage, reason string) {
+	t.Helper()
+	stack := startProviderFailureStack(t, ctx, "obk-e2e-provider-state-boundary", providerFailureStackOptions{
+		ProviderImage: initialImage,
 	})
 	oldSampleEnv := []string{kmsSamplePathEnv + "=" + oldBinarySamplePath}
-	stack.runClientWithEnv(ctx, "old-write-client", kmsClientModeWriteSample, sampleReadWrite, oldSampleEnv)
-	runDocker(t, ctx, dockerPath, "stop", stack.providerName)
+	stack.runClientWithEnv(ctx, "initial-write-client", kmsClientModeWriteSample, sampleReadWrite, oldSampleEnv)
+	runDocker(t, ctx, stack.dockerPath, "stop", stack.providerName)
 	before := providerPersistenceHashes(t, ctx, stack)
 
-	stack.restartProvider(ctx, newImage)
+	stack.restartProvider(ctx, rejectedImage)
 	exitCtx, exitCancel := context.WithTimeout(ctx, 30*time.Second)
 	defer exitCancel()
-	exitCode, err := runDockerOutput(exitCtx, dockerPath, "wait", stack.providerName)
+	exitCode, err := runDockerOutput(exitCtx, stack.dockerPath, "wait", stack.providerName)
 	if err != nil || strings.TrimSpace(exitCode) == "0" {
-		t.Fatalf("candidate did not reject legacy state: exit=%q err=%v", exitCode, err)
+		t.Fatalf("incompatible provider did not reject state: exit=%q err=%v", exitCode, err)
 	}
-	if !strings.Contains(dockerLogs(ctx, dockerPath, stack.providerName), legacyStateRejection) {
-		t.Fatal("candidate failed without the expected legacy-state rejection")
+	logs := dockerLogs(ctx, stack.dockerPath, stack.providerName)
+	assertOutputContains(t, logs, reason)
+	if reason == legacyStateRejection {
+		doctorOutput := stack.runProviderCLIExpectFailure(ctx, "legacy-doctor", "doctor", "--config", containerConfigPath)
+		assertOutputContains(t, doctorOutput, "[fail] registry.state", legacyStateRejection)
+	} else {
+		assertOutputContains(t, logs, "identityFingerprint")
 	}
-	doctorOutput := stack.runProviderCLIExpectFailure(ctx, "legacy-doctor", "doctor", "--config", containerConfigPath)
-	assertOutputContains(t, doctorOutput, "[fail] registry.state", legacyStateRejection)
 	if after := providerPersistenceHashes(t, ctx, stack); after != before {
-		t.Fatal("rejected upgrade changed legacy registry or checkpoint")
+		t.Fatal("rejected release changed registry or checkpoint")
 	}
-	stack.restartProvider(ctx, oldImage)
-	stack.runClientWithEnv(ctx, "rollback-read-old-client", kmsClientModeReadSample, sampleReadOnly, oldSampleEnv)
+	stack.restartProvider(ctx, initialImage)
+	stack.runClientWithEnv(ctx, "rollback-read-client", kmsClientModeReadSample, sampleReadOnly, oldSampleEnv)
 }
 
 func requireProviderImageVersionsDiffer(

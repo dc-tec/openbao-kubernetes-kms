@@ -199,7 +199,7 @@ these destructive actions within the lab:
 - stops OpenBao, then verifies that cached API server writes remain
   envelope-encrypted and cold writes fail closed after API server restart;
 - restores a paired OpenBao, provider state, and etcd backup;
-- tests provider upgrade and rollback for both deployment modes;
+- verifies rejection of an unsupported provider downgrade in both deployment modes;
 - creates KMS-encrypted Kubernetes Secrets on both clusters.
 
 The gate is split into smaller targets so failures can be rerun without
@@ -222,11 +222,31 @@ version. Docker pulls its Linux amd64 image. The systemd check extracts that
 image's binary without starting a container; the static-pod check transfers
 the same image. Only the candidate is built from the current checkout. The
 checks reject identical baseline and candidate artifacts before deployment.
-They retain configuration and state across baseline, candidate, and rollback,
-wait for the selected static-pod image under a unique run tag, and restart
-each API server before checking encrypted Secret readback to clear its caches.
+Preview.3 requires fresh installations. The target starts with the candidate,
+writes a Secret, stops the provider, and hashes its registry and checkpoint.
+It then deploys preview.2 and requires the specific bound-state rejection.
+Both file hashes must remain unchanged. The target restores the candidate,
+restarts the API server to clear its caches, and reads the original Secret.
+The candidate is also restored on failure. Subsequent gate steps therefore
+continue with the candidate. This does not establish in-place upgrade support.
 This target requires a running lab and changes both provider deployments;
-local harness tests do not qualify a VM upgrade.
+local harness tests do not qualify VM recovery.
+
+Before each provider qualification step, `production-gate` checks that every
+deployment reports the current checkout commit. Deploy the candidate before
+running the gate. This check identifies an old deployment; it does not replace
+the release artifact checks.
+
+`verify-recovery` writes a Secret corpus before rotation, confirms promotion
+from each validated registry, and cold-reads the original corpus after each
+restart or reboot. The outage check requires a new failed KMS Encrypt request
+in provider metrics before it counts a failed cold write as evidence. It also
+cold-reads the pre-outage corpus after OpenBao recovery.
+
+`verify-paired-restore` stops each provider while copying its registry and
+checkpoint. After backup, it confirms promotion and restarts the API servers
+before writing the post-backup markers. Restore must recover the pre-backup
+Secrets and remove the post-backup markers.
 
 Set `HARVESTER_LOAD_SECRET_COUNT` to change the load-smoke size. The default is
 `25` Secrets per kubeadm cluster. These targets must remain local-only and must
