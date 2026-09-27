@@ -265,7 +265,10 @@ func expectSocketUnavailable(ctx context.Context, client kmsapi.KeyManagementSer
 }
 
 func expectStatusStaleness(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
-	waitForHealthyStatus(ctx, client)
+	// The test verifies healthy service before pausing OpenBao. A new client
+	// may connect after the cached status has already expired.
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	waitForUnhealthyStatus(ctx, client)
 
 	_, err := client.Encrypt(ctx, &kmsapi.EncryptRequest{

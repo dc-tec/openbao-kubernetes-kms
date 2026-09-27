@@ -245,13 +245,30 @@ func TestProviderStatusStalenessFailsClosedE2E(t *testing.T) {
 
 	stack := startProviderFailureStack(t, ctx, "obk-e2e-stale-status", providerFailureStackOptions{
 		Config: providerContainerConfigOptions{
-			ProbeInterval:      "10s",
+			OpenBaoTimeout:     "1m",
+			ProbeInterval:      "1s",
 			DeepProbeInterval:  "30s",
 			StatusMaxStaleness: "2s",
 		},
 	})
 
-	stack.runClient(ctx, "staleness-client", kmsClientModeExpectStatusStaleness, sampleNotMounted)
+	stack.runClient(ctx, "initial-client", kmsClientModeWriteSample, sampleReadWrite)
+	if err := stack.environment.PauseContainer(ctx); err != nil {
+		t.Fatalf("pause OpenBao container: %v", err)
+	}
+	func() {
+		defer func() {
+			resumeCtx, resumeCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer resumeCancel()
+			if err := stack.environment.ResumeContainer(resumeCtx); err != nil {
+				t.Errorf("resume OpenBao container: %v", err)
+			}
+		}()
+		// Pause keeps connections open, so the cache must expire while a probe
+		// is waiting. The client's 15s deadline is below the 1m backend timeout.
+		stack.runClient(ctx, "staleness-client", kmsClientModeExpectStatusStaleness, sampleNotMounted)
+	}()
+	stack.runClient(ctx, "recovery-client", kmsClientModeReadSample, sampleReadOnly)
 }
 
 func TestProviderStaleSocketReclaimedE2E(t *testing.T) {
