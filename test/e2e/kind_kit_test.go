@@ -215,7 +215,7 @@ func requireKitCheck(t *testing.T, report cli.Report, id string) string {
 func waitKindDirectAPI(t *testing.T, ctx context.Context, docker, node string) {
 	t.Helper()
 	waitKindOAuthCondition(t, ctx, "direct API readiness on "+node, func() bool {
-		_, err := runDockerOutput(ctx, docker, "exec", node, "kubectl", "--kubeconfig=/etc/kubernetes/admin.conf",
+		_, err := runDockerOutput(ctx, docker, "exec", node, "kubectl", "--kubeconfig=/etc/kubernetes/super-admin.conf",
 			"--server=https://127.0.0.1:6443", "--request-timeout=5s", "get", "--raw=/readyz")
 		return err == nil
 	})
@@ -239,7 +239,7 @@ func verifyKindKitWriterRollout(
 			t.Fatal(err)
 		}
 		dockerCopy(t, ctx, docker, valueFile, writer+":"+kindKitDir+"/value")
-		runDocker(t, ctx, docker, "exec", writer, "kubectl", "--kubeconfig=/etc/kubernetes/admin.conf",
+		runDocker(t, ctx, docker, "exec", writer, "kubectl", "--kubeconfig=/etc/kubernetes/super-admin.conf",
 			"--server=https://127.0.0.1:6443", "create", "secret", "generic", name, "--from-file=value="+kindKitDir+"/value")
 		assertKindEtcdEncryptedNamed(t, ctx, docker, writer, name, value)
 		for _, reader := range nodes {
@@ -257,7 +257,7 @@ func verifyKindKitWriterRollout(
 
 func assertKindKitDirectRead(t *testing.T, ctx context.Context, docker, node, name, value string) {
 	t.Helper()
-	output, err := runDockerOutput(ctx, docker, "exec", node, "kubectl", "--kubeconfig=/etc/kubernetes/admin.conf",
+	output, err := runDockerOutput(ctx, docker, "exec", node, "kubectl", "--kubeconfig=/etc/kubernetes/super-admin.conf",
 		"--server=https://127.0.0.1:6443", "get", "secret", name, "-o", "jsonpath={.data.value}")
 	if err != nil {
 		t.Fatalf("direct Secret read through %s failed: %v", node, err)
