@@ -94,6 +94,7 @@ type Controller struct {
 	refreshInterval time.Duration
 	nextRefresh     time.Time
 	refreshErr      error
+	pendingCommit   *stateCommit
 }
 
 // NewController builds a status probe controller and loads persisted registry state when available.
@@ -243,8 +244,17 @@ func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 		return c.metadataFailed(now, ReasonMetadataReadFailed,
 			fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageTransitMetadataFailed, err))
 	}
+	return c.publishObservation(ctx, profile, now, discover)
+}
 
-	state, hasState := c.store.State()
+func (c *Controller) publishObservation(
+	ctx context.Context, profile openbao.KeyProfile, now time.Time, discover bool,
+) error {
+	state, hasState, err := c.stateForObservation()
+	if err != nil {
+		return c.metadataFailed(now, ReasonStateSaveFailed,
+			fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, err))
+	}
 	previous, _ := c.store.Active()
 	var result ObservationResult
 	if hasState {
@@ -271,7 +281,7 @@ func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 	}
 
 	if result.Changed && c.stateStore != nil {
-		if err := c.stateStore.Save(result.State); err != nil {
+		if err := c.saveState(state, hasState, result.State); err != nil {
 			return c.metadataFailed(now, ReasonStateSaveFailed,
 				fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, err))
 		}
@@ -279,6 +289,7 @@ func (c *Controller) probeOnce(ctx context.Context, discover bool) (err error) {
 	if err := c.store.publishMetadata(result.State, now, result.EncryptionBlocked); err != nil {
 		return c.metadataFailed(now, ReasonStatePublishFailed, err)
 	}
+	c.pendingCommit = nil
 	c.observePromotion(ctx, previous)
 	c.recordProbeSuccess(ProbeKindMetadata)
 	if result.EncryptionBlocked {

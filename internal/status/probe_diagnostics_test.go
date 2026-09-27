@@ -82,7 +82,11 @@ func TestProbeDiagnosticsReportFailureAndClearAfterRecovery(t *testing.T) {
 			if last.Reason != tc.reason || last.ErrorClass != tc.class || last.Kind != kind {
 				t.Fatalf("observation = %+v", last)
 			}
-			*fixture.transit = fakeTransit{profile: profileForLatest(1, fixture.clock.Now())}
+			latest := 1
+			if tc.name == "save failure" {
+				latest = 2 // Recovery retains the attempted identity even before publication.
+			}
+			*fixture.transit = fakeTransit{profile: profileForLatest(latest, fixture.clock.Now())}
 			fixture.state.saveErr = nil
 			fixture.probeHealthy(t)
 			diagnostics = fixture.store.DiagnosticsSnapshot()

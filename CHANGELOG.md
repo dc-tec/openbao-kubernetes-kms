@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **rotation:** Reconcile failed state and checkpoint saves before restoring
+  readiness. Retain the exact attempted transition and reject conflicting disk
+  state. Stop rewriting stable observation counts during the activation delay.
+
 - **observability:** Report cached readiness reasons and probe failure classes.
   Log persisted key promotions and serve startup, readiness, and shutdown events
   without raw backend errors or key identities.
