@@ -22,7 +22,13 @@
 <a href=/openbao-kubernetes-kms/next/docs/operate/>Operate</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
 <span aria-current=page>Upgrade</span></nav><aside class="version-notice version-notice-next" aria-label="Documentation version notice"><strong>Next · Unreleased</strong>
-<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>Upgrade</h1><p class=article-lede>Upgrade the provider one control-plane node at a time, confirm each node rejoins with the same key, and roll back only when the older release can read every stored format.</p><p class=page-meta>Updated 27 September 2026 · 2 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#before-you-begin>Before you begin</a></li><li><a href=#upgrade-each-node>Upgrade each node</a></li><li><a href=#roll-back>Roll back</a></li></ul></nav></details><div class=article-content><p>Every provider sits on its API server&rsquo;s boot path, so upgrade one control-plane
+<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>Upgrade</h1><p class=article-lede>Upgrade the provider one control-plane node at a time, confirm each node rejoins with the same key, and roll back only when the older release can read every stored format.</p><p class=page-meta>Updated 28 September 2026 · 2 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#before-you-begin>Before you begin</a></li><li><a href=#upgrade-each-node>Upgrade each node</a></li><li><a href=#roll-back>Roll back</a></li></ul></nav></details><div class=article-content><p><code>0.1.0-preview.3</code> requires a fresh disposable installation. Do not use this
+procedure to upgrade an earlier preview: its unbound registry state is rejected.
+Keep the old state, checkpoint, and key material intact. See
+<a href=/openbao-kubernetes-kms/next/docs/reference/compatibility/#preview3-fresh-installation-boundary>Compatibility</a>
+.</p><p>Use the procedure below only when the target release documents support for
+the installed release&rsquo;s configuration and persisted state.
+Every provider sits on its API server&rsquo;s boot path, so upgrade one control-plane
 node at a time and confirm each one before moving on. For wire-format promises
 between releases, see <a href=/openbao-kubernetes-kms/next/docs/reference/compatibility/>Reference: Compatibility</a>
 .</p><h2 id=before-you-begin>Before you begin</h2><p>Defer the upgrade while a Transit rotation is pending, OpenBao is failing over
@@ -37,7 +43,8 @@ and run <code>systemctl restart bao-kms-provider.service</code>. For a static po
 the new verified image digest in <code>/etc/kubernetes/manifests/bao-kms-provider.yaml</code>
 after preloading it.</p></li><li><p>Confirm <code>/ready</code> returns HTTP 200 and the <code>key_id</code> hash matches the other
 nodes:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>curl -fsS http://127.0.0.1:8082/ready
-curl -fsS http://127.0.0.1:8081/metrics | grep openbao_kms_status_key_id_hash</code></pre></div></li><li><p>Restart the local API server only if the release notes require it.</p></li></ol><p>After the last node, confirm every node reports the same <code>key_id</code> hash.</p><h2 id=roll-back>Roll back</h2><p>Roll back only if the older release can read every <code>key_id</code>, annotation, and
+curl -fsS http://127.0.0.1:8081/metrics | grep openbao_kms_status_key_id_hash</code></pre></div></li><li><p>Restart the local API server only if the release notes require it.</p></li></ol><p>After the last node, confirm every node reports the same <code>key_id</code> hash.</p><h2 id=roll-back>Roll back</h2><p>Roll back only if the older release can read the current registry schema and
+every <code>key_id</code>, annotation, and
 AAD format now in etcd; otherwise decryption fails with unknown <code>key_id</code>
 errors. Never roll back when:</p><ul><li>the new release wrote data in a new wire format,</li><li>a rotation completed under the new release that the older release never
 promoted,</li><li>the release notes call the upgrade one-way.</li></ul><p>In those cases, fix forward with a patch release.</p><p>To roll back, repeat the node procedure with the previous package or image

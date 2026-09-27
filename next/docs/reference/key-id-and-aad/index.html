@@ -22,7 +22,7 @@
 <a href=/openbao-kubernetes-kms/next/docs/reference/>Reference</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
 <span aria-current=page>Key ID and AAD</span></nav><aside class="version-notice version-notice-next" aria-label="Documentation version notice"><strong>Next · Unreleased</strong>
-<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>Key ID and AAD</h1><p class=article-lede>The key_id format and derivation, KMS v2 annotations, the AAD envelope, decrypt validation order, and the invariants of local registry state.</p><p class=page-meta>Updated 27 September 2026 · 5 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#key_id-format>key_id format</a></li><li><a href=#annotations>Annotations</a></li><li><a href=#aad-envelope>AAD envelope</a></li><li><a href=#decrypt-validation-order>Decrypt validation order</a></li><li><a href=#local-registry-state>Local registry state</a></li></ul></nav></details><div class=article-content><p>The provider, Kubernetes, and OpenBao share this wire contract. Changing any
+<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>Key ID and AAD</h1><p class=article-lede>The key_id format and derivation, KMS v2 annotations, the AAD envelope, decrypt validation order, and the invariants of local registry state.</p><p class=page-meta>Updated 28 September 2026 · 5 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#key_id-format>key_id format</a></li><li><a href=#annotations>Annotations</a></li><li><a href=#aad-envelope>AAD envelope</a></li><li><a href=#decrypt-validation-order>Decrypt validation order</a></li><li><a href=#local-registry-state>Local registry state</a></li></ul></nav></details><div class=article-content><p>The provider, Kubernetes, and OpenBao share this wire contract. Changing any
 of it is a breaking change; see
 <a href=/openbao-kubernetes-kms/next/docs/reference/compatibility/#breaking-changes>Compatibility</a>
 . For what the
@@ -81,14 +81,24 @@ rebuild the same bytes on decryption, and a missing required field fails the
 decryption. AAD is always required.</p><h2 id=decrypt-validation-order>Decrypt validation order</h2><ol><li>Parse the <code>key_id</code>.</li><li>Find the matching active, pending, or retired snapshot. For an unknown
 <code>key_id</code>, run one rate-limited metadata lookup, and validate and save any
 new identity before accepting it.</li><li>Validate annotation keys and versions.</li><li>Validate annotation hashes against the snapshot.</li><li>Rebuild the AAD.</li><li>Call Transit decrypt.</li></ol><p>Every failure in steps 1 to 5 happens before OpenBao is called.</p><h2 id=local-registry-state>Local registry state</h2><p>The registry at <code>state.path</code> is a non-secret JSON file with a schema version, a
+configuration identity fingerprint, a
 monotonic generation, the previous and current state hashes, the active
 <code>key_id</code>, and every observed and promoted key snapshot. It keeps rotation
 decisions across restarts and lets decryption find historical snapshots
 without asking Transit. An adjacent checkpoint records the last accepted
 generation and hash. Neither file holds key material, plaintext, credentials,
-raw key names, or raw mount paths.</p><p>The provider checks on load that:</p><ul><li>the file is a regular file, not a symlink, without group write, execute
+raw key names, or raw mount paths.</p><p>Schema <code>keyregistry.openbao-kms/v1alpha2</code> requires the <code>cfg1.</code> configuration
+fingerprint, including <code>transit.mountPath</code> and <code>transit.keyName</code>. The fingerprint
+is covered by the state hash and remains unchanged across rotation and
+retirement. Changing either backend path fails startup even when the new key
+has identical version creation timestamps. These paths do not enter <code>key_id</code>
+derivation or canonical AAD; the wire format remains unchanged.</p><p>Preview.3 requires fresh installations. It rejects older unbound registry
+schemas without rewriting state or checkpoint. Do not delete the old files to
+bypass this rejection. See <a href=/openbao-kubernetes-kms/next/docs/reference/compatibility/#preview3-fresh-installation-boundary>Compatibility</a>
+.</p><p>The provider checks on load that:</p><ul><li>the file is a regular file, not a symlink, without group write, execute
 bits, or world access, in a directory that is not group or world writable,</li><li>the JSON has no unknown fields and its current hash matches the body, with
-well-formed hashes and no duplicate <code>key_id</code> records,</li><li>the checkpoint accepts the generation and hash,</li><li>the state matches the configured provider, cluster, OpenBao instance,
+well-formed hashes and no duplicate <code>key_id</code> records,</li><li>the state matches the checkpoint, or is its immediate next generation with
+a previous hash matching the checkpoint&rsquo;s hash,</li><li>the state matches the configured provider, cluster, OpenBao instance,
 namespace, mount, lineage, key name, and AAD mode,</li><li>the creation time of every active, pending, and retired version matches
 Transit metadata to the second,</li><li><code>min_available_version</code> and <code>min_decryption_version</code> block no retained
 version.</li></ul><p>State and checkpoint reads open the immediate parent without following a
@@ -105,7 +115,11 @@ Encrypt unhealthy while observation continues.</li></ul><p>When both files are m
 until the state and checkpoint are restored; see
 <a href=/openbao-kubernetes-kms/next/docs/operate/disaster-recovery/#local-registry-state>Disaster recovery: Local registry state</a>
 .
-A checkpoint without its state file, or with an older one, also fails startup.</p><p><code>serve</code> and <code>retire-versions --apply</code> take the same persistent
+A checkpoint without its state file, or with an older one, also fails startup.
+An unrelated higher generation or a generation gap fails startup too. Only a
+direct hash-linked successor can advance an older checkpoint, to complete a
+save interrupted between writing the state and checkpoint. Restore both files
+from the same backup or peer; generation numbers are local to each node.</p><p><code>serve</code> and <code>retire-versions --apply</code> take the same persistent
 <code>&lt;state.path>.lock</code> before writing, which needs a local filesystem with working
 advisory locks. The state directory must be owned by the process&rsquo;s OS user.</p><p>The checkpoint detects corruption, unsafe restores, and replayed older state.
 It does not stop a host administrator who replaces both files with a
