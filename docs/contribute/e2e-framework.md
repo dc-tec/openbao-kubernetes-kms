@@ -19,7 +19,7 @@ Kind and kubectl.
 
 | Lane | Command | Proves |
 |---|---|---|
-| OpenBao | `make test-e2e-openbao-ci` | Transit, JWT auth, least-privilege policy, and OpenBao `2.6.0` behavior. |
+| OpenBao | `make test-e2e-openbao-ci` | Transit, JWT auth, least-privilege policy, and the primary pinned OpenBao version. |
 | OpenBao cert auth | `make test-e2e-cert-auth-openbao-ci` | TLS cert auth with a URI SAN role binding, login, and Transit access. |
 | PKCS#11 source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | SoftHSM token, session pool timeout and recovery under the race detector, PKCS#11 signer, cert login, and KMS v2 through the provider. |
 | Certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | The supported PKCS#11 source lane. |
@@ -109,3 +109,19 @@ contain tokens, JWTs, plaintext, or full ciphertext.
 
 New specs go in the `test/e2e` package, and shared helpers in
 `test/e2e/framework`, kept small until several specs need them.
+
+## Candidate qualification matrix
+
+`make test-e2e-release-preview-openbao` runs every OpenBao row in
+`.ci/versions.yaml`. Set `E2E_OPENBAO_VERSION=2.6.3` or `2.7.0` to select one.
+`make test-e2e-release-preview-kind` runs the Kubernetes rows against the primary
+OpenBao version. Set `E2E_KUBERNETES_LINE` to select one Kubernetes minor.
+
+Reports include console output for each version and lane. Go test lanes use
+JSON events and fail if no tests pass or a selected test skips. Ginkgo lanes
+fail when the selection is empty. Version pins and the provider commit identify
+the run; no additional provenance service is needed.
+
+Fresh Harvester lab installations use Raft storage. Existing file-backed lab
+data requires a separate migration before using OpenBao 2.7; changing the
+storage stanza does not migrate data.

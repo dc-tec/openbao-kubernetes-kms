@@ -74,8 +74,16 @@ type lane struct {
 
 type versionsConfig struct {
 	Validation struct {
+		OpenBao struct {
+			PreviewMatrix []openBaoEntry `yaml:"previewMatrix"`
+		} `yaml:"openbao"`
 		Kubernetes kubernetesValidation `yaml:"kubernetes"`
 	} `yaml:"validation"`
+}
+
+type openBaoEntry struct {
+	Version string `yaml:"version" json:"openbao_version"`
+	Image   string `yaml:"image" json:"openbao_image"`
 }
 
 type kubernetesValidation struct {
@@ -108,6 +116,9 @@ func run(args []string) error {
 	manifestPath := flags.String("manifest", defaultManifestPath, "Path to E2E suite manifest")
 	versionsPath := flags.String("versions", "", "Path to version policy file")
 	group := flags.String("group", "", "Release gate group to run")
+	openBaoVersion := flags.String(
+		"openbao-version", os.Getenv("E2E_OPENBAO_VERSION"), "OpenBao version to run (default: all pinned versions)",
+	)
 	kubernetesLine := flags.String(
 		"kubernetes-line",
 		os.Getenv("E2E_KUBERNETES_LINE"),
@@ -156,11 +167,59 @@ func run(args []string) error {
 		}
 		return runKubernetesMatrixLanes(*ginkgoBinary, *artifactDir, manifest.Defaults, lanes, kubernetesEntries, *dryRun)
 	}
-	if *matrix {
-		return fmt.Errorf("-matrix is only supported for the kind release gate group")
-	}
+	return runOpenBaoMatrix(*versionsPath, *openBaoVersion, *ginkgoBinary, *artifactDir,
+		manifest.Defaults, lanes, *matrix, *dryRun)
+}
 
-	return runLanes(*ginkgoBinary, *artifactDir, manifest.Defaults, *group, lanes, nil, *dryRun)
+func runOpenBaoMatrix(
+	versionsPath, selectedVersion, ginkgoBinary, artifactDir string,
+	defaults suiteDefaults, lanes []lane, matrix, dryRun bool,
+) error {
+	entries, err := releaseGateOpenBaoMatrix(versionsPath, selectedVersion)
+	if err != nil {
+		return err
+	}
+	if matrix {
+		return json.NewEncoder(os.Stdout).Encode(struct {
+			Include []openBaoEntry `json:"include"`
+		}{entries})
+	}
+	for _, entry := range entries {
+		if err := os.Setenv("E2E_OPENBAO_IMAGE", entry.Image); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "OpenBao %s: %s\n", entry.Version, entry.Image)
+		reportDir := filepath.Join(artifactDir, entry.Version)
+		if err := runLanes(ginkgoBinary, reportDir, defaults, "openbao", lanes, nil, dryRun); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func releaseGateOpenBaoMatrix(versionsPath, selectedVersion string) ([]openBaoEntry, error) {
+	cfg, err := loadVersions(versionsPath)
+	if err != nil {
+		return nil, err
+	}
+	var entries []openBaoEntry
+	seen := make(map[string]bool)
+	for _, entry := range cfg.Validation.OpenBao.PreviewMatrix {
+		if entry.Version == "" || !strings.Contains(entry.Image, ":"+entry.Version+"@sha256:") {
+			return nil, fmt.Errorf("OpenBao matrix entry must include version and pinned image: %q", entry.Version)
+		}
+		if seen[entry.Version] {
+			return nil, fmt.Errorf("duplicate OpenBao version %q", entry.Version)
+		}
+		seen[entry.Version] = true
+		if selectedVersion == "" || selectedVersion == entry.Version {
+			entries = append(entries, entry)
+		}
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no OpenBao matrix entry for version %q", selectedVersion)
+	}
+	return entries, nil
 }
 
 func loadManifest(path string) (suitesManifest, error) {
@@ -356,7 +415,47 @@ func runLanes(
 		if closeErr != nil {
 			return fmt.Errorf("close console log for lane %q: %w", entry.ID, closeErr)
 		}
+		if entry.RunRegex != "" {
+			if err := validateGoTestResults(filepath.Join(command.ReportDir, "console.log")); err != nil {
+				return fmt.Errorf("lane %q: %w", entry.ID, err)
+			}
+		}
 	}
+	return nil
+}
+
+// A successful process exit is insufficient when the selected tests skip or do not exist.
+func validateGoTestResults(path string) error {
+	raw, err := os.ReadFile(path) // #nosec G304 -- reads the report just produced by this runner.
+	if err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	passed := 0
+	for {
+		var event struct {
+			Action string
+			Test   string
+		}
+		if err := decoder.Decode(&event); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return fmt.Errorf("read Go test results: %w", err)
+		}
+		if event.Test == "" {
+			continue
+		}
+		switch event.Action {
+		case "pass":
+			passed++
+		case "skip", "fail":
+			return fmt.Errorf("required test %s: %s", event.Test, event.Action)
+		}
+	}
+	if passed == 0 {
+		return errors.New("no selected tests passed")
+	}
+	fmt.Fprintf(os.Stderr, "Passed %d tests; no skips\n", passed)
 	return nil
 }
 
@@ -414,11 +513,18 @@ func buildLaneCommand(
 
 	reportDir := laneReportDir(artifactDir, group, entry.ID, kubernetesEntry)
 	args := buildGinkgoArgs(entry, packagePath, timeout, parallelNodes, reportDir)
+	binary := ginkgoBinary
+	if entry.RunRegex != "" {
+		binary = envDefault("GO", "go")
+		args = []string{
+			"test", "-json", "-tags=e2e", "-count=1", "-timeout=" + timeout, "-run=" + entry.RunRegex, packagePath,
+		}
+	}
 	env, err := laneEnvironment(os.Environ(), entry, kubernetesEntry, validateEnv)
 	if err != nil {
 		return laneCommand{}, err
 	}
-	return laneCommand{Binary: ginkgoBinary, Args: args, Env: env, ReportDir: reportDir}, nil
+	return laneCommand{Binary: binary, Args: args, Env: env, ReportDir: reportDir}, nil
 }
 
 func validateGinkgoBinary(ginkgoBinary string, validate bool) error {
@@ -481,6 +587,7 @@ func buildGinkgoArgs(
 	args := []string{
 		"--tags=e2e",
 		"--timeout=" + timeout,
+		"--fail-on-empty",
 	}
 	if entry.RunRegex == "" {
 		args = append(args,

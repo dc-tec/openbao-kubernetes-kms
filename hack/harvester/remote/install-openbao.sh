@@ -1,13 +1,19 @@
 #!/bin/sh
 set -eu
 
-OPENBAO_VERSION="${OPENBAO_VERSION:-2.6.0}"
+OPENBAO_VERSION="${OPENBAO_VERSION:-2.7.0}"
 OPENBAO_ARCH="${OPENBAO_ARCH:-x86_64}"
 OPENBAO_IP="${OPENBAO_IP:?OPENBAO_IP is required}"
 OPENBAO_TLS_SERVER_NAME="${OPENBAO_TLS_SERVER_NAME:-obk-openbao-1}"
 OPENBAO_LAB_DIR="${OPENBAO_LAB_DIR:-/root/openbao-kms-lab}"
 
 export DEBIAN_FRONTEND=noninteractive
+
+# Changing the storage stanza does not migrate an existing file datastore.
+if [ -f /etc/openbao.d/openbao.hcl ] && grep -Eq 'storage[[:space:]]+"file"' /etc/openbao.d/openbao.hcl; then
+	echo 'Migrate the existing file-backed lab datastore to Raft before running this installer.' >&2
+	exit 1
+fi
 
 apt-get update
 apt-get install -y ca-certificates curl jq openssl tar
@@ -54,8 +60,9 @@ api_addr = "https://${OPENBAO_IP}:8200"
 cluster_addr = "https://${OPENBAO_IP}:8201"
 disable_mlock = true
 
-storage "file" {
+storage "raft" {
   path = "/var/lib/openbao/data"
+  node_id = "openbao-lab"
 }
 
 listener "tcp" {
