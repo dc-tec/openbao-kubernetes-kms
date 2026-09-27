@@ -216,6 +216,18 @@ make -C hack/harvester verify-decrypt-warmup
 make -C hack/harvester verify-decrypt-cold-start
 ```
 
+`verify-upgrade-rollback` uses the digest-pinned published provider from
+`validation.provider.upgradeBaselineImage` in `.ci/versions.yaml` as its old
+version. Docker pulls its Linux amd64 image. The systemd check extracts that
+image's binary without starting a container; the static-pod check transfers
+the same image. Only the candidate is built from the current checkout. The
+checks reject identical baseline and candidate artifacts before deployment.
+They retain configuration and state across baseline, candidate, and rollback,
+wait for the selected static-pod image under a unique run tag, and restart
+each API server before checking encrypted Secret readback to clear its caches.
+This target requires a running lab and changes both provider deployments;
+local harness tests do not qualify a VM upgrade.
+
 Set `HARVESTER_LOAD_SECRET_COUNT` to change the load-smoke size. The default is
 `25` Secrets per kubeadm cluster. These targets must remain local-only and must
 not be added to public pull-request CI.

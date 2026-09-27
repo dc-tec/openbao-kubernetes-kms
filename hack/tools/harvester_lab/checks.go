@@ -1908,6 +1908,8 @@ func labVerifyUpgradeRollback(ctx context.Context, cfg *labConfig, _ []string) e
 	if _, err := requireProviderInputs(cfg); err != nil {
 		return err
 	}
+	fmt.Printf("provider upgrade baseline: %s; candidate commit: %s\n",
+		cfg.providerBaselineImage, gitShortCommit(ctx, cfg))
 	if err := verifySystemdUpgradeRollback(ctx, cfg); err != nil {
 		return err
 	}
@@ -2197,10 +2199,13 @@ func verifySystemdUpgradeRollback(ctx context.Context, cfg *labConfig) error {
 	check := kubeadmChecks(cfg)[0]
 	oldBinary := filepath.Join(cfg.providerAssetDir, "bao-kms-provider-upgrade-old")
 	newBinary := filepath.Join(cfg.providerAssetDir, "bao-kms-provider-upgrade-new")
-	if err := buildProviderBinaryAt(ctx, cfg, "harvester-lab-upgrade-old", oldBinary); err != nil {
+	if err := extractProviderBaseline(ctx, cfg, oldBinary); err != nil {
 		return err
 	}
 	if err := buildProviderBinaryAt(ctx, cfg, "harvester-lab-upgrade-new", newBinary); err != nil {
+		return err
+	}
+	if err := requireDifferentBinaries(oldBinary, newBinary); err != nil {
 		return err
 	}
 	if err := applySystemdBinary(ctx, cfg, check, oldBinary, "old"); err != nil {
@@ -2253,7 +2258,8 @@ func applySystemdBinary(
 	if err := waitProviderReady(ctx, cfg, check.host); err != nil {
 		return err
 	}
-	return waitAPIServer(ctx, cfg, check.kubeconfig)
+	// Clear the API server's data and DEK caches before checking this release.
+	return restartAPIServer(ctx, cfg, check)
 }
 
 type trackedSecret struct {
@@ -2285,19 +2291,21 @@ func createTrackedSecret(
 
 func verifyStaticPodUpgradeRollback(ctx context.Context, cfg *labConfig) error {
 	check := kubeadmChecks(cfg)[1]
-	oldImage := imageWithTag(cfg.providerImage, "harvester-lab-upgrade-old")
-	newImage := imageWithTag(cfg.providerImage, "harvester-lab-upgrade-new")
+	// Unique tags prevent a container from an earlier run satisfying the image wait.
+	runID := strconv.FormatInt(time.Now().UnixNano(), 10)
+	oldImage := imageWithTag(cfg.providerImage, "harvester-lab-upgrade-old-"+runID)
+	newImage := imageWithTag(cfg.providerImage, "harvester-lab-upgrade-new-"+runID)
 	oldTar := filepath.Join(cfg.providerAssetDir, "bao-kms-provider-image-upgrade-old.tar")
 	newTar := filepath.Join(cfg.providerAssetDir, "bao-kms-provider-image-upgrade-new.tar")
 	oldManifest := filepath.Join(cfg.providerAssetDir, "bao-kms-provider-upgrade-old.yaml")
 	newManifest := filepath.Join(cfg.providerAssetDir, "bao-kms-provider-upgrade-new.yaml")
-	if err := buildProviderImage(ctx, cfg, oldImage, "harvester-lab-upgrade-old"); err != nil {
-		return err
-	}
-	if err := runCmd(ctx, cfg, "docker", "save", oldImage, "-o", oldTar); err != nil {
+	if err := saveProviderBaseline(ctx, cfg, oldImage, oldTar); err != nil {
 		return err
 	}
 	if err := buildProviderImage(ctx, cfg, newImage, "harvester-lab-upgrade-new"); err != nil {
+		return err
+	}
+	if err := requireDifferentImages(ctx, cfg, oldImage, newImage); err != nil {
 		return err
 	}
 	if err := runCmd(ctx, cfg, "docker", "save", newImage, "-o", newTar); err != nil {
@@ -2309,7 +2317,7 @@ func verifyStaticPodUpgradeRollback(ctx context.Context, cfg *labConfig) error {
 	if err := writeStaticPodManifestForImage(cfg, newManifest, newImage); err != nil {
 		return err
 	}
-	if err := applyStaticPodRelease(ctx, cfg, check, oldTar, oldManifest, "old"); err != nil {
+	if err := applyStaticPodRelease(ctx, cfg, check, oldTar, oldManifest, oldImage, "old"); err != nil {
 		return err
 	}
 	oldSecret, oldCleanup, err := createTrackedSecret(ctx, cfg, check, "upgrade-static-old")
@@ -2317,7 +2325,7 @@ func verifyStaticPodUpgradeRollback(ctx context.Context, cfg *labConfig) error {
 		return err
 	}
 	defer oldCleanup()
-	if err := applyStaticPodRelease(ctx, cfg, check, newTar, newManifest, "new"); err != nil {
+	if err := applyStaticPodRelease(ctx, cfg, check, newTar, newManifest, newImage, "new"); err != nil {
 		return err
 	}
 	newSecret, newCleanup, err := createTrackedSecret(ctx, cfg, check, "upgrade-static-new")
@@ -2328,7 +2336,7 @@ func verifyStaticPodUpgradeRollback(ctx context.Context, cfg *labConfig) error {
 	if err := verifyRemoteSecretEnvelope(ctx, cfg, check.host, oldSecret.name, oldSecret.path); err != nil {
 		return err
 	}
-	if err := applyStaticPodRelease(ctx, cfg, check, oldTar, oldManifest, "rollback"); err != nil {
+	if err := applyStaticPodRelease(ctx, cfg, check, oldTar, oldManifest, oldImage, "rollback"); err != nil {
 		return err
 	}
 	if err := verifyRemoteSecretEnvelope(ctx, cfg, check.host, oldSecret.name, oldSecret.path); err != nil {
@@ -2355,6 +2363,7 @@ func applyStaticPodRelease(
 	check kubeadmCheck,
 	imageTar string,
 	manifest string,
+	image string,
 	label string,
 ) error {
 	if err := ensureRemoteProviderAssetDir(ctx, cfg, check.host); err != nil {
@@ -2374,10 +2383,13 @@ func applyStaticPodRelease(
 	if err := sshLab(ctx, cfg, check.host, command); err != nil {
 		return err
 	}
+	if err := waitStaticPodImage(ctx, cfg, check.host, image); err != nil {
+		return err
+	}
 	if err := waitProviderReady(ctx, cfg, check.host); err != nil {
 		return err
 	}
-	return waitAPIServer(ctx, cfg, check.kubeconfig)
+	return restartAPIServer(ctx, cfg, check)
 }
 
 func ensureRemoteProviderAssetDir(ctx context.Context, cfg *labConfig, host string) error {
