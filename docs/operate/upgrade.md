@@ -8,6 +8,13 @@ verifiedBy:
   - test/e2e/provider_upgrade_test.go
 ---
 
+`0.1.0-preview.3` requires a fresh disposable installation. Do not use this
+procedure to upgrade an earlier preview: its unbound registry state is rejected.
+Keep the old state, checkpoint, and key material intact. See
+[Compatibility](/docs/reference/compatibility/#preview3-fresh-installation-boundary).
+
+Use the procedure below only when the target release documents support for
+the installed release's configuration and persisted state.
 Every provider sits on its API server's boot path, so upgrade one control-plane
 node at a time and confirm each one before moving on. For wire-format promises
 between releases, see [Reference: Compatibility](/docs/reference/compatibility/).
@@ -54,7 +61,8 @@ After the last node, confirm every node reports the same `key_id` hash.
 
 ## Roll back
 
-Roll back only if the older release can read every `key_id`, annotation, and
+Roll back only if the older release can read the current registry schema and
+every `key_id`, annotation, and
 AAD format now in etcd; otherwise decryption fails with unknown `key_id`
 errors. Never roll back when:
 

@@ -154,6 +154,11 @@ func runDoctor(
 		return report, cli.WithExitCode(cli.ExitConfig, errors.New("doctor config validation failed"))
 	}
 	report.Pass(checkConfigValidate, "Config validation", "local configuration is syntactically safe")
+	if _, err := loadConfiguredRegistryState(cfg); err != nil && !errors.Is(err, keyregistry.ErrStateNotFound) {
+		report.Fail(checkRegistryState, "Registry state", safeMessage(err))
+		report.Skip(checkOpenBaoAuth, openBaoAuthCheckName(cfg), "local registry validation failed")
+		return report, nil
+	}
 
 	if _, err := lookupGroupID(cfg.Server.SocketGroup); err != nil {
 		report.Fail(checkSocketGroup, "Socket group", safeMessage(err))
@@ -175,6 +180,7 @@ func runDoctor(
 	}
 	diag, ok := runTransitDiagnostics(ctx, &report, cfg, clients.transitClient, true)
 	if ok {
+		checkRegistryVersionRestrictions(&report, cfg, diag.profile)
 		checkStatusEncryptConsistency(ctx, &report, diag.state, info)
 	}
 	return report, nil
@@ -566,7 +572,7 @@ func checkKeyIDDeterminism(
 	cfg config.Config,
 	profile openbao.KeyProfile,
 ) (keyregistry.StateFile, keyregistry.KeySnapshot, bool) {
-	observer, err := status.NewObserver(snapshotScope(cfg), rotationPolicy(cfg))
+	observer, err := newRotationObserver(cfg)
 	if err != nil {
 		report.Fail(checkKeyIDDeterministic, "Key ID determinism", safeMessage(err))
 		return keyregistry.StateFile{}, keyregistry.KeySnapshot{}, false
@@ -657,7 +663,7 @@ func diagnosticPluginVersion(info version.Info) string {
 }
 
 func checkRegistryVersionRestrictions(report *cli.Report, cfg config.Config, profile openbao.KeyProfile) {
-	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
+	loaded, err := loadConfiguredRegistryState(cfg)
 	if errors.Is(err, keyregistry.ErrStateNotFound) {
 		assessment := status.AssessAutoBootstrapState(profile)
 		report.Warn(
@@ -739,8 +745,13 @@ func checkLatestVersionRestrictions(report *cli.Report, profile openbao.KeyProfi
 	report.Pass(checkVersionRestrictions, "Transit version restrictions", "latest Transit version is usable")
 }
 
-func snapshotScope(cfg config.Config) status.SnapshotScope {
-	return status.SnapshotScope{
+func newRotationObserver(cfg config.Config) (*status.Observer, error) {
+	fingerprint, err := config.IdentityFingerprint(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return status.NewObserver(status.SnapshotScope{
+		IdentityFingerprint: fingerprint,
 		ProviderName:        cfg.Transit.KeyIDScope.ProviderName,
 		ClusterID:           cfg.Transit.KeyIDScope.ClusterID,
 		OpenBaoInstanceID:   cfg.OpenBao.InstanceID,
@@ -748,7 +759,7 @@ func snapshotScope(cfg config.Config) status.SnapshotScope {
 		TransitMountID:      cfg.Transit.KeyIDScope.TransitMountID,
 		TransitKeyLineageID: cfg.Transit.KeyIDScope.KeyLineageID,
 		AADMode:             keyregistry.AADModeRequired,
-	}
+	}, rotationPolicy(cfg))
 }
 
 func rotationPolicy(cfg config.Config) status.RotationPolicy {

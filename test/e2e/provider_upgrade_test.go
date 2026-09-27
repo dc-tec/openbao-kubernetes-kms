@@ -34,21 +34,27 @@ func TestProviderBinaryUpgradeRollbackE2E(t *testing.T) {
 		ProviderImage: oldImage,
 	})
 	oldSampleEnv := []string{kmsSamplePathEnv + "=" + oldBinarySamplePath}
-	newSampleEnv := []string{kmsSamplePathEnv + "=" + newBinarySamplePath}
-
 	stack.runClientWithEnv(ctx, "old-write-client", kmsClientModeWriteSample, sampleReadWrite, oldSampleEnv)
-	peer := startRotationPeer(t, ctx, stack)
+	runDocker(t, ctx, dockerPath, "stop", stack.providerName)
+	before := providerPersistenceHashes(t, ctx, stack)
 
 	stack.restartProvider(ctx, newImage)
-	stack.runClientWithEnv(ctx, "new-read-old-client", kmsClientModeReadSample, sampleReadOnly, oldSampleEnv)
-	stack.runClientWithEnv(ctx, "new-write-client", kmsClientModeWriteSample, sampleReadWrite, newSampleEnv)
-	stack.runClientWithEnv(ctx, "new-read-new-client", kmsClientModeReadSample, sampleReadOnly, newSampleEnv)
-
-	peer.runClientWithEnv(ctx, "mixed-read-new", kmsClientModeReadSample, sampleReadOnly, newSampleEnv)
-	peer.runClientWithEnv(ctx, "mixed-read-old", kmsClientModeReadSample, sampleReadOnly, oldSampleEnv)
+	exitCtx, exitCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer exitCancel()
+	exitCode, err := runDockerOutput(exitCtx, dockerPath, "wait", stack.providerName)
+	if err != nil || strings.TrimSpace(exitCode) == "0" {
+		t.Fatalf("candidate did not reject legacy state: exit=%q err=%v", exitCode, err)
+	}
+	if !strings.Contains(dockerLogs(ctx, dockerPath, stack.providerName), legacyStateRejection) {
+		t.Fatal("candidate failed without the expected legacy-state rejection")
+	}
+	doctorOutput := stack.runProviderCLIExpectFailure(ctx, "legacy-doctor", "doctor", "--config", containerConfigPath)
+	assertOutputContains(t, doctorOutput, "[fail] registry.state", legacyStateRejection)
+	if after := providerPersistenceHashes(t, ctx, stack); after != before {
+		t.Fatal("rejected upgrade changed legacy registry or checkpoint")
+	}
 	stack.restartProvider(ctx, oldImage)
 	stack.runClientWithEnv(ctx, "rollback-read-old-client", kmsClientModeReadSample, sampleReadOnly, oldSampleEnv)
-	stack.runClientWithEnv(ctx, "rollback-read-new-client", kmsClientModeReadSample, sampleReadOnly, newSampleEnv)
 }
 
 func requireProviderImageVersionsDiffer(
@@ -80,4 +86,17 @@ func providerImageVersion(t *testing.T, ctx context.Context, dockerPath string, 
 		t.Fatalf("provider image %s returned empty version output", image)
 	}
 	return trimmed
+}
+
+const legacyStateRejection = "preview.3 requires fresh bound state"
+
+func providerPersistenceHashes(t *testing.T, ctx context.Context, stack *providerFailureStack) string {
+	t.Helper()
+	output, err := runDockerOutput(ctx, stack.dockerPath, "run", "--rm", "--user", "0:0",
+		"--entrypoint", "sha256sum", "--volume", stack.volumes.state+":/state:ro", stack.openBaoImage,
+		"/state/key-registry.json", "/state/key-registry.json.checkpoint")
+	if err != nil || strings.TrimSpace(output) == "" {
+		t.Fatalf("hash provider persistence: %v", err)
+	}
+	return output
 }

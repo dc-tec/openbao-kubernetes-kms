@@ -235,19 +235,7 @@ func buildStatusRuntime(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	observer, err := status.NewObserver(status.SnapshotScope{
-		ProviderName:        cfg.Transit.KeyIDScope.ProviderName,
-		ClusterID:           cfg.Transit.KeyIDScope.ClusterID,
-		OpenBaoInstanceID:   cfg.OpenBao.InstanceID,
-		OpenBaoNamespace:    cfg.OpenBao.Namespace,
-		TransitMountID:      cfg.Transit.KeyIDScope.TransitMountID,
-		TransitKeyLineageID: cfg.Transit.KeyIDScope.KeyLineageID,
-		AADMode:             keyregistry.AADModeRequired,
-	}, status.RotationPolicy{
-		ActivationDelay:               cfg.Rotation.ActivationDelay,
-		RequireStableObservationCount: cfg.Rotation.RequireStableObservationCount,
-		RejectVersionRollback:         cfg.Rotation.RejectVersionRollback,
-	})
+	observer, err := newRotationObserver(cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}

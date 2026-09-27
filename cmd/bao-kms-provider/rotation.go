@@ -91,7 +91,7 @@ func newVerifyRotationCommand(runtimeConfig *config.Runtime, configPath *string)
 
 func buildRotationReport(ctx context.Context, cfg config.Config, name string) (rotationReport, error) {
 	report := rotationReport{Name: name, RotationState: status.RotationStateUnknown, TransitMetadataStatus: cli.CheckSkip}
-	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
+	loaded, err := loadConfiguredRegistryState(cfg)
 	if err != nil && !errors.Is(err, keyregistry.ErrStateNotFound) {
 		return rotationReport{}, err
 	}
@@ -157,7 +157,7 @@ func applyTransitProfileToRotationReport(
 				assessment.Reason,
 			)
 		}
-		observer, observerErr := status.NewObserver(snapshotScope(cfg), rotationPolicy(cfg))
+		observer, observerErr := newRotationObserver(cfg)
 		if observerErr != nil {
 			return rotationReport{}, observerErr
 		}

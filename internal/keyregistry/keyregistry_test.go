@@ -253,7 +253,7 @@ func TestNormalizeRejectsMismatchedKeyID(t *testing.T) {
 func TestStateFileRoundTrip(t *testing.T) {
 	active := loadGoldenFixture(t).Snapshot.keySnapshot()
 	historical := historicalSnapshot(active)
-	state, err := keyregistry.NewStateFile(active, []keyregistry.KeySnapshot{historical}, 1, "")
+	state, err := keyregistry.NewStateFile(active, []keyregistry.KeySnapshot{historical}, 1, "", testIdentityFingerprint)
 	if err != nil {
 		t.Fatalf("new state file: %v", err)
 	}
@@ -327,6 +327,7 @@ func TestStateFileRegistryIncludesPendingAndExcludesRejectedSnapshots(t *testing
 		},
 		1,
 		"",
+		testIdentityFingerprint,
 	)
 	if err != nil {
 		t.Fatalf("new state file: %v", err)
@@ -356,7 +357,9 @@ func TestMissingStateFileCanBeRebuiltFromMetadata(t *testing.T) {
 		t.Fatalf("expected missing state error, got %v", err)
 	}
 
-	state, err := keyregistry.RebuildStateFromMetadata(active, []keyregistry.KeySnapshot{historical})
+	state, err := keyregistry.RebuildStateFromMetadata(
+		active, []keyregistry.KeySnapshot{historical}, testIdentityFingerprint,
+	)
 	if err != nil {
 		t.Fatalf("rebuild state from metadata: %v", err)
 	}
@@ -386,6 +389,7 @@ func TestStateFileFromRecordsPreservesRotationObservationState(t *testing.T) {
 		[]keyregistry.SnapshotStateRecord{record},
 		7,
 		"",
+		testIdentityFingerprint,
 	)
 	if err != nil {
 		t.Fatalf("new state from records: %v", err)
@@ -415,6 +419,7 @@ func TestStateFileFromRecordsRejectsInvalidRotationObservationState(t *testing.T
 		[]keyregistry.SnapshotStateRecord{record},
 		7,
 		"",
+		testIdentityFingerprint,
 	)
 	if !errors.Is(err, keyregistry.ErrStateCorrupt) {
 		t.Fatalf("expected corrupt observation metadata error, got %v", err)
@@ -455,6 +460,7 @@ func TestStateFileFromRecordsRejectsStrippedStateSurfaces(t *testing.T) {
 				[]keyregistry.SnapshotStateRecord{record},
 				7,
 				"",
+				testIdentityFingerprint,
 			)
 			if err == nil {
 				t.Fatal("expected stripped state surface to be rejected")
@@ -517,7 +523,7 @@ func TestLoadStateFileRejectsHashMismatch(t *testing.T) {
 
 func TestStateReplayAndRollbackDetection(t *testing.T) {
 	active := loadGoldenFixture(t).Snapshot.keySnapshot()
-	previous, err := keyregistry.NewStateFile(active, nil, 1, "")
+	previous, err := keyregistry.NewStateFile(active, nil, 1, "", testIdentityFingerprint)
 	if err != nil {
 		t.Fatalf("new previous state: %v", err)
 	}
@@ -540,7 +546,7 @@ func TestStateReplayAndRollbackDetection(t *testing.T) {
 
 func TestStateCheckpointRejectsRollbackAndSameGenerationHashMismatch(t *testing.T) {
 	active := loadGoldenFixture(t).Snapshot.keySnapshot()
-	previous, err := keyregistry.NewStateFile(active, nil, 1, "")
+	previous, err := keyregistry.NewStateFile(active, nil, 1, "", testIdentityFingerprint)
 	if err != nil {
 		t.Fatalf("new previous state: %v", err)
 	}
@@ -567,7 +573,9 @@ func TestStateCheckpointRejectsRollbackAndSameGenerationHashMismatch(t *testing.
 	alternateActive.TransitVersionCreatedAt = active.TransitVersionCreatedAt.Add(2 * time.Hour)
 	alternateActive.KubernetesKeyID = ""
 	alternateActive.State = keyregistry.StateActive
-	alternate, err := keyregistry.NewStateFile(alternateActive, nil, next.Generation, next.PreviousHash)
+	alternate, err := keyregistry.NewStateFile(
+		alternateActive, nil, next.Generation, next.PreviousHash, testIdentityFingerprint,
+	)
 	if err != nil {
 		t.Fatalf("new alternate state: %v", err)
 	}
@@ -602,7 +610,7 @@ func saveValidStateFile(t *testing.T) string {
 	t.Helper()
 
 	active := loadGoldenFixture(t).Snapshot.keySnapshot()
-	state, err := keyregistry.NewStateFile(active, nil, 1, "")
+	state, err := keyregistry.NewStateFile(active, nil, 1, "", testIdentityFingerprint)
 	if err != nil {
 		t.Fatalf("new state file: %v", err)
 	}

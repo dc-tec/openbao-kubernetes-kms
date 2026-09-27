@@ -33,11 +33,11 @@ Kind and kubectl.
 | Load soak | `make test-e2e-provider-load-soak-openbao-ci` | Sustained Status, Encrypt, and Decrypt with resource checks. |
 | OpenBao restore | `make test-e2e-provider-restore-openbao-ci` | Backend replacement and raft snapshot restore with old ciphertext readback. |
 | Transit rotation | `make test-e2e-provider-rotation-openbao-ci` | Two-node promotion, pending decrypt and discovery, minimum versions, retirement, writer lock, and rollback rejection. |
-| Upgrade and rollback | `make test-e2e-provider-upgrade-rollback-openbao-ci` | Old and new images over one state volume. |
+| Upgrade and rollback | `make test-e2e-provider-upgrade-rollback-openbao-ci` | Published preview.2 state rejection, file preservation, and readback after returning to preview.2. |
 | Kind smoke | `make test-e2e-kind-smoke` | Real API server encryption, raw etcd envelopes, restart, and readback. |
 | Kind OAuth | `make test-e2e-kind-oauth2` | Pinned Keycloak, OpenBao OIDC discovery, generated provider static pod, both client authentication methods, secret rotation, issuer outage, and recovery while the protected API is stopped. Auth-failure waits include the full maximum token TTL, two probe intervals, two login timeouts, and five seconds of scheduling margin. Status, Encrypt, and Decrypt rejection assertions remain required. |
 | Kind convergence | `make test-e2e-kind-convergence` | Three API servers converge through node-local providers. |
-| Kind upgrade | `make test-e2e-kind-upgrade-rollback` | Static pod upgrade and rollback with old Secret readback. |
+| Kind upgrade | `make test-e2e-kind-upgrade-rollback` | Static pod preview.2 upgrade rejection and cold readback after returning to preview.2. |
 | Kind DR runbook | `make test-e2e-kind-dr-runbook` | Raft restore, provider state rehydration, API server restart, and readback. |
 
 `make test-e2e` runs every enabled spec selected by labels. Soak lanes are
@@ -128,11 +128,13 @@ storage stanza does not migrate data.
 
 ## Upgrade and soak qualification
 
-The provider upgrade lane pulls the published image pinned by
-`validation.provider.upgradeBaselineImage`. It reuses the same configuration,
-registry, and checkpoint through upgrade and rollback, and checks reads through
-a peer running the old release. The Kind lane changes the actual static-pod
-image and restarts the API server after each transition before reading Secrets.
+The provider upgrade lane pulls the published preview.2 image pinned by
+`validation.provider.upgradeBaselineImage`. The candidate must reject its
+unbound state without changing the registry or checkpoint. Returning to
+preview.2 must read the original ciphertext. The Kind lane performs the same
+rejected transition with actual static pods, then restarts the API server to
+clear caches before checking historical Secret reads. Preview.3 requires fresh
+installations; these tests do not establish in-place upgrade support.
 
 Run `make test-e2e-provider-openbao-upgrade` to upgrade the pinned OpenBao
 compatibility version to the primary version with its Raft data intact. This

@@ -34,6 +34,7 @@ func TestFileStateStoreRejectsDivergentAheadState(t *testing.T) {
 	}
 	gap, err := keyregistry.NewStateFileFromRecords(
 		retired.ActiveKeyID, retired.Snapshots, retired.Generation+2, retired.CurrentHash,
+		testIdentityFingerprint,
 	)
 	if err != nil {
 		t.Fatal(err)

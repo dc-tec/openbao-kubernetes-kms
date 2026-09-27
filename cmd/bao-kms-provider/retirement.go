@@ -94,7 +94,7 @@ func runRetirement(
 		}
 		defer func() { _ = lock.Close() }()
 	}
-	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
+	loaded, err := loadConfiguredRegistryState(cfg)
 	if err != nil {
 		return retirementReport{}, err
 	}
@@ -160,7 +160,7 @@ func validateRetirementProfile(cfg config.Config, state keyregistry.StateFile, p
 	if profile.LatestVersion != active.TransitVersion {
 		return fmt.Errorf("retirement requires local active version to equal Transit latest_version")
 	}
-	observer, err := status.NewObserver(snapshotScope(cfg), rotationPolicy(cfg))
+	observer, err := newRotationObserver(cfg)
 	if err != nil {
 		return err
 	}

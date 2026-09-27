@@ -18,6 +18,7 @@ const (
 
 // SnapshotScope contains the identity-bearing inputs used for key_id derivation.
 type SnapshotScope struct {
+	IdentityFingerprint string
 	ProviderName        string
 	ClusterID           string
 	OpenBaoInstanceID   string
@@ -54,6 +55,9 @@ type Observer struct {
 
 // NewObserver validates and returns a rotation observer.
 func NewObserver(scope SnapshotScope, policy RotationPolicy) (*Observer, error) {
+	if err := keyregistry.ValidateIdentityFingerprint(scope.IdentityFingerprint); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrConfigInvalid, err)
+	}
 	if policy.ActivationDelay < 0 {
 		return nil, fmt.Errorf("%w: activation delay must not be negative", ErrConfigInvalid)
 	}
@@ -110,7 +114,9 @@ func (o *Observer) RebuildState(profile openbao.KeyProfile, now time.Time) (keyr
 		records = append(records, recordFromSnapshot(snapshot, now, time.Time{}, 0, promotedAt))
 	}
 
-	state, err := keyregistry.NewStateFileFromRecords(activeKeyID, orderedRecords(activeKeyID, records), 1, "")
+	state, err := keyregistry.NewStateFileFromRecords(
+		activeKeyID, orderedRecords(activeKeyID, records), 1, "", o.scope.IdentityFingerprint,
+	)
 	if err != nil {
 		return keyregistry.StateFile{}, err
 	}
@@ -344,6 +350,9 @@ func (o *Observer) intermediateHistoricalRecords(
 }
 
 func (o *Observer) validateStateScope(state keyregistry.StateFile) error {
+	if state.IdentityFingerprint != o.scope.IdentityFingerprint {
+		return fmt.Errorf("%w: persisted configuration identity differs from current configuration", ErrConfigInvalid)
+	}
 	for _, record := range state.Snapshots {
 		snapshot, err := record.Snapshot()
 		if err != nil {
@@ -634,6 +643,7 @@ func nextStateFromRecords(
 		orderedRecords(activeKeyID, records),
 		previous.Generation+1,
 		previous.CurrentHash,
+		previous.IdentityFingerprint,
 	)
 	if err != nil {
 		return keyregistry.StateFile{}, err

@@ -77,6 +77,7 @@ func TestStateFileRejectsPersistedMismatchedKeyID(t *testing.T) {
 		[]keyregistry.SnapshotStateRecord{record},
 		1,
 		"",
+		testIdentityFingerprint,
 	)
 	if err == nil {
 		t.Fatal("expected persisted snapshot with mismatched embedded key_id to fail closed")

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	stateFileVersion       = "keyregistry.openbao-kms/v1alpha1"
+	stateFileVersion       = "keyregistry.openbao-kms/v1alpha2"
 	stateCheckpointVersion = "keyregistry.openbao-kms/checkpoint/v1alpha1"
 	stateHashPrefix        = "krs1."
 	stateFileMode          = os.FileMode(0o640)
@@ -35,12 +35,13 @@ var (
 
 // StateFile contains the non-secret local registry state persisted across restarts.
 type StateFile struct {
-	SchemaVersion string                `json:"schemaVersion"`
-	Generation    uint64                `json:"generation"`
-	PreviousHash  string                `json:"previousHash,omitempty"`
-	CurrentHash   string                `json:"currentHash"`
-	ActiveKeyID   string                `json:"activeKeyId"`
-	Snapshots     []SnapshotStateRecord `json:"snapshots"`
+	SchemaVersion       string                `json:"schemaVersion"`
+	IdentityFingerprint string                `json:"identityFingerprint"`
+	Generation          uint64                `json:"generation"`
+	PreviousHash        string                `json:"previousHash,omitempty"`
+	CurrentHash         string                `json:"currentHash"`
+	ActiveKeyID         string                `json:"activeKeyId"`
+	Snapshots           []SnapshotStateRecord `json:"snapshots"`
 }
 
 // StateCheckpoint is the small replay anchor saved next to the registry state file.
@@ -81,6 +82,7 @@ func NewStateFile(
 	historical []KeySnapshot,
 	generation uint64,
 	previousHash string,
+	identityFingerprint string,
 ) (StateFile, error) {
 	if generation == 0 {
 		return StateFile{}, fmt.Errorf("state generation must be positive")
@@ -105,11 +107,12 @@ func NewStateFile(
 	}
 
 	state := StateFile{
-		SchemaVersion: stateFileVersion,
-		Generation:    generation,
-		PreviousHash:  previousHash,
-		ActiveKeyID:   normalizedActive.KubernetesKeyID,
-		Snapshots:     records,
+		SchemaVersion:       stateFileVersion,
+		IdentityFingerprint: identityFingerprint,
+		Generation:          generation,
+		PreviousHash:        previousHash,
+		ActiveKeyID:         normalizedActive.KubernetesKeyID,
+		Snapshots:           records,
 	}
 	hash, err := state.computeHash()
 	if err != nil {
@@ -128,6 +131,7 @@ func NewStateFileFromRecords(
 	records []SnapshotStateRecord,
 	generation uint64,
 	previousHash string,
+	identityFingerprint string,
 ) (StateFile, error) {
 	if generation == 0 {
 		return StateFile{}, fmt.Errorf("state generation must be positive")
@@ -149,11 +153,12 @@ func NewStateFileFromRecords(
 	}
 
 	state := StateFile{
-		SchemaVersion: stateFileVersion,
-		Generation:    generation,
-		PreviousHash:  previousHash,
-		ActiveKeyID:   activeKeyID,
-		Snapshots:     normalizedRecords,
+		SchemaVersion:       stateFileVersion,
+		IdentityFingerprint: identityFingerprint,
+		Generation:          generation,
+		PreviousHash:        previousHash,
+		ActiveKeyID:         activeKeyID,
+		Snapshots:           normalizedRecords,
 	}
 	hash, err := state.computeHash()
 	if err != nil {
@@ -167,8 +172,10 @@ func NewStateFileFromRecords(
 }
 
 // RebuildStateFromMetadata creates a restart-safe state from config and Transit metadata when no state exists.
-func RebuildStateFromMetadata(active KeySnapshot, historical []KeySnapshot) (StateFile, error) {
-	return NewStateFile(active, historical, 1, "")
+func RebuildStateFromMetadata(
+	active KeySnapshot, historical []KeySnapshot, identityFingerprint string,
+) (StateFile, error) {
+	return NewStateFile(active, historical, 1, "", identityFingerprint)
 }
 
 // PromoteState creates the next state generation and rejects active key rollback.
@@ -176,7 +183,9 @@ func PromoteState(previous StateFile, active KeySnapshot, historical []KeySnapsh
 	if err := previous.Validate(); err != nil {
 		return StateFile{}, err
 	}
-	next, err := NewStateFile(active, historical, previous.Generation+1, previous.CurrentHash)
+	next, err := NewStateFile(
+		active, historical, previous.Generation+1, previous.CurrentHash, previous.IdentityFingerprint,
+	)
 	if err != nil {
 		return StateFile{}, err
 	}
@@ -274,7 +283,10 @@ func validateObservationMetadata(record SnapshotStateRecord) error {
 // Validate verifies state schema, content, active snapshot, and current hash.
 func (s StateFile) Validate() error {
 	if s.SchemaVersion != stateFileVersion {
-		return fmt.Errorf("%w: unsupported schema version", ErrStateCorrupt)
+		return fmt.Errorf("%w: unsupported registry schema; preview.3 requires fresh bound state", ErrStateCorrupt)
+	}
+	if err := ValidateIdentityFingerprint(s.IdentityFingerprint); err != nil {
+		return err
 	}
 	if s.Generation == 0 {
 		return fmt.Errorf("%w: generation must be positive", ErrStateCorrupt)
@@ -341,6 +353,9 @@ func ValidateStateProgress(previous StateFile, next StateFile) error {
 	}
 	if err := next.Validate(); err != nil {
 		return err
+	}
+	if next.IdentityFingerprint != previous.IdentityFingerprint {
+		return fmt.Errorf("%w: configuration identity changed", ErrStateRollback)
 	}
 	if next.Generation <= previous.Generation {
 		return fmt.Errorf("%w: generation did not increase", ErrStateRollback)
@@ -551,20 +566,22 @@ func saveEncodedFile(path string, encode func(*json.Encoder) error) error {
 }
 
 type stateHashBody struct {
-	SchemaVersion string                `json:"schemaVersion"`
-	Generation    uint64                `json:"generation"`
-	PreviousHash  string                `json:"previousHash,omitempty"`
-	ActiveKeyID   string                `json:"activeKeyId"`
-	Snapshots     []SnapshotStateRecord `json:"snapshots"`
+	SchemaVersion       string                `json:"schemaVersion"`
+	IdentityFingerprint string                `json:"identityFingerprint"`
+	Generation          uint64                `json:"generation"`
+	PreviousHash        string                `json:"previousHash,omitempty"`
+	ActiveKeyID         string                `json:"activeKeyId"`
+	Snapshots           []SnapshotStateRecord `json:"snapshots"`
 }
 
 func (s StateFile) computeHash() (string, error) {
 	body := stateHashBody{
-		SchemaVersion: s.SchemaVersion,
-		Generation:    s.Generation,
-		PreviousHash:  s.PreviousHash,
-		ActiveKeyID:   s.ActiveKeyID,
-		Snapshots:     s.Snapshots,
+		SchemaVersion:       s.SchemaVersion,
+		IdentityFingerprint: s.IdentityFingerprint,
+		Generation:          s.Generation,
+		PreviousHash:        s.PreviousHash,
+		ActiveKeyID:         s.ActiveKeyID,
+		Snapshots:           s.Snapshots,
 	}
 	canonical, err := json.Marshal(body)
 	if err != nil {

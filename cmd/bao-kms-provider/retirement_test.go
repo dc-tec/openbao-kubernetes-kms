@@ -28,7 +28,7 @@ func prepareRetirement(t *testing.T) (config.Config, keyregistry.StateFile, open
 			Version: 2, CreatedAt: profile.VersionCreationTimes[0].CreatedAt.Add(time.Hour),
 		})
 	})
-	observer, err := status.NewObserver(snapshotScope(cfg), rotationPolicy(cfg))
+	observer, err := newRotationObserver(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,6 +180,7 @@ func TestRetirementConfirmsBehindCheckpointBeforeAdvancing(t *testing.T) {
 			cfg, previous, profile := prepareRetirement(t)
 			ahead, err := keyregistry.NewStateFileFromRecords(
 				previous.ActiveKeyID, previous.Snapshots, previous.Generation+1, previous.CurrentHash,
+				previous.IdentityFingerprint,
 			)
 			if err != nil {
 				t.Fatal(err)

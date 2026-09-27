@@ -1,5 +1,19 @@
 # Unreleased
 
+## Preview.3 installation boundary
+
+`0.1.0-preview.3` requires fresh disposable installations with new Transit keys
+and provider identities. It does not support in-place upgrades from earlier
+previews. Registry schema `v1alpha2` binds the configuration identity
+fingerprint, including the Transit key name and mount path. Older unbound state
+is rejected without rewriting state or checkpoint; do not delete either file
+to bypass the check. KMS key IDs, annotations, and AAD bytes are unchanged.
+
+Checkpoint validation now accepts only the same state or its immediate
+hash-linked successor. Copy the registry and checkpoint together when restoring
+from backup or a healthy peer. A divergent higher-generation registry cannot
+replace a surviving checkpoint.
+
 ## Operator-Controlled Key Retirement
 
 `retire-versions` plans removal of obsolete historical versions from local
@@ -11,8 +25,8 @@ OpenBao minimum versions.
 Normal rotation now rejects loss of accepted active or historical key identities.
 Removed identities remain in hashed state and cannot reappear during later
 rotation. Older binaries that do not recognize `removed` records reject this
-state; upgrade every provider before retirement and do not downgrade afterward
-without a reviewed recovery procedure.
+state. Every node must understand retirement records before retirement begins;
+do not downgrade to a binary that rejects them.
 
 `serve` and retirement share a state writer lock acquired before bootstrap.
 The state directory must be owned by the provider's OS user. Key ID derivation,

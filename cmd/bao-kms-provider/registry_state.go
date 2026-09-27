@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
 )
 
 const (
@@ -21,6 +23,23 @@ type registryStateLoadResult struct {
 	CheckpointStatus     string
 	CheckpointGeneration uint64
 	CheckpointHash       string
+}
+
+func loadConfiguredRegistryState(cfg config.Config) (registryStateLoadResult, error) {
+	loaded, err := loadRegistryStateWithCheckpoint(cfg.State.Path)
+	if err != nil {
+		return loaded, err
+	}
+	fingerprint, err := config.IdentityFingerprint(cfg)
+	if err != nil {
+		return registryStateLoadResult{}, err
+	}
+	if loaded.State.IdentityFingerprint != fingerprint {
+		return registryStateLoadResult{}, fmt.Errorf(
+			"%w: persisted configuration identity differs from current configuration", status.ErrConfigInvalid,
+		)
+	}
+	return loaded, nil
 }
 
 func loadRegistryStateWithCheckpoint(statePath string) (registryStateLoadResult, error) {

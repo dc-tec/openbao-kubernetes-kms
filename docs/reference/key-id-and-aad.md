@@ -112,12 +112,24 @@ Every failure in steps 1 to 5 happens before OpenBao is called.
 ## Local registry state
 
 The registry at `state.path` is a non-secret JSON file with a schema version, a
+configuration identity fingerprint, a
 monotonic generation, the previous and current state hashes, the active
 `key_id`, and every observed and promoted key snapshot. It keeps rotation
 decisions across restarts and lets decryption find historical snapshots
 without asking Transit. An adjacent checkpoint records the last accepted
 generation and hash. Neither file holds key material, plaintext, credentials,
 raw key names, or raw mount paths.
+
+Schema `keyregistry.openbao-kms/v1alpha2` requires the `cfg1.` configuration
+fingerprint, including `transit.mountPath` and `transit.keyName`. The fingerprint
+is covered by the state hash and remains unchanged across rotation and
+retirement. Changing either backend path fails startup even when the new key
+has identical version creation timestamps. These paths do not enter `key_id`
+derivation or canonical AAD; the wire format remains unchanged.
+
+Preview.3 requires fresh installations. It rejects older unbound registry
+schemas without rewriting state or checkpoint. Do not delete the old files to
+bypass this rejection. See [Compatibility](/docs/reference/compatibility/#preview3-fresh-installation-boundary).
 
 The provider checks on load that:
 
