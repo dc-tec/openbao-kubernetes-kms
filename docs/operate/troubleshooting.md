@@ -138,6 +138,24 @@ was deleted, restore it from an OpenBao backup; see
 [Disaster recovery: Transit key loss](/docs/operate/disaster-recovery/#transit-key-loss).
 A recreated key with the same name never decrypts old data.
 
+## Registry state save failed
+
+When `/ready` reports `state_save_failed`, check free space, filesystem errors,
+mount writability, and the state directory's owner and permissions. Repair the
+storage problem while preserving the registry file and its checkpoint. Do not
+delete either file to bypass the error.
+
+The provider retries the exact attempted transition and validates it against
+fresh Transit metadata before restoring readiness. A newer state file with an
+older checkpoint can result from a partial save. Conflicting files remain a
+failure and require investigation; do not replace them with older copies while
+the provider is running. See [Disaster recovery](/docs/operate/disaster-recovery/)
+for recovery with matching state, checkpoint, and Transit evidence.
+
+During the failure, Encrypt is unavailable. Decrypt can still use keys in the
+last published registry. Confirm `/ready` has returned to HTTP 200 and validate
+reads and writes before resuming a rotation.
+
 ## Unknown key ID
 
 **Signs:** decryption is rejected before any Transit call,

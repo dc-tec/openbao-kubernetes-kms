@@ -13,6 +13,9 @@ const messageStatePathRequired = "state path is required"
 type StateStore interface {
 	Load() (keyregistry.StateFile, error)
 	Save(keyregistry.StateFile) error
+	// Recover completes the exact failed save after checking both persisted files.
+	// A nil previous state is allowed only for initial bootstrap.
+	Recover(previous *keyregistry.StateFile, attempted keyregistry.StateFile) error
 }
 
 // FileStateStore persists registry state through the keyregistry state-file implementation.

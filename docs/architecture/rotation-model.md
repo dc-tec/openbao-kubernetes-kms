@@ -124,3 +124,21 @@ changed metadata fails validation and keeps the previous state. A pending
 identity stays retained when a newer candidate supersedes it, and a metadata
 rollback that would drop it fails validation, because another node might
 already have encrypted with it.
+
+## Persistence failures
+
+The provider writes registry state and its replay checkpoint separately. A save
+can fail after the state file has changed. Until recovery completes, Status and
+readiness remain unhealthy, Encrypt stops, and the last published registry
+continues to serve Decrypt for known keys.
+
+The running process retains the exact attempted transition. Before publishing
+another state, it checks that both files contain only the last confirmed state
+or that transition, then repeats the save and its durability barriers. Missing
+confirmed files, conflicting hashes, and unexpected generations fail closed.
+Fresh Transit metadata must validate the recovered state before health returns.
+A recovered promotion also requires a deep probe of the new active key.
+
+Stable observations stop increasing at the configured threshold. During the
+remaining activation delay, unchanged observations update cached metadata health
+without rewriting state. Promotion still requires a successful save.

@@ -618,3 +618,7 @@ func (f *fakeStateStore) Save(state keyregistry.StateFile) error {
 	f.state = state
 	return nil
 }
+
+func (f *fakeStateStore) Recover(_ *keyregistry.StateFile, attempted keyregistry.StateFile) error {
+	return f.Save(attempted)
+}

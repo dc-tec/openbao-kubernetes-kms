@@ -2,6 +2,7 @@ package status
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -222,6 +223,18 @@ func (o *Observer) observeNewerVersion(
 		return ObservationResult{State: promoted, Changed: true, Promoted: true}, nil
 	}
 
+	return pendingObservation(state, records, profile, profile.MinEncryptionVersion > active.TransitVersion)
+}
+
+func pendingObservation(
+	state keyregistry.StateFile, records []keyregistry.SnapshotStateRecord,
+	profile openbao.KeyProfile, encryptionBlocked bool,
+) (ObservationResult, error) {
+	if slices.Equal(state.Snapshots, records) {
+		return ObservationResult{
+			State: state, Pending: true, EncryptionBlocked: encryptionBlocked,
+		}, nil
+	}
 	next, err := nextStateFromRecords(state, state.ActiveKeyID, records)
 	if err != nil {
 		return ObservationResult{}, err
@@ -231,7 +244,7 @@ func (o *Observer) observeNewerVersion(
 	}
 	return ObservationResult{
 		State: next, Changed: true, Pending: true,
-		EncryptionBlocked: profile.MinEncryptionVersion > active.TransitVersion,
+		EncryptionBlocked: encryptionBlocked,
 	}, nil
 }
 
@@ -519,7 +532,7 @@ func upsertPendingRecord(
 		seen[snapshot.KubernetesKeyID] = struct{}{}
 	}
 
-	if advance {
+	if advance && pending.StableObservationCount < stableThreshold {
 		pending.StableObservationCount++
 	}
 	if pending.ObservedAtUnix == 0 {
