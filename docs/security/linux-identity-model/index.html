@@ -44,7 +44,10 @@ the numeric GID from <code>getent group openbao-kms-socket</code> in both
 <code>spec.securityContext.supplementalGroups</code> and <code>server.socketGroup</code>.</p><h2 id=runtime-directory>Runtime directory</h2><p>Create <code>/run/openbao-kms</code> with a <code>tmpfiles.d</code> entry, a privileged install step,
 or a root pre-start helper. <code>RuntimeDirectory=</code> alone can assign the wrong
 group. The provider checks the directory at startup and fails closed if it is
-unsafe.</p><p>Mode <code>2750</code> lets the owner create and remove the socket and lets the socket
+unsafe. The directory must be owned by the provider&rsquo;s effective UID, must not
+be a symlink, and must not allow group or world write. A non-root provider
+therefore cannot use a root-owned runtime directory. Set its owner during
+installation, before starting the provider.</p><p>Mode <code>2750</code> lets the owner create and remove the socket and lets the socket
 group traverse the directory. The setgid bit keeps the socket group stable, and
 the missing group write stops the group from replacing entries. The socket
 itself is <code>0660</code>.</p><h2 id=why-a-separate-socket-group>Why a separate socket group</h2><table><thead><tr><th>Option</th><th>Benefit</th><th>Cost</th></tr></thead><tbody><tr><td>Separate socket group (selected)</td><td>Socket access without credential access; works with non-root API servers; explicit privilege boundary.</td><td>One more group; API server group membership differs per distribution; static pods need the numeric GID.</td></tr><tr><td>Provider primary group equals API server group</td><td>Fewer groups.</td><td>Easy to expose provider files to the API server; distribution-specific group names leak into packaging.</td></tr><tr><td>Root-owned socket directory</td><td>Simple for kubeadm API servers that run as root.</td><td>No non-root story; hides permission problems until hardening.</td></tr></tbody></table><p>Distribution packages can choose other names but must keep the same split

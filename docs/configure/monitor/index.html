@@ -30,7 +30,12 @@ compare the active <code>key_id</code> hash across them:</p><div class=command-b
       - targets:
           - 127.0.0.1:8081</code></pre></div><p>Load the sample rules from <code>deploy/prometheus/rules/openbao-kms.rules.yaml</code>,
 and tune their thresholds to your probe cadence, OpenBao latency, token TTLs,
-and API server restart behavior before paging on them.</p><h2 id=grafana>Grafana</h2><p>Import <code>deploy/grafana/dashboards/openbao-kms-overview.json</code> with a Prometheus
+and API server restart behavior before paging on them.</p><p>The <code>OpenBaoKMSProcessRestarting</code> alert detects at least three observed process
+restarts in 15 minutes. It matches <code>process_start_time_seconds</code> only on targets
+that also expose <code>openbao_kms_build_info</code>. Keep <code>job</code> and <code>instance</code> labels
+stable across restarts. Restarts between scrapes or replacements that change
+these labels can go uncounted. <code>openbao_kms_socket_restarts_total</code> counts stale
+socket cleanup, not process restarts.</p><h2 id=grafana>Grafana</h2><p>Import <code>deploy/grafana/dashboards/openbao-kms-overview.json</code> with a Prometheus
 data source whose UID is <code>Prometheus</code>, or change the UID during import. The
 dashboard shows KMS and OpenBao request rates, errors, and latency, Status
 cache age, token and certificate TTLs, the circuit breaker, the active key

@@ -18,7 +18,7 @@
 <a href=/openbao-kubernetes-kms/docs/configure/>Configure</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
 <span aria-current=page>OpenBao auth and policy</span></nav><aside class="version-notice version-notice-01x" aria-label="Documentation version notice"><strong>0.1.x · Preview</strong>
-<span>Preview release line. Use it for labs, staging, and evaluation; do not protect production control planes with it.</span></aside><article class=doc-article><header class=article-header><h1>OpenBao auth and policy</h1><p class=article-lede>Variants of the default OpenBao setup: policy details and capabilities to avoid, JWKS or pinned JWT keys, certificate auth with PKCS#11, and generating the policy from configuration.</p><p class=page-meta>Updated 27 September 2026 · 3 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#policy>Policy</a></li><li><a href=#jwt-key-sources>JWT key sources</a></li><li><a href=#certificate-auth>Certificate auth</a></li></ul></nav></details><div class=article-content><p><a href=/openbao-kubernetes-kms/docs/get-started/openbao/>Prepare OpenBao</a>
+<span>Preview release line. Use it for labs, staging, and evaluation; do not protect production control planes with it.</span></aside><article class=doc-article><header class=article-header><h1>OpenBao auth and policy</h1><p class=article-lede>Variants of the default OpenBao setup: policy details and capabilities to avoid, JWKS or pinned JWT keys, certificate auth with PKCS#11, and generating the policy from configuration.</p><p class=page-meta>Updated 27 September 2026 · 4 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#policy>Policy</a></li><li><a href=#credential-files>Credential files</a></li><li><a href=#jwt-key-sources>JWT key sources</a></li><li><a href=#certificate-auth>Certificate auth</a></li></ul></nav></details><div class=article-content><p><a href=/openbao-kubernetes-kms/docs/get-started/openbao/>Prepare OpenBao</a>
 sets up the default: a JWT role
 using OIDC discovery and the standard policy. This page covers the variants.
 Commands use the shell variables from
@@ -30,9 +30,14 @@ same OpenBao JWT auth mount and role. OAuth requires an authorization server
 that issues signed JWT access tokens and works independently of the protected
 Kubernetes API.</p><h2 id=policy>Policy</h2><p>The standard policy grants metadata read, encrypt, and decrypt on the key,
 read on <code>&lt;mount>/config/keys</code> so the provider can verify <code>disable_upsert</code>, and
-update on <code>sys/capabilities-self</code> so <code>doctor</code> can check the token.</p><ul><li>Keep <code>auth/token/renew-self</code> when the role sets <code>token_no_default_policy=true</code>
-and the provider renews its token. Drop it if the provider only logs in
-again.</li><li>The provider never calls <code>auth/token/lookup-self</code>; grant it only to separate
+update on <code>sys/capabilities-self</code> so <code>doctor</code> can check the token.</p><ul><li>Generated policies include update on <code>auth/token/renew-self</code>, including when
+the role sets <code>token_no_default_policy=true</code>. Both <code>init</code> and <code>policy openbao</code>
+include this permission by default.</li><li><code>policy openbao --include-token-renewal=false</code> omits that stanza. Use it when
+OpenBao issues non-renewable tokens or another attached policy grants renewal.
+The provider attempts renewal for renewable tokens and logs in again when
+renewal fails. It uses login directly for non-renewable tokens. There is no
+runtime switch for disabling renewal; omitting a permission does not disable
+the attempt.</li><li>The provider never calls <code>auth/token/lookup-self</code>; grant it only to separate
 diagnostic tooling.</li></ul><p>Never grant the provider:</p><ul><li><code>create</code> on <code>&lt;mount>/encrypt/*</code>, which would let an encrypt call create a key,</li><li>write access to key creation, rotation, configuration, or trim paths, which
 belong to operators,</li><li>write access to <code>&lt;mount>/config/keys</code>, which could turn off <code>disable_upsert</code>,</li><li>write access to <code>&lt;mount>/restore</code>, <code>&lt;mount>/restore/&lt;key></code>, or
 <code>&lt;mount>/rewrap/&lt;key></code>,</li><li><code>delete</code> on any key path, <code>read</code> on export or plaintext backup paths, or
@@ -42,6 +47,22 @@ for that. A pass covers only the queried paths; review the whole policy for
 access to other keys or paths.</p><p><code>bao-kms-provider policy openbao</code> prints the standard policy from the active
 configuration; review its paths before applying it. See
 <a href=/openbao-kubernetes-kms/docs/reference/cli/#policy-openbao>Reference: CLI</a>
+.</p><h2 id=credential-files>Credential files</h2><p>JWT files, OAuth client-secret files, and PKCS#11 PIN files must be regular
+files at absolute paths. Symlinks are rejected, including the symlinks commonly
+used by Kubernetes projected volumes. Use mode <code>0600</code>, or <code>0640</code> only with a
+trusted group that needs credential access. Group write, group execute, and
+all world permissions are rejected. Keep parent directories under trusted
+host administration.</p><p>A node-local credential helper must write a new regular file in the same
+private directory, set its owner and permissions, then atomically rename it
+over the configured name. Mount that directory into a container so replacement
+files remain visible; a single-file bind mount keeps the old inode. JWT and
+OAuth credentials are reread before login. The PKCS#11 PIN is read when the
+certificate provider is constructed, so restart the provider after changing it.</p><p>Credential delivery and recovery must work while the protected Kubernetes API
+is unavailable. Copying a projected token into a regular file satisfies the
+file format requirement but does not remove its issuer or renewal dependency.
+See <a href=/openbao-kubernetes-kms/docs/security/auth-model/#jwt-source-options>Security: Auth model</a>
+and
+<a href=/openbao-kubernetes-kms/docs/get-started/static-pod/>Static pod credential delivery</a>
 .</p><h2 id=jwt-key-sources>JWT key sources</h2><p>The default JWT config uses OIDC discovery. To use a JSON Web Key Set URL
 instead, replace <code>&lt;jwks-url></code> with the issuer&rsquo;s key set URL:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao write &#34;auth/${JWT_MOUNT}/config&#34; \
   jwks_url=&#34;&lt;jwks-url&gt;&#34; \
@@ -72,7 +93,7 @@ Keep <code>disable_binding=false</code> so renewal stays tied to the login certi
 service validates the selected auth material during startup. For static pods, mount the certificate chain,
 PIN file, and PKCS#11 module instead of the JWT.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
 <a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
-<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#policy>Policy</a></li><li><a href=#jwt-key-sources>JWT key sources</a></li><li><a href=#certificate-auth>Certificate auth</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/configure/openbao-auth.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#policy>Policy</a></li><li><a href=#credential-files>Credential files</a></li><li><a href=#jwt-key-sources>JWT key sources</a></li><li><a href=#certificate-auth>Certificate auth</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/configure/openbao-auth.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
 <label class=sr-only for=site-search>Search documentation</label>
 <input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
 <button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog></body></html>

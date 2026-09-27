@@ -33,9 +33,12 @@ active, pending, or retired snapshot, checks the annotations and their hashes,
 and rebuilds the AAD before it calls Transit. An unknown <code>key_id</code> triggers one
 rate-limited metadata lookup; new identities are validated and saved before
 they are accepted.</p><p>Failures before the Transit call surface as <code>key_id_unknown</code>,
-<code>key_id_malformed</code>, <code>aad_missing</code>, <code>aad_mismatch</code>, or <code>annotation_invalid</code>; see
+<code>key_id_malformed</code>, <code>aad_mismatch</code>, or <code>annotation_invalid</code>; see
 <a href=/openbao-kubernetes-kms/docs/reference/observability/#error-classes>Reference: Observability</a>
-.</p><h2 id=aad-is-always-required>AAD is always required</h2><p>AAD is always required. The provider has no setting to disable it, and state
+.</p><p>Missing or empty annotations produce <code>annotation_invalid</code>. The retained
+<code>aad_missing</code> class describes an unsupported AAD mode in an internal snapshot.
+Normal configuration and persisted-state validation reject that mode before
+requests are served; it is not the class for a request without annotations.</p><h2 id=aad-is-always-required>AAD is always required</h2><p>AAD is always required. The provider has no setting to disable it, and state
 validation rejects any other mode. Bypassing AAD during an incident would
 reopen every replay above; follow
 <a href=/openbao-kubernetes-kms/docs/operate/troubleshooting/#aad-mismatch>Troubleshooting: AAD mismatch</a>
