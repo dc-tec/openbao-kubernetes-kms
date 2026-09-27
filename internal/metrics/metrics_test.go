@@ -87,6 +87,31 @@ func scrapeMetrics(t *testing.T, handler http.Handler) string {
 
 type fakeStatusProvider struct{}
 
+type mutableStatusProvider struct{ diagnostics status.Diagnostics }
+
+func (p *mutableStatusProvider) DiagnosticsSnapshot() status.Diagnostics { return p.diagnostics }
+
+func TestPersistenceWarningMetricTracksRecovery(t *testing.T) {
+	recorder, err := metrics.NewRecorder()
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &mutableStatusProvider{}
+	if err := recorder.RegisterStatusProvider(provider); err != nil {
+		t.Fatal(err)
+	}
+	for _, degraded := range []bool{false, true, false} {
+		provider.diagnostics.PersistenceDegraded = degraded
+		want := "openbao_kms_rotation_persistence_degraded 0"
+		if degraded {
+			want = "openbao_kms_rotation_persistence_degraded 1"
+		}
+		if output := scrapeMetrics(t, recorder.Handler()); !strings.Contains(output, want) {
+			t.Fatalf("missing persistence gauge: %s", want)
+		}
+	}
+}
+
 func (fakeStatusProvider) DiagnosticsSnapshot() status.Diagnostics {
 	return status.Diagnostics{
 		Healthz:              kmsv2.HealthOK,

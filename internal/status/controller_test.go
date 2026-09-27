@@ -622,3 +622,10 @@ func (f *fakeStateStore) Save(state keyregistry.StateFile) error {
 func (f *fakeStateStore) Recover(_ *keyregistry.StateFile, attempted keyregistry.StateFile) error {
 	return f.Save(attempted)
 }
+
+func (f *fakeStateStore) Confirm(expected keyregistry.StateFile) error {
+	if f.state.CurrentHash != expected.CurrentHash {
+		return keyregistry.ErrStateRollback
+	}
+	return nil
+}

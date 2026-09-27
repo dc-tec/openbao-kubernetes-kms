@@ -20,22 +20,23 @@ type StoreOptions struct {
 
 // Store is the runtime bridge between background probes and KMS v2 request handlers.
 type Store struct {
-	mu                sync.RWMutex
-	clock             Clock
-	maxStaleness      time.Duration
-	healthz           string
-	updatedAt         time.Time
-	metadataOK        bool
-	encryptionBlocked bool
-	deepProbeOK       bool
-	deepProbed        bool
-	metadataFailure   probeFailure
-	deepFailure       probeFailure
-	state             keyregistry.StateFile
-	registry          keyregistry.Registry
-	active            keyregistry.KeySnapshot
-	hasState          bool
-	breaker           CircuitBreakerSnapshot
+	mu                  sync.RWMutex
+	clock               Clock
+	maxStaleness        time.Duration
+	healthz             string
+	updatedAt           time.Time
+	metadataOK          bool
+	encryptionBlocked   bool
+	deepProbeOK         bool
+	deepProbed          bool
+	metadataFailure     probeFailure
+	deepFailure         probeFailure
+	persistenceDegraded bool
+	state               keyregistry.StateFile
+	registry            keyregistry.Registry
+	active              keyregistry.KeySnapshot
+	hasState            bool
+	breaker             CircuitBreakerSnapshot
 }
 
 // NewStore creates an initially unhealthy status cache.
@@ -95,6 +96,7 @@ func (s *Store) PublishHealthy(state keyregistry.StateFile, updatedAt time.Time)
 	s.hasState = true
 	s.metadataOK = true
 	s.metadataFailure = probeFailure{}
+	s.persistenceDegraded = false
 	s.encryptionBlocked = false
 	s.deepProbeOK = true
 	s.deepProbed = true
@@ -124,6 +126,7 @@ func (s *Store) publishMetadata(state keyregistry.StateFile, updatedAt time.Time
 	s.metadataOK = !encryptionBlocked
 	s.encryptionBlocked = encryptionBlocked
 	s.metadataFailure = probeFailure{}
+	s.persistenceDegraded = false
 	if encryptionBlocked {
 		s.metadataFailure = probeFailure{reason: ReasonEncryptionBlocked}
 	}
@@ -149,6 +152,21 @@ func (s *Store) publishMetadataUnhealthy(updatedAt time.Time, failure probeFailu
 	s.metadataFailure = failure
 	s.updateHealthLocked()
 	s.updatedAt = updatedAt.UTC()
+}
+
+func (s *Store) publishDeferredObservation(expectedHash string, updatedAt time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasState || s.state.CurrentHash != expectedHash || !s.deepProbed || !s.deepProbeOK {
+		return false
+	}
+	s.metadataOK = true
+	s.metadataFailure = probeFailure{}
+	s.encryptionBlocked = false
+	s.persistenceDegraded = true
+	s.updatedAt = updatedAt.UTC()
+	s.updateHealthLocked()
+	return true
 }
 
 func (s *Store) publishDeepHealthy() {
@@ -285,6 +303,7 @@ func (s *Store) DiagnosticsSnapshot() Diagnostics {
 	diagnostics.Reasons = s.readinessReasonsLocked(diagnostics.Stale)
 	diagnostics.MetadataErrorClass = s.metadataFailure.errorClass
 	diagnostics.DeepErrorClass = s.deepFailure.errorClass
+	diagnostics.PersistenceDegraded = s.persistenceDegraded
 	return diagnostics
 }
 

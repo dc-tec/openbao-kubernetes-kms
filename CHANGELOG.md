@@ -4,6 +4,11 @@
 
 ### Bug Fixes
 
+- **rotation:** Preserve service during failed observation-only saves when the
+  published keys remain valid and both persistence files are unchanged. Report
+  deferred saves through readiness diagnostics and a persistence warning metric.
+  New identities, promotions, and partial writes still require recovery.
+
 - **rotation:** Reconcile failed state and checkpoint saves before restoring
   readiness. Retain the exact attempted transition and reject conflicting disk
   state. Stop rewriting stable observation counts during the activation delay.

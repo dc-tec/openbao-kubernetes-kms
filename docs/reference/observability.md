@@ -37,6 +37,12 @@ A healthy response has an empty `reasons` list. For example:
 {"status":"unavailable","healthz":"unhealthy","cache_age_ms":120,"stale":false,"rotation_state":"active","reasons":["metadata_read_failed"],"metadata_error_class":"tls_failed"}
 ```
 
+The optional `persistence_degraded: true` field reports a deferred pending
+observation save. Readiness can remain HTTP 200 only while the published keys
+remain validated and both persistence files are confirmed unchanged. The field
+does not override other health failures and clears after successful state
+publication. See [Persistence failures](/docs/architecture/rotation-model/#persistence-failures).
+
 | Reason | Condition or action |
 |---|---|
 | `state_unavailable` | No active registry state is loaded, or metadata cannot safely rebuild missing state. |
@@ -85,6 +91,7 @@ names, request UIDs, and error strings never appear as labels.
 | `openbao_kms_status_cache_age_seconds` | gauge | none | Age of the cached KMS Status response. |
 | `openbao_kms_transit_metadata_observation_total` | counter | `status` | Background Transit metadata probes by outcome. |
 | `openbao_kms_rotation_state` | gauge | `state` | `1` for `active`, `pending`, or `unknown`; see `rotation-plan` for detail. |
+| `openbao_kms_rotation_persistence_degraded` | gauge | none | `1` while an observation-only save is deferred; `0` after successful state publication. Readiness reports current key usability. |
 | `openbao_kms_aad_validation_errors_total` | counter | `reason` | AAD validation failures during decryption. |
 | `openbao_kms_decrypt_key_id_errors_total` | counter | `reason` | Decryptions rejected for an unknown, malformed, or disallowed `key_id`. |
 | `openbao_kms_circuit_breaker_state` | gauge | none | OpenBao client circuit breaker state. |
@@ -134,6 +141,9 @@ not emit promotion events. The new key still needs its deep probe before
 Encrypt becomes available. Probe failures log at warning level with `reason`
 and `error_class`; successful periodic probes remain at debug level.
 
+A deferred observation save logs `reason: state_save_failed` and increments the
+failed metadata-probe counter even when cached KMS Status remains healthy.
+
 ## Error classes
 
 Failed KMS calls carry a bounded `error_class`. Use these classes as alert
@@ -177,6 +187,10 @@ renewal failures, low token TTL, different `key_id` hashes across nodes, a
 rotation stuck pending, AAD or unknown `key_id` errors, encrypt or decrypt
 latency, rising concurrency rejections, restart loops, and stale socket
 reclaims.
+
+Alert when `openbao_kms_rotation_persistence_degraded == 1` persists across
+probes. Repair state storage before the next key transition; healthy readiness
+during a deferred observation save does not mean rotation can continue.
 
 Starting rules ship in `deploy/prometheus/rules/openbao-kms.rules.yaml`. Tune
 their thresholds to your OpenBao latency, probe cadence, token TTLs, and scrape

@@ -16,6 +16,9 @@ type StateStore interface {
 	// Recover completes the exact failed save after checking both persisted files.
 	// A nil previous state is allowed only for initial bootstrap.
 	Recover(previous *keyregistry.StateFile, attempted keyregistry.StateFile) error
+	// Confirm checks that both persisted files still match the confirmed state,
+	// without repairing or writing either file.
+	Confirm(keyregistry.StateFile) error
 }
 
 // FileStateStore persists registry state through the keyregistry state-file implementation.

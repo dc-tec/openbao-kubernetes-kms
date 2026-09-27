@@ -25,6 +25,7 @@ type Diagnostics struct {
 	Reasons                       []HealthReason
 	MetadataErrorClass            string
 	DeepErrorClass                string
+	PersistenceDegraded           bool
 	Healthz                       string
 	UpdatedAt                     time.Time
 	CacheAge                      time.Duration

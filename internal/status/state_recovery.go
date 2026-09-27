@@ -82,3 +82,24 @@ func recoveryStateMatches(
 ) bool {
 	return state.CurrentHash == attempted.CurrentHash || previous != nil && state.CurrentHash == previous.CurrentHash
 }
+
+// Confirm verifies an unchanged, previously durable state/checkpoint pair. The
+// state writer lock must remain held between the failed save and this check.
+func (s FileStateStore) Confirm(expected keyregistry.StateFile) error {
+	if err := expected.Validate(); err != nil {
+		return err
+	}
+	state, _, err := keyregistry.LoadStateFile(s.Path, keyregistry.StateLoadOptions{})
+	if err != nil {
+		return err
+	}
+	checkpoint, err := keyregistry.LoadStateCheckpoint(keyregistry.StateCheckpointPath(s.Path))
+	if err != nil {
+		return err
+	}
+	if state.CurrentHash != expected.CurrentHash || checkpoint.CurrentHash != expected.CurrentHash ||
+		checkpoint.Generation != expected.Generation {
+		return fmt.Errorf("%w: persistence no longer matches the published state", keyregistry.ErrStateRollback)
+	}
+	return nil
+}

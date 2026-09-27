@@ -252,8 +252,7 @@ func (c *Controller) publishObservation(
 ) error {
 	state, hasState, err := c.stateForObservation()
 	if err != nil {
-		return c.metadataFailed(now, ReasonStateSaveFailed,
-			fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, err))
+		return c.stateSaveFailed(now, profile, err)
 	}
 	previous, _ := c.store.Active()
 	var result ObservationResult
@@ -282,8 +281,7 @@ func (c *Controller) publishObservation(
 
 	if result.Changed && c.stateStore != nil {
 		if err := c.saveState(state, hasState, result.State); err != nil {
-			return c.metadataFailed(now, ReasonStateSaveFailed,
-				fmt.Errorf("%w: %s: %w", ErrProbeFailed, messageRegistryStateSave, err))
+			return c.stateSaveFailed(now, profile, err)
 		}
 	}
 	if err := c.store.publishMetadata(result.State, now, result.EncryptionBlocked); err != nil {

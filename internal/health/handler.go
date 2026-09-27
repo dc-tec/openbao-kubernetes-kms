@@ -96,14 +96,15 @@ func readyHandler(probe ReadinessProbe) http.HandlerFunc {
 			return
 		}
 		body := readyBody{
-			Status:             readyStatusFor(diagnostics),
-			Healthz:            diagnostics.Healthz,
-			CacheAgeMs:         diagnostics.CacheAge.Milliseconds(),
-			Stale:              diagnostics.Stale,
-			RotationState:      string(diagnostics.RotationState),
-			Reasons:            diagnostics.Reasons,
-			MetadataErrorClass: diagnostics.MetadataErrorClass,
-			DeepErrorClass:     diagnostics.DeepErrorClass,
+			Status:              readyStatusFor(diagnostics),
+			Healthz:             diagnostics.Healthz,
+			CacheAgeMs:          diagnostics.CacheAge.Milliseconds(),
+			Stale:               diagnostics.Stale,
+			RotationState:       string(diagnostics.RotationState),
+			Reasons:             diagnostics.Reasons,
+			MetadataErrorClass:  diagnostics.MetadataErrorClass,
+			DeepErrorClass:      diagnostics.DeepErrorClass,
+			PersistenceDegraded: diagnostics.PersistenceDegraded,
 		}
 		code := http.StatusOK
 		if body.Status != statusOK {
@@ -131,14 +132,15 @@ type liveBody struct {
 }
 
 type readyBody struct {
-	Reasons            []status.HealthReason `json:"reasons"`
-	MetadataErrorClass string                `json:"metadata_error_class,omitempty"`
-	DeepErrorClass     string                `json:"deep_error_class,omitempty"`
-	Status             string                `json:"status"`
-	Healthz            string                `json:"healthz,omitempty"`
-	CacheAgeMs         int64                 `json:"cache_age_ms"`
-	Stale              bool                  `json:"stale"`
-	RotationState      string                `json:"rotation_state,omitempty"`
+	PersistenceDegraded bool                  `json:"persistence_degraded,omitempty"`
+	Reasons             []status.HealthReason `json:"reasons"`
+	MetadataErrorClass  string                `json:"metadata_error_class,omitempty"`
+	DeepErrorClass      string                `json:"deep_error_class,omitempty"`
+	Status              string                `json:"status"`
+	Healthz             string                `json:"healthz,omitempty"`
+	CacheAgeMs          int64                 `json:"cache_age_ms"`
+	Stale               bool                  `json:"stale"`
+	RotationState       string                `json:"rotation_state,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, code int, body liveOrReady) {
