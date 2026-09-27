@@ -38,7 +38,7 @@ bao-kms-provider doctor \
 | Check | Passes when |
 |---|---|
 | OpenBao reachable, TLS valid | HTTPS succeeds with the configured CA, and the chain and server name validate. |
-| Local auth material | JWT: the file exists with safe permissions, parses, is not near expiry, and matches the configured claims. Certificate: the source is reachable, the certificate is valid, and the signer matches it and signs a probe. |
+| Local auth material | JWT file: safe permissions, valid claims, and sufficient lifetime. OAuth: a safely permissioned client-secret file (`oauth2.local`); acquisition uses the configured endpoint (`oauth2.acquire`). Certificate: the source is reachable, the certificate is valid, and the signer matches it and signs a probe. |
 | OpenBao auth login | Login with the configured method and role succeeds. |
 | Token policy | The token can read Transit metadata, encrypt, and decrypt, and the checked paths grant no key management, export, backup, restore, rewrap, or mount configuration writes. |
 | Transit key | The key exists with an allowed type, `exportable=false`, `allow_plaintext_backup=false`, and `deletion_allowed=false`. |
@@ -182,7 +182,7 @@ bao-kms-provider init --values values.yaml --out ./generated --new-key
 | `--socket-gid <gid>` | Static pod only, required. Numeric host GID of `openbao-kms-socket`. |
 
 `init` fills the documented host paths for an omitted `openbao.caCertFile`,
-`auth.jwt.jwtFile`, and `server.socketGroup`, then validates the result as
+`auth.jwt.jwtFile` for source `file`, and `server.socketGroup`, then validates the result as
 `serve` would. With JWT auth it also needs `auth.jwt.expectedIssuer`,
 `expectedAudience`, and `expectedSubject`, because the OpenBao role binds them.
 

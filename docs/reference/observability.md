@@ -55,6 +55,13 @@ A healthy response has an empty `reasons` list. For example:
 
 ## Metrics
 
+OAuth token acquisition failures use bounded `status` values on
+`openbao_kms_auth_login_total`: `oauth2_credential` for local credential failures,
+`oauth2_request` for transport failures, `oauth2_rejected` for non-200 responses,
+and `oauth2_response` for invalid responses. JWT claim failures retain the
+existing JWT status classes. Remote response bodies and credentials are never
+included in these labels or error messages.
+
 Labels hold only bounded values. `key_id` values are exported as
 `base64url-sha256` hashes. Raw OpenBao paths, key names, Kubernetes object
 names, request UIDs, and error strings never appear as labels.

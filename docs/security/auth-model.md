@@ -21,7 +21,7 @@ required controls, see [Hardening](/docs/security/hardening/#auth-material).
 
 | Method | Status | Use when |
 |---|---|---|
-| `jwt` | Default build and release path | A file-backed JWT issuer can be validated by OpenBao without calling the protected Kubernetes API server. |
+| `jwt` | Default build and release path | A JWT from a file or OAuth client credentials can be validated by OpenBao without calling the protected Kubernetes API server. |
 | `cert` with `pkcs11` source | Opt-in preview when the selected release marks it as tested | The deployment has a PKCS#11 hardware or software token that can hold the private key outside the filesystem. |
 | `cert` with `spiffe` source | Not user-configurable in preview | SPIFFE workload identity source wiring remains in tree for local verification, but it is not a supported preview configuration. |
 
@@ -56,8 +56,10 @@ stateDiagram-v2
     AuthUnhealthy --> ReadyFalse: ready endpoint fails
 ```
 
-The provider keeps its OpenBao token in memory only, and re-reads the JWT or
-certificate chain before every login.
+The provider keeps its OpenBao token in memory only. Before every login, it
+reads the JWT file, obtains a new OAuth access token, or reads the certificate
+chain, according to the configured source. OAuth access tokens remain in
+memory. OpenBao token renewal does not acquire another OAuth token.
 
 When a request reaches the refresh-ahead threshold, the provider starts one
 shared renewal or login. Requests keep using the current token while it is
@@ -77,6 +79,10 @@ request denied again after recovery keeps its OpenBao error class, so a
 persistent `403` means checking both the auth role and the Transit policy. For the configuration fields, see [Reference: Configuration](/docs/reference/configuration/#auth).
 
 ## JWT source options
+
+Set `auth.jwt.source` to `oauth2` for native client credentials or `file` for
+an externally provisioned JWT. See [OAuth 2.0 client credentials](/docs/configure/oauth2/)
+for the supported protocol, independent bootstrap requirements, and secret rotation.
 
 | Option | Recommendation | Analysis |
 |---|---|---|
@@ -110,7 +116,8 @@ alias from a URI SAN, which stock SPIRE SVIDs rely on.
 | Issue | Design response |
 |---|---|
 | Clock skew | Validate `nbf`, `iat`, and `exp` with configurable leeway. Alert on host clock drift. |
-| JWT expiry | Refuse startup when JWT remaining TTL is below `auth.jwt.minRemainingTtl`. Re-read the JWT file before re-login. |
+| JWT expiry | Refuse login when JWT remaining TTL is at or below `auth.jwt.minRemainingTtl`. Acquire a new OAuth token or re-read the JWT file before re-login. |
+| OAuth issuer outage | Use the current OpenBao token while usable; new logins require token acquisition. Failed grants back off and never switch sources. |
 | Certificate expiry | Refuse login when the certificate remaining TTL is below `auth.cert.minRemainingTtl`. Track certificate TTL through metrics. |
 | JWKS rotation | Support OIDC discovery and JWKS cache behavior. Provide recovery mode with pinned public keys when discovery is unavailable. |
 | Issuer rotation | Treat issuer change as planned migration. Configure overlapping trust only during a bounded window. |

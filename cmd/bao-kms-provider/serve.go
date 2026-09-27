@@ -338,7 +338,14 @@ func buildAuthManager(
 		if err != nil {
 			return nil, err
 		}
-		return auth.NewManager(authConfig(cfg), authClient, auth.ManagerOptions{
+		source, err := buildJWTLoginSource(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return auth.NewManagerWithSource(auth.LifecycleConfig{
+			LoginBeforeTokenExpiry: cfg.Auth.LoginBeforeTokenExpiry,
+			TokenRenewalIncrement:  cfg.Auth.TokenRenewalIncrement,
+		}, source, authClient, auth.ManagerOptions{
 			LifecycleContext: ctx,
 			RefreshTimeout:   authLoginTimeout(cfg),
 			RenewalEnabled:   true,
@@ -348,6 +355,17 @@ func buildAuthManager(
 		return newCertAuthManager(ctx, cfg, observer)
 	default:
 		return nil, fmt.Errorf("%w: unsupported auth method", auth.ErrAuthConfig)
+	}
+}
+
+func buildJWTLoginSource(cfg config.Config) (auth.LoginSource, error) {
+	switch cfg.Auth.JWT.Source {
+	case config.JWTSourceFile:
+		return auth.NewJWTLoginSource(authConfig(cfg))
+	case config.JWTSourceOAuth2:
+		return auth.NewOAuth2LoginSource(authConfig(cfg), cfg.Auth.JWT.OAuth2.ClientConfig(authLoginTimeout(cfg)))
+	default:
+		return nil, fmt.Errorf("%w: unsupported JWT source", auth.ErrAuthConfig)
 	}
 }
 

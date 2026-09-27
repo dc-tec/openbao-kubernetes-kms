@@ -6,6 +6,7 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
@@ -172,8 +173,11 @@ func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, erro
 	tlsDir := filepath.Dir(cfg.OpenBao.CACertFile)
 	runDir := filepath.Dir(cfg.Server.SocketPath)
 	stateDir := filepath.Dir(cfg.State.Path)
+	if cfg.Auth.JWT.Source == config.JWTSourceOAuth2 && filepath.Dir(cfg.Auth.JWT.OAuth2.ClientSecretFile) == "/" {
+		return podManifest{}, errors.New("OAuth client secret must be in a dedicated directory, not the host root")
+	}
 
-	return podManifest{
+	manifest := podManifest{
 		APIVersion: "v1",
 		Kind:       "Pod",
 		Metadata: podMetadata{
@@ -238,7 +242,45 @@ func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, erro
 				{Name: "state", HostPath: hostPathVolume{Path: stateDir, Type: "Directory"}},
 			},
 		},
-	}, nil
+	}
+	if cfg.Auth.JWT.Source == config.JWTSourceOAuth2 {
+		if err := configureOAuth2Volumes(&manifest, cfg.Auth.JWT.OAuth2); err != nil {
+			return podManifest{}, err
+		}
+	}
+	return manifest, nil
+}
+
+func configureOAuth2Volumes(manifest *podManifest, cfg config.OAuth2Config) error {
+	// Mount the directory so atomic credential replacement is visible without a restart.
+	manifest.Spec.Volumes = slices.DeleteFunc(manifest.Spec.Volumes, func(v podVolume) bool { return v.Name == "jwt" })
+	container := &manifest.Spec.Containers[0]
+	container.VolumeMounts = slices.DeleteFunc(container.VolumeMounts, func(v volumeMount) bool { return v.Name == "jwt" })
+	credentialDir := filepath.Dir(cfg.ClientSecretFile)
+	if err := addReadOnlyHostPath(manifest, "oauth2-credentials", credentialDir, "Directory"); err != nil {
+		return err
+	}
+	if cfg.CACertFile != "" {
+		return addReadOnlyHostPath(manifest, "oauth2-ca", cfg.CACertFile, "File")
+	}
+	return nil
+}
+
+func addReadOnlyHostPath(manifest *podManifest, name, source, kind string) error {
+	container := &manifest.Spec.Containers[0]
+	for _, mount := range container.VolumeMounts {
+		if mount.MountPath == source {
+			if !mount.ReadOnly {
+				return errors.New("OAuth credential mount conflicts with a writable provider directory")
+			}
+			return nil
+		}
+	}
+	manifest.Spec.Volumes = append(manifest.Spec.Volumes, podVolume{
+		Name: name, HostPath: hostPathVolume{Path: source, Type: kind},
+	})
+	container.VolumeMounts = append(container.VolumeMounts, volumeMount{Name: name, MountPath: source, ReadOnly: true})
+	return nil
 }
 
 func addressPort(address string) (int, error) {

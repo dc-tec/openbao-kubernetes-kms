@@ -59,10 +59,18 @@ Fields marked **required** have no usable default.
 | `auth.tokenRenewalIncrement` | `1h` | TTL requested on renewal. Keep it above `loginBeforeTokenExpiry` and within the role's maximum TTL. |
 | `auth.loginTimeout` | `0s` | Deadline for one shared renewal or login, including recovery after a rejected token, independent of the request deadline. Also bounds each PKCS#11 session pool wait. `0s` means `max(openbao.timeout, 5s)`; it does not enable an unlimited pool wait. See the native-call limit below. |
 | `auth.jwt.mountPath`, `auth.jwt.role` | none | Required for `jwt`. Mount path including `auth/`, and role name. |
-| `auth.jwt.jwtFile` | none | Required for `jwt`. Re-read before every login. |
+| `auth.jwt.source` | none | Required for `jwt`: `file` or `oauth2`. |
+| `auth.jwt.jwtFile` | none | Required for source `file`; forbidden for `oauth2`. Re-read before every login. |
 | `auth.jwt.minRemainingTtl` | `2m` | Minimum JWT lifetime left for a login. |
 | `auth.jwt.clockSkewLeeway` | `30s` | Leeway for `nbf`, `iat`, and `exp`. |
-| `auth.jwt.expectedIssuer`, `expectedAudience`, `expectedSubject` | empty | Local claim checks before login. |
+| `auth.jwt.expectedIssuer`, `expectedAudience`, `expectedSubject` | empty | Local claim checks before login. Issuer and at least one audience are required for source `oauth2`. |
+| `auth.jwt.oauth2.tokenUrl` | none | Required for `oauth2`. HTTPS token endpoint without user info or fragment. Redirects are rejected. |
+| `auth.jwt.oauth2.clientId`, `clientSecretFile` | none | Required for `oauth2`. Client ID and absolute path to a private, regular client-secret file. The secret is reread before every grant. |
+| `auth.jwt.oauth2.authMethod` | none | Required for `oauth2`: `client_secret_basic` or `client_secret_post`. |
+| `auth.jwt.oauth2.scopes` | empty | List of OAuth scopes, joined with spaces in the request. |
+| `auth.jwt.oauth2.audience` | empty | Optional issuer-specific `audience` request parameter. |
+| `auth.jwt.oauth2.resources` | empty | List of absolute resource URIs sent as repeated RFC 8707 `resource` parameters. |
+| `auth.jwt.oauth2.caCertFile` | empty | Token endpoint CA bundle. Empty uses system roots. |
 | `auth.cert.mountPath`, `auth.cert.source` | none | Required for `cert`. `source` must be `pkcs11`. |
 | `auth.cert.name` | empty | OpenBao cert role name; empty lets OpenBao try every role. |
 | `auth.cert.minRemainingTtl` | `24h` | Minimum certificate lifetime left for a login. |

@@ -181,7 +181,10 @@ func appendAuthRequired(problems *[]ValidationProblem, auth AuthConfig) {
 	case authMethodJWT:
 		appendRequired(problems, "auth.jwt.mountPath", auth.JWT.MountPath)
 		appendRequired(problems, "auth.jwt.role", auth.JWT.Role)
-		appendRequired(problems, "auth.jwt.jwtFile", auth.JWT.JWTFile)
+		appendRequired(problems, "auth.jwt.source", auth.JWT.Source)
+		if auth.JWT.Source == JWTSourceFile {
+			appendRequired(problems, "auth.jwt.jwtFile", auth.JWT.JWTFile)
+		}
 	case authMethodCert:
 		appendRequired(problems, "auth.cert.mountPath", auth.Cert.MountPath)
 		appendRequired(problems, "auth.cert.source", auth.Cert.Source)
@@ -277,6 +280,7 @@ func validateAuthValues(problems *[]ValidationProblem, auth AuthConfig) {
 }
 
 func validateJWTAuthValues(problems *[]ValidationProblem, jwt JWTAuthConfig) {
+	validateJWTSource(problems, jwt)
 	validateMountPath(problems, "auth.jwt.mountPath", jwt.MountPath)
 	validateIdentifier(problems, "auth.jwt.role", jwt.Role)
 	validateClaimExpectation(problems, "auth.jwt.expectedIssuer", jwt.ExpectedIssuer)
@@ -410,7 +414,16 @@ func validateFilesystem(cfg Config, opts ValidationOptions) []ValidationProblem 
 	validateRegularFile(&problems, "openbao.caCertFile", cfg.OpenBao.CACertFile, caFileDisallowedMode)
 	switch cfg.Auth.Method {
 	case authMethodJWT:
-		validateRegularFile(&problems, "auth.jwt.jwtFile", cfg.Auth.JWT.JWTFile, jwtFileDisallowedMode)
+		switch cfg.Auth.JWT.Source {
+		case JWTSourceFile:
+			validateRegularFile(&problems, "auth.jwt.jwtFile", cfg.Auth.JWT.JWTFile, jwtFileDisallowedMode)
+		case JWTSourceOAuth2:
+			validateRegularFile(&problems, "auth.jwt.oauth2.clientSecretFile",
+				cfg.Auth.JWT.OAuth2.ClientSecretFile, os.FileMode(0o137))
+			if cfg.Auth.JWT.OAuth2.CACertFile != "" {
+				validateRegularFile(&problems, "auth.jwt.oauth2.caCertFile", cfg.Auth.JWT.OAuth2.CACertFile, caFileDisallowedMode)
+			}
+		}
 	case authMethodCert:
 		if cfg.Auth.Cert.Source == certSourcePKCS11 {
 			validateRegularFile(

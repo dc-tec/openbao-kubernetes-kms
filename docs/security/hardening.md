@@ -55,6 +55,11 @@ changes to configuration and auth material, and upgrade one node at a time.
 
 Required for JWT auth:
 
+- For `auth.jwt.source: oauth2`, provision the client secret independently of
+  the protected API. Use a private regular file and verified HTTPS to the token
+  endpoint. Bind the issuer and audience locally and constrain the OpenBao role
+  to the intended client identity. See [OAuth client credentials](/docs/configure/oauth2/).
+
 - An OpenBao role that binds issuer, audience, and subject or strong claims,
   with a short token TTL, a limited maximum TTL, no default policy, and only the
   provider policy.

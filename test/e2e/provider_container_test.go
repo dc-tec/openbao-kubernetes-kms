@@ -336,6 +336,7 @@ func providerJWTAuthConfig(environment *framework.OpenBaoEnvironment, opts provi
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
   jwt:
+    source: file
     mountPath: %q
     role: %q
     jwtFile: %q

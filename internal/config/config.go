@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/oauth2"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -111,6 +112,8 @@ type AuthConfig struct {
 
 // JWTAuthConfig contains OpenBao JWT auth settings.
 type JWTAuthConfig struct {
+	Source           string        `mapstructure:"source"`
+	OAuth2           OAuth2Config  `mapstructure:"oauth2"`
 	MountPath        string        `mapstructure:"mountPath"`
 	Role             string        `mapstructure:"role"`
 	JWTFile          string        `mapstructure:"jwtFile"`
@@ -119,6 +122,33 @@ type JWTAuthConfig struct {
 	ExpectedIssuer   string        `mapstructure:"expectedIssuer"`
 	ExpectedAudience []string      `mapstructure:"expectedAudience"`
 	ExpectedSubject  string        `mapstructure:"expectedSubject"`
+}
+
+// JWT source names select how the provider obtains its OpenBao login credential.
+const (
+	JWTSourceFile   = "file"
+	JWTSourceOAuth2 = "oauth2"
+)
+
+// OAuth2Config contains provider-independent client credentials grant settings.
+type OAuth2Config struct {
+	TokenURL         string   `mapstructure:"tokenUrl"`
+	ClientID         string   `mapstructure:"clientId"`
+	ClientSecretFile string   `mapstructure:"clientSecretFile"`
+	AuthMethod       string   `mapstructure:"authMethod"`
+	Scopes           []string `mapstructure:"scopes"`
+	Audience         string   `mapstructure:"audience"`
+	Resources        []string `mapstructure:"resources"`
+	CACertFile       string   `mapstructure:"caCertFile"`
+}
+
+// ClientConfig applies the shared login deadline to the OAuth transport settings.
+func (c OAuth2Config) ClientConfig(timeout time.Duration) oauth2.Config {
+	return oauth2.Config{
+		TokenURL: c.TokenURL, ClientID: c.ClientID, ClientSecretFile: c.ClientSecretFile,
+		AuthMethod: c.AuthMethod, Scopes: c.Scopes, Audience: c.Audience, Resources: c.Resources,
+		CACertFile: c.CACertFile, Timeout: timeout,
+	}
 }
 
 // CertAuthConfig contains OpenBao certificate auth settings.

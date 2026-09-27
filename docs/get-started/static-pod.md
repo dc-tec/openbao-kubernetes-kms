@@ -29,6 +29,11 @@ Everything the provider needs comes from host files.
   and the lineage ID from [Prepare OpenBao](/docs/get-started/openbao/).
 - Obtain the OpenBao CA bundle as `ca.crt` and the provider host JWT as
   `identity.jwt`. The JWT must be renewable without the protected API server.
+
+For native [OAuth 2.0 client credentials](/docs/configure/oauth2/), set
+`auth.jwt.source: oauth2` and generate the manifest with `init --model static-pod`.
+Stage the client secret and issuer CA bundle instead of `identity.jwt`.
+The generated pod mounts the credential directory read-only for secret rotation.
 - Use a kubeadm-style control plane that runs `kube-apiserver` as a static pod
   on containerd.
 

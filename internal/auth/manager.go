@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/oauth2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
 
@@ -44,6 +45,11 @@ var (
 )
 
 var safeAuthErrorClasses = []error{
+	oauth2.ErrConfig,
+	oauth2.ErrCredential,
+	oauth2.ErrRequest,
+	oauth2.ErrRejected,
+	oauth2.ErrResponse,
 	ErrJWTRead,
 	ErrJWTMalformed,
 	ErrJWTExpired,
@@ -535,6 +541,9 @@ func jitterRetryBackoff(backoff time.Duration) time.Duration {
 
 // NewJWTLoginSource creates a JWT login source with validated local settings.
 func NewJWTLoginSource(cfg ManagerConfig) (*JWTLoginSource, error) {
+	if strings.TrimSpace(cfg.JWTFile) == "" {
+		return nil, fmt.Errorf("%w: JWT file is required", ErrAuthConfig)
+	}
 	normalized, err := validateManagerConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -601,9 +610,6 @@ func validateManagerConfig(cfg ManagerConfig) (ManagerConfig, error) {
 	}
 	if containsUnsafeIdentifierChars(cfg.Role) {
 		return ManagerConfig{}, fmt.Errorf("%w: auth role contains unsafe characters", ErrAuthConfig)
-	}
-	if strings.TrimSpace(cfg.JWTFile) == "" {
-		return ManagerConfig{}, fmt.Errorf("%w: JWT file is required", ErrAuthConfig)
 	}
 	if cfg.MinJWTRemainingTTL <= 0 {
 		return ManagerConfig{}, fmt.Errorf("%w: minimum JWT remaining TTL must be positive", ErrAuthConfig)
@@ -678,6 +684,14 @@ func authStatus(err error) string {
 		return authStatusOK
 	}
 	switch {
+	case errors.Is(err, oauth2.ErrCredential):
+		return "oauth2_credential"
+	case errors.Is(err, oauth2.ErrRejected):
+		return "oauth2_rejected"
+	case errors.Is(err, oauth2.ErrResponse):
+		return "oauth2_response"
+	case errors.Is(err, oauth2.ErrRequest):
+		return "oauth2_request"
 	case errors.Is(err, ErrJWTExpired):
 		return authStatusJWTExpired
 	case errors.Is(err, ErrJWTNearExpiry):
