@@ -20,6 +20,9 @@
   {{- with $targetSite.GetPage $resolved -}}
     {{- $href = .RelPermalink -}}
   {{- else -}}
+    {{- if hasPrefix (strings.TrimPrefix "/" $resolved) "docs/" -}}
+      {{- errorf "Documentation link %s has no target in %s (%s)" $dest $targetSite.Version.Name $.Page.RelPermalink -}}
+    {{- end -}}
     {{- if or (hasPrefix $pathPart "./") (hasPrefix $pathPart "../") -}}
       {{- $line := index hugo.Data.version_lines $.Page.Site.Version.Name -}}
       {{- $ref := cond (eq $line.sourceRef "HEAD") $.Page.Site.Params.defaultBranch $line.sourceRef -}}
