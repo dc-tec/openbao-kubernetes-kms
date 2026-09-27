@@ -107,26 +107,6 @@ func StartKeycloakEnvironment(ctx context.Context, network string) (_ *KeycloakE
 	return f, nil
 }
 
-func (f *KeycloakEnvironment) writeRealm() error {
-	// Fixed JSON is a Keycloak import fixture. Only hex-encoded random secrets are interpolated.
-	realm := fmt.Sprintf(`{
-  "realm": "kms-e2e", "enabled": true, "accessTokenLifespan": 300,
-  "clients": [{
-    "id": %q, "clientId": %q, "secret": %q,
-    "enabled": true, "protocol": "openid-connect", "publicClient": false,
-    "serviceAccountsEnabled": true, "standardFlowEnabled": false,
-    "directAccessGrantsEnabled": false,
-    "protocolMappers": [{
-      "name": "bao-audience", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper",
-      "config": {"included.custom.audience": %q, "access.token.claim": "true", "id.token.claim": "false"}
-    }]
-  }],
-  "users": [{"id": %q, "username": "service-account-kms-provider", "enabled": true,
-    "serviceAccountClientId": "kms-provider"}]
-}`, keycloakClientUUID, f.ClientID, f.ClientSecret, f.Audience, f.Subject)
-	return os.WriteFile(filepath.Join(f.dir, "kms-e2e-realm.json"), []byte(realm), 0o600)
-}
-
 func (f *KeycloakEnvironment) WaitReady(ctx context.Context) error {
 	deadline, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()

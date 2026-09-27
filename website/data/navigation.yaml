@@ -52,6 +52,8 @@ primary:
         url: docs/configure/openbao-auth/
       - title: OAuth 2.0 client credentials
         url: docs/configure/oauth2/
+      - title: Provision a Keycloak client
+        url: docs/configure/keycloak/
       - title: Monitor the provider
         url: docs/configure/monitor/
   - title: Operate
