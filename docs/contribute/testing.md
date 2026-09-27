@@ -78,8 +78,15 @@ runs this check too.
 
 Set `IMAGE_PLATFORM=linux/amd64` or `linux/arm64` to choose the Linux test
 architecture. Docker needs native support or emulation for that platform.
-To test an existing static-pod kit, set `BUNDLE_ARCHIVE` to its path relative
-to the repository root. The container runs without network access.
+To test an existing systemd or static-pod archive, set `BUNDLE_ARCHIVE` to its
+path relative to the repository root. The container runs without network
+access. Systemd archives containing the minimal values files also exercise
+both JWT sources and identity reuse through the packaged `init` command.
+
+The release workflow runs both checks on amd64 and arm64 using the exact
+archives selected for publication. Publication depends on these jobs passing.
+This gate covers host installation and file generation; API-server activation,
+credential recovery, and VM boot remain separate qualification steps.
 
 ## Fuzzing
 
