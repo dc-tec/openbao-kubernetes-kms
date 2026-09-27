@@ -85,6 +85,16 @@ owned by the provider's OS user, and retirement must run as that user. See
 
 ## Breaking changes
 
+### Unreleased static-pod JWT mount correction
+
+New static-pod scaffolds place file JWTs in
+`/var/lib/openbao-kms/credentials/identity.jwt` and mount the directory read-only
+so atomic replacement is visible. Existing file mounts need a one-time
+[manifest and credential-path migration](/docs/get-started/static-pod/#migrate-an-existing-jwt-file-mount).
+The generator rejects JWT directories that overlap provider state or socket
+directories. Existing deployments are not changed automatically. Systemd
+paths and the encryption format are unchanged.
+
 ### Unreleased rotation corrections
 
 Pending versions now decrypt as soon as their metadata is validated and saved,

@@ -530,14 +530,14 @@ func requireHostPathVolumes(t *testing.T, volumes []volume) {
 	wantTypes := map[string]string{
 		"config": "File",
 		"tls":    "Directory",
-		"jwt":    "File",
+		"jwt":    "Directory",
 		"run":    "Directory",
 		"state":  "Directory",
 	}
 	wantPaths := map[string]string{
 		"config": "/etc/openbao-kms/config.yaml",
 		"tls":    "/etc/openbao-kms/tls",
-		"jwt":    "/var/lib/openbao-kms/identity.jwt",
+		"jwt":    "/var/lib/openbao-kms/credentials",
 		"run":    "/run/openbao-kms",
 		"state":  "/var/lib/openbao-kms/state",
 	}

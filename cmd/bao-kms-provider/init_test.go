@@ -145,6 +145,9 @@ func TestInitWritesStaticPodFiles(t *testing.T) {
 	if err != nil || cfg.Server.SocketGroup != "1234" {
 		t.Fatalf("static pod config must use the numeric socket GID: %v %q", err, cfg.Server.SocketGroup)
 	}
+	if cfg.Auth.JWT.JWTFile != initStaticPodJWTFile {
+		t.Fatal("static pod JWT must use a dedicated credential directory")
+	}
 	script := readGenerated(t, filepath.Join(out, "openbao-setup.sh"))
 	if !strings.Contains(script, "bao policy write 'kms-policy'") {
 		t.Fatalf("setup script must use --policy-name:\n%s", script)

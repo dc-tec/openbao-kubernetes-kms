@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/scaffold"
 	"github.com/dc-tec/openbao-kubernetes-kms/test/e2e/framework"
 )
 
@@ -26,7 +28,7 @@ const (
 
 	kindProviderConfigPath     = "/etc/openbao-kms/config.yaml"
 	kindProviderCAPath         = "/etc/openbao-kms/tls/ca.crt"
-	kindProviderJWTPath        = "/var/lib/openbao-kms/identity.jwt"
+	kindProviderJWTPath        = "/var/lib/openbao-kms/credentials/identity.jwt"
 	kindProviderSocketPath     = "/run/openbao-kms/kms.sock"
 	kindProviderStatePath      = "/var/lib/openbao-kms/state/key-registry.json"
 	kindEncryptionConfigDir    = "/etc/kubernetes/encryption/openbao-kms"
@@ -40,6 +42,7 @@ const (
 )
 
 func TestKindKMSV2SmokeE2E(t *testing.T) {
+	t.Setenv("KUBECONFIG", filepath.Join(t.TempDir(), "kubeconfig"))
 	if !kindCIEnabled() {
 		t.Skip(envKindCI + "=true is required")
 	}
@@ -88,6 +91,7 @@ func TestKindKMSV2SmokeE2E(t *testing.T) {
 	createKindSecret(t, ctx, kubectlPath, contextName, secretValue)
 	assertKindSecretReadable(t, ctx, kubectlPath, contextName, secretValue)
 	assertKindEtcdEncrypted(t, ctx, dockerPath, nodeName, secretValue)
+	verifyKindJWTRotation(t, ctx, dockerPath, nodeName, environment)
 	restartKindAPIServer(t, ctx, dockerPath, kubectlPath, contextName, nodeName)
 	assertKindSecretReadable(t, ctx, kubectlPath, contextName, secretValue)
 }
@@ -361,7 +365,8 @@ func stageKindProvider(
 
 	stagingDir := t.TempDir()
 	writeKindProviderConfig(t, filepath.Join(stagingDir, "provider.yaml"), environment)
-	writeKindProviderStaticPod(t, filepath.Join(stagingDir, "bao-kms-provider.yaml"), providerImage)
+	pinnedImage := pinKindProviderImage(t, ctx, dockerPath, nodeName, providerImage)
+	writeKindProviderStaticPod(t, filepath.Join(stagingDir, "bao-kms-provider.yaml"), filepath.Join(stagingDir, "provider.yaml"), pinnedImage)
 	writeKindEncryptionConfig(t, filepath.Join(stagingDir, "encryption-config.yaml"))
 	copyFile(t, environment.CACertFile, filepath.Join(stagingDir, "ca.crt"), 0o644)
 	copyFile(t, environment.JWTFile, filepath.Join(stagingDir, "identity.jwt"), 0o600)
@@ -369,6 +374,7 @@ func stageKindProvider(
 	runDocker(t, ctx, dockerPath, "exec", nodeName, "mkdir", "-p",
 		"/etc/openbao-kms/tls",
 		"/var/lib/openbao-kms/state",
+		filepath.Dir(kindProviderJWTPath),
 		"/run/openbao-kms",
 		kindEncryptionConfigDir,
 	)
@@ -383,9 +389,9 @@ func stageKindProvider(
 const kindProviderPermissionsScript = `set -eu
 chown -R 65532:65532 /etc/openbao-kms /var/lib/openbao-kms
 chown -R 65532:1234 /run/openbao-kms
-chmod 0700 /etc/openbao-kms /etc/openbao-kms/tls /var/lib/openbao-kms /var/lib/openbao-kms/state
+chmod 0700 /etc/openbao-kms /etc/openbao-kms/tls /var/lib/openbao-kms /var/lib/openbao-kms/state /var/lib/openbao-kms/credentials
 chmod 2750 /run/openbao-kms
-chmod 0600 /etc/openbao-kms/config.yaml /var/lib/openbao-kms/identity.jwt
+chmod 0600 /etc/openbao-kms/config.yaml /var/lib/openbao-kms/credentials/identity.jwt
 if [ -f /var/lib/openbao-kms/state/key-registry.json ]; then chmod 0600 /var/lib/openbao-kms/state/key-registry.json; fi
 chmod 0644 /etc/openbao-kms/tls/ca.crt /etc/kubernetes/encryption/openbao-kms/encryption-config.yaml
 `
@@ -902,8 +908,8 @@ server:
   socketPath: %q
   socketMode: "0660"
   socketGroup: "1234"
-  metricsAddress: ""
-  healthAddress: ""
+  metricsAddress: "127.0.0.1:8083"
+  healthAddress: "127.0.0.1:8082"
 openbao:
   address: %q
   caCertFile: %q
@@ -988,85 +994,17 @@ resources:
 	}
 }
 
-func writeKindProviderStaticPod(t *testing.T, path string, providerImage string) {
+func writeKindProviderStaticPod(t *testing.T, path, configPath, providerImage string) {
 	t.Helper()
-
-	raw := fmt.Sprintf(`apiVersion: v1
-kind: Pod
-metadata:
-  name: bao-kms-provider
-  namespace: kube-system
-  labels:
-    app.kubernetes.io/name: bao-kms-provider
-    app.kubernetes.io/component: kms-provider
-spec:
-  hostNetwork: true
-  priorityClassName: system-node-critical
-  automountServiceAccountToken: false
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 65532
-    runAsGroup: 65532
-    supplementalGroups:
-      - 1234
-    seccompProfile:
-      type: RuntimeDefault
-  containers:
-    - name: bao-kms-provider
-      image: %q
-      imagePullPolicy: IfNotPresent
-      args:
-        - serve
-        - --config=%s
-      securityContext:
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        capabilities:
-          drop:
-            - ALL
-      volumeMounts:
-        - name: config
-          mountPath: %s
-          readOnly: true
-        - name: tls
-          mountPath: /etc/openbao-kms/tls
-          readOnly: true
-        - name: jwt
-          mountPath: %s
-          readOnly: true
-        - name: run
-          mountPath: /run/openbao-kms
-        - name: state
-          mountPath: /var/lib/openbao-kms/state
-  volumes:
-    - name: config
-      hostPath:
-        path: %s
-        type: File
-    - name: tls
-      hostPath:
-        path: /etc/openbao-kms/tls
-        type: Directory
-    - name: jwt
-      hostPath:
-        path: %s
-        type: File
-    - name: run
-      hostPath:
-        path: /run/openbao-kms
-        type: Directory
-    - name: state
-      hostPath:
-        path: /var/lib/openbao-kms/state
-        type: Directory
-`, providerImage,
-		kindProviderConfigPath,
-		kindProviderConfigPath,
-		kindProviderJWTPath,
-		kindProviderConfigPath,
-		kindProviderJWTPath,
-	)
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+	cfg, err := config.Load(config.NewRuntime(), config.LoadOptions{Path: configPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := scaffold.RenderStaticPod(cfg, scaffold.StaticPodOptions{Image: providerImage, SocketGID: 1234})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatalf("write Kind provider static pod: %v", err)
 	}
 }
