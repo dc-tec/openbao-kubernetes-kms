@@ -54,8 +54,11 @@ stateDiagram-v2
 certificate chain before every login.</p><p>When a request reaches the refresh-ahead threshold, the provider starts one
 shared renewal or login. Requests keep using the current token while it is
 valid; requests without a usable token wait for the shared attempt, and
-canceling a request stops only its own wait. <code>auth.loginTimeout</code> bounds the
-renewal plus any fallback login, and provider shutdown cancels it.</p><p>OpenBao can return <code>403</code> for a revoked token as well as a policy denial. On a
+canceling a request stops only its own wait. <code>auth.loginTimeout</code> sets the
+deadline for renewal plus any fallback login, and provider shutdown cancels
+that context. PKCS#11 pool waits also use this timeout. Native PKCS#11 calls
+have a separate limit described in <a href=/openbao-kubernetes-kms/docs/reference/configuration/#auth>Reference: Configuration</a>
+.</p><p>OpenBao can return <code>403</code> for a revoked token as well as a policy denial. On a
 <code>401</code> or <code>403</code>, the provider replaces the rejected credential and retries the
 request once; concurrent rejections share one login. Recovery starts at most
 once every five seconds, even when the new token is denied too, and failed
