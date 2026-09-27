@@ -85,6 +85,14 @@ owned by the provider's OS user, and retirement must run as that user. See
 
 ## Breaking changes
 
+### Unreleased CLI exit-code corrections
+
+Invalid command usage now returns the documented exit code `2`, and an
+unreadable or malformed file passed to `config` returns `3`. These cases
+previously returned the unclassified error code `1`. Unknown help topics
+and completion subcommands also return `2`. Update scripts that matched the
+previous codes. Diagnostic failures remain `4` and runtime failures remain `5`.
+
 ### Unreleased configuration cross-checks
 
 Configuration validation now rejects a probe interval greater than or equal to

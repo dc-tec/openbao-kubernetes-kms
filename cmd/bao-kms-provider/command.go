@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
 	"github.com/spf13/cobra"
@@ -27,6 +28,7 @@ func newRootCommand(info version.Info) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       info.Version,
+		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
@@ -88,7 +90,7 @@ func newConfigCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			loaded, err := config.Load(runtimeConfig, config.LoadOptions{Path: *configPath})
 			if err != nil {
-				return err
+				return cli.WithExitCode(cli.ExitConfig, err)
 			}
 			printConfigSummary(cmd.OutOrStdout(), loaded)
 			return nil
