@@ -125,7 +125,8 @@ The provider checks on load that:
   bits, or world access, in a directory that is not group or world writable,
 - the JSON has no unknown fields and its current hash matches the body, with
   well-formed hashes and no duplicate `key_id` records,
-- the checkpoint accepts the generation and hash,
+- the state matches the checkpoint, or is its immediate next generation with
+  a previous hash matching the checkpoint's hash,
 - the state matches the configured provider, cluster, OpenBao instance,
   namespace, mount, lineage, key name, and AAD mode,
 - the creation time of every active, pending, and retired version matches
@@ -157,6 +158,10 @@ When both files are missing, startup creates state only for an unrotated key:
 until the state and checkpoint are restored; see
 [Disaster recovery: Local registry state](/docs/operate/disaster-recovery/#local-registry-state).
 A checkpoint without its state file, or with an older one, also fails startup.
+An unrelated higher generation or a generation gap fails startup too. Only a
+direct hash-linked successor can advance an older checkpoint, to complete a
+save interrupted between writing the state and checkpoint. Restore both files
+from the same backup or peer; generation numbers are local to each node.
 
 `serve` and `retire-versions --apply` take the same persistent
 `<state.path>.lock` before writing, which needs a local filesystem with working

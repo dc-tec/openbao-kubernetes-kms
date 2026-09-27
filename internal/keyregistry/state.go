@@ -442,7 +442,8 @@ func (c StateCheckpoint) Validate() error {
 	return nil
 }
 
-// ValidateState rejects state older than the checkpoint or with a mismatched same-generation hash.
+// ValidateState accepts the checkpointed state or its direct hash-linked successor.
+// The successor covers a crash after the state rename but before checkpoint persistence.
 func (c StateCheckpoint) ValidateState(state StateFile) error {
 	if err := c.Validate(); err != nil {
 		return err
@@ -455,6 +456,14 @@ func (c StateCheckpoint) ValidateState(state StateFile) error {
 	}
 	if state.Generation == c.Generation && state.CurrentHash != c.CurrentHash {
 		return fmt.Errorf("%w: current hash differs from checkpoint", ErrStateRollback)
+	}
+	if state.Generation > c.Generation {
+		if state.Generation-c.Generation != 1 {
+			return fmt.Errorf("%w: state skips checkpoint generations", ErrStateRollback)
+		}
+		if state.PreviousHash != c.CurrentHash {
+			return fmt.Errorf("%w: state does not extend checkpoint history", ErrStateRollback)
+		}
 	}
 	return nil
 }
