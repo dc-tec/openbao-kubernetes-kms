@@ -21,7 +21,8 @@ func newPolicyCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.
 }
 
 func newOpenBaoPolicyCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.Command {
-	return &cobra.Command{
+	var includeTokenRenewal bool
+	cmd := &cobra.Command{
 		Use:   "openbao",
 		Short: "Generate the least-privilege OpenBao policy for this provider config",
 		Args:  cobra.NoArgs,
@@ -30,10 +31,14 @@ func newOpenBaoPolicyCommand(runtimeConfig *config.Runtime, configPath *string) 
 			if err != nil {
 				return err
 			}
-			if err := scaffold.WriteOpenBaoPolicy(cmd.OutOrStdout(), cfg, scaffold.PolicyOptions{}); err != nil {
+			opts := scaffold.PolicyOptions{IncludeTokenRenewal: includeTokenRenewal}
+			if err := scaffold.WriteOpenBaoPolicy(cmd.OutOrStdout(), cfg, opts); err != nil {
 				return cli.WithExitCode(cli.ExitError, err)
 			}
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&includeTokenRenewal, "include-token-renewal", true,
+		"Include auth/token/renew-self for renewable OpenBao tokens")
+	return cmd
 }

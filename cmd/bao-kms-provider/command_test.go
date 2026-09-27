@@ -61,11 +61,26 @@ func TestPolicyOpenBaoCommand(t *testing.T) {
 		`path "transit/decrypt/k8s-workload-a-etcd"`,
 		`path "transit/config/keys"`,
 		`path "sys/capabilities-self"`,
+		`path "auth/token/renew-self"`,
 	}
 	for _, want := range required {
 		if !strings.Contains(output, want) {
 			t.Fatalf("policy output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestPolicyOpenBaoCanOmitTokenRenewal(t *testing.T) {
+	output, err := executeCommand(t, "policy", "openbao", "--include-token-renewal=false",
+		"--config", "../../test/testdata/config/valid.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(output, "auth/token/renew-self") {
+		t.Fatal("policy included disabled renewal permission")
+	}
+	if !strings.Contains(output, `path "transit/decrypt/k8s-workload-a-etcd"`) {
+		t.Fatal("policy lost required Transit permission")
 	}
 }
 
