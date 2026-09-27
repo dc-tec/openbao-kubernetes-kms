@@ -51,3 +51,19 @@ systemd-install-check: ## Exercise the documented tarball installation in a disp
 		--env KMS_INSTALL_TEST_CONTAINER=1 \
 		--workdir /src \
 		"$$(cat "$$tmp/image-id")" bash test/deployment/systemd-install.sh
+
+.PHONY: static-pod-install-check
+static-pod-install-check: ## Exercise the static-pod kit without activating a provider or contacting OpenBao.
+	@set -eu; \
+	builder="$$(awk '/^  imageBuilderBase:/{print $$2}' .ci/versions.yaml)"; \
+	digest="$$(awk '/^  imageBuilderBaseDigest:/{print $$2}' .ci/versions.yaml)"; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	docker build --platform "$(IMAGE_PLATFORM)" --iidfile "$$tmp/image-id" \
+		--build-arg "BUILDER_IMAGE=$$builder@$$digest" \
+		-f test/deployment/Dockerfile.systemd-install test/deployment; \
+	docker run --rm --platform "$(IMAGE_PLATFORM)" --network=none --user 0:0 \
+		--mount "type=bind,source=$(CURDIR),target=/src,readonly" \
+		--env KMS_INSTALL_TEST_CONTAINER=1 --env "BUNDLE_ARCHIVE=$(BUNDLE_ARCHIVE)" \
+		--workdir /src \
+		"$$(cat "$$tmp/image-id")" bash test/deployment/static-pod-install.sh

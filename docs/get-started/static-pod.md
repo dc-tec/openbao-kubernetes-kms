@@ -23,8 +23,6 @@ Everything the provider needs comes from host files.
 - Download and verify the static-pod bundle in
   [Download the release](/docs/get-started/download/), and keep that shell with
   `VERSION`, `ARCH`, `REPO`, and `WORKFLOW_IDENTITY` set.
-- Download and verify the systemd tarball of the same release as well. You use
-  its `bao-kms-provider` binary on the host to run `doctor`.
 - Have the values from [Plan identity values](/docs/get-started/plan-values/)
   and the lineage ID from [Prepare OpenBao](/docs/get-started/openbao/).
 - Obtain the OpenBao CA bundle as `ca.crt` and the provider host JWT as
@@ -40,29 +38,26 @@ The generated pod mounts the credential directory read-only for secret rotation.
 ## Step 1: Extract the bundle
 
 ```sh
-tar -xzf "bao-kms-provider_${VERSION}_static-pod.tar.gz"
-cd "bao-kms-provider_${VERSION}_static-pod"
+tar -xzf "bao-kms-provider_${VERSION}_static-pod_linux_${ARCH}.tar.gz"
+cd "bao-kms-provider_${VERSION}_static-pod_linux_${ARCH}"
 cat image-ref.txt
 ```
 
 `image-ref.txt` holds the provider image reference, ending in
-`@sha256:<digest>`. Place the diagnostic binary from the systemd tarball on the
-host:
+`@sha256:<digest>`. The kit includes the matching Linux binary for `init`,
+`config`, and diagnostics. Install it on the host:
 
 ```sh
-tar -xzf "../bao-kms-provider_${VERSION}_systemd_linux_${ARCH}.tar.gz" \
-  --strip-components=2 "bao-kms-provider_${VERSION}_systemd_linux_${ARCH}/bin/bao-kms-provider"
-sudo install -o root -g root -m 0755 bao-kms-provider /usr/bin/bao-kms-provider
+sudo install -o root -g root -m 0755 bin/bao-kms-provider /usr/bin/bao-kms-provider
 ```
 
 ## Step 2: Verify the provider image
 
-Set `IMAGE` to the digest reference, replacing `<digest>` with the digest from
-`image-ref.txt`, then verify the image signature from the release workflow and
+Read `IMAGE` from the verified kit, then verify the image signature from the release workflow and
 its build provenance from the reusable build workflow:
 
 ```sh
-IMAGE="ghcr.io/dc-tec/bao-kms-provider@sha256:<digest>"
+IMAGE=$(cat image-ref.txt)
 
 cosign verify \
   --new-bundle-format=true \
@@ -111,7 +106,7 @@ every reboot:
 
 ```sh
 sudo sh -eu -c "
-install -d -m 0750 -o root -g root /etc/openbao-kms
+install -d -m 0750 -o root -g 65532 /etc/openbao-kms
 install -d -m 0755 -o root -g root /etc/openbao-kms/tls
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state

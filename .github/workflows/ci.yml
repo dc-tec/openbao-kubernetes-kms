@@ -225,6 +225,9 @@ jobs:
       - name: Check documented systemd installation
         run: make systemd-install-check
 
+      - name: Check static-pod installation kit
+        run: make static-pod-install-check
+
   e2e-provider-images:
     name: E2E Provider Images
     runs-on: ubuntu-24.04

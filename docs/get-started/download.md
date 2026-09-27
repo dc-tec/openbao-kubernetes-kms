@@ -28,7 +28,7 @@ contains the features you intend to use.
 | systemd on Debian or Ubuntu | `bao-kms-provider_<version>_linux_<arch>.deb` | Binary, systemd unit, sysusers and tmpfiles inputs, example configuration. |
 | systemd on RHEL-family hosts | `bao-kms-provider_<version>_linux_<arch>.rpm` | Same as the Debian package. |
 | systemd on other hosts | `bao-kms-provider_<version>_systemd_linux_<arch>.tar.gz` | Same files as the packages, installed with the commands in [Run with systemd](/docs/get-started/systemd/). |
-| Static pod | `bao-kms-provider_<version>_static-pod.tar.gz` | Static pod manifest, provider configuration sample, `EncryptionConfiguration` sample, and the provider image digest in `image-ref.txt`. |
+| Static pod | `bao-kms-provider_<version>_static-pod_linux_<arch>.tar.gz` | Matching host binary, minimal values, manifest inputs, host preparation instructions, and image digest in `image-ref.txt`. |
 
 The static-pod bundle references the distroless provider image, which runs as
 `65532:65532` and is always pulled by digest.

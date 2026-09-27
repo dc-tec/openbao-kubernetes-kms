@@ -69,6 +69,18 @@ The Deployment Samples CI job runs it when installation docs, packaging, the
 bundle builder, or deployment tests change. It does not start systemd, log in
 to OpenBao, or test Kubernetes boot; the VM and E2E lanes do.
 
+`make static-pod-install-check` runs the host preparation commands from the
+static-pod kit's README, then generates files for both JWT sources with the
+bundled binary. It checks UID/GID `65532` access, socket-group isolation,
+matching identity on a second node, and preservation on reinstall. It does
+not start kubelet or claim cluster activation. The Deployment Samples job
+runs this check too.
+
+Set `IMAGE_PLATFORM=linux/amd64` or `linux/arm64` to choose the Linux test
+architecture. Docker needs native support or emulation for that platform.
+To test an existing static-pod kit, set `BUNDLE_ARCHIVE` to its path relative
+to the repository root. The container runs without network access.
+
 ## Fuzzing
 
 `make ci-core` runs short fuzz smoke campaigns (`FUZZTIME=10s`). To run longer
