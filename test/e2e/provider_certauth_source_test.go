@@ -46,9 +46,30 @@ func TestProviderCertAuthPKCS11SoftHSME2E(t *testing.T) {
 		BeforeProviderStart: func(t *testing.T, ctx context.Context, stack *providerFailureStack) {
 			t.Helper()
 			configureSoftHSMProviderSource(t, ctx, stack)
+			checkSoftHSMPoolTimeout(t, ctx, stack)
 		},
 	})
 	stack.runClient(ctx, "certauth-pkcs11-client", kmsClientModeFullStack, sampleNotMounted)
+}
+
+func checkSoftHSMPoolTimeout(t *testing.T, ctx context.Context, stack *providerFailureStack) {
+	t.Helper()
+	output, err := runDockerOutput(ctx, stack.dockerPath,
+		"run", "--rm", "--entrypoint", "/certauth-pkcs11.test",
+		"--volume", stack.volumes.hsm+":/hsm",
+		"--volume", stack.volumes.tls+":/bao/tls:ro",
+		"--env", "SOFTHSM2_CONF="+containerSoftHSMConfigPath,
+		"--env", "PKCS11_TEST_MODULE="+containerPKCS11ModulePath,
+		"--env", "PKCS11_TEST_CERTIFICATE="+containerCertChainPath,
+		"--env", "PKCS11_TEST_TOKEN="+providerCertAuthPKCS11TokenLabel,
+		"--env", "PKCS11_TEST_KEY="+providerCertAuthPKCS11KeyLabel,
+		"--env", "PKCS11_TEST_PIN="+containerPKCS11PINPath,
+		stack.providerImage, "-test.v", "-test.run", "^TestPKCS11PoolTimeoutSoftHSM$", "-test.timeout", "30s",
+	)
+	if err != nil {
+		t.Fatalf("PKCS#11 pool timeout regression: %v\n%s", err, output)
+	}
+	assertOutputContains(t, output, "--- PASS: TestPKCS11PoolTimeoutSoftHSM")
 }
 
 func TestProviderCertAuthSPIREWorkloadAPISourceE2E(t *testing.T) {

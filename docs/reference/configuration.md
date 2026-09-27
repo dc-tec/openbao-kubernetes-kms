@@ -7,6 +7,8 @@ verifiedBy:
   - internal/config/config.go
   - internal/config/validation.go
   - internal/config/schema.go
+  - cmd/bao-kms-provider/certauth_enabled.go
+  - internal/auth/pkcs11_provider.go
   - deploy/config/provider-systemd.yaml
 ---
 
@@ -55,7 +57,7 @@ Fields marked **required** have no usable default.
 | `auth.method` | `jwt` | `jwt`, or `cert` in certificate-auth builds; see [Compatibility](/docs/reference/compatibility/#auth-methods). |
 | `auth.loginBeforeTokenExpiry` | `5m` | Inside this window before expiry, a request starts one shared renewal or login while others keep using the valid token. |
 | `auth.tokenRenewalIncrement` | `1h` | TTL requested on renewal. Keep it above `loginBeforeTokenExpiry` and within the role's maximum TTL. |
-| `auth.loginTimeout` | `0s` | Deadline for one shared renewal or login, including recovery after a rejected token, independent of the request deadline. `0s` means `max(openbao.timeout, 5s)`. |
+| `auth.loginTimeout` | `0s` | Deadline for one shared renewal or login, including recovery after a rejected token, independent of the request deadline. Also bounds each PKCS#11 session pool wait. `0s` means `max(openbao.timeout, 5s)`; it does not enable an unlimited pool wait. See the native-call limit below. |
 | `auth.jwt.mountPath`, `auth.jwt.role` | none | Required for `jwt`. Mount path including `auth/`, and role name. |
 | `auth.jwt.jwtFile` | none | Required for `jwt`. Re-read before every login. |
 | `auth.jwt.minRemainingTtl` | `2m` | Minimum JWT lifetime left for a login. |
@@ -71,6 +73,18 @@ Fields marked **required** have no usable default.
 After a `401` or `403`, the provider logs in again and retries the request
 once, at most once every five seconds and with exponential backoff for failed
 logins; see [Security: Auth model](/docs/security/auth-model/#plugin-authentication-lifecycle).
+
+For PKCS#11, the effective `auth.loginTimeout` limits each wait for a free
+session. A pool timeout fails that signing attempt; the provider retries login
+with its normal backoff. `maxSessions` includes one session reserved for token
+login state, so `maxSessions: 2` permits one concurrent signing operation.
+
+The pool timeout and Go context deadlines cannot interrupt a native call
+already running inside the PKCS#11 module. They do not bound module
+initialization, session creation, signing, or shutdown inside that module.
+Configure finite connection and operation timeouts in the HSM vendor client.
+If a native call never returns, the provider may need a restart after HSM
+connectivity recovers. See [Troubleshooting](/docs/operate/troubleshooting/#auth-login-fails).
 
 A full certificate-auth configuration:
 

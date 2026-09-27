@@ -33,6 +33,8 @@ type PKCS11ProviderConfig struct {
 	KeyLabel        string
 	PINFile         string
 	MaxSessions     int
+	// PoolWaitTimeout bounds session acquisition, not native PKCS#11 calls.
+	PoolWaitTimeout time.Duration
 }
 
 // SPIFFEProviderConfig contains SPIFFE certificate provider settings.

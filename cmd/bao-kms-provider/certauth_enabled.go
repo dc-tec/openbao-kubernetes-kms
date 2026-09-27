@@ -94,6 +94,7 @@ func newCertificateProvider(
 			KeyLabel:        cfg.Auth.Cert.PKCS11.KeyLabel,
 			PINFile:         cfg.Auth.Cert.PKCS11.PINFile,
 			MaxSessions:     cfg.Auth.Cert.PKCS11.MaxSessions,
+			PoolWaitTimeout: authLoginTimeout(cfg),
 		})
 	case certSourceSPIFFE:
 		return auth.NewSPIFFECertificateProvider(ctx, auth.SPIFFEProviderConfig{

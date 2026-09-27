@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **auth:** Bound PKCS#11 session pool waits by the effective
+  `auth.loginTimeout`, including signer probes and TLS signing. Native calls
+  inside the HSM module still require vendor client timeouts.
+
 - **cli:** Check Transit configuration, trim, restore, and rewrap capabilities
   in doctor. Accept Kubernetes migration encryption configurations with local
   encryption keys and additional KMS providers while requiring the configured

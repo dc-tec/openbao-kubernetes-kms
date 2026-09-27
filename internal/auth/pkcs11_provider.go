@@ -48,10 +48,11 @@ func NewPKCS11CertificateProvider(
 		return nil, err
 	}
 	pkcs11Ctx, err := crypto11.Configure(&crypto11.Config{
-		Path:        normalized.ModulePath,
-		TokenLabel:  normalized.TokenLabel,
-		Pin:         pin,
-		MaxSessions: normalized.MaxSessions,
+		Path:            normalized.ModulePath,
+		TokenLabel:      normalized.TokenLabel,
+		Pin:             pin,
+		MaxSessions:     normalized.MaxSessions,
+		PoolWaitTimeout: normalized.PoolWaitTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: initialize pkcs11 context", ErrAuthConfig)
@@ -164,6 +165,9 @@ func validatePKCS11ProviderConfig(cfg PKCS11ProviderConfig) (PKCS11ProviderConfi
 	}
 	if cfg.MaxSessions < 2 {
 		return PKCS11ProviderConfig{}, fmt.Errorf("%w: pkcs11 max sessions must be at least 2", ErrAuthConfig)
+	}
+	if cfg.PoolWaitTimeout <= 0 {
+		return PKCS11ProviderConfig{}, fmt.Errorf("%w: pkcs11 pool wait timeout must be positive", ErrAuthConfig)
 	}
 	return cfg, nil
 }

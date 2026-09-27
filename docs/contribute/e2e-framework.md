@@ -21,7 +21,7 @@ Kind and kubectl.
 |---|---|---|
 | OpenBao | `make test-e2e-openbao-ci` | Transit, JWT auth, least-privilege policy, and OpenBao `2.6.0` behavior. |
 | OpenBao cert auth | `make test-e2e-cert-auth-openbao-ci` | TLS cert auth with a URI SAN role binding, login, and Transit access. |
-| PKCS#11 source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | SoftHSM token, PKCS#11 signer, cert login, and KMS v2 through the provider. |
+| PKCS#11 source | `make test-e2e-provider-certauth-pkcs11-openbao-ci` | SoftHSM token, session pool timeout and recovery under the race detector, PKCS#11 signer, cert login, and KMS v2 through the provider. |
 | Certificate sources | `make test-e2e-provider-certauth-sources-openbao-ci` | The supported PKCS#11 source lane. |
 | SPIRE source | `make test-e2e-provider-certauth-spiffe-openbao-ci` | Local implementation check only; not in CI or the release gate. |
 | Provider full stack | `make test-e2e-provider-openbao-ci` | Provider image, Unix socket, KMS v2 client, Transit, and auth. |
