@@ -245,3 +245,85 @@ func TestWriteOpenBaoPolicyRenewal(t *testing.T) {
 		t.Fatalf("renewal policy missing renew-self:\n%s", withRenewal.String())
 	}
 }
+
+func TestOAuth2ScaffoldRoundTripAndCredentialMount(t *testing.T) {
+	cfg := loadConfig(t, systemdSamplePath)
+	cfg.Auth.JWT.Source = config.JWTSourceOAuth2
+	cfg.Auth.JWT.JWTFile = ""
+	// #nosec G101 -- fixture configuration contains a credential path, not a client secret.
+	cfg.Auth.JWT.OAuth2 = config.OAuth2Config{
+		TokenURL: "https://issuer.example/token", ClientID: "provider", AuthMethod: "client_secret_post",
+		ClientSecretFile: "/etc/openbao-kms/credentials/client-secret", CACertFile: "/etc/openbao-kms/issuer/ca.pem",
+		Scopes: []string{"read", "write"}, Audience: "bao", Resources: []string{"urn:bao:production"},
+	}
+	rendered, err := RenderProviderConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(rendered, []byte("jwtFile:")) {
+		t.Fatal("OAuth config rendered a JWT file")
+	}
+	got := loadContent(t, rendered)
+	if !reflect.DeepEqual(got.Auth, cfg.Auth) {
+		t.Fatal("OAuth configuration changed during round trip")
+	}
+	if err := config.Validate(got, config.ValidationOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := buildStaticPod(cfg, StaticPodOptions{Image: sampleImage, SocketGID: 1234})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var credentialMounted bool
+	for _, volume := range manifest.Spec.Volumes {
+		if volume.Name == authMethodJWT {
+			t.Fatal("OAuth pod depends on a JWT file")
+		}
+		if volume.Name == "oauth2-credentials" {
+			credentialMounted = volume.HostPath.Type == "Directory" && volume.HostPath.Path == "/etc/openbao-kms/credentials"
+		}
+	}
+	if !credentialMounted {
+		t.Fatal("credential directory not mounted for atomic rotation")
+	}
+	for _, mount := range manifest.Spec.Containers[0].VolumeMounts {
+		if strings.HasPrefix(mount.Name, "oauth2-") && !mount.ReadOnly {
+			t.Fatal("issuer material mounted writable")
+		}
+	}
+}
+
+func TestOAuth2CredentialMountConflicts(t *testing.T) {
+	for _, tc := range []struct {
+		name, credential string
+		wantError        bool
+	}{
+		{"existing TLS directory", "/etc/openbao-kms/tls/client-secret", false},
+		{"writable runtime directory", "/run/openbao-kms/client-secret", true},
+		{"host root", "/client-secret", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := loadConfig(t, staticPodSamplePath)
+			cfg.Auth.JWT.Source = config.JWTSourceOAuth2
+			cfg.Auth.JWT.JWTFile = ""
+			cfg.Auth.JWT.OAuth2.ClientSecretFile = tc.credential
+			manifest, err := buildStaticPod(cfg, StaticPodOptions{Image: sampleImage, SocketGID: 1234})
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("unsafe credential directory accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			mounts := map[string]bool{}
+			for _, mount := range manifest.Spec.Containers[0].VolumeMounts {
+				if mounts[mount.MountPath] {
+					t.Fatal("duplicate container mount path")
+				}
+				mounts[mount.MountPath] = true
+			}
+		})
+	}
+}

@@ -86,6 +86,7 @@ auth:
   tokenRenewalIncrement: 2h
   loginTimeout: 9s
   jwt:
+    source: file
     mountPath: auth/k8s-workload-a-jwt
     role: openbao-kms-control-plane
     jwtFile: /var/lib/openbao-kms/identity.jwt

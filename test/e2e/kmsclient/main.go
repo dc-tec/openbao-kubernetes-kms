@@ -44,6 +44,7 @@ const (
 	modeWriteSample             = "write-sample"
 	modeReadSample              = "read-sample"
 	modeExpectOutage            = "expect-outage"
+	modeExpectAuthFailure       = "expect-auth-failure"
 	modeExpectUnhealthy         = "expect-unhealthy"
 	modeExpectPolicyDenied      = "expect-policy-denied"
 	modeExpectSocketUnavailable = "expect-socket-unavailable"
@@ -107,6 +108,7 @@ var modeHandlers = map[string]func(context.Context, kmsapi.KeyManagementServiceC
 	modeWriteSample:             writeEncryptedSample,
 	modeReadSample:              readEncryptedSample,
 	modeExpectOutage:            expectOutage,
+	modeExpectAuthFailure:       expectAuthFailure,
 	modeExpectUnhealthy:         expectUnhealthy,
 	modeExpectPolicyDenied:      expectPolicyDenied,
 	modeExpectSocketUnavailable: expectSocketUnavailable,
@@ -216,6 +218,15 @@ func expectOutage(ctx context.Context, client kmsapi.KeyManagementServiceClient)
 		Annotations: sample.Annotations,
 	})
 	assertAnyCode(err, []codes.Code{codes.Unavailable, codes.DeadlineExceeded}, "decrypt during OpenBao outage")
+}
+
+func expectAuthFailure(ctx context.Context, client kmsapi.KeyManagementServiceClient) {
+	expectUnhealthy(ctx, client)
+	sample := readSample()
+	_, err := client.Decrypt(ctx, &kmsapi.DecryptRequest{
+		Ciphertext: sample.Ciphertext, KeyId: sample.KeyID, Annotations: sample.Annotations,
+	})
+	assertCode(err, codes.Unauthenticated, "decrypt without a usable authentication credential")
 }
 
 func expectUnhealthy(ctx context.Context, client kmsapi.KeyManagementServiceClient) {

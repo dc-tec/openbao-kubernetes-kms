@@ -75,6 +75,7 @@ type e2eLane struct {
 type versionsPolicy struct {
 	Validation struct {
 		OpenBao         openBaoValidationPolicy    `yaml:"openbao"`
+		Keycloak        openBaoValidationPolicy    `yaml:"keycloak"`
 		Kubernetes      kubernetesValidationPolicy `yaml:"kubernetes"`
 		ReleaseGateRows []releaseGateRow           `yaml:"releaseGateRows"`
 	} `yaml:"validation"`
@@ -228,6 +229,7 @@ func TestCIWorkflowReusesPrebuiltE2EProviderImages(t *testing.T) {
 
 	kind := workflowJobSection(t, workflow, "kind-e2e")
 	for _, want := range []string{
+		"make test-e2e-kind-oauth2",
 		"needs: [changes, core, e2e-provider-images]",
 		`E2E_PROVIDER_BUILD: "false"`,
 		"name: e2e-provider-base-image",
@@ -341,6 +343,18 @@ func TestReleaseGateMakeTargetsExist(t *testing.T) {
 			t.Fatalf("%s must define or generate lane target %q", e2eMakefilePath, target)
 		}
 	}
+}
+
+func TestKeycloakImagePinMatchesFixtureDefault(t *testing.T) {
+	policy := readVersionsPolicy(t).Validation.Keycloak
+	if policy.Primary == "" || !strings.HasPrefix(policy.ImageDigest, "sha256:") || policy.DigestStatus != "pinned" {
+		t.Fatal("Keycloak validation must declare an exact version and image digest")
+	}
+	if !strings.Contains(policy.Image, ":"+policy.Primary+"@"+policy.ImageDigest) {
+		t.Fatal("Keycloak validation image does not match the version and digest")
+	}
+	fixture := readTextFile(t, "framework/keycloak_environment.go")
+	requireContains(t, fixture, policy.Image, "Keycloak fixture default")
 }
 
 func TestOpenBaoAggregateClearsProviderImageEnvironment(t *testing.T) {

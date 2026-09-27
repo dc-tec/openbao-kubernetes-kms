@@ -131,10 +131,11 @@ define kind-e2e-target
 .PHONY: $(1)
 $(1): verify-e2e-manifest
 	@if [ "$$(E2E_PROVIDER_BUILD)" != "false" ]; then $$(MAKE) image IMAGE="$$(E2E_PROVIDER_IMAGE)"; fi
-	@E2E_KIND_CI=true E2E_OPENBAO_IMAGE="$$(E2E_OPENBAO_IMAGE)" E2E_PROVIDER_IMAGE="$$(E2E_PROVIDER_IMAGE)" E2E_KIND_NODE_IMAGE="$$(E2E_KIND_NODE_IMAGE)" "$$(GO)" test -v -tags=e2e ./test/e2e -run '$(2)' -count=1 -timeout=$(3)
+	@E2E_KIND_CI=true E2E_OPENBAO_IMAGE="$$(E2E_OPENBAO_IMAGE)" E2E_KEYCLOAK_IMAGE="$$(E2E_KEYCLOAK_IMAGE)" E2E_PROVIDER_IMAGE="$$(E2E_PROVIDER_IMAGE)" E2E_KIND_NODE_IMAGE="$$(E2E_KIND_NODE_IMAGE)" "$$(GO)" test -v -tags=e2e ./test/e2e -run '$(2)' -count=1 -timeout=$(3)
 endef
 
 $(eval $(call kind-e2e-target,test-e2e-kind-smoke,^TestKindKMSV2SmokeE2E$$$$,30m))
+$(eval $(call kind-e2e-target,test-e2e-kind-oauth2,^TestKindOAuth2KeycloakE2E$$$$,25m))
 $(eval $(call kind-e2e-target,test-e2e-kind-convergence,^TestKindMultiControlPlaneConvergenceE2E$$$$,45m))
 $(eval $(call kind-e2e-target,test-e2e-kind-upgrade-rollback,^TestKindStaticPodUpgradeRollbackE2E$$$$,30m))
 $(eval $(call kind-e2e-target,test-e2e-kind-dr-runbook,^TestKindDRRestoreRunbookE2E$$$$,35m))

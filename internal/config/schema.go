@@ -54,7 +54,35 @@ const configSchemaJSON = `{
         "jwt": {
           "type": "object",
           "additionalProperties": false,
+          "required": ["source", "mountPath", "role"],
+          "oneOf": [
+            {"properties": {"source": {"const": "file"}}, "required": ["jwtFile"], "not": {"required": ["oauth2"]}},
+            {
+              "properties": {
+                "source": {"const": "oauth2"},
+                "expectedIssuer": {"minLength": 1},
+                "expectedAudience": {"minItems": 1}
+              },
+              "required": ["oauth2", "expectedIssuer", "expectedAudience"], "not": {"required": ["jwtFile"]}
+            }
+          ],
           "properties": {
+            "source": {"type": "string", "enum": ["file", "oauth2"]},
+            "oauth2": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["tokenUrl", "clientId", "clientSecretFile", "authMethod"],
+              "properties": {
+                "tokenUrl": {"type": "string", "format": "uri"},
+                "clientId": {"type": "string", "minLength": 1},
+                "clientSecretFile": {"type": "string", "minLength": 1},
+                "authMethod": {"type": "string", "enum": ["client_secret_basic", "client_secret_post"]},
+                "scopes": {"type": "array", "items": {"type": "string", "minLength": 1}},
+                "audience": {"type": "string"},
+                "resources": {"type": "array", "items": {"type": "string", "format": "uri"}},
+                "caCertFile": {"type": "string"}
+              }
+            },
             "mountPath": {"type": "string", "minLength": 1},
             "role": {"type": "string", "minLength": 1},
             "jwtFile": {"type": "string", "minLength": 1},

@@ -55,14 +55,27 @@ type authConfigFile struct {
 }
 
 type jwtAuthFile struct {
-	MountPath        string   `yaml:"mountPath"`
-	Role             string   `yaml:"role"`
-	JWTFile          string   `yaml:"jwtFile"`
-	MinRemainingTTL  string   `yaml:"minRemainingTtl"`
-	ClockSkewLeeway  string   `yaml:"clockSkewLeeway"`
-	ExpectedIssuer   string   `yaml:"expectedIssuer"`
-	ExpectedAudience []string `yaml:"expectedAudience"`
-	ExpectedSubject  string   `yaml:"expectedSubject"`
+	Source           string          `yaml:"source"`
+	OAuth2           *oauth2AuthFile `yaml:"oauth2,omitempty"`
+	MountPath        string          `yaml:"mountPath"`
+	Role             string          `yaml:"role"`
+	JWTFile          string          `yaml:"jwtFile,omitempty"`
+	MinRemainingTTL  string          `yaml:"minRemainingTtl"`
+	ClockSkewLeeway  string          `yaml:"clockSkewLeeway"`
+	ExpectedIssuer   string          `yaml:"expectedIssuer"`
+	ExpectedAudience []string        `yaml:"expectedAudience"`
+	ExpectedSubject  string          `yaml:"expectedSubject"`
+}
+
+type oauth2AuthFile struct {
+	TokenURL         string   `yaml:"tokenUrl"`
+	ClientID         string   `yaml:"clientId"`
+	ClientSecretFile string   `yaml:"clientSecretFile"`
+	AuthMethod       string   `yaml:"authMethod"`
+	Scopes           []string `yaml:"scopes,omitempty"`
+	Audience         string   `yaml:"audience,omitempty"`
+	Resources        []string `yaml:"resources,omitempty"`
+	CACertFile       string   `yaml:"caCertFile,omitempty"`
 }
 
 type certAuthFile struct {
@@ -204,6 +217,7 @@ func RenderProviderConfig(cfg config.Config) ([]byte, error) {
 			audience = []string{}
 		}
 		file.Auth.JWT = &jwtAuthFile{
+			Source:           cfg.Auth.JWT.Source,
 			MountPath:        cfg.Auth.JWT.MountPath,
 			Role:             cfg.Auth.JWT.Role,
 			JWTFile:          cfg.Auth.JWT.JWTFile,
@@ -212,6 +226,14 @@ func RenderProviderConfig(cfg config.Config) ([]byte, error) {
 			ExpectedIssuer:   cfg.Auth.JWT.ExpectedIssuer,
 			ExpectedAudience: audience,
 			ExpectedSubject:  cfg.Auth.JWT.ExpectedSubject,
+		}
+		if cfg.Auth.JWT.Source == config.JWTSourceOAuth2 {
+			oauth := cfg.Auth.JWT.OAuth2
+			file.Auth.JWT.OAuth2 = &oauth2AuthFile{
+				TokenURL: oauth.TokenURL, ClientID: oauth.ClientID, ClientSecretFile: oauth.ClientSecretFile,
+				AuthMethod: oauth.AuthMethod, Scopes: oauth.Scopes, Audience: oauth.Audience,
+				Resources: oauth.Resources, CACertFile: oauth.CACertFile,
+			}
 		}
 	case authMethodCert:
 		file.Auth.Cert = &certAuthFile{

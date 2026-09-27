@@ -47,6 +47,8 @@ primary:
         url: docs/configure/
       - title: OpenBao auth and policy
         url: docs/configure/openbao-auth/
+      - title: OAuth 2.0 client credentials
+        url: docs/configure/oauth2/
       - title: Monitor the provider
         url: docs/configure/monitor/
   - title: Operate

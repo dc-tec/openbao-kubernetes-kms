@@ -179,7 +179,7 @@ func applyInitHostLayout(cfg *config.Config, opts initOptions) error {
 	if cfg.OpenBao.CACertFile == "" {
 		cfg.OpenBao.CACertFile = initDefaultCACertFile
 	}
-	if cfg.Auth.Method == initAuthMethodJWT && cfg.Auth.JWT.JWTFile == "" {
+	if cfg.Auth.Method == initAuthMethodJWT && cfg.Auth.JWT.Source == config.JWTSourceFile && cfg.Auth.JWT.JWTFile == "" {
 		cfg.Auth.JWT.JWTFile = initDefaultJWTFile
 	}
 	if opts.model != initModelStaticPod {

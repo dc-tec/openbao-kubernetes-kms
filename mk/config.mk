@@ -27,6 +27,7 @@ E2E_JSON_REPORT ?= $(E2E_ARTIFACT_DIR)/ginkgo.json
 E2E_PARALLEL_NODES ?= 1
 E2E_GINKGO_EXTRA_ARGS ?=
 E2E_OPENBAO_IMAGE ?= $(shell awk '/^[[:space:]]*image:[[:space:]]*/ { gsub("\"", "", $$2); print $$2; exit }' .ci/versions.yaml)
+E2E_KEYCLOAK_IMAGE ?= $(shell awk '/^  keycloak:/{found=1;next} found && /^    image:/{print $$2;exit}' .ci/versions.yaml)
 E2E_PROVIDER_IMAGE ?= $(IMAGE_REPOSITORY):e2e-$(COMMIT)
 E2E_PROVIDER_OLD_IMAGE ?= $(IMAGE_REPOSITORY):e2e-upgrade-old-$(COMMIT)
 E2E_PROVIDER_NEW_IMAGE ?= $(IMAGE_REPOSITORY):e2e-upgrade-new-$(COMMIT)

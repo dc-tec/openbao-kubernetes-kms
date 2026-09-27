@@ -14,6 +14,12 @@ using OIDC discovery and the standard policy. This page covers the variants.
 Commands use the shell variables from
 [Plan identity values](/docs/get-started/plan-values/#record-the-values).
 
+The provider accepts a JWT file or obtains a JWT directly through
+[OAuth 2.0 client credentials](/docs/configure/oauth2/). Both sources use the
+same OpenBao JWT auth mount and role. OAuth requires an authorization server
+that issues signed JWT access tokens and works independently of the protected
+Kubernetes API.
+
 ## Policy
 
 The standard policy grants metadata read, encrypt, and decrypt on the key,
@@ -104,7 +110,6 @@ The OpenBao listener the provider uses must request client certificates.
 Keep `disable_binding=false` so renewal stays tied to the login certificate.
 
 On the provider side, set `auth.method: cert` with the PKCS#11 fields from
-[Reference: Configuration](/docs/reference/configuration/#auth). For systemd,
-replace the unit's JWT `ConditionPathExists=` line with checks for the
-certificate chain and PIN file. For static pods, mount the certificate chain,
+[Reference: Configuration](/docs/reference/configuration/#auth). The systemd
+service validates the selected auth material during startup. For static pods, mount the certificate chain,
 PIN file, and PKCS#11 module instead of the JWT.

@@ -105,6 +105,7 @@ openbao:
   instanceId: bao-prod-a                   # OpenBao instance ID
 auth:
   jwt:
+    source: file
     mountPath: auth/k8s-workload-a-jwt     # auth/ + JWT auth mount path
     role: openbao-kms-control-plane        # JWT role
     expectedIssuer: https://issuer.example.internal

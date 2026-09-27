@@ -16,6 +16,7 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/keyregistry"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/kmsv2"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/oauth2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/version"
@@ -192,6 +193,14 @@ func jwtValidationOptions(cfg config.Config) auth.JWTValidationOptions {
 func checkLocalAuthForDoctor(ctx context.Context, report *cli.Report, cfg config.Config) bool {
 	switch cfg.Auth.Method {
 	case authMethodJWT:
+		if cfg.Auth.JWT.Source == config.JWTSourceOAuth2 {
+			if _, err := oauth2.ReadClientSecret(cfg.Auth.JWT.OAuth2.ClientSecretFile); err != nil {
+				report.Fail("oauth2.local", "OAuth 2.0 client credential", safeMessage(err))
+				return false
+			}
+			report.Pass("oauth2.local", "OAuth 2.0 client credential", "readable and safely permissioned")
+			return true
+		}
 		if _, err := auth.ReadAndValidateJWT(cfg.Auth.JWT.JWTFile, jwtValidationOptions(cfg)); err != nil {
 			report.Fail(checkJWTLocal, "JWT file", safeMessage(err))
 			return false
@@ -256,8 +265,16 @@ func authenticateForDiagnostics(
 	loginCtx, cancel := withTimeout(ctx, authLoginTimeout(cfg))
 	defer cancel()
 	if err := manager.Refresh(loginCtx); err != nil {
+		if isOAuth2Error(err) {
+			report.Fail("oauth2.acquire", "OAuth 2.0 token acquisition", safeMessage(err))
+			report.Skip(checkOpenBaoAuth, openBaoAuthCheckName(cfg), "OAuth 2.0 token acquisition failed")
+			return diagnosticClients{}, false
+		}
 		report.Fail(checkOpenBaoAuth, openBaoAuthCheckName(cfg), safeMessage(err))
 		return diagnosticClients{}, false
+	}
+	if cfg.Auth.Method == authMethodJWT && cfg.Auth.JWT.Source == config.JWTSourceOAuth2 {
+		report.Pass("oauth2.acquire", "OAuth 2.0 token acquisition", "access token acquired and accepted by OpenBao")
 	}
 	report.Pass(checkOpenBaoAuth, openBaoAuthCheckName(cfg), openBaoAuthPassMessage(cfg))
 
@@ -274,6 +291,11 @@ func authenticateForDiagnostics(
 		return diagnosticClients{}, false
 	}
 	return diagnosticClients{transitClient: transitClient}, true
+}
+
+func isOAuth2Error(err error) bool {
+	return errors.Is(err, oauth2.ErrCredential) || errors.Is(err, oauth2.ErrRequest) ||
+		errors.Is(err, oauth2.ErrRejected) || errors.Is(err, oauth2.ErrResponse) || errors.Is(err, oauth2.ErrConfig)
 }
 
 func openBaoAuthCheckName(cfg config.Config) string {

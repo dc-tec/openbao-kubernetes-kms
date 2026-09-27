@@ -25,6 +25,10 @@ runs as the non-root `openbao-kms` user, listens on
   `identity.jwt` from your identity provisioning process. The JWT must be
   renewable without the protected API server.
 
+For native token acquisition, follow [OAuth 2.0 client credentials](/docs/configure/oauth2/).
+Set `auth.jwt.source: oauth2` and stage the client secret and issuer CA bundle
+instead of `identity.jwt` in the steps below. The service unit supports both sources.
+
 ## Step 1: Install the package or tarball
 
 On Debian or Ubuntu:
@@ -192,7 +196,7 @@ settings that matter for the control-plane boot path:
 | Setting | Purpose |
 |---|---|
 | `Before=kubelet.service` | Starts the provider before kubelet starts a static-pod API server on kubeadm-style hosts. |
-| `ConditionPathExists=` | Skips start until the configuration and JWT are staged. PKCS#11 deployments replace the JWT condition with their certificate chain and PIN file. |
+| `ConditionPathExists=` | Skips start until the configuration is staged. The provider validates the selected authentication source during startup. |
 | `ConditionPathIsDirectory=/run/openbao-kms` | Requires the socket directory that tmpfiles creates. |
 | `User=openbao-kms`, `SupplementaryGroups=openbao-kms-socket` | Runs without root; the socket group is how the API server connects. |
 | `Restart=always` with start limits | Restarts transient failures without hiding a fast crash loop. |

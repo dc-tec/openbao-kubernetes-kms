@@ -27,6 +27,7 @@ const (
 	kmsClientModeWriteSample             = "write-sample"
 	kmsClientModeReadSample              = "read-sample"
 	kmsClientModeExpectOutage            = "expect-outage"
+	kmsClientModeExpectAuthFailure       = "expect-auth-failure"
 	kmsClientModeExpectUnhealthy         = "expect-unhealthy"
 	kmsClientModeExpectPolicyDenied      = "expect-policy-denied"
 	kmsClientModeExpectSocketUnavailable = "expect-socket-unavailable"

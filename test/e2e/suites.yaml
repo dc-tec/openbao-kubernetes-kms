@@ -31,11 +31,33 @@ releaseGate:
         - openbao-provider-certauth-pkcs11-source-ci
       kind:
         - kind-smoke
+        - kind-oauth2
         - kind-convergence
         - kind-upgrade-rollback
         - kind-dr-runbook
 
 lanes:
+  - id: kind-oauth2
+    name: Kubernetes KMS v2 OAuth Keycloak
+    makeTarget: test-e2e-kind-oauth2
+    package: ./test/e2e
+    labelFilter: kind && kmsv2 && oauth2
+    runRegex: ^TestKindOAuth2KeycloakE2E$
+    prScope: main
+    environment: kind-keycloak
+    isolation: local-cluster
+    timeout: 25m
+    parallelNodes: 1
+    requiredEnv:
+      - E2E_PROVIDER_IMAGE
+      - E2E_KIND_NODE_IMAGE
+    versionRefs:
+      - validation.openbao.image
+      - validation.keycloak.image
+      - validation.kubernetes.previewMatrix
+    status: active
+    reports: true
+
   - id: openbao-ci
     name: OpenBao CI
     makeTarget: test-e2e-openbao-ci
