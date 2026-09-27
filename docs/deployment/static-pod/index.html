@@ -1,0 +1,162 @@
+<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Static pod manifest, image preload, host preparation, and bootstrap risk profile for running bao-kms-provider as a kubelet-managed pod."><title>Static Pod Deployment · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/docs/deployment/static-pod/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="Static Pod Deployment · OpenBao Kubernetes KMS"><meta property="og:description" content="Static pod manifest, image preload, host preparation, and bootstrap risk profile for running bao-kms-provider as a kubelet-managed pod."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/docs/deployment/static-pod/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
+<span></span><span></span><span></span>
+</button>
+<a class=brand href=/openbao-kubernetes-kms/ aria-label="OpenBao KMS documentation home"><img class=brand-logo src=/openbao-kubernetes-kms/img/brand/logo.svg alt>
+<span class=brand-name>OpenBao <b>KMS</b></span></a><nav class=top-nav id=primary-navigation aria-label=Primary><a href=/openbao-kubernetes-kms/docs/ aria-current=location>Docs</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></nav><div class=header-actions><button class=search-trigger type=button aria-haspopup=dialog data-search-open>
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<span>Search</span>
+<kbd>⌘ K</kbd></button><div class=github-actions><a class=github-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2A10 10 0 008.84 21.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94.0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64.0.0.84-.27 2.75 1.02A9.58 9.58.0 0112 6.82c.85.0 1.7.12 2.5.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68.0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg>
+</a><a class=stargazers-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="View OpenBao KMS stars on GitHub" data-stargazers data-endpoint=https://api.github.com/repos/dc-tec/openbao-kubernetes-kms data-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.2l-5.56 2.92 1.06-6.2L3 9.53l6.22-.9L12 3z"/></svg>
+<span class=stargazer-count data-stargazer-count hidden></span></a></div></div></div></header><button class=nav-scrim type=button aria-label="Close navigation" data-nav-close></button><div class=docs-shell><aside class=sidebar id=site-sidebar data-sidebar><div class=sidebar-head><p>Documentation</p><div class=sidebar-head-actions><details class=version-switcher><summary aria-label="Documentation version, currently 0.1.x"><span>0.1.x</span>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary><div class=version-menu><a href=/openbao-kubernetes-kms/docs/deployment/static-pod/ aria-current=page><span>0.1.x</span>
+<small>Preview</small>
+</a><a href=/openbao-kubernetes-kms/next/docs/><span>Next</span>
+<small>Unreleased</small></a></div></details><button class=sidebar-collapse type=button aria-controls=site-sidebar aria-expanded=true title="Collapse sidebar" data-sidebar-collapse>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg>
+<span class=sr-only data-sidebar-collapse-label>Collapse sidebar</span></button></div></div><nav aria-label=Documentation><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/errata/><span>Release notes and corrections</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/getting-started/><span>Start Here</span></a></div><div class="nav-group is-active"><a class=nav-group-link href=/openbao-kubernetes-kms/docs/deployment/><span>Deployment</span></a><div class=nav-children><a href=/openbao-kubernetes-kms/docs/deployment/choosing-a-model/>Choosing A Model</a><a href=/openbao-kubernetes-kms/docs/deployment/systemd/>systemd Deployment</a><a href=/openbao-kubernetes-kms/docs/deployment/>Deployment</a><a class=is-current href=/openbao-kubernetes-kms/docs/deployment/static-pod/ aria-current=page>Static Pod Deployment</a><a href=/openbao-kubernetes-kms/docs/deployment/linux-identity-model/>Linux Identity Model</a><a href=/openbao-kubernetes-kms/docs/deployment/observability/>Observability Deployment</a></div></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/operations/><span>Operations</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/security/><span>Security</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/reference/><span>Reference</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/architecture/><span>Architecture</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/development/><span>Development</span></a></div><div class=nav-divider></div><details class=nav-secondary-group><summary class=nav-secondary>Contribute</summary><div class=nav-children><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/>Docs site</a></div></details></nav></aside><main class=doc-main id=main-content><nav class=breadcrumbs aria-label=Breadcrumb><a href=/openbao-kubernetes-kms/>Home</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/docs/>Documentation</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/docs/deployment/>Deployment</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<span aria-current=page>Static Pod Deployment</span></nav><aside class="version-notice version-notice-01x" aria-label="Documentation version notice"><strong>0.1.x · Preview</strong>
+<span>Documentation for 0.1.0-preview.2, with maintained corrections. Use this preview for evaluation only. Read the release corrections before installation.</span>
+<a href=/openbao-kubernetes-kms/docs/errata/>Release corrections</a></aside><article class=doc-article><header class=article-header><h1>Static Pod Deployment</h1><p class=article-lede>Static pod manifest, image preload, host preparation, and bootstrap risk profile for running bao-kms-provider as a kubelet-managed pod.</p><p class=page-meta>Updated 27 September 2026 · 5 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#constraints>Constraints</a></li><li><a href=#example-manifest>Example Manifest</a></li><li><a href=#pod-hardening>Pod Hardening</a></li><li><a href=#image-availability>Image Availability</a></li><li><a href=#host-preparation>Host Preparation</a></li><li><a href=#kubeadm-placement>kubeadm Placement</a></li><li><a href=#bootstrap-risks>Bootstrap Risks</a></li><li><a href=#verification>Verification</a></li><li><a href=#source-references>Source References</a></li></ul></nav></details><div class=article-content><p>Static pod deployment is appropriate for kubeadm-style environments and
+image-based control-plane management. It keeps the provider under kubelet
+management alongside the API server. Kubelet, the container runtime, and local
+image availability are therefore part of the KMS provider boot path.</p><p>For the model selection rationale see <a href=/openbao-kubernetes-kms/docs/deployment/choosing-a-model/>Deployment: Choosing A Model</a>
+. For the user, group, and file ownership model see <a href=/openbao-kubernetes-kms/docs/deployment/linux-identity-model/>Deployment: Linux Identity Model</a>
+.</p><h2 id=constraints>Constraints</h2><p>Kubelet reads a static pod manifest from the host filesystem. Static pods
+cannot depend on Kubernetes API objects such as ConfigMaps, Secrets, or
+ServiceAccounts. The protected API server may need the KMS provider before
+those API objects are reachable.</p><p>The provider static pod mounts everything it needs from the host:</p><ul><li>configuration file,</li><li>certificate authority (CA) bundle,</li><li>configured auth material such as a JSON Web Token (JWT) file, certificate chain, or PKCS#11 personal identification number (PIN) file,</li><li>runtime socket directory,</li><li>optional local state directory.</li></ul><h2 id=example-manifest>Example Manifest</h2><p>The maintained sample manifest lives at
+<code>deploy/static-pod/bao-kms-provider.yaml</code>. Replace the placeholder image digest
+with the verified digest from the selected release. Replace the supplemental
+group ID (GID) before deploying. Do not deploy a tag-only image reference.</p><div class=command-block><div class=command-head><div><span>yaml</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-yaml>apiVersion: v1
+kind: Pod
+metadata:
+  name: bao-kms-provider
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: bao-kms-provider
+    app.kubernetes.io/component: kms-provider
+spec:
+  # Required during early control-plane boot because the Container Network
+  # Interface (CNI) may be unavailable when the provider must reach OpenBao.
+  hostNetwork: true
+  priorityClassName: system-node-critical
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    supplementalGroups:
+      # Replace with the host openbao-kms-socket GID from:
+      # getent group openbao-kms-socket
+      - 1234
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: bao-kms-provider
+      # Replace with the verified image digest from the selected release.
+      image: ghcr.io/dc-tec/bao-kms-provider@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      imagePullPolicy: IfNotPresent
+      args:
+        - serve
+        - --config=/etc/openbao-kms/config.yaml
+      ports:
+        - name: metrics
+          containerPort: 8081
+          protocol: TCP
+        - name: health
+          containerPort: 8082
+          protocol: TCP
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      volumeMounts:
+        - name: config
+          mountPath: /etc/openbao-kms/config.yaml
+          readOnly: true
+        - name: tls
+          mountPath: /etc/openbao-kms/tls
+          readOnly: true
+        - name: jwt
+          mountPath: /var/lib/openbao-kms/identity.jwt
+          readOnly: true
+        - name: run
+          mountPath: /run/openbao-kms
+        - name: state
+          mountPath: /var/lib/openbao-kms/state
+      livenessProbe:
+        httpGet:
+          host: 127.0.0.1
+          path: /live
+          port: 8082
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          host: 127.0.0.1
+          path: /ready
+          port: 8082
+        initialDelaySeconds: 5
+        periodSeconds: 10
+  volumes:
+    - name: config
+      hostPath:
+        path: /etc/openbao-kms/config.yaml
+        type: File
+    - name: tls
+      hostPath:
+        path: /etc/openbao-kms/tls
+        type: Directory
+    - name: jwt
+      hostPath:
+        path: /var/lib/openbao-kms/identity.jwt
+        type: File
+    - name: run
+      hostPath:
+        path: /run/openbao-kms
+        type: Directory
+    - name: state
+      hostPath:
+        path: /var/lib/openbao-kms/state
+        type: Directory</code></pre></div><p>The final manifest depends on the host socket GID and the released
+image digest recorded for the selected release. The sample uses user ID (UID)
+and GID <code>65532:65532</code>, matching the distroless non-root image user.</p><h2 id=pod-hardening>Pod Hardening</h2><table><thead><tr><th>Setting</th><th>Purpose</th></tr></thead><tbody><tr><td><code>hostNetwork: true</code></td><td>Avoids CNI availability as an early-boot dependency.</td></tr><tr><td><code>automountServiceAccountToken: false</code></td><td>Prevents accidental dependency on protected-cluster ServiceAccount tokens.</td></tr><tr><td><code>runAsNonRoot: true</code> and <code>runAsUser: 65532</code></td><td>Runs as the distroless non-root image user.</td></tr><tr><td><code>supplementalGroups</code></td><td>Gives the container access to the host socket group without exposing provider auth material to the API server.</td></tr><tr><td><code>seccompProfile: RuntimeDefault</code></td><td>Uses the runtime default syscall filter.</td></tr><tr><td><code>allowPrivilegeEscalation: false</code></td><td>Blocks privilege escalation inside the container.</td></tr><tr><td><code>readOnlyRootFilesystem: true</code></td><td>Forces writes into explicit hostPath mounts.</td></tr><tr><td><code>capabilities.drop: [ALL]</code></td><td>Runs without Linux capabilities.</td></tr><tr><td>immutable image digest</td><td>Prevents image drift during recovery.</td></tr><tr><td>liveness and readiness probes</td><td>Lets kubelet report provider process and dependency health.</td></tr></tbody></table><h2 id=image-availability>Image Availability</h2><p>For air-gapped or bootstrap-sensitive control planes, preload the image on every control-plane node:</p><ul><li>use immutable image digests from the selected release,</li><li>avoid <code>Always</code> pulls in recovery-sensitive deployments,</li><li>keep the previous image available for rollback,</li><li>document image import steps for node replacement.</li></ul><p><code>imagePullPolicy: IfNotPresent</code> is appropriate only when the exact digest has already been imported or is reliably pullable during node recovery. Do not rely on tag movement for upgrade or rollback.</p><h2 id=host-preparation>Host Preparation</h2><p>Every control-plane node must have:</p><div class=command-block><div class=command-head><div><span>text</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-text>/etc/openbao-kms/config.yaml
+/etc/openbao-kms/tls/ca.crt
+/var/lib/openbao-kms/identity.jwt
+/etc/openbao-kms/client/client-chain.pem
+/etc/openbao-kms/pkcs11/pin
+/var/lib/openbao-kms/state
+/run/openbao-kms</code></pre></div><p>The JWT path is needed only for <code>auth.method: jwt</code>. PKCS#11 certificate-auth
+deployments must instead mount the configured certificate chain, PKCS#11 PIN
+file, and PKCS#11 module path.</p><p>The API server must be able to access the socket under <code>/run/openbao-kms</code>. The
+container user must own the socket directory, or an equally narrow
+provider-only identity must be the only writer. The API server socket group
+needs execute permission on the directory and write permission on <code>kms.sock</code>.
+It must not have write permission on the directory.</p><p>The provider configuration used by the static pod sets <code>server.socketGroup</code> to the same numeric host GID listed in <code>supplementalGroups</code>. See <code>deploy/config/provider-static-pod.yaml</code> for the matching configuration sample.</p><p>Every provider in a multi-control-plane cluster must use the same
+identity-bearing configuration: provider name, cluster ID, OpenBao instance ID,
+Transit mount ID, key lineage ID, Transit mount path, and Transit key name.
+Multi-control-plane validation exercises this model with one node-local
+provider per API server.</p><h2 id=kubeadm-placement>kubeadm Placement</h2><p>Typical kubeadm static pod path:</p><div class=command-block><div class=command-head><div><span>text</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-text>/etc/kubernetes/manifests/bao-kms-provider.yaml</code></pre></div><p>The kubelet watches this directory and starts the static pod.</p><h2 id=bootstrap-risks>Bootstrap Risks</h2><p>Static pod mode depends on:</p><ul><li>kubelet,</li><li>the container runtime,</li><li>local image availability,</li><li>hostPath mounts,</li><li>container networking and DNS,</li><li>file permissions inside the container.</li></ul><p>If kubelet or the container runtime is broken, the provider may not start and
+the API server may be unable to decrypt existing resources.</p><p>The provider retries its initial metadata and deep probes for
+<code>bootstrap.graceTimeout</code> before exiting. Keep this setting enabled for static
+pod deployments because auth material, container networking, DNS, OpenBao
+availability, and clock synchronization can settle after the container starts.</p><p>For single-node control planes, systemd is usually safer. See <a href=/openbao-kubernetes-kms/docs/deployment/choosing-a-model/>Deployment: Choosing A Model</a>
+.</p><h2 id=verification>Verification</h2><p>Before enabling API server encryption:</p><ol><li>Place the static pod manifest under <code>/etc/kubernetes/manifests/</code>.</li><li>Confirm the pod is running through kubelet or container runtime tooling.</li><li>Confirm <code>/run/openbao-kms/kms.sock</code> exists on the host.</li><li>Run <code>bao-kms-provider doctor</code> on the host or in an equivalent debug container.</li><li>Confirm <code>kube-apiserver</code> can connect to the socket.</li></ol><p>After the Kubernetes <code>EncryptionConfiguration</code> is staged, include it in <code>doctor</code>:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao-kms-provider doctor \
+  --config /etc/openbao-kms/config.yaml \
+  --encryption-config /etc/kubernetes/encryption-config.yaml</code></pre></div><p>Before enabling API server encryption, the pod is running, the socket exists
+with the configured owner and mode, and the API server can connect to it. The
+<code>doctor</code> command must exit with status <code>0</code> and must not report a <code>[fail]</code> check.</p><h2 id=source-references>Source References</h2><ul><li><a href=https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/ target=_blank rel=noreferrer>Kubernetes static Pods</a></li><li><a href=https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/ target=_blank rel=noreferrer>Kubernetes KMS provider documentation</a></li></ul></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#constraints>Constraints</a></li><li><a href=#example-manifest>Example Manifest</a></li><li><a href=#pod-hardening>Pod Hardening</a></li><li><a href=#image-availability>Image Availability</a></li><li><a href=#host-preparation>Host Preparation</a></li><li><a href=#kubeadm-placement>kubeadm Placement</a></li><li><a href=#bootstrap-risks>Bootstrap Risks</a></li><li><a href=#verification>Verification</a></li><li><a href=#source-references>Source References</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/website/content-versions/0.1.x/docs/deployment/static-pod.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<label class=sr-only for=site-search>Search documentation</label>
+<input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
+<button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog></body></html>

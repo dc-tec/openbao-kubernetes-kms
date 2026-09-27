@@ -1,0 +1,106 @@
+<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Obtain JWT access tokens directly from an independent OAuth authorization server and exchange them for OpenBao tokens."><meta name=robots content="noindex,follow"><title>OAuth 2.0 client credentials · Next · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/configure/oauth2/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="OAuth 2.0 client credentials · OpenBao Kubernetes KMS"><meta property="og:description" content="Obtain JWT access tokens directly from an independent OAuth authorization server and exchange them for OpenBao tokens."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/configure/oauth2/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
+<span></span><span></span><span></span>
+</button>
+<a class=brand href=/openbao-kubernetes-kms/next/ aria-label="OpenBao KMS documentation home"><img class=brand-logo src=/openbao-kubernetes-kms/img/brand/logo.svg alt>
+<span class=brand-name>OpenBao <b>KMS</b></span></a><nav class=top-nav id=primary-navigation aria-label=Primary><a href=/openbao-kubernetes-kms/next/docs/ aria-current=location>Docs</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></nav><div class=header-actions><button class=search-trigger type=button aria-haspopup=dialog data-search-open>
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<span>Search</span>
+<kbd>⌘ K</kbd></button><div class=github-actions><a class=github-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2A10 10 0 008.84 21.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94.0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64.0.0.84-.27 2.75 1.02A9.58 9.58.0 0112 6.82c.85.0 1.7.12 2.5.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68.0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg>
+</a><a class=stargazers-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="View OpenBao KMS stars on GitHub" data-stargazers data-endpoint=https://api.github.com/repos/dc-tec/openbao-kubernetes-kms data-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.2l-5.56 2.92 1.06-6.2L3 9.53l6.22-.9L12 3z"/></svg>
+<span class=stargazer-count data-stargazer-count hidden></span></a></div></div></div></header><button class=nav-scrim type=button aria-label="Close navigation" data-nav-close></button><div class=docs-shell><aside class=sidebar id=site-sidebar data-sidebar><div class=sidebar-head><p>Documentation</p><div class=sidebar-head-actions><details class=version-switcher><summary aria-label="Documentation version, currently Next"><span>Next</span>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary><div class=version-menu><a href=/openbao-kubernetes-kms/docs/><span>0.1.x</span>
+<small>Preview</small>
+</a><a href=/openbao-kubernetes-kms/next/docs/configure/oauth2/ aria-current=page><span>Next</span>
+<small>Unreleased</small></a></div></details><button class=sidebar-collapse type=button aria-controls=site-sidebar aria-expanded=true title="Collapse sidebar" data-sidebar-collapse>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg>
+<span class=sr-only data-sidebar-collapse-label>Collapse sidebar</span></button></div></div><nav aria-label=Documentation><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/get-started/><span>Get started</span></a></div><div class="nav-group is-active"><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/configure/><span>Configure</span></a><div class=nav-children><a href=/openbao-kubernetes-kms/next/docs/configure/>Overview</a><a href=/openbao-kubernetes-kms/next/docs/configure/openbao-auth/>OpenBao auth and policy</a><a class=is-current href=/openbao-kubernetes-kms/next/docs/configure/oauth2/ aria-current=page>OAuth 2.0 client credentials</a><a href=/openbao-kubernetes-kms/next/docs/configure/monitor/>Monitor the provider</a></div></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/operate/><span>Operate</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/security/><span>Security</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/reference/><span>Reference</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/architecture/><span>Architecture</span></a></div><div class=nav-divider></div><details class=nav-secondary-group><summary class=nav-secondary>Contribute</summary><div class=nav-children><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/>Docs site</a></div></details></nav></aside><main class=doc-main id=main-content><nav class=breadcrumbs aria-label=Breadcrumb><a href=/openbao-kubernetes-kms/next/>Home</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/next/docs/>Documentation</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/next/docs/configure/>Configure</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<span aria-current=page>OAuth 2.0 client credentials</span></nav><aside class="version-notice version-notice-next" aria-label="Documentation version notice"><strong>Next · Unreleased</strong>
+<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>OAuth 2.0 client credentials</h1><p class=article-lede>Obtain JWT access tokens directly from an independent OAuth authorization server and exchange them for OpenBao tokens.</p><p class=page-meta>Updated 27 September 2026 · 5 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#supported-protocol>Supported protocol</a></li><li><a href=#configure-the-source>Configure the source</a></li><li><a href=#lifetime-and-recovery>Lifetime and recovery</a></li></ul></nav></details><div class=article-content><p>Set <code>auth.jwt.source: oauth2</code> to obtain JWT access tokens with the OAuth 2.0
+client credentials grant. The provider requests a new access token before each
+OpenBao JWT login. It keeps access tokens and OpenBao tokens in memory.</p><p>The authorization server, its database, DNS, routing, and TLS trust must work
+while the protected Kubernetes API is unavailable. Provision the client secret
+on each control-plane host through an independent process. Fetching it from a
+Secret in the protected cluster creates a startup and recovery dependency.
+A separate management cluster can host the issuer if it recovers independently.</p><h2 id=supported-protocol>Supported protocol</h2><p>The integration uses <a href=https://www.rfc-editor.org/rfc/rfc6749#section-4.4 target=_blank rel=noreferrer>OAuth 2.0 client credentials</a>
+and has no provider-specific endpoint paths or realm configuration.</p><table><thead><tr><th>Setting or behavior</th><th>Contract</th></tr></thead><tbody><tr><td>Token endpoint</td><td>Administrator-configured HTTPS URL, including fixed query parameters; verified TLS; redirects are rejected.</td></tr><tr><td>Client authentication</td><td><code>client_secret_basic</code> or <code>client_secret_post</code>, selected in configuration. No automatic method fallback.</td></tr><tr><td>Request parameters</td><td><code>scope</code>, optional <code>audience</code>, and repeated <code>resource</code> parameters from <a href=https://www.rfc-editor.org/rfc/rfc8707 target=_blank rel=noreferrer>RFC 8707</a>
+.</td></tr><tr><td>Successful response</td><td>HTTP 200 with a JSON body containing <code>access_token</code> and Bearer <code>token_type</code>. Unknown response fields are ignored.</td></tr><tr><td>Access token</td><td>A compact, signed JWT with <code>exp</code> and matching configured claims. OpenBao verifies its signature and role bindings.</td></tr><tr><td>Expiration</td><td>JWT <code>exp</code> is required. If <code>expires_in</code> is present, the provider uses the shorter lifetime.</td></tr><tr><td>Client secret</td><td>Absolute path to a regular file; no symlink, group write, world access, or execute permission. The file is reread before each grant.</td></tr><tr><td>Other flows</td><td>Refresh-token grants, interactive login, opaque-token introspection, client assertions, and mutual TLS client authentication are unavailable.</td></tr></tbody></table><p>The optional <code>audience</code> request parameter is an extension supported by some
+authorization servers. It does not replace <code>expectedAudience</code>, which checks the
+JWT returned by the server. Configure only the request parameters your issuer
+accepts. Scopes and resource indicators depend on the registered API and client.</p><p>Keycloak service accounts can issue JWT access tokens through this grant.
+Other OAuth providers can use the same integration when they meet this contract.
+Protocol tests exercise both client authentication methods with an HTTPS test
+issuer. OpenBao integration tests exercise signature validation and Transit.
+The <a href=/openbao-kubernetes-kms/contribute/e2e-framework/>Kind OAuth lane</a>
+uses Keycloak <code>26.6.3</code>, OpenBao
+<code>2.6.0</code>, and the generated provider static pod. It checks both authentication
+methods, Kubernetes Secret encryption in etcd, credential rotation without a
+provider restart, issuer outages, and cold provider recovery while the protected
+API server is stopped. Images are pinned by digest in <code>.ci/versions.yaml</code>.
+This qualifies the tested Keycloak flow; other providers and issuer deployment
+topologies require their own validation.</p><h2 id=configure-the-source>Configure the source</h2><p>Register a confidential client with permission to request a token for the
+OpenBao audience. Record the actual token issuer, audience, and service-account
+subject. Configure the OpenBao JWT role to bind that identity and grant only the
+provider policy; see <a href=/openbao-kubernetes-kms/next/docs/configure/openbao-auth/>OpenBao auth and policy</a>
+.</p><p>Replace the JWT section in the provider configuration:</p><div class=command-block><div class=command-head><div><span>yaml</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-yaml>auth:
+  method: jwt
+  loginTimeout: 10s
+  jwt:
+    source: oauth2
+    mountPath: auth/k8s-workload-a-jwt
+    role: openbao-kms-control-plane
+    minRemainingTtl: 2m
+    clockSkewLeeway: 30s
+    expectedIssuer: https://identity.example.com/realms/platform
+    expectedAudience:
+      - openbao-kms-production
+    expectedSubject: &#34;&lt;service-account-subject&gt;&#34;
+    oauth2:
+      tokenUrl: https://identity.example.com/realms/platform/protocol/openid-connect/token
+      clientId: kms-control-plane
+      authMethod: client_secret_basic
+      clientSecretFile: /etc/openbao-kms/credentials/client-secret
+      caCertFile: /etc/openbao-kms/issuer/ca.pem</code></pre></div><p>Omit <code>caCertFile</code> to use system certificate roots. If you set it, the file is
+the trust bundle for the token endpoint. OpenBao has separate TLS trust settings
+and separate issuer trust for JWT verification.</p><p><code>expectedIssuer</code> and at least one <code>expectedAudience</code> are required for this source.
+Set <code>expectedSubject</code> when the issuer provides a stable subject. If identity
+binding uses other claims, configure those bindings on the OpenBao role.
+The <code>init</code> setup script requires a subject to generate its bound JWT role.
+Omit <code>jwtFile</code>; configuring both sources is rejected.</p><p>For issuers that require request parameters, add the applicable fields under
+<code>oauth2</code>. These are independent examples; use the values registered with your issuer:</p><div class=command-block><div class=command-head><div><span>yaml</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-yaml>scopes: [&#34;https://api.example.com/.default&#34;]
+audience: https://api.example.com
+resources: [&#34;https://api.example.com&#34;]</code></pre></div><p>Use a dedicated directory for the client secret. For systemd, install the
+credential with owner <code>root</code>, group <code>openbao-kms</code>, and mode <code>0640</code>; give the
+service user directory traversal permission. A single trailing newline is
+accepted. Keep the secret out of configuration YAML, command arguments, and logs.</p><p>For static pods, <code>init --model static-pod</code> mounts the credential directory
+read-only so atomic replacement is visible without a restart. The container UID
+must be able to read the secret. No Kubernetes Secret or TokenRequest is needed.</p><p>Run <code>bao-kms-provider doctor --config /etc/openbao-kms/config.yaml</code> as the service
+user. <code>oauth2.local</code> checks the credential file. <code>oauth2.acquire</code> reports token
+acquisition, followed by OpenBao JWT login and the usual Transit checks.</p><h2 id=lifetime-and-recovery>Lifetime and recovery</h2><p><code>auth.loginTimeout</code> covers token acquisition and OpenBao login together, including
+an attempted OpenBao renewal before fallback login. Set it for both network hops.
+Concurrent requests share one login attempt and failed attempts use the existing
+exponential backoff.</p><p>Acquire tokens with more remaining lifetime than <code>auth.jwt.minRemainingTtl</code>
+(default two minutes). The provider rejects a token at or below this threshold,
+even if the issuer has just minted it. Lower the threshold deliberately when
+using an issuer with a shorter token lifetime.</p><p>The provider renews its OpenBao token when renewal is available. Renewal does
+not acquire a new issuer token. An issuer outage can therefore leave an existing
+OpenBao token usable. New logins require the issuer; an expired or rejected
+OpenBao token cannot fall back to a JWT file or another authentication method.</p><p>Disabling the OAuth client does not revoke OpenBao tokens already issued to it.
+Use bounded OpenBao token lifetimes and an OpenBao revocation procedure when
+immediate removal of access is required.</p><p>To rotate the client secret, install the replacement as a private temporary
+file in the same directory, set its ownership and permissions, and rename it
+over <code>clientSecretFile</code>. The next grant reads the replacement. Use the issuer&rsquo;s
+credential overlap procedure when available, and verify a new login before
+retiring the old secret. Changes to the endpoint or CA configuration require a
+provider restart.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#supported-protocol>Supported protocol</a></li><li><a href=#configure-the-source>Configure the source</a></li><li><a href=#lifetime-and-recovery>Lifetime and recovery</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/configure/oauth2.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/next/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<label class=sr-only for=site-search>Search documentation</label>
+<input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
+<button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog></body></html>

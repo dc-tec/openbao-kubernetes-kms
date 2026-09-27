@@ -1,4 +1,4 @@
-<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Why rotation is observed rather than performed, the snapshot state machine, the guards against key_id flip-flop, how minimum versions are treated, and why retirement is an explicit operator step."><title>Rotation model · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/docs/architecture/rotation-model/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="Rotation model · OpenBao Kubernetes KMS"><meta property="og:description" content="Why rotation is observed rather than performed, the snapshot state machine, the guards against key_id flip-flop, how minimum versions are treated, and why retirement is an explicit operator step."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/docs/architecture/rotation-model/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
+<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Rotation invariants, state machine, flip-flop guards, and version restriction semantics for bao-kms-provider."><title>Rotation Model · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/docs/architecture/rotation-model/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="Rotation Model · OpenBao Kubernetes KMS"><meta property="og:description" content="Rotation invariants, state machine, flip-flop guards, and version restriction semantics for bao-kms-provider."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/docs/architecture/rotation-model/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
 <span></span><span></span><span></span>
 </button>
 <a class=brand href=/openbao-kubernetes-kms/ aria-label="OpenBao KMS documentation home"><img class=brand-logo src=/openbao-kubernetes-kms/img/brand/logo.svg alt>
@@ -9,33 +9,36 @@
 <span>Search</span>
 <kbd>⌘ K</kbd></button><div class=github-actions><a class=github-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2A10 10 0 008.84 21.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94.0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64.0.0.84-.27 2.75 1.02A9.58 9.58.0 0112 6.82c.85.0 1.7.12 2.5.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68.0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg>
 </a><a class=stargazers-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="View OpenBao KMS stars on GitHub" data-stargazers data-endpoint=https://api.github.com/repos/dc-tec/openbao-kubernetes-kms data-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.2l-5.56 2.92 1.06-6.2L3 9.53l6.22-.9L12 3z"/></svg>
-<span class=stargazer-count data-stargazer-count hidden></span></a></div></div></div></header><button class=nav-scrim type=button aria-label="Close navigation" data-nav-close></button><div class=docs-shell><aside class=sidebar id=site-sidebar data-sidebar><div class=sidebar-head><p>Documentation</p><div class=sidebar-head-actions><button class=sidebar-collapse type=button aria-controls=site-sidebar aria-expanded=true title="Collapse sidebar" data-sidebar-collapse>
+<span class=stargazer-count data-stargazer-count hidden></span></a></div></div></div></header><button class=nav-scrim type=button aria-label="Close navigation" data-nav-close></button><div class=docs-shell><aside class=sidebar id=site-sidebar data-sidebar><div class=sidebar-head><p>Documentation</p><div class=sidebar-head-actions><details class=version-switcher><summary aria-label="Documentation version, currently 0.1.x"><span>0.1.x</span>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary><div class=version-menu><a href=/openbao-kubernetes-kms/docs/architecture/rotation-model/ aria-current=page><span>0.1.x</span>
+<small>Preview</small>
+</a><a href=/openbao-kubernetes-kms/next/docs/architecture/rotation-model/><span>Next</span>
+<small>Unreleased</small></a></div></details><button class=sidebar-collapse type=button aria-controls=site-sidebar aria-expanded=true title="Collapse sidebar" data-sidebar-collapse>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg>
-<span class=sr-only data-sidebar-collapse-label>Collapse sidebar</span></button></div></div><nav aria-label=Documentation><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/get-started/><span>Get started</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/configure/><span>Configure</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/operate/><span>Operate</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/security/><span>Security</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/reference/><span>Reference</span></a></div><div class="nav-group is-active"><a class=nav-group-link href=/openbao-kubernetes-kms/docs/architecture/><span>Architecture</span></a><div class=nav-children><a href=/openbao-kubernetes-kms/docs/architecture/>Overview</a><a href=/openbao-kubernetes-kms/docs/architecture/overview/>Components and data flow</a><a href=/openbao-kubernetes-kms/docs/architecture/background/>Background</a><a href=/openbao-kubernetes-kms/docs/architecture/transit-key-model/>Transit key model</a><a class=is-current href=/openbao-kubernetes-kms/docs/architecture/rotation-model/ aria-current=page>Rotation model</a><a href=/openbao-kubernetes-kms/docs/architecture/failure-modes/>Failure modes</a><a href=/openbao-kubernetes-kms/docs/architecture/related-work/>Related work</a></div></div><div class=nav-divider></div><details class=nav-secondary-group><summary class=nav-secondary>Contribute</summary><div class=nav-children><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/>Docs site</a></div></details></nav></aside><main class=doc-main id=main-content><nav class=breadcrumbs aria-label=Breadcrumb><a href=/openbao-kubernetes-kms/>Home</a>
+<span class=sr-only data-sidebar-collapse-label>Collapse sidebar</span></button></div></div><nav aria-label=Documentation><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/errata/><span>Release notes and corrections</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/getting-started/><span>Start Here</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/deployment/><span>Deployment</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/operations/><span>Operations</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/security/><span>Security</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/reference/><span>Reference</span></a></div><div class="nav-group is-active"><a class=nav-group-link href=/openbao-kubernetes-kms/docs/architecture/><span>Architecture</span></a><div class=nav-children><a href=/openbao-kubernetes-kms/docs/architecture/overview/>Overview</a><a href=/openbao-kubernetes-kms/docs/architecture/background/>Background</a><a href=/openbao-kubernetes-kms/docs/architecture/transit-key-model/>Transit Key Model</a><a class=is-current href=/openbao-kubernetes-kms/docs/architecture/rotation-model/ aria-current=page>Rotation Model</a><a href=/openbao-kubernetes-kms/docs/architecture/failure-modes/>Failure Modes</a><a href=/openbao-kubernetes-kms/docs/architecture/related-work/>Related Work</a><a href=/openbao-kubernetes-kms/docs/architecture/>Architecture</a></div></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/development/><span>Development</span></a></div><div class=nav-divider></div><details class=nav-secondary-group><summary class=nav-secondary>Contribute</summary><div class=nav-children><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/>Docs site</a></div></details></nav></aside><main class=doc-main id=main-content><nav class=breadcrumbs aria-label=Breadcrumb><a href=/openbao-kubernetes-kms/>Home</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
 <a href=/openbao-kubernetes-kms/docs/>Documentation</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
 <a href=/openbao-kubernetes-kms/docs/architecture/>Architecture</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
-<span aria-current=page>Rotation model</span></nav><aside class="version-notice version-notice-01x" aria-label="Documentation version notice"><strong>0.1.x · Preview</strong>
-<span>Preview release line. Use it for labs, staging, and evaluation; do not protect production control planes with it.</span></aside><article class=doc-article><header class=article-header><h1>Rotation model</h1><p class=article-lede>Why rotation is observed rather than performed, the snapshot state machine, the guards against key_id flip-flop, how minimum versions are treated, and why retirement is an explicit operator step.</p><p class=page-meta>Updated 27 September 2026 · 6 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#states>States</a></li><li><a href=#no-flip-flop>No flip-flop</a></li><li><a href=#minimum-versions>Minimum versions</a></li><li><a href=#operator-controlled-retirement>Operator-controlled retirement</a></li><li><a href=#convergence-and-discovery>Convergence and discovery</a></li><li><a href=#persistence-failures>Persistence failures</a></li><li><a href=#activation-delay-and-clock-corrections>Activation delay and clock corrections</a></li></ul></nav></details><div class=article-content><p>The platform rotates the Transit key; the provider only observes the new
-version and decides when to promote it; operators rewrite Kubernetes data and
-retire old versions. Keeping rotation out of the provider keeps its permissions
-narrow. For the procedure, see <a href=/openbao-kubernetes-kms/docs/operate/rotation/>Operate: Rotation</a>
-.</p><h2 id=states>States</h2><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
+<span aria-current=page>Rotation Model</span></nav><aside class="version-notice version-notice-01x" aria-label="Documentation version notice"><strong>0.1.x · Preview</strong>
+<span>Documentation for 0.1.0-preview.2, with maintained corrections. Use this preview for evaluation only. Read the release corrections before installation.</span>
+<a href=/openbao-kubernetes-kms/docs/errata/>Release corrections</a></aside><article class=doc-article><header class=article-header><h1>Rotation Model</h1><p class=article-lede>Rotation invariants, state machine, flip-flop guards, and version restriction semantics for bao-kms-provider.</p><p class=page-meta>Updated 27 September 2026 · 4 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#principles>Principles</a></li><li><a href=#state-machine>State Machine</a></li><li><a href=#avoiding-key-id-flip-flop>Avoiding Key ID Flip-Flop</a></li><li><a href=#min_encryption_version><code>min_encryption_version</code></a></li><li><a href=#min_decryption_version><code>min_decryption_version</code></a></li><li><a href=#transit-rewrap>Transit Rewrap</a></li><li><a href=#cross-node-convergence>Cross-Node Convergence</a></li></ul></nav></details><div class=article-content><p>This maintainer-facing description defines the rotation state machine and its invariants. For the operator runbook, see <a href=/openbao-kubernetes-kms/docs/operations/rotation/>Operations: Rotation</a>
+.</p><h2 id=principles>Principles</h2><p>Rotation is driven by OpenBao Transit key versions and Kubernetes KMS v2 <code>key_id</code>.</p><p>The provider does not rotate the Transit key. Rotation is a platform operation, and Kubernetes data migration is an operator-controlled operation. This split keeps the provider&rsquo;s permission surface narrow. Key-management decisions remain in the platform&rsquo;s existing change-control path.</p><p>Kubernetes recommends rotating KEKs at least every 90 days and explains that KMS v2 uses <code>key_id</code> changes to determine when data may be stale.</p><h2 id=state-machine>State Machine</h2><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
 stateDiagram-v2
-    [*] --&gt; Active: initial bootstrap
-    [*] --&gt; Pending: newer Transit version observed
-    Pending --&gt; Pending: collect stable observations and wait activationDelay
-    Pending --&gt; Active: promotion guards satisfied
-    Pending --&gt; Retired: a newer candidate supersedes this version
-    Active --&gt; Retired: another version promoted
-    Retired --&gt; Removed: operator applies retire-versions
-  </pre></figure><p>The states belong to individual snapshots. The previous active snapshot keeps
-encrypting while a newer one is pending. Validated pending and retired
-snapshots decrypt; only the active one encrypts; removed snapshots stay as
-records and never decrypt. A validation failure makes Status unhealthy without
-recording a <code>rejected</code> state.</p><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
+    [*] --&gt; ObservedOld
+    ObservedOld --&gt; NewVersionObserved: Transit latest version increases
+    NewVersionObserved --&gt; PendingStability: first successful observation
+    PendingStability --&gt; PendingStability: successful observation count below threshold
+    PendingStability --&gt; PendingActivationDelay: stable observation threshold met
+    PendingActivationDelay --&gt; Active: activation delay elapsed
+    Active --&gt; RetiredAfterMigration: operator migration evidence retained
+
+    NewVersionObserved --&gt; Rejected: metadata inconsistent
+    PendingStability --&gt; Rejected: version rollback or probe failure
+    PendingActivationDelay --&gt; Rejected: metadata stale or inconsistent
+    Rejected --&gt; ObservedOld: operator resolves or DR mode selected
+  </pre></figure><p>End-to-end flow:</p><figure class="diagram-block diagram-block--mermaid"><pre class=mermaid>
 sequenceDiagram
     participant Operator as platform operator
     participant Bao as OpenBao Transit
@@ -46,97 +49,37 @@ sequenceDiagram
     Operator-&gt;&gt;Bao: rotate Transit key
     Watcher-&gt;&gt;Bao: read key metadata
     Bao--&gt;&gt;Watcher: latest version increased
-    Watcher-&gt;&gt;Watcher: validate identity and persist decryptable pending snapshot
     Watcher-&gt;&gt;Watcher: require stable observations
     Watcher-&gt;&gt;Watcher: wait activationDelay
+    Watcher-&gt;&gt;Watcher: compute opaque Kubernetes key_id
     Watcher-&gt;&gt;Status: publish new active key_id
     API-&gt;&gt;Status: observe changed Status.key_id
     API-&gt;&gt;API: mark older encrypted data stale
     Operator-&gt;&gt;API: run storage migration / resource rewrite
     Operator-&gt;&gt;Watcher: collect local verify-rotation preflight
-    Operator-&gt;&gt;Watcher: apply reviewed retire-versions plan on every node
     Operator-&gt;&gt;Bao: consider min_decryption_version only after independent rewrite and backup evidence
-  </pre></figure><h2 id=no-flip-flop>No flip-flop</h2><p>A <code>key_id</code> change tells Kubernetes that older data is stale, so an
-oscillating <code>key_id</code> would corrupt its migration tracking. The provider
-therefore:</p><ul><li>promotes only after <code>rotation.requireStableObservationCount</code> observations and
-<code>rotation.activationDelay</code>,</li><li>never promotes on stale, inconsistent, or failed metadata reads, or on an
-encrypt response,</li><li>rejects a <code>latest_version</code> that moves backwards; with
-<code>rejectVersionRollback</code> off, every retained identity still needs valid
-metadata,</li><li>keeps skipped versions as decrypt-only snapshots when <code>latest_version</code>
-jumps, and fails closed if their creation metadata is missing,</li><li>keeps every old snapshot for decryption.</li></ul><h2 id=minimum-versions>Minimum versions</h2><p>The provider observes minimum versions and never sets them.</p><ul><li>If <code>min_encryption_version</code> blocks the old active version before promotion,
-Status turns unhealthy and Encrypt stops while observation continues. Health
-returns after promotion and a successful deep probe.</li><li>Status probes check <code>min_decryption_version</code> and <code>min_available_version</code>
-against every retained snapshot. If one would be blocked, Status turns
-unhealthy rather than advertising keys OpenBao can no longer decrypt.</li></ul><p>Raising <code>min_decryption_version</code> too early makes data unreadable, and nothing
-in OpenBao or the provider can prove that no object or backup still needs a
-version. That proof stays with operator change control.</p><h2 id=operator-controlled-retirement>Operator-controlled retirement</h2><p>For the same reason, the provider never infers retirement from OpenBao
-minimums. The operator runs <code>retire-versions</code> after collecting the proof. The
-command turns eligible <code>retired</code> snapshots into <code>removed</code> records in a new
-hashed state generation, keeps their identities, and excludes them from
-decryption and Transit usability checks. Normal transitions must keep every
-decryptable identity and every removal record; they can neither remove nor
-revive an identity.</p><p>Retirement needs no pending rotation, an active version equal to Transit&rsquo;s
-latest, valid metadata for every retained version, the reviewed state hash,
-and the state writer lock that <code>serve</code> also takes. It is a local transition:
-operators run it on every node before raising the shared OpenBao minimum. The
-provider does not scan ciphertext, coordinate nodes, change OpenBao, or offer
-an undo.</p><h2 id=convergence-and-discovery>Convergence and discovery</h2><p>Each node promotes on its own. The observation count and delay make nodes
-promote at nearly the same time but cannot guarantee it, so operators compare
-<code>openbao_kms_status_key_id_hash</code> across nodes.</p><p>A node can decrypt a peer&rsquo;s new ciphertext before promoting locally. An
-unknown, well-formed <code>key_id</code> triggers one metadata lookup, which reads only the
-configured mount and key; request annotations never choose a backend or an
-identity. Lookups are shared by concurrent requests, limited to one per
-<code>status.probeInterval</code> per process including failures, and bounded by the
-Decrypt deadline. They never count as observations, start the activation delay,
-or promote. Status and Encrypt never trigger them.</p><p>A lookup saves a validated identity before decryption uses it. Missing or
-changed metadata fails validation and keeps the previous state. A pending
-identity stays retained when a newer candidate supersedes it, and a metadata
-rollback that would drop it fails validation, because another node might
-already have encrypted with it.</p><h2 id=persistence-failures>Persistence failures</h2><p>The provider writes registry state and its replay checkpoint separately. A save
-can fail after the state file has changed. A failed save normally makes Status
-and readiness unhealthy and stops Encrypt. The last published registry
-continues to serve Decrypt for known keys.</p><p>A failed observation-only save can keep Status healthy when both files still
-match the published state, fresh metadata validates every retained key and the
-active encryption version, and the last deep probe succeeded. Only the pending
-observation count and its stable timestamp may differ in the attempted state.
-New identities, promotions, partial writes, and conflicting or missing files
-cannot use this exception. Encrypt keeps the published active key; Decrypt can
-use all previously published keys. Metadata and deep-probe failures still make
-Status unhealthy, and cached metadata still expires normally.</p><p>During this exception, <code>/ready</code> includes <code>persistence_degraded: true</code> and the
-<code>openbao_kms_rotation_persistence_degraded</code> metric is <code>1</code>. Failed saves continue
-to produce warning logs and failed-probe counters. Repair storage before
-continuing rotation; see <a href=/openbao-kubernetes-kms/docs/operate/troubleshooting/#registry-state-save-failed>Troubleshooting</a>
-.</p><p>The running process retains the exact attempted transition. Before publishing
-another state, it checks that both files contain only the last confirmed state
-or that transition, then repeats the save and its durability barriers. Missing
-confirmed files, conflicting hashes, and unexpected generations fail closed.
-Fresh Transit metadata must validate the recovered state before health returns.
-A recovered promotion also requires a deep probe of the new active key.</p><p>Deferred retries do not accumulate observations. The attempted observation and
-its timestamp stay fixed until the save completes. If the stable observation
-was not yet confirmed, recovery starts the full activation delay after the exact
-state is durable and fresh metadata validates it. No new
-identity or promotion is published before its own save succeeds. Successful
-state publication clears the persistence warning.</p><p>Stable observations stop increasing at the configured threshold. During the
-remaining activation delay, unchanged observations update cached metadata health
-without rewriting state. Promotion still requires a successful save.</p><h2 id=activation-delay-and-clock-corrections>Activation delay and clock corrections</h2><p>The running controller measures <code>rotation.activationDelay</code> with a process-local
-elapsed-time deadline. It starts the countdown after the required stable
-observations are durably confirmed and fresh metadata validates the pending key.
-Wall-clock changes cannot shorten this delay, and whole-second persisted
-timestamps do not determine promotion eligibility.</p><p>After a restart, the provider retains pending keys and observation counts. The
-first successful metadata probe that validates a durable stable candidate starts
-the full activation delay again. Downtime does not count towards that delay.
-Existing keys remain available for decryption. Encrypt continues with the active
-key when its profile and health checks allow it; an encryption minimum that
-blocks that key still blocks Encrypt until promotion.</p><p>A different candidate starts its own countdown. Decrypt-triggered discovery
-cannot start or advance the countdown. Failed saves cannot start it, and a
-failed promotion must complete persistence recovery before publication.</p><p><code>observedAtUnix</code>, <code>stableAtUnix</code>, and <code>promotedAtUnix</code> are ordered local event
-timestamps. When the host clock moves backward, newly written stable or promotion
-timestamps are floored at preceding event timestamps. Existing records are not
-rewritten. The <code>clock.regressed</code> warning uses the logger&rsquo;s current wall time and
-reports that timestamp ordering was preserved. These local timestamps do not
-change OpenBao creation metadata, key identity, or the elapsed-time countdown.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
+  </pre></figure><h2 id=avoiding-key-id-flip-flop>Avoiding Key ID Flip-Flop</h2><p>The provider must not flip-flop between <code>key_id</code> values during rotation. Recommended controls:</p><ul><li>require a stable observation count (<code>rotation.requireStableObservationCount</code>),</li><li>require an activation delay (<code>rotation.activationDelay</code>),</li><li>reject apparent version rollback unless disaster-recovery mode is explicitly enabled,</li><li>keep old snapshots in the registry for decrypt,</li><li>do not promote a key while OpenBao metadata is stale or inconsistent,</li><li>do not promote when Transit metadata read fails,</li><li>retain complete intermediate Transit version metadata as decrypt-only
+historical snapshots if a node observes <code>latest_version</code> jump over one or
+more versions,</li><li>fail closed when an observed <code>latest_version</code> jump is missing intermediate
+Transit version creation metadata,</li><li>do not promote based on an encrypt response.</li></ul><p>The flip-flop guard is critical because Kubernetes treats Status <code>key_id</code> changes as a signal that older data is stale. A flip-flop would oscillate the staleness signal and confuse the API server&rsquo;s storage migration tracking.</p><h2 id=min_encryption_version><code>min_encryption_version</code></h2><p><code>min_encryption_version</code> can be used as a guard after rotation to prevent encryption with older versions. It is managed by platform automation; the provider only observes it.</p><h2 id=min_decryption_version><code>min_decryption_version</code></h2><p><code>min_decryption_version</code> is dangerous. Raising it too early can make existing Kubernetes data undecryptable. Raise it only after:</p><ul><li>every configured resource has been rewritten,</li><li>old <code>key_id</code> references are no longer observed,</li><li>backups are aligned with retained Transit versions,</li><li>disaster recovery drills have passed,</li><li>OpenBao and etcd backup retention implications are understood.</li></ul><p>The current preview implementation does not prove those conditions. It validates
+local registry state and Transit metadata, then leaves rewrite proof,
+backup-retention proof, and <code>min_decryption_version</code> decisions to operator
+change control.</p><p>Runtime status probes validate <code>min_decryption_version</code> and
+<code>min_available_version</code> against every retained active, retired, and
+historical snapshot in the local registry. If any retained historical version is
+blocked, Status becomes unhealthy instead of advertising a decrypt registry that
+OpenBao can no longer serve. <code>min_encryption_version</code> is checked against the
+active version only.</p><p>The operator runbook for raising <code>min_decryption_version</code> lives at <a href=/openbao-kubernetes-kms/docs/operations/rotation/#min_decryption_version>Operations: Rotation: min_decryption_version</a>
+.</p><h2 id=transit-rewrap>Transit Rewrap</h2><p>OpenBao Transit <code>rewrap</code> can upgrade Transit ciphertexts to a newer key version without exposing plaintext to the caller.</p><p>For Kubernetes KMS v2, rewrap remains outside the hot path because Kubernetes owns stale-data detection through <code>key_id</code> changes plus resource rewrites. Rewrap is useful for non-Kubernetes Transit consumers and for one-off operational migrations, but it does not replace Kubernetes storage migration in this design.</p><h2 id=cross-node-convergence>Cross-Node Convergence</h2><p>Each control-plane node runs its own provider instance and maintains its own
+snapshot. The activation delay and stable observation count reduce the chance
+that nodes promote the new version at materially different times, but they do
+not eliminate it. Operators verify cross-node convergence by comparing the
+<code>openbao_kms_status_key_id_hash</code> metric across nodes during and after rotation.
+See <a href=/openbao-kubernetes-kms/docs/operations/rotation/#observe-promotion>Operations: Rotation: Observe
+Promotion</a>
+.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
 <a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
-<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#states>States</a></li><li><a href=#no-flip-flop>No flip-flop</a></li><li><a href=#minimum-versions>Minimum versions</a></li><li><a href=#operator-controlled-retirement>Operator-controlled retirement</a></li><li><a href=#convergence-and-discovery>Convergence and discovery</a></li><li><a href=#persistence-failures>Persistence failures</a></li><li><a href=#activation-delay-and-clock-corrections>Activation delay and clock corrections</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/architecture/rotation-model.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#principles>Principles</a></li><li><a href=#state-machine>State Machine</a></li><li><a href=#avoiding-key-id-flip-flop>Avoiding Key ID Flip-Flop</a></li><li><a href=#min_encryption_version><code>min_encryption_version</code></a></li><li><a href=#min_decryption_version><code>min_decryption_version</code></a></li><li><a href=#transit-rewrap>Transit Rewrap</a></li><li><a href=#cross-node-convergence>Cross-Node Convergence</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/website/content-versions/0.1.x/docs/architecture/rotation-model.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
 <label class=sr-only for=site-search>Search documentation</label>
 <input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
 <button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog><script src=/openbao-kubernetes-kms/vendor/mermaid/mermaid.min.js defer></script><script src=/openbao-kubernetes-kms/js/mermaid-init.min.dee60146b0268829a3935295fa2dd141652d00ba4520a1fd2471bc804c2073d3.js integrity="sha256-3uYBRrAmiCmjk1KV+i3RQWUtALpFIKH9JHG8gEwgc9M=" defer></script></body></html>

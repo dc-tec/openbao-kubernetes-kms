@@ -13,7 +13,7 @@
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
 <a href=/openbao-kubernetes-kms/contribute/>Contribute</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
-<span aria-current=page>Docs site</span></nav><nav class=section-nav aria-label="Contribute sections"><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/ aria-current=page>Docs site</a></nav><article class=doc-article><header class=article-header><h1>Docs site</h1><p class=article-lede>How the Hugo documentation site is organized, built, checked, and published.</p><p class=page-meta>Updated 27 September 2026 · 4 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#source-layout>Source layout</a></li><li><a href=#hugo-mounts>Hugo mounts</a></li><li><a href=#navigation>Navigation</a></li><li><a href=#retired-routes>Retired routes</a></li><li><a href=#local-builds>Local builds</a></li><li><a href=#checks>Checks</a></li><li><a href=#templates>Templates</a></li><li><a href=#mermaid>Mermaid</a></li><li><a href=#publishing>Publishing</a></li></ul></nav></details><div class=article-content><p>The published documentation is a Hugo site built from the Markdown files under
+<span aria-current=page>Docs site</span></nav><nav class=section-nav aria-label="Contribute sections"><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/ aria-current=page>Docs site</a></nav><article class=doc-article><header class=article-header><h1>Docs site</h1><p class=article-lede>How the Hugo documentation site is organized, built, checked, and published.</p><p class=page-meta>Updated 27 September 2026 · 5 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#source-layout>Source layout</a></li><li><a href=#hugo-mounts>Hugo mounts</a></li><li><a href=#navigation>Navigation</a></li><li><a href=#retired-routes>Retired routes</a></li><li><a href=#local-builds>Local builds</a></li><li><a href=#checks>Checks</a></li><li><a href=#templates>Templates</a></li><li><a href=#mermaid>Mermaid</a></li><li><a href=#advancing-a-release-line>Advancing a release line</a></li><li><a href=#publishing>Publishing</a></li></ul></nav></details><div class=article-content><p>The published documentation is a Hugo site built from the Markdown files under
 <code>docs/</code> and the site assets under <code>website/</code>. For writing guidance, see
 <a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a>
 .</p><h2 id=source-layout>Source layout</h2><div class=command-block><div class=command-head><div><span>text</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-text>docs/
@@ -32,15 +32,27 @@ website/
   assets/             CSS and JavaScript sources
   static/             brand assets and vendored Mermaid
   scripts/            rendered-site checks
-hugo.toml             site configuration, theme strings, and module mounts</code></pre></div><p>The live docs must describe the current project. Older plans and design notes
-remain available through repository history.</p><p>The theme follows the OpenBao Operator documentation site. Layouts read
+hugo.toml             site configuration, theme strings, and module mounts</code></pre></div><p>The default documentation describes the published <code>0.1.x</code> preview line through
+<code>0.1.0-preview.2</code>. Unreleased behavior publishes under <code>/next/docs/</code> with the
+<strong>Next · Unreleased</strong> notice. This follows the OpenBao Operator site&rsquo;s native
+Hugo version convention. Repository <code>docs/</code> remains the editable source for
+Next; released content is maintained under
+<code>website/content-versions/0.1.x/docs/</code>.</p><p><code>website/data/version_lines.yaml</code> records each line&rsquo;s release, source tag,
+editable content root, notice, and navigation. Release docs receive corrections
+that apply to the shipped binaries. New commands and behavior belong in Next
+until their artifacts are published. <code>sourceRef</code> records the release source;
+the site builds from checked-in Markdown, not an automatic tag checkout.</p><p>The theme follows the OpenBao Operator documentation site. Layouts read
 project-specific copy from <code>[params]</code> in <code>hugo.toml</code> so the same templates can
 move into a shared theme module later. Keep new project strings in <code>hugo.toml</code>
-instead of hardcoding them in templates.</p><h2 id=hugo-mounts>Hugo mounts</h2><p><code>hugo.toml</code> mounts <code>docs/</code> at <code>content/docs/</code>, so every page renders under
-<code>/docs/</code>. The mount excludes internal planning material (<code>adr/</code>,
+instead of hardcoding them in templates.</p><h2 id=hugo-mounts>Hugo mounts</h2><p><code>hugo.toml</code> uses <code>sites.matrix.versions</code> to mount <code>docs/</code> at <code>content/docs/</code>
+for <code>next</code>, and the release snapshot at the same logical path for <code>0.1.x</code>.
+The default line renders under <code>/docs/</code>; Next renders under <code>/next/docs/</code>.
+The mount excludes internal planning material (<code>adr/</code>,
 <code>workstreams/</code>, <code>research-notes.md</code>). <code>docs/contribute/</code> mounts separately at
 <code>content/contribute/</code>, so contributor guides render under <code>/contribute/</code> with
-their own section navigation, like the OpenBao Operator site.</p><p>To add a new top-level docs section:</p><ol><li>Create <code>docs/&lt;section>/_index.md</code> with front matter.</li><li>Add the section and its pages to <code>website/data/navigation.yaml</code>.</li><li>Add the section to the link grid in <code>docs/_index.md</code>.</li></ol><h2 id=navigation>Navigation</h2><p><code>website/data/navigation.yaml</code> defines the sidebar. The <code>primary</code> list holds
+their own section navigation, like the OpenBao Operator site.</p><p>To add a new top-level docs section:</p><ol><li>Create <code>docs/&lt;section>/_index.md</code> with front matter.</li><li>Add the section and its pages to <code>website/data/navigation.yaml</code>.</li><li>Add the section to the link grid in <code>docs/_index.md</code>.</li></ol><h2 id=navigation>Navigation</h2><p><code>website/data/navigation.yaml</code> defines the Next sidebar.
+<code>website/data/navigation_release.yaml</code> preserves the preview.2 layout. Both use
+the same sidebar partials and page lookup within the selected version. The <code>primary</code> list holds
 the documentation sections, and the <code>secondary</code> list holds global guides such
 as Contribute. Items with a <code>step</code> field form the Previous and Next path of
 their group. Items that share a step are alternatives, such as the systemd and
@@ -49,7 +61,10 @@ and from each alternative to the step after them. Section landing pages list
 their child pages by <code>weight</code> unless they set <code>hideChildren: true</code>.</p><h2 id=retired-routes>Retired routes</h2><p><code>website/data/redirects.yaml</code> lists retired routes and their canonical targets.
 The content adapter in <code>website/content/_content.gotmpl</code> publishes a redirect
 page for each entry. When a page moves, add a ledger entry for the old route in
-the same change.</p><h2 id=local-builds>Local builds</h2><p>The Makefile runs a pinned Hugo version through <code>go run</code>, so a global Hugo
+the same change. <code>website/data/release_aliases.yaml</code> preserves the newer URLs
+that were published before the release/development split. Each alias names its
+target version. Release-only routes retain their release destination; pages
+that exist only in Next redirect to a page with the unreleased notice.</p><h2 id=local-builds>Local builds</h2><p>The Makefile runs a pinned Hugo version through <code>go run</code>, so a global Hugo
 install is not required.</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>make docs-deps    # install pinned Hugo into GOBIN once
 make docs-build   # build into public/ and check the rendered site
 make docs-serve   # serve on http://localhost:1313/openbao-kubernetes-kms/</code></pre></div><p>The Hugo version is pinned in <code>.hugo-version</code> and <code>.ci/versions.yaml</code>. Update
@@ -81,7 +96,13 @@ flowchart LR
 ```</code></pre></div><p>The renderer is <code>website/layouts/_markup/render-codeblock-mermaid.html</code>, with
 initialization in <code>website/assets/js/mermaid-init.js</code>. Mermaid itself is
 vendored at <code>website/static/vendor/mermaid/mermaid.min.js</code>, so the published
-site does not depend on a CDN.</p><h2 id=publishing>Publishing</h2><p>GitHub Pages serves the generated site from the <code>gh-pages</code> branch. The
+site does not depend on a CDN.</p><h2 id=advancing-a-release-line>Advancing a release line</h2><p>After the release artifacts are published:</p><ol><li>Copy the documentation from the released source into the maintained release
+content root. Exclude internal plans and the global contributor guides.</li><li>Update the line&rsquo;s <code>release</code>, <code>sourceRef</code>, notice, navigation, and artifact
+examples together. Preserve any installation corrections that still apply.</li><li>Review CLI, configuration, authentication, and compatibility claims against
+the selected release. Do not copy unreleased claims from a later main commit.</li><li>Update the release alias ledger and the release-specific assertions in
+<code>website/scripts/check-rendered-site.py</code>.</li><li>Build both versions and check the version selector, search, and links.</li></ol><p>Keep a previous stable line under <code>website/content-versions/&lt;minor>.x/</code> when
+stable support begins. Preview migration tooling and encryption-provider
+retirement procedures remain outside this onboarding scope.</p><h2 id=publishing>Publishing</h2><p>GitHub Pages serves the generated site from the <code>gh-pages</code> branch. The
 <code>Docs Pages</code> workflow runs on pushes to <code>main</code>, builds the site with the same
 <code>make docs-check</code> and <code>make docs-build</code> targets used locally, and publishes the
 rendered <code>public/</code> directory to <code>gh-pages</code>.</p><p>Configure the repository Pages source as:</p><div class=command-block><div class=command-head><div><span>text</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-text>Deploy from a branch
@@ -90,7 +111,7 @@ Folder: / (root)</code></pre></div><p>The workflow creates <code>gh-pages</code>
 branch with normal commits.</p><p>Local builds write rendered output to <code>public/</code>. That directory is generated
 and gitignored.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
 <a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
-<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#source-layout>Source layout</a></li><li><a href=#hugo-mounts>Hugo mounts</a></li><li><a href=#navigation>Navigation</a></li><li><a href=#retired-routes>Retired routes</a></li><li><a href=#local-builds>Local builds</a></li><li><a href=#checks>Checks</a></li><li><a href=#templates>Templates</a></li><li><a href=#mermaid>Mermaid</a></li><li><a href=#publishing>Publishing</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/contribute/docs-site.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#source-layout>Source layout</a></li><li><a href=#hugo-mounts>Hugo mounts</a></li><li><a href=#navigation>Navigation</a></li><li><a href=#retired-routes>Retired routes</a></li><li><a href=#local-builds>Local builds</a></li><li><a href=#checks>Checks</a></li><li><a href=#templates>Templates</a></li><li><a href=#mermaid>Mermaid</a></li><li><a href=#advancing-a-release-line>Advancing a release line</a></li><li><a href=#publishing>Publishing</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/contribute/docs-site.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
 <label class=sr-only for=site-search>Search documentation</label>
 <input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
 <button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog></body></html>

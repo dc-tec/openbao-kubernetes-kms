@@ -1,0 +1,124 @@
+<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Hardened systemd unit, directory setup, and startup procedure for running bao-kms-provider as a host service."><title>systemd Deployment · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/docs/deployment/systemd/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="systemd Deployment · OpenBao Kubernetes KMS"><meta property="og:description" content="Hardened systemd unit, directory setup, and startup procedure for running bao-kms-provider as a host service."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/docs/deployment/systemd/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
+<span></span><span></span><span></span>
+</button>
+<a class=brand href=/openbao-kubernetes-kms/ aria-label="OpenBao KMS documentation home"><img class=brand-logo src=/openbao-kubernetes-kms/img/brand/logo.svg alt>
+<span class=brand-name>OpenBao <b>KMS</b></span></a><nav class=top-nav id=primary-navigation aria-label=Primary><a href=/openbao-kubernetes-kms/docs/ aria-current=location>Docs</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></nav><div class=header-actions><button class=search-trigger type=button aria-haspopup=dialog data-search-open>
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<span>Search</span>
+<kbd>⌘ K</kbd></button><div class=github-actions><a class=github-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2A10 10 0 008.84 21.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94.0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64.0.0.84-.27 2.75 1.02A9.58 9.58.0 0112 6.82c.85.0 1.7.12 2.5.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68.0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg>
+</a><a class=stargazers-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="View OpenBao KMS stars on GitHub" data-stargazers data-endpoint=https://api.github.com/repos/dc-tec/openbao-kubernetes-kms data-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.2l-5.56 2.92 1.06-6.2L3 9.53l6.22-.9L12 3z"/></svg>
+<span class=stargazer-count data-stargazer-count hidden></span></a></div></div></div></header><button class=nav-scrim type=button aria-label="Close navigation" data-nav-close></button><div class=docs-shell><aside class=sidebar id=site-sidebar data-sidebar><div class=sidebar-head><p>Documentation</p><div class=sidebar-head-actions><details class=version-switcher><summary aria-label="Documentation version, currently 0.1.x"><span>0.1.x</span>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary><div class=version-menu><a href=/openbao-kubernetes-kms/docs/deployment/systemd/ aria-current=page><span>0.1.x</span>
+<small>Preview</small>
+</a><a href=/openbao-kubernetes-kms/next/docs/><span>Next</span>
+<small>Unreleased</small></a></div></details><button class=sidebar-collapse type=button aria-controls=site-sidebar aria-expanded=true title="Collapse sidebar" data-sidebar-collapse>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg>
+<span class=sr-only data-sidebar-collapse-label>Collapse sidebar</span></button></div></div><nav aria-label=Documentation><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/errata/><span>Release notes and corrections</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/getting-started/><span>Start Here</span></a></div><div class="nav-group is-active"><a class=nav-group-link href=/openbao-kubernetes-kms/docs/deployment/><span>Deployment</span></a><div class=nav-children><a href=/openbao-kubernetes-kms/docs/deployment/choosing-a-model/>Choosing A Model</a><a class=is-current href=/openbao-kubernetes-kms/docs/deployment/systemd/ aria-current=page>systemd Deployment</a><a href=/openbao-kubernetes-kms/docs/deployment/>Deployment</a><a href=/openbao-kubernetes-kms/docs/deployment/static-pod/>Static Pod Deployment</a><a href=/openbao-kubernetes-kms/docs/deployment/linux-identity-model/>Linux Identity Model</a><a href=/openbao-kubernetes-kms/docs/deployment/observability/>Observability Deployment</a></div></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/operations/><span>Operations</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/security/><span>Security</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/reference/><span>Reference</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/architecture/><span>Architecture</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/docs/development/><span>Development</span></a></div><div class=nav-divider></div><details class=nav-secondary-group><summary class=nav-secondary>Contribute</summary><div class=nav-children><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/>Docs site</a></div></details></nav></aside><main class=doc-main id=main-content><nav class=breadcrumbs aria-label=Breadcrumb><a href=/openbao-kubernetes-kms/>Home</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/docs/>Documentation</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/docs/deployment/>Deployment</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<span aria-current=page>systemd Deployment</span></nav><aside class="version-notice version-notice-01x" aria-label="Documentation version notice"><strong>0.1.x · Preview</strong>
+<span>Documentation for 0.1.0-preview.2, with maintained corrections. Use this preview for evaluation only. Read the release corrections before installation.</span>
+<a href=/openbao-kubernetes-kms/docs/errata/>Release corrections</a></aside><article class=doc-article><header class=article-header><h1>systemd Deployment</h1><p class=article-lede>Hardened systemd unit, directory setup, and startup procedure for running bao-kms-provider as a host service.</p><p class=page-meta>Updated 27 September 2026 · 5 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#recommended-unit>Recommended Unit</a></li><li><a href=#unit-settings>Unit Settings</a></li><li><a href=#directory-setup>Directory Setup</a></li><li><a href=#start>Start</a></li><li><a href=#hardening-checklist>Hardening Checklist</a></li><li><a href=#failure-modes>Failure Modes</a></li></ul></nav></details><div class=article-content><p>systemd is the preferred hardened deployment model when operators control the
+host operating system. It does not depend on kubelet, the container runtime, or
+the Kubernetes API server to start the provider. This separation matters
+because <code>kube-apiserver</code> may require the provider to decrypt existing resources
+during startup.</p><p>For the model selection rationale, see <a href=/openbao-kubernetes-kms/docs/deployment/choosing-a-model/>Deployment: Choosing A
+Model</a>
+. For the user, group, and file ownership
+model, see <a href=/openbao-kubernetes-kms/docs/deployment/linux-identity-model/>Deployment: Linux Identity
+Model</a>
+.</p><h2 id=recommended-unit>Recommended Unit</h2><p>The maintained sample unit lives at <code>deploy/systemd/bao-kms-provider.service</code> in the repository. It uses the identity model from <a href=/openbao-kubernetes-kms/docs/deployment/linux-identity-model/>Linux Identity Model</a>
+.</p><div class=command-block><div class=command-head><div><span>ini</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-ini>[Unit]
+Description=OpenBao Kubernetes KMS v2 Provider
+Documentation=https://github.com/dc-tec/openbao-kubernetes-kms
+Wants=network-online.target
+After=network-online.target
+Before=kubelet.service
+StartLimitIntervalSec=60
+StartLimitBurst=10
+ConditionPathExists=/etc/openbao-kms/config.yaml
+ConditionPathExists=/var/lib/openbao-kms/identity.jwt
+ConditionPathIsDirectory=/run/openbao-kms
+
+[Service]
+Type=exec
+User=openbao-kms
+Group=openbao-kms
+SupplementaryGroups=openbao-kms-socket
+ExecStart=/usr/bin/bao-kms-provider serve --config /etc/openbao-kms/config.yaml
+Restart=always
+RestartSec=5s
+UMask=0027
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadOnlyPaths=/etc/openbao-kms
+ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state
+
+[Install]
+WantedBy=multi-user.target</code></pre></div><p>The exact ordering depends on the Kubernetes distribution. On kubeadm-style
+hosts, start the provider early enough that the socket is available before
+kubelet starts the static-pod API server.</p><p>Use <code>deploy/config/provider-systemd.yaml</code> as the starting provider configuration
+for host-service deployments. Install only packages or tarballs that have passed
+the checksum, signature, and provenance verification described in
+<a href=/openbao-kubernetes-kms/docs/getting-started/install/#verify-release-artifacts>Getting Started: Install</a>
+.</p><p>The sample unit uses the default JSON Web Token (JWT) configuration. PKCS#11
+certificate-auth deployments must replace the JWT <code>ConditionPathExists=</code> line
+with checks for the configured certificate chain and PKCS#11 PIN file.</p><h2 id=unit-settings>Unit Settings</h2><table><thead><tr><th>Setting</th><th>Purpose</th></tr></thead><tbody><tr><td><code>Before=kubelet.service</code></td><td>Starts the provider before kubelet starts static-pod control-plane components on kubeadm-style hosts.</td></tr><tr><td><code>ConditionPathExists=</code></td><td>Fails early when config or selected auth material has not been staged.</td></tr><tr><td><code>ConditionPathIsDirectory=</code></td><td>Requires the runtime socket directory to exist with packaging-controlled ownership.</td></tr><tr><td><code>Type=exec</code></td><td>Surfaces <code>execve</code> failures before systemd marks the service started.</td></tr><tr><td><code>Restart=always</code> and restart limits</td><td>Restarts transient provider failures without hiding a fast crash loop.</td></tr><tr><td><code>UMask=0027</code></td><td>Prevents permissive files created by the process.</td></tr><tr><td><code>NoNewPrivileges=true</code></td><td>Blocks privilege escalation through setuid or file capabilities.</td></tr><tr><td><code>ProtectSystem=strict</code></td><td>Makes the host filesystem read-only except explicitly allowed paths.</td></tr><tr><td><code>ReadOnlyPaths=/etc/openbao-kms</code></td><td>Allows config and certificate authority (CA) bundle reads without making the directory writable.</td></tr><tr><td><code>ReadWritePaths=/run/openbao-kms /var/lib/openbao-kms/state</code></td><td>Limits writes to the socket directory and non-secret local registry state.</td></tr><tr><td><code>RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6</code></td><td>Allows Unix sockets plus IPv4 and IPv6 OpenBao traffic.</td></tr><tr><td><code>CapabilityBoundingSet=</code> and <code>AmbientCapabilities=</code></td><td>Runs without Linux capabilities.</td></tr></tbody></table><p><code>network-online.target</code> is only an ordering hint. It does not prove that DNS,
+routing, OpenBao TLS, or the OpenBao load balancer is ready. The provider&rsquo;s
+<code>bootstrap.graceTimeout</code> handles these boot races by retrying the initial
+metadata and deep probes before exiting.</p><h2 id=directory-setup>Directory Setup</h2><p>For the preview.2 packages and tarballs, apply this persistent correction as
+root before starting the provider. If <code>/etc/tmpfiles.d/openbao-kms.conf</code> already
+exists, preserve it and change only its <code>/etc/openbao-kms</code> entry to group
+<code>openbao-kms</code>, mode <code>0750</code>. The command refuses to overwrite an existing file.</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>set -eu
+test ! -e /etc/tmpfiles.d/openbao-kms.conf
+install -d -o root -g root -m 0755 /etc/tmpfiles.d
+sed &#39;s@^d /etc/openbao-kms 0750 root root -$@d /etc/openbao-kms 0750 root openbao-kms -@&#39; \
+  /usr/lib/tmpfiles.d/openbao-kms.conf &gt; /etc/tmpfiles.d/openbao-kms.conf
+chmod 0644 /etc/tmpfiles.d/openbao-kms.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/openbao-kms.conf</code></pre></div><p>Then verify the remaining directories:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>install -d -o root -g openbao-kms -m 0750 /etc/openbao-kms
+install -d -o root -g root -m 0755 /etc/openbao-kms/tls
+install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms
+install -d -o openbao-kms -g openbao-kms -m 0750 /var/lib/openbao-kms/state
+install -d -o openbao-kms -g openbao-kms-socket -m 2750 /run/openbao-kms</code></pre></div><p>The service verifies <code>/run/openbao-kms</code> at startup. Packaging must create the
+runtime directory through <code>tmpfiles.d</code> or an equivalent root-owned install
+step. The directory group must be <code>openbao-kms-socket</code>, and the setgid bit must
+preserve the socket access group. The socket access group needs execute
+permission on the directory and write permission on <code>kms.sock</code>. It must not
+have write permission on the directory.</p><p>A sample <code>tmpfiles.d</code> entry lives under <code>deploy/package/linux/tmpfiles.d/openbao-kms.conf</code>. The runtime-only entry is:</p><div class=command-block><div class=command-head><div><span>text</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-text>d /run/openbao-kms 2750 openbao-kms openbao-kms-socket -</code></pre></div><h2 id=start>Start</h2><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>systemctl daemon-reload
+systemctl enable bao-kms-provider.service
+systemctl start bao-kms-provider.service
+systemctl status bao-kms-provider.service</code></pre></div><p>Run <code>doctor</code> before enabling kube-apiserver encryption:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo -u openbao-kms bao-kms-provider doctor --config /etc/openbao-kms/config.yaml</code></pre></div><p>After the Kubernetes <code>EncryptionConfiguration</code> is staged, include it in the check:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo -u openbao-kms bao-kms-provider doctor \
+  --config /etc/openbao-kms/config.yaml \
+  --encryption-config /etc/kubernetes/encryption-config.yaml</code></pre></div><p>Before enabling API server encryption, <code>systemctl status</code> reports the service
+as active and <code>doctor</code> exits with status <code>0</code> without a <code>[fail]</code> check.</p><h2 id=hardening-checklist>Hardening Checklist</h2><ul><li>Run as non-root where possible.</li><li>Keep auth material readable only by the provider process.</li><li>Keep the socket writable only by the provider and the API server identity.</li><li>Verify <code>ProtectSystem=strict</code> does not block required paths.</li><li>Bind metrics and health endpoints to localhost unless explicitly needed.</li><li>Avoid debug endpoints.</li><li>Use systemd restart limits suitable for control-plane recovery.</li></ul><p>For the broader hardening surface beyond the systemd unit see <a href=/openbao-kubernetes-kms/docs/security/hardening/>Security: Hardening</a>
+.</p><h2 id=failure-modes>Failure Modes</h2><p>Common failures during initial bring-up:</p><ul><li>the service starts after kubelet or the API server,</li><li>the socket directory group is wrong,</li><li><code>ProtectSystem</code> blocks the configuration file or auth material,</li><li>the CA bundle path is missing,</li><li>host DNS is not ready before service start,</li><li>the OpenBao TLS server name does not match the certificate.</li></ul><p>The provider retries the initial metadata and deep probes for
+<code>bootstrap.graceTimeout</code> before exiting. Keep the grace long enough for auth
+material projection, DNS or routing, OpenBao restart, and clock synchronization.
+Keep it short enough that service status exposes deterministic misconfiguration.</p><p>For diagnosis and recovery see <a href=/openbao-kubernetes-kms/docs/operations/troubleshooting/>Operations: Troubleshooting</a>
+. For provider upgrade procedure see <a href=/openbao-kubernetes-kms/docs/operations/upgrade/>Operations: Upgrade</a>
+.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#recommended-unit>Recommended Unit</a></li><li><a href=#unit-settings>Unit Settings</a></li><li><a href=#directory-setup>Directory Setup</a></li><li><a href=#start>Start</a></li><li><a href=#hardening-checklist>Hardening Checklist</a></li><li><a href=#failure-modes>Failure Modes</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/website/content-versions/0.1.x/docs/deployment/systemd.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<label class=sr-only for=site-search>Search documentation</label>
+<input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
+<button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog></body></html>

@@ -1,0 +1,155 @@
+<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Find the failing layer first, then apply the recovery for that symptom: socket, OpenBao, auth, Transit key, key_id and AAD validation, fallback, or static pod."><meta name=robots content="noindex,follow"><title>Troubleshooting · Next · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/operate/troubleshooting/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="Troubleshooting · OpenBao Kubernetes KMS"><meta property="og:description" content="Find the failing layer first, then apply the recovery for that symptom: socket, OpenBao, auth, Transit key, key_id and AAD validation, fallback, or static pod."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/operate/troubleshooting/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
+<span></span><span></span><span></span>
+</button>
+<a class=brand href=/openbao-kubernetes-kms/next/ aria-label="OpenBao KMS documentation home"><img class=brand-logo src=/openbao-kubernetes-kms/img/brand/logo.svg alt>
+<span class=brand-name>OpenBao <b>KMS</b></span></a><nav class=top-nav id=primary-navigation aria-label=Primary><a href=/openbao-kubernetes-kms/next/docs/ aria-current=location>Docs</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></nav><div class=header-actions><button class=search-trigger type=button aria-haspopup=dialog data-search-open>
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<span>Search</span>
+<kbd>⌘ K</kbd></button><div class=github-actions><a class=github-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2A10 10 0 008.84 21.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94.0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64.0.0.84-.27 2.75 1.02A9.58 9.58.0 0112 6.82c.85.0 1.7.12 2.5.34 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68.0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0012 2z"/></svg>
+</a><a class=stargazers-link href=https://github.com/dc-tec/openbao-kubernetes-kms aria-label="View OpenBao KMS stars on GitHub" data-stargazers data-endpoint=https://api.github.com/repos/dc-tec/openbao-kubernetes-kms data-label="OpenBao KMS on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.2l-5.56 2.92 1.06-6.2L3 9.53l6.22-.9L12 3z"/></svg>
+<span class=stargazer-count data-stargazer-count hidden></span></a></div></div></div></header><button class=nav-scrim type=button aria-label="Close navigation" data-nav-close></button><div class=docs-shell><aside class=sidebar id=site-sidebar data-sidebar><div class=sidebar-head><p>Documentation</p><div class=sidebar-head-actions><details class=version-switcher><summary aria-label="Documentation version, currently Next"><span>Next</span>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary><div class=version-menu><a href=/openbao-kubernetes-kms/docs/><span>0.1.x</span>
+<small>Preview</small>
+</a><a href=/openbao-kubernetes-kms/next/docs/operate/troubleshooting/ aria-current=page><span>Next</span>
+<small>Unreleased</small></a></div></details><button class=sidebar-collapse type=button aria-controls=site-sidebar aria-expanded=true title="Collapse sidebar" data-sidebar-collapse>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg>
+<span class=sr-only data-sidebar-collapse-label>Collapse sidebar</span></button></div></div><nav aria-label=Documentation><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/get-started/><span>Get started</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/configure/><span>Configure</span></a></div><div class="nav-group is-active"><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/operate/><span>Operate</span></a><div class=nav-children><a href=/openbao-kubernetes-kms/next/docs/operate/>Overview</a><a href=/openbao-kubernetes-kms/next/docs/operate/rotation/>Rotation</a><a href=/openbao-kubernetes-kms/next/docs/operate/disaster-recovery/>Disaster recovery</a><a href=/openbao-kubernetes-kms/next/docs/operate/upgrade/>Upgrade</a><a class=is-current href=/openbao-kubernetes-kms/next/docs/operate/troubleshooting/ aria-current=page>Troubleshooting</a></div></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/security/><span>Security</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/reference/><span>Reference</span></a></div><div class=nav-group><a class=nav-group-link href=/openbao-kubernetes-kms/next/docs/architecture/><span>Architecture</span></a></div><div class=nav-divider></div><details class=nav-secondary-group><summary class=nav-secondary>Contribute</summary><div class=nav-children><a href=/openbao-kubernetes-kms/contribute/>Overview</a><a href=/openbao-kubernetes-kms/contribute/contributing/>Contributing</a><a href=/openbao-kubernetes-kms/contribute/local-lab/>Local lab</a><a href=/openbao-kubernetes-kms/contribute/code-quality/>Code quality</a><a href=/openbao-kubernetes-kms/contribute/testing/>Testing</a><a href=/openbao-kubernetes-kms/contribute/e2e-framework/>E2E framework</a><a href=/openbao-kubernetes-kms/contribute/benchmark-results/>Performance evidence</a><a href=/openbao-kubernetes-kms/contribute/ci-supply-chain/>CI and supply chain</a><a href=/openbao-kubernetes-kms/contribute/docs-style-guide/>Docs style guide</a><a href=/openbao-kubernetes-kms/contribute/docs-site/>Docs site</a></div></details></nav></aside><main class=doc-main id=main-content><nav class=breadcrumbs aria-label=Breadcrumb><a href=/openbao-kubernetes-kms/next/>Home</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/next/docs/>Documentation</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<a href=/openbao-kubernetes-kms/next/docs/operate/>Operate</a>
+<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+<span aria-current=page>Troubleshooting</span></nav><aside class="version-notice version-notice-next" aria-label="Documentation version notice"><strong>Next · Unreleased</strong>
+<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>Troubleshooting</h1><p class=article-lede>Find the failing layer first, then apply the recovery for that symptom: socket, OpenBao, auth, Transit key, key_id and AAD validation, fallback, or static pod.</p><p class=page-meta>Updated 27 September 2026 · 8 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#api-server-cannot-connect-to-kms>API server cannot connect to KMS</a></li><li><a href=#socket-permission-denied>Socket permission denied</a></li><li><a href=#openbao-unavailable-or-sealed>OpenBao unavailable or sealed</a></li><li><a href=#transit-profile-fails-closed>Transit profile fails closed</a></li><li><a href=#auth-login-fails>Auth login fails</a></li><li><a href=#transit-key-missing>Transit key missing</a></li><li><a href=#registry-state-save-failed>Registry state save failed</a></li><li><a href=#unknown-key-id>Unknown key ID</a></li><li><a href=#transit-allows-implicit-key-creation>Transit allows implicit key creation</a></li><li><a href=#transit-version-creation-time-changed>Transit version creation time changed</a></li><li><a href=#intermediate-transit-version-metadata-missing>Intermediate Transit version metadata missing</a></li><li><a href=#aad-mismatch>AAD mismatch</a></li><li><a href=#status-key-id-differs-from-encrypt-key-id>Status key ID differs from encrypt key ID</a></li><li><a href=#min_decryption_version-raised-too-early>min_decryption_version raised too early</a></li><li><a href=#static-pod-image-missing>Static pod image missing</a></li><li><a href=#identity-fallback-issues>Identity fallback issues</a></li></ul></nav></details><div class=article-content><p>Find the failing layer before you change configuration or recovery state.
+Start with the checks that change nothing:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>curl -fsS http://127.0.0.1:8082/live
+curl -sS -i http://127.0.0.1:8082/ready
+curl -fsS http://127.0.0.1:8081/metrics | grep -E &#39;openbao_kms_status_key_id_hash|openbao_kms_status_cache_age_seconds&#39;
+bao-kms-provider doctor \
+  --config /etc/openbao-kms/config.yaml \
+  --encryption-config /etc/kubernetes/openbao-kms/encryption-config.yaml</code></pre></div><p>On a healthy node both endpoints return HTTP 200, the metrics show the active
+<code>key_id</code> hash and cache age, and <code>doctor</code> reports no <code>[fail]</code> check. The rules
+in <a href=/openbao-kubernetes-kms/next/docs/operate/disaster-recovery/#during-an-incident>Disaster recovery: During an incident</a>
+apply to every fix below. For the full catalog of failure modes, see
+<a href=/openbao-kubernetes-kms/next/docs/architecture/failure-modes/>Architecture: Failure modes</a>
+.</p><p>When <code>/ready</code> returns HTTP 503, read <code>reasons</code> and the optional
+<code>metadata_error_class</code> and <code>deep_error_class</code> fields. These report cached
+conditions; the endpoint does not run a new probe. Use the matching
+<code>status.probe</code> warning for the probe kind and failure class. See the
+<a href=/openbao-kubernetes-kms/next/docs/reference/observability/#endpoints>reason codes</a>
+.</p><p>At the default log level, <code>serve.start</code>, <code>serve.ready</code>, and <code>serve.shutdown</code>
+show startup and exit. A <code>serve.shutdown</code> with <code>startup_failed</code> means setup
+failed before readiness. A <code>key.promoted</code> event identifies the previous and new
+key hashes and Transit versions; wait for the new key&rsquo;s deep probe to pass.</p><h2 id=api-server-cannot-connect-to-kms>API server cannot connect to KMS</h2><p><strong>Signs:</strong> the API server log reports a KMS connection failure, or
+<code>/run/openbao-kms/kms.sock</code> is missing.</p><p><strong>Check</strong> the service (<code>systemctl status bao-kms-provider.service</code>) or the
+static pod (<code>crictl ps --name bao-kms-provider</code>, <code>journalctl -u kubelet</code>), then
+<code>ls -l /run/openbao-kms</code>.</p><p><strong>Fix:</strong></p><ol><li>Start or restart the provider.</li><li>Correct the socket directory owner and mode; see
+<a href=/openbao-kubernetes-kms/next/docs/security/linux-identity-model/>Security: Linux identity model</a>
+.</li><li>Confirm the <code>EncryptionConfiguration</code> endpoint matches <code>server.socketPath</code>.</li><li>Restart <code>kube-apiserver</code> if it does not reconnect.</li></ol><h2 id=socket-permission-denied>Socket permission denied</h2><p><strong>Signs:</strong> the socket exists, but the API server or provider log reports
+permission denied.</p><p><strong>Check:</strong> <code>ls -ld /run/openbao-kms</code>, <code>ls -l /run/openbao-kms/kms.sock</code>, and
+<code>getent group openbao-kms-socket</code>.</p><p><strong>Fix:</strong> the API server identity must be in <code>openbao-kms-socket</code>, the directory
+must be group <code>openbao-kms-socket</code> with mode <code>2750</code>, and the socket mode
+<code>0660</code>. For static pods, the socket GID must equal both <code>supplementalGroups</code>
+and <code>server.socketGroup</code>. Restart the provider, then the API server if needed.</p><h2 id=openbao-unavailable-or-sealed>OpenBao unavailable or sealed</h2><p><strong>Signs:</strong> <code>/ready</code> fails, KMS Status is unhealthy, and OpenBao request errors
+or timeouts appear in metrics.</p><p><strong>Check:</strong> <code>bao status</code>, <code>/ready</code>, and <code>doctor</code>. Use the KMS log <code>error_class</code>
+to locate transport failures: <code>openbao_tls_failed</code> points to certificate or TLS
+validation, <code>openbao_dns_failed</code> to name resolution, and
+<code>openbao_connection_failed</code> to the listener or network connection.</p><p><strong>Fix:</strong> restore OpenBao reachability, unseal or repair it, and check TLS and
+DNS. Run <code>verify-key</code>. The provider recovers on its own once OpenBao is
+healthy; restart it only if it does not.</p><h2 id=transit-profile-fails-closed>Transit profile fails closed</h2><p><strong>Signs:</strong> <code>/ready</code> fails and <code>doctor</code> or <code>verify-key</code> reports a
+<code>transit.profile</code> failure. Writes fail while cached reads might still work.</p><p><strong>Fix:</strong> read each finding&rsquo;s impact prefix. For <code>cryptographic_safety</code>, restore
+the validated key profile before routing writes through the provider. For
+<code>api_server_availability</code>, repair the setting that blocks encryption or
+decryption, such as key deletion or version restrictions. Re-run <code>verify-key</code>,
+and wait for <code>/ready</code> before restarting the API server.</p><h2 id=auth-login-fails>Auth login fails</h2><p><strong>Signs:</strong> OpenBao auth errors in the provider log, <code>/ready</code> fails, or token
+refresh fails.</p><p><strong>Check:</strong></p><ul><li>JWT: the file is readable by the provider, <code>exp</code> is not close, <code>iss</code>, <code>aud</code>,
+and <code>sub</code> match the OpenBao role, and OpenBao has the issuer&rsquo;s current
+signing keys.</li><li>Certificate: the OpenBao listener requests client certificates, and the
+certificate is valid, has client-auth usage, and matches the role.</li><li>PKCS#11: the module path, token label, key label, and PIN file are correct.
+If signer probes fail after a delay, check HSM latency and session usage.
+Pool waits use <code>auth.loginTimeout</code>; native HSM calls require finite timeouts
+in the vendor client. See <a href=/openbao-kubernetes-kms/next/docs/reference/configuration/#auth>Configuration</a>
+.</li><li>Host, OpenBao, issuer, and CA clocks agree.</li></ul><p><strong>Fix:</strong> replace the auth material or correct the role, the issuer
+reachability, or the CA, then confirm the next request or background probe
+logs in. The provider re-reads auth material before each login and backs off
+after failures. A pool timeout recovers when a session becomes available. A
+native HSM call that never returns can require a provider restart after HSM
+connectivity recovers.</p><p>After a token revocation or an OpenBao restore, the provider logs in again on a
+<code>401</code> or <code>403</code> and retries the rejected request once, without waiting for the
+token TTL. Recovery starts at most once every five seconds, with exponential
+backoff for failed logins. OpenBao returns <code>403</code> for both invalid tokens and
+policy denials, so a <code>403</code> that persists after a successful login points at the
+role&rsquo;s policies or the Transit capabilities. Local credential failures and
+rejected logins surface as <code>auth_failed</code>; see
+<a href=/openbao-kubernetes-kms/next/docs/reference/observability/#error-classes>Observability: Error classes</a>
+.</p><h2 id=transit-key-missing>Transit key missing</h2><p><strong>Signs:</strong> <code>verify-key</code> fails with not found, and encryption and decryption
+fail.</p><p><strong>Fix:</strong> confirm the Transit mount path, key name, and OpenBao namespace match
+the configuration, and that the policy grants read on the key path. If the key
+was deleted, restore it from an OpenBao backup; see
+<a href=/openbao-kubernetes-kms/next/docs/operate/disaster-recovery/#transit-key-loss>Disaster recovery: Transit key loss</a>
+.
+A recreated key with the same name never decrypts old data.</p><h2 id=registry-state-save-failed>Registry state save failed</h2><p>When <code>/ready</code> reports <code>state_save_failed</code> or <code>persistence_degraded: true</code>, check
+free space, filesystem errors, mount writability, and the state directory&rsquo;s
+owner and permissions. Repair the storage problem while preserving the registry
+file and its checkpoint. Do not
+delete either file to bypass the error.</p><p>The provider retries the exact attempted transition and validates it against
+fresh Transit metadata before restoring readiness. A newer state file with an
+older checkpoint can result from a partial save. Conflicting files remain a
+failure and require investigation; do not replace them with older copies while
+the provider is running. See <a href=/openbao-kubernetes-kms/next/docs/operate/disaster-recovery/>Disaster recovery</a>
+for recovery with matching state, checkpoint, and Transit evidence.</p><p>An observation-only save that leaves both files unchanged can keep Encrypt and
+Decrypt available with the published keys. In this case, <code>/ready</code> can return
+HTTP 200 with <code>persistence_degraded: true</code>. Rotation progress stays unpublished
+until storage recovers. Other save failures stop Encrypt; Decrypt can still use
+keys in the last published registry.</p><p>Before resuming a rotation, confirm <code>/ready</code> returns HTTP 200 without
+<code>persistence_degraded</code>, check that <code>openbao_kms_rotation_persistence_degraded</code>
+is <code>0</code>, and validate reads and writes.</p><h2 id=unknown-key-id>Unknown key ID</h2><p><strong>Signs:</strong> decryption is rejected before any Transit call,
+<code>openbao_kms_decrypt_key_id_errors_total</code> increases, and old objects fail to
+read after a configuration change.</p><p><strong>Causes:</strong> a changed identity-bearing value, a missing, corrupted, or
+rolled-back registry state or checkpoint, or data from a different provider.</p><p><strong>Fix:</strong> restore the original identity-bearing values and the registry state
+file and checkpoint, confirm the active and historical key snapshots are
+present, then restart the provider and retry the read. After a rotation, state
+must come from backup or a healthy peer; see
+<a href=/openbao-kubernetes-kms/next/docs/operate/disaster-recovery/#local-registry-state>Disaster recovery: Local registry state</a>
+.</p><h2 id=transit-allows-implicit-key-creation>Transit allows implicit key creation</h2><p><strong>Signs:</strong> KMS Status is unhealthy without a <code>key_id</code>, and probes report
+<code>disable_upsert</code> as false or unreadable.</p><p><strong>Fix:</strong> set <code>disable_upsert=true</code> on the Transit mount, confirm the provider
+token can read <code>&lt;mount>/config/keys</code>, run <code>doctor</code>, and wait for the next
+metadata probe to report healthy.</p><h2 id=transit-version-creation-time-changed>Transit version creation time changed</h2><p><strong>Signs:</strong> <code>/ready</code>, <code>doctor</code>, or <code>verify-key</code> reports a changed creation time
+and KMS Status has no <code>key_id</code>, typically after an OpenBao restore or import.</p><p>The provider records each version&rsquo;s first observed creation time, to the
+second, and treats a different second as identity drift.</p><p><strong>Fix:</strong> restore an OpenBao backup with the original key and metadata, and the
+matching provider state and checkpoint. Confirm the lineage ID still matches,
+then run <code>verify-key</code>. Keep the provider stopped if the original metadata
+cannot be restored. Never edit timestamps, <code>key_id</code> values, or state by hand.</p><h2 id=intermediate-transit-version-metadata-missing>Intermediate Transit version metadata missing</h2><p><strong>Signs:</strong> <code>rotation-plan</code>, <code>verify-rotation</code>, <code>/ready</code>, or startup reports
+invalid metadata after <code>latest_version</code> skipped versions, and Status has no
+<code>key_id</code>. Causes are back-to-back rotations before convergence, or a restore
+that dropped a version&rsquo;s creation time.</p><p><strong>Fix:</strong></p><ol><li>Stop rotations and keep every Transit version decryptable.</li><li>Restore OpenBao metadata that includes each intermediate version&rsquo;s creation
+time, and restore provider state from backup or a healthy peer if it was
+lost.</li><li>Run <code>rotation-plan</code> on every node, and resume only after all nodes report
+the same healthy <code>key_id</code> hash.</li></ol><h2 id=aad-mismatch>AAD mismatch</h2><p><strong>Signs:</strong> decryption rejects an object with an additional authenticated data
+(AAD) error, or Transit returns an authentication failure.</p><p><strong>Causes:</strong> modified or corrupted annotations, a changed provider, cluster, or
+key scope, or a serialization bug.</p><p><strong>Fix:</strong> compare the object&rsquo;s annotations with the expected key snapshot
+hashes and restore the correct configuration. Never disable or bypass AAD. File
+a bug if canonical serialization changed.</p><h2 id=status-key-id-differs-from-encrypt-key-id>Status key ID differs from encrypt key ID</h2><p><strong>Signs:</strong> the API server marks the provider unhealthy and discards encrypt
+responses.</p><p><strong>Causes:</strong> nodes with inconsistent configuration or provider versions, an
+inconsistent Transit metadata read, or a promotion bug.</p><p><strong>Fix:</strong> stop any rotation, compare configuration and provider versions on
+every node, and restart the affected provider. Roll back only as allowed in
+<a href=/openbao-kubernetes-kms/next/docs/operate/upgrade/#roll-back>Upgrade: Roll back</a>
+.</p><h2 id=min_decryption_version-raised-too-early>min_decryption_version raised too early</h2><p><strong>Signs:</strong> old objects fail to decrypt after a rotation, and OpenBao returns
+version restriction errors.</p><p><strong>Fix:</strong> lower <code>min_decryption_version</code> if the old version still exists and
+policy allows it; otherwise restore an OpenBao backup that holds it. Rewrite
+the affected resources once reads through the provider work again, and confirm
+retained backups are expired or still decryptable.</p><h2 id=static-pod-image-missing>Static pod image missing</h2><p><strong>Signs:</strong> kubelet cannot start the provider, reports image pull errors, and
+the socket is missing.</p><p><strong>Fix:</strong> import the verified image digest on the node, and restart kubelet if
+needed. See <a href=/openbao-kubernetes-kms/next/docs/get-started/static-pod/#step-3-preload-the-image>Run as a static pod: Preload the image</a>
+.</p><h2 id=identity-fallback-issues>Identity fallback issues</h2><p>An <code>identity</code> fallback left in place makes plaintext writes possible after a
+future misconfiguration. Removed too early, it leaves unmigrated plaintext
+objects unreadable.</p><p><strong>Fix:</strong> restore the last known-good provider order while retaining every
+reader needed for existing ciphertext. Keep <code>identity</code> second during the
+preview evaluation. See <a href=/openbao-kubernetes-kms/next/docs/get-started/enable-encryption/>Enable encryption</a>
+for the fresh-install scope and rollback boundaries.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
+<a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#api-server-cannot-connect-to-kms>API server cannot connect to KMS</a></li><li><a href=#socket-permission-denied>Socket permission denied</a></li><li><a href=#openbao-unavailable-or-sealed>OpenBao unavailable or sealed</a></li><li><a href=#transit-profile-fails-closed>Transit profile fails closed</a></li><li><a href=#auth-login-fails>Auth login fails</a></li><li><a href=#transit-key-missing>Transit key missing</a></li><li><a href=#registry-state-save-failed>Registry state save failed</a></li><li><a href=#unknown-key-id>Unknown key ID</a></li><li><a href=#transit-allows-implicit-key-creation>Transit allows implicit key creation</a></li><li><a href=#transit-version-creation-time-changed>Transit version creation time changed</a></li><li><a href=#intermediate-transit-version-metadata-missing>Intermediate Transit version metadata missing</a></li><li><a href=#aad-mismatch>AAD mismatch</a></li><li><a href=#status-key-id-differs-from-encrypt-key-id>Status key ID differs from encrypt key ID</a></li><li><a href=#min_decryption_version-raised-too-early>min_decryption_version raised too early</a></li><li><a href=#static-pod-image-missing>Static pod image missing</a></li><li><a href=#identity-fallback-issues>Identity fallback issues</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/operate/troubleshooting.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/next/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<label class=sr-only for=site-search>Search documentation</label>
+<input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
+<button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog></body></html>
