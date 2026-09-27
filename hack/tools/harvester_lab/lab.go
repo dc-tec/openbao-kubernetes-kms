@@ -80,10 +80,11 @@ type labConfig struct {
 	multiControlPlaneEnabled bool
 	multiControlPlaneHosts   []string
 
-	systemdHost      string
-	staticPodHost    string
-	providerImage    string
-	providerAssetDir string
+	systemdHost           string
+	staticPodHost         string
+	providerImage         string
+	providerBaselineImage string
+	providerAssetDir      string
 
 	loadSecretCount int
 
@@ -111,6 +112,9 @@ type versionsConfig struct {
 			ExactVersion string `yaml:"exactVersion"`
 			Flannel      string `yaml:"flannel"`
 		} `yaml:"kubernetes"`
+		Provider struct {
+			UpgradeBaselineImage string `yaml:"upgradeBaselineImage"`
+		} `yaml:"provider"`
 	} `yaml:"validation"`
 }
 
@@ -263,6 +267,7 @@ func newLabConfig() (*labConfig, error) {
 		systemdHost:            envOrDefault("SYSTEMD_HOST", systemdHostAlias),
 		staticPodHost:          envOrDefault("STATIC_HOST", staticPodHostAlias),
 		providerImage:          envOrDefault("PROVIDER_IMAGE", providerImageDefault),
+		providerBaselineImage:  versions.Validation.Provider.UpgradeBaselineImage,
 		providerAssetDir:       envOrDefault("HARVESTER_PROVIDER_ASSET_DIR", filepath.Join(artifactDir, "provider")),
 		loadSecretCount:        envInt("HARVESTER_LOAD_SECRET_COUNT", 25),
 		decryptWarmupSecretCount: envInt(
