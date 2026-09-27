@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,4 +150,39 @@ func readUpgradeTestFile(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+func TestRejectedDowngradeRestoresCandidateAfterCancellation(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"ssh", "scp", "kubectl"} {
+		script := "#!/bin/sh\nexit 0\n"
+		if name == "ssh" {
+			script = "#!/bin/sh\ncase \"$*\" in *sha256sum*) printf 'a state\\nb checkpoint\\n';; esac\n"
+		}
+		// #nosec G306 -- isolated command stubs; this test never accesses a VM.
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	restored := false
+	err := verifyRejectedDowngrade(ctx, &labConfig{root: dir}, kubeadmCheck{providerMode: providerModeSystemd},
+		func(context.Context) error {
+			cancel()
+			return context.Canceled
+		},
+		func(recoveryCtx context.Context) error {
+			if err := recoveryCtx.Err(); err != nil {
+				t.Fatalf("candidate restoration inherited canceled context: %v", err)
+			}
+			restored = true
+			return nil
+		},
+		func(context.Context) error { t.Fatal("continued after failed install"); return nil },
+	)
+	if !errors.Is(err, context.Canceled) || !restored {
+		t.Fatalf("error = %v, candidate restored = %v", err, restored)
+	}
 }

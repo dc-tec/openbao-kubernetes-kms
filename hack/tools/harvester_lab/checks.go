@@ -220,19 +220,34 @@ func labVerifyRecovery(ctx context.Context, cfg *labConfig, _ []string) error {
 	if err := labVerifyKMS(ctx, cfg, nil); err != nil {
 		return fmt.Errorf("baseline KMS verification: %w", err)
 	}
-	if err := verifyProviderRestartRecovery(ctx, cfg); err != nil {
+	checks := kubeadmChecks(cfg)
+	corpus, cleanup, err := createPairedRestoreSecrets(ctx, cfg, checks, "recovery", "before-faults")
+	if err != nil {
 		return err
 	}
-	if err := verifyAPIServerRestartRecovery(ctx, cfg); err != nil {
+	defer cleanup()
+	if err := rotateAndConfirmProviders(ctx, cfg, checks, "recovery"); err != nil {
 		return err
 	}
-	if err := verifyOpenBaoRestartRecovery(ctx, cfg); err != nil {
-		return err
+	steps := []struct {
+		name string
+		run  func(context.Context, *labConfig) error
+	}{
+		{"provider restart", verifyProviderRestartRecovery},
+		{"API server restart", verifyAPIServerRestartRecovery},
+		{"OpenBao restart", verifyOpenBaoRestartRecovery},
+		{"control-plane reboot", verifyKubeadmRebootRecovery},
+		{"OpenBao reboot", verifyOpenBaoRebootRecovery},
 	}
-	if err := verifyKubeadmRebootRecovery(ctx, cfg); err != nil {
-		return err
+	for _, step := range steps {
+		if err := step.run(ctx, cfg); err != nil {
+			return err
+		}
+		if err := verifyColdHistoricalSecrets(ctx, cfg, checks, corpus); err != nil {
+			return fmt.Errorf("historical read after %s: %w", step.name, err)
+		}
 	}
-	return verifyOpenBaoRebootRecovery(ctx, cfg)
+	return nil
 }
 
 func labVerifyMultiControlPlaneRecovery(ctx context.Context, cfg *labConfig, _ []string) error {
@@ -662,27 +677,20 @@ func labVerifyOpenBaoOutage(ctx context.Context, cfg *labConfig, _ []string) (re
 	if err := labVerifyKMS(ctx, cfg, nil); err != nil {
 		return fmt.Errorf("baseline KMS verification: %w", err)
 	}
+	checks := kubeadmChecks(cfg)
+	corpus, cleanup, err := createPairedRestoreSecrets(ctx, cfg, checks, "outage", "before-fault")
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 	if err := sshLab(ctx, cfg, cfg.openBaoHost, "sudo systemctl stop openbao.service"); err != nil {
 		return err
 	}
 	defer func() {
-		if err := sshLab(ctx, cfg, cfg.openBaoHost, "sudo systemctl start openbao.service"); err != nil {
-			retErr = errors.Join(retErr, fmt.Errorf("restart OpenBao after outage: %w", err))
-			return
-		}
-		if err := unsealOpenBao(ctx, cfg); err != nil {
-			retErr = errors.Join(retErr, fmt.Errorf("unseal OpenBao after outage: %w", err))
-			return
-		}
-		if err := waitOpenBaoAvailable(ctx, cfg); err != nil {
-			retErr = errors.Join(retErr, fmt.Errorf("verify OpenBao after outage: %w", err))
-			return
-		}
-		for _, check := range kubeadmChecks(cfg) {
-			if err := waitAPIServer(ctx, cfg, check.kubeconfig); err != nil {
-				retErr = errors.Join(retErr, err)
-				return
-			}
+		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
+		defer cancel()
+		if err := recoverOpenBaoOutage(recoveryCtx, cfg, checks, corpus); err != nil {
+			retErr = errors.Join(retErr, err)
 		}
 	}()
 	if err := waitRemoteCommand(
@@ -701,12 +709,16 @@ func labVerifyOpenBaoOutage(ctx context.Context, cfg *labConfig, _ []string) (re
 		}
 	}
 	for _, check := range kubeadmChecks(cfg) {
+		before, err := remoteFailedEncryptions(ctx, cfg, check.host)
+		if err != nil {
+			return err
+		}
 		fmt.Printf("restarting kube-apiserver with OpenBao stopped on %s\n", check.host)
 		if err := sshLab(ctx, cfg, check.host, crictlStopContainerCommand("^kube-apiserver$")); err != nil {
 			return err
 		}
 		time.Sleep(5 * time.Second)
-		if err := expectKMSWriteFailure(ctx, cfg, check); err != nil {
+		if err := expectKMSWriteFailure(ctx, cfg, check, before); err != nil {
 			return err
 		}
 	}
@@ -716,7 +728,7 @@ func labVerifyOpenBaoOutage(ctx context.Context, cfg *labConfig, _ []string) (re
 func verifyOutageCachedWrite(ctx context.Context, cfg *labConfig, check kubeadmCheck) error {
 	secret, cleanup, err := attemptOutageSecretCreate(ctx, cfg, check, "openbao-kms-outage-cache")
 	if err != nil {
-		fmt.Printf("KMS write failed while OpenBao was stopped for %s (expected)\n", check.suffix)
+		fmt.Printf("Warm-cache write did not succeed for %s; the cold check verifies KMS failure separately\n", check.suffix)
 		return nil
 	}
 	defer cleanup()
@@ -730,9 +742,12 @@ func verifyOutageCachedWrite(ctx context.Context, cfg *labConfig, check kubeadmC
 	return nil
 }
 
-func expectKMSWriteFailure(ctx context.Context, cfg *labConfig, check kubeadmCheck) error {
+func expectKMSWriteFailure(ctx context.Context, cfg *labConfig, check kubeadmCheck, before float64) error {
 	secret, cleanup, err := attemptOutageSecretCreate(ctx, cfg, check, "openbao-kms-outage-cold")
 	if err != nil {
+		if err := waitForFailedEncryption(ctx, cfg, check.host, before); err != nil {
+			return err
+		}
 		fmt.Printf("KMS write failed after kube-apiserver restart with OpenBao stopped for %s (expected)\n", check.suffix)
 		return nil
 	}
@@ -1908,7 +1923,7 @@ func labVerifyUpgradeRollback(ctx context.Context, cfg *labConfig, _ []string) e
 	if _, err := requireProviderInputs(cfg); err != nil {
 		return err
 	}
-	fmt.Printf("provider upgrade baseline: %s; candidate commit: %s\n",
+	fmt.Printf("unsupported downgrade baseline: %s; candidate commit: %s\n",
 		cfg.providerBaselineImage, gitShortCommit(ctx, cfg))
 	if err := verifySystemdUpgradeRollback(ctx, cfg); err != nil {
 		return err
@@ -1930,10 +1945,15 @@ func labVerifyPairedRestore(ctx context.Context, cfg *labConfig, _ []string) err
 	if err := backupPairedRestoreState(ctx, cfg, checks, restoreID); err != nil {
 		return err
 	}
-	if err := runOpenBaoBackupRestoreScript(ctx, cfg, "rotate-transit", restoreID); err != nil {
+	if err := rotateAndConfirmProviders(ctx, cfg, checks, restoreID); err != nil {
 		return err
 	}
-	time.Sleep(5 * time.Second)
+	// A fresh API server must obtain its encryption key after confirmed promotion.
+	for _, check := range checks {
+		if err := restartAPIServer(ctx, cfg, check); err != nil {
+			return err
+		}
+	}
 	postRestore, cleanupPost, err := createPairedRestoreSecrets(ctx, cfg, checks, restoreID, "post")
 	if err != nil {
 		return err
@@ -1977,7 +1997,7 @@ func createPairedRestoreSecrets(
 
 func backupPairedRestoreState(ctx context.Context, cfg *labConfig, checks []kubeadmCheck, restoreID string) error {
 	for _, check := range checks {
-		if err := runProviderStateScript(ctx, cfg, check, "backup", restoreID); err != nil {
+		if err := backupQuiescedProvider(ctx, cfg, check, restoreID); err != nil {
 			return err
 		}
 	}
@@ -2208,32 +2228,14 @@ func verifySystemdUpgradeRollback(ctx context.Context, cfg *labConfig) error {
 	if err := requireDifferentBinaries(oldBinary, newBinary); err != nil {
 		return err
 	}
-	if err := applySystemdBinary(ctx, cfg, check, oldBinary, "old"); err != nil {
+	if err := applySystemdBinary(ctx, cfg, check, newBinary, "candidate"); err != nil {
 		return err
 	}
-	oldSecret, oldCleanup, err := createTrackedSecret(ctx, cfg, check, "upgrade-systemd-old")
-	if err != nil {
-		return err
-	}
-	defer oldCleanup()
-	if err := applySystemdBinary(ctx, cfg, check, newBinary, "new"); err != nil {
-		return err
-	}
-	newSecret, newCleanup, err := createTrackedSecret(ctx, cfg, check, "upgrade-systemd-new")
-	if err != nil {
-		return err
-	}
-	defer newCleanup()
-	if err := verifyRemoteSecretEnvelope(ctx, cfg, check.host, oldSecret.name, oldSecret.path); err != nil {
-		return err
-	}
-	if err := applySystemdBinary(ctx, cfg, check, oldBinary, "rollback"); err != nil {
-		return err
-	}
-	if err := verifyRemoteSecretEnvelope(ctx, cfg, check.host, oldSecret.name, oldSecret.path); err != nil {
-		return err
-	}
-	return verifyRemoteSecretEnvelope(ctx, cfg, check.host, newSecret.name, newSecret.path)
+	return verifyRejectedDowngrade(ctx, cfg, check,
+		func(ctx context.Context) error { return installSystemdBinary(ctx, cfg, check, oldBinary, "baseline") },
+		func(ctx context.Context) error { return applySystemdBinary(ctx, cfg, check, newBinary, "candidate") },
+		func(ctx context.Context) error { return waitSystemdStateRejection(ctx, cfg, check.host) },
+	)
 }
 
 func applySystemdBinary(
@@ -2243,6 +2245,19 @@ func applySystemdBinary(
 	binaryPath string,
 	label string,
 ) error {
+	if err := installSystemdBinary(ctx, cfg, check, binaryPath, label); err != nil {
+		return err
+	}
+	if err := waitProviderReady(ctx, cfg, check.host); err != nil {
+		return err
+	}
+	// Clear the API server's data and DEK caches before checking this release.
+	return restartAPIServer(ctx, cfg, check)
+}
+
+func installSystemdBinary(
+	ctx context.Context, cfg *labConfig, check kubeadmCheck, binaryPath, label string,
+) error {
 	if err := ensureRemoteProviderAssetDir(ctx, cfg, check.host); err != nil {
 		return err
 	}
@@ -2251,15 +2266,12 @@ func applySystemdBinary(
 		return err
 	}
 	command := "sudo install -m 0755 -o root -g root " + remoteBinary +
-		" /usr/bin/bao-kms-provider && sudo systemctl restart bao-kms-provider.service"
+		" /usr/bin/bao-kms-provider && sudo systemctl reset-failed bao-kms-provider.service" +
+		" && sudo systemctl restart bao-kms-provider.service"
 	if err := sshLab(ctx, cfg, check.host, command); err != nil {
 		return err
 	}
-	if err := waitProviderReady(ctx, cfg, check.host); err != nil {
-		return err
-	}
-	// Clear the API server's data and DEK caches before checking this release.
-	return restartAPIServer(ctx, cfg, check)
+	return nil
 }
 
 type trackedSecret struct {
@@ -2317,32 +2329,18 @@ func verifyStaticPodUpgradeRollback(ctx context.Context, cfg *labConfig) error {
 	if err := writeStaticPodManifestForImage(cfg, newManifest, newImage); err != nil {
 		return err
 	}
-	if err := applyStaticPodRelease(ctx, cfg, check, oldTar, oldManifest, oldImage, "old"); err != nil {
+	if err := applyStaticPodRelease(ctx, cfg, check, newTar, newManifest, newImage, "candidate"); err != nil {
 		return err
 	}
-	oldSecret, oldCleanup, err := createTrackedSecret(ctx, cfg, check, "upgrade-static-old")
-	if err != nil {
-		return err
-	}
-	defer oldCleanup()
-	if err := applyStaticPodRelease(ctx, cfg, check, newTar, newManifest, newImage, "new"); err != nil {
-		return err
-	}
-	newSecret, newCleanup, err := createTrackedSecret(ctx, cfg, check, "upgrade-static-new")
-	if err != nil {
-		return err
-	}
-	defer newCleanup()
-	if err := verifyRemoteSecretEnvelope(ctx, cfg, check.host, oldSecret.name, oldSecret.path); err != nil {
-		return err
-	}
-	if err := applyStaticPodRelease(ctx, cfg, check, oldTar, oldManifest, oldImage, "rollback"); err != nil {
-		return err
-	}
-	if err := verifyRemoteSecretEnvelope(ctx, cfg, check.host, oldSecret.name, oldSecret.path); err != nil {
-		return err
-	}
-	return verifyRemoteSecretEnvelope(ctx, cfg, check.host, newSecret.name, newSecret.path)
+	return verifyRejectedDowngrade(ctx, cfg, check,
+		func(ctx context.Context) error {
+			return installStaticPodRelease(ctx, cfg, check, oldTar, oldManifest, "baseline")
+		},
+		func(ctx context.Context) error {
+			return applyStaticPodRelease(ctx, cfg, check, newTar, newManifest, newImage, "candidate")
+		},
+		func(ctx context.Context) error { return waitStaticPodStateRejection(ctx, cfg, check.host, oldImage) },
+	)
 }
 
 func imageWithTag(image string, tag string) string {
@@ -2366,6 +2364,21 @@ func applyStaticPodRelease(
 	image string,
 	label string,
 ) error {
+	if err := installStaticPodRelease(ctx, cfg, check, imageTar, manifest, label); err != nil {
+		return err
+	}
+	if err := waitStaticPodImage(ctx, cfg, check.host, image); err != nil {
+		return err
+	}
+	if err := waitProviderReady(ctx, cfg, check.host); err != nil {
+		return err
+	}
+	return restartAPIServer(ctx, cfg, check)
+}
+
+func installStaticPodRelease(
+	ctx context.Context, cfg *labConfig, check kubeadmCheck, imageTar, manifest, label string,
+) error {
 	if err := ensureRemoteProviderAssetDir(ctx, cfg, check.host); err != nil {
 		return err
 	}
@@ -2383,13 +2396,7 @@ func applyStaticPodRelease(
 	if err := sshLab(ctx, cfg, check.host, command); err != nil {
 		return err
 	}
-	if err := waitStaticPodImage(ctx, cfg, check.host, image); err != nil {
-		return err
-	}
-	if err := waitProviderReady(ctx, cfg, check.host); err != nil {
-		return err
-	}
-	return restartAPIServer(ctx, cfg, check)
+	return nil
 }
 
 func ensureRemoteProviderAssetDir(ctx context.Context, cfg *labConfig, host string) error {
@@ -2419,6 +2426,11 @@ func labProductionGate(ctx context.Context, cfg *labConfig, _ []string) error {
 	}
 	for _, step := range steps {
 		fmt.Printf("==> harvester lab production gate: %s\n", step.name)
+		if step.name != "verify-guests" {
+			if err := requireCandidateProviders(ctx, cfg); err != nil {
+				return fmt.Errorf("%s candidate check: %w", step.name, err)
+			}
+		}
 		if err := step.run(ctx, cfg, nil); err != nil {
 			return fmt.Errorf("%s: %w", step.name, err)
 		}
