@@ -241,6 +241,51 @@ func TestRejectedTokenIsNotFallbackAfterFailedLogin(t *testing.T) {
 	}
 }
 
+func TestPersistentDenialsBackOffDespiteSuccessfulLogins(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(testCurrentUnix, 0)}
+	var calls atomic.Int32
+	manager := recoveryManager(t, recoveryLoginSource{login: func(context.Context) (LoginResult, error) {
+		return recoveryLogin(fmt.Sprintf("test-token-%d", calls.Add(1))), nil
+	}}, ManagerOptions{Clock: clock})
+	initial, err := manager.Token(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := manager.RecoverToken(t.Context(), initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, delay := range []time.Duration{5, 10, 20, 40, 80, 160, 300, 300} {
+		// A rejected retry invalidates the replacement, without starting a third login.
+		manager.RejectToken(current)
+		before := calls.Load()
+		clock.advance(delay*time.Second - time.Millisecond)
+		if token, err := manager.Token(t.Context()); err == nil || token != "" || calls.Load() != before {
+			t.Fatalf("rejected token or premature login during %s backoff", delay*time.Second)
+		}
+		clock.advance(time.Millisecond)
+		current, err = manager.Token(t.Context())
+		if err != nil || current == "" || calls.Load() != before+1 {
+			t.Fatalf("recovery did not resume after %s: %v", delay*time.Second, err)
+		}
+	}
+	clock.advance(tokenRecoveryQuietPeriod)
+	// Obtain a live session after the quiet period, then model an unrelated denial.
+	current, err = manager.Token(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err = manager.RecoverToken(t.Context(), current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.RejectToken(current)
+	clock.advance(tokenRecoveryInterval)
+	if _, err := manager.Token(t.Context()); err != nil {
+		t.Fatalf("quiet period did not reset denial backoff: %v", err)
+	}
+}
+
 func TestPublicAuthErrorPreservesCauseWithoutDisclosure(t *testing.T) {
 	cause := errors.New("secret token payload")
 	err := publicAuthError(cause)

@@ -13,7 +13,10 @@ type recoveringTokenSource struct {
 	replacement string
 	recoveryErr error
 	recoveries  atomic.Int32
+	rejected    string
 }
+
+func (s *recoveringTokenSource) RejectToken(token string) { s.rejected = token }
 
 func (*recoveringTokenSource) Token(context.Context) (string, error) { return testToken, nil }
 func (s *recoveringTokenSource) RecoverToken(_ context.Context, rejected string) (string, error) {
@@ -118,6 +121,13 @@ func TestClientRetriesOnlyAuthenticationRejectionsOnce(t *testing.T) {
 			}
 			if calls.Load() != tc.wantCalls || source.recoveries.Load() != tc.wantRecoveries {
 				t.Fatalf("unexpected calls/recoveries: %d/%d", calls.Load(), source.recoveries.Load())
+			}
+			wantRejected := ""
+			if tc.wantCalls == 2 && (tc.retryStatus == 401 || tc.retryStatus == 403) {
+				wantRejected = tc.replacement
+			}
+			if source.rejected != wantRejected {
+				t.Fatalf("retry rejection was not invalidated: %q", source.rejected)
 			}
 		})
 	}

@@ -39,6 +39,8 @@ var (
 	ErrRequest = errors.New("oauth2 token request failed")
 	// ErrRejected identifies a token request rejected by the authorization server.
 	ErrRejected = errors.New("oauth2 token request rejected")
+	// ErrUnavailable identifies retryable rate limiting or server failure.
+	ErrUnavailable = errors.New("oauth2 token endpoint unavailable")
 	// ErrResponse identifies a token response outside the supported contract.
 	ErrResponse = errors.New("oauth2 token response invalid")
 )
@@ -189,11 +191,14 @@ func (c *Client) Token(ctx context.Context) (Token, error) {
 	response, err := c.http.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return Token{}, errors.Join(ErrRequest, ctx.Err())
+			return Token{}, &requestError{cause: ctx.Err()}
 		}
-		return Token{}, ErrRequest
+		return Token{}, &requestError{cause: err}
 	}
 	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= http.StatusInternalServerError {
+		return Token{}, ErrUnavailable
+	}
 	if response.StatusCode != http.StatusOK {
 		return Token{}, ErrRejected
 	}

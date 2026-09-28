@@ -76,6 +76,9 @@ type ControllerOptions struct {
 	ProbeObserver ProbeObserver
 	// DecryptRefreshInterval bounds metadata attempts caused by unknown key IDs.
 	DecryptRefreshInterval time.Duration
+	// LifecycleContext owns discovery work independently of individual KMS calls.
+	LifecycleContext      context.Context
+	DecryptRefreshTimeout time.Duration
 }
 
 // Controller runs one-shot status probes used by the scheduler and tests.
@@ -93,6 +96,8 @@ type Controller struct {
 	probeObserver   ProbeObserver
 	probeGate       chan struct{}
 	refreshInterval time.Duration
+	lifecycle       context.Context
+	refreshTimeout  time.Duration
 	nextRefresh     clocktime.Deadline
 	refreshErr      error
 	pendingCommit   *stateCommit
@@ -102,6 +107,10 @@ type Controller struct {
 // NewController builds a status probe controller and loads persisted registry state when available.
 func NewController(opts ControllerOptions) (*Controller, error) {
 	switch {
+	case opts.LifecycleContext == nil:
+		return nil, fmt.Errorf("%w: lifecycle context is required", ErrConfigInvalid)
+	case opts.DecryptRefreshTimeout < 0:
+		return nil, fmt.Errorf("%w: decrypt refresh timeout must not be negative", ErrConfigInvalid)
 	case opts.Store == nil:
 		return nil, fmt.Errorf("%w: status store is required", ErrConfigInvalid)
 	case opts.Observer == nil:
@@ -118,6 +127,9 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 	if opts.DecryptRefreshInterval == 0 {
 		opts.DecryptRefreshInterval = 30 * time.Second
 	}
+	if opts.DecryptRefreshTimeout == 0 {
+		opts.DecryptRefreshTimeout = 5 * time.Second
+	}
 
 	controller := &Controller{
 		clock:           clockOrReal(opts.Clock),
@@ -132,6 +144,8 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		probeObserver:   opts.ProbeObserver,
 		probeGate:       make(chan struct{}, 1),
 		refreshInterval: opts.DecryptRefreshInterval,
+		lifecycle:       opts.LifecycleContext,
+		refreshTimeout:  opts.DecryptRefreshTimeout,
 	}
 	controller.publishCircuitBreakerState()
 	if opts.StateStore != nil {
@@ -160,36 +174,59 @@ func (c *Controller) RefreshForDecrypt(ctx context.Context, keyID string) error 
 	if err := c.acquireProbe(ctx); err != nil {
 		return err
 	}
-	defer c.releaseProbe()
+	start, err := c.prepareDecryptRefresh(keyID)
+	if !start {
+		c.releaseProbe()
+		return err
+	}
+	done := make(chan error, 1)
+	go func() {
+		probeCtx, cancel := context.WithTimeout(c.lifecycle, c.refreshTimeout)
+		defer cancel()
+		err := c.probeOnce(probeCtx, true)
+		c.refreshErr = err
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			c.refreshErr = fmt.Errorf("%w: metadata discovery interrupted", ErrProbeFailed)
+		}
+		c.releaseProbe()
+		if _, lookupErr := c.store.Lookup(keyID); lookupErr == nil {
+			// Encryption can remain blocked while a validated pending key decrypts.
+			err = nil
+		}
+		done <- err
+	}()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.lifecycle.Done():
+		return c.lifecycle.Err()
+	case err := <-done:
+		return err
+	}
+}
+
+// prepareDecryptRefresh runs under probeGate. The gate transfers to the shared
+// attempt only when this method returns true.
+func (c *Controller) prepareDecryptRefresh(keyID string) (bool, error) {
 	if _, err := c.store.Lookup(keyID); err == nil {
-		return nil
+		return false, nil
 	}
 	state, ok := c.store.State()
 	if !ok {
-		return ErrStateUnavailable
+		return false, ErrStateUnavailable
 	}
 	for _, record := range state.Snapshots {
 		if record.KubernetesKeyID == keyID {
 			// Removed and rejected identities cannot be rediscovered.
-			return nil
+			return false, nil
 		}
 	}
 	now := c.clock.Read()
 	if c.nextRefresh.Pending(now) {
-		return c.refreshErr
+		return false, c.refreshErr
 	}
 	c.nextRefresh = clocktime.After(now, c.refreshInterval)
-	err := c.probeOnce(ctx, true)
-	c.refreshErr = err
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		// A canceled discoverer must not label other requests as canceled.
-		c.refreshErr = fmt.Errorf("%w: metadata discovery interrupted", ErrProbeFailed)
-	}
-	if _, err := c.store.Lookup(keyID); err == nil {
-		// Encryption can remain blocked while a validated pending key decrypts.
-		return nil
-	}
-	return err
+	return true, nil
 }
 
 func (c *Controller) acquireProbe(ctx context.Context) error {

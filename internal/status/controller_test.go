@@ -529,6 +529,9 @@ func newTestController(
 
 func newTestControllerWithOptions(t *testing.T, opts status.ControllerOptions) *status.Controller {
 	t.Helper()
+	if opts.LifecycleContext == nil {
+		opts.LifecycleContext = t.Context()
+	}
 
 	controller, err := status.NewController(opts)
 	if err != nil {

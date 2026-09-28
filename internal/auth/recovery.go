@@ -11,7 +11,12 @@ import (
 
 var errRefreshSuperseded = errors.New("token refresh superseded")
 
-const tokenRecoveryInterval = 5 * time.Second
+const (
+	tokenRecoveryInterval    = 5 * time.Second
+	maxTokenRecoveryInterval = 5 * time.Minute
+	// A quiet period longer than the cap distinguishes a new incident from ongoing denials.
+	tokenRecoveryQuietPeriod = 2 * maxTokenRecoveryInterval
+)
 
 type refreshFlight struct {
 	done chan struct{}
@@ -38,7 +43,7 @@ func (m *Manager) ensureToken(ctx context.Context, forceLogin bool) (currentToke
 			m.mu.Unlock()
 			return token, nil
 		}
-		if m.flight == nil && m.retryBlockedLocked(now) {
+		if m.flight == nil && m.loginBlockedLocked(now) {
 			err := m.lastErr
 			if err == nil {
 				err = ErrTokenUnavailable
@@ -64,6 +69,10 @@ func (m *Manager) ensureToken(ctx context.Context, forceLogin bool) (currentToke
 	}
 }
 
+func (m *Manager) loginBlockedLocked(now clocktime.Reading) bool {
+	return m.retryBlockedLocked(now) || (m.current.value == "" && m.nextRecoveryAt.Pending(now))
+}
+
 func (m *Manager) startEarlyRefreshLocked(now clocktime.Reading) {
 	if m.current.lifetime.Remaining(now) <= m.cfg.LoginBeforeTokenExpiry && !m.retryBlockedLocked(now) && m.flight == nil {
 		m.startRefreshLocked(false)
@@ -82,7 +91,16 @@ func (m *Manager) waitForRefresh(ctx context.Context, flight *refreshFlight) err
 }
 
 func (m *Manager) startRefreshLocked(forceLogin bool) {
-	action := m.refreshActionLocked(forceLogin, m.clock.Read())
+	now := m.clock.Read()
+	action := m.refreshActionLocked(forceLogin, now)
+	if action.kind == refreshKindLogin && m.current.value == "" && m.recoveryFailures > 0 {
+		backoff := exponentialBackoff(tokenRecoveryInterval, maxTokenRecoveryInterval, m.recoveryFailures)
+		m.nextRecoveryAt = clocktime.After(now, backoff)
+		// Saturate the counter; successful login does not establish permission to use Transit.
+		if backoff < maxTokenRecoveryInterval {
+			m.recoveryFailures++
+		}
+	}
 	flight := &refreshFlight{done: make(chan struct{}), kind: action.kind}
 	m.flight = flight
 	go m.runRefresh(action, flight)
@@ -123,18 +141,35 @@ func (m *Manager) RecoverToken(ctx context.Context, token string) (string, error
 		return "", publicAuthError(err)
 	}
 	m.mu.Lock()
-	if token != "" && token == m.current.value {
-		now := m.clock.Read()
-		if m.nextRecoveryAt.Pending(now) {
-			m.mu.Unlock()
-			return "", nil
-		}
-		m.current = currentToken{}
-		m.lastErr = publicAuthError(ErrTokenUnavailable)
-		m.nextRecoveryAt = clocktime.After(now, tokenRecoveryInterval)
+	if m.rejectTokenLocked(token) && m.nextRecoveryAt.Pending(m.clock.Read()) {
+		m.mu.Unlock()
+		return "", nil
 	}
 	m.mu.Unlock()
 	return m.Token(ctx)
+}
+
+// RejectToken invalidates the current token without starting recovery. The
+// transport uses it after its one retry also receives a credential denial.
+func (m *Manager) RejectToken(token string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.rejectTokenLocked(token)
+}
+
+func (m *Manager) rejectTokenLocked(token string) bool {
+	if token == "" || token != m.current.value {
+		return false
+	}
+	now := m.clock.Read()
+	m.current = currentToken{}
+	m.lastErr = publicAuthError(ErrTokenUnavailable)
+	if !m.recoveryQuietUntil.Pending(now) {
+		m.recoveryFailures = 1
+		m.nextRecoveryAt = clocktime.Deadline{}
+	}
+	m.recoveryQuietUntil = clocktime.After(now, tokenRecoveryQuietPeriod)
+	return true
 }
 
 // authError preserves internal causes while exposing only a redacted message.

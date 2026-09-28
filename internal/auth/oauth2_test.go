@@ -97,7 +97,7 @@ func TestOAuth2SourceChecksJWTBeforeOpenBaoLogin(t *testing.T) {
 		{"issuer", func(f *oauthSourceFixture) { f.cfg.ExpectedIssuer = "https://wrong.example" }, ErrJWTIssuerMismatch},
 		{"audience", func(f *oauthSourceFixture) { f.cfg.ExpectedAudience = []string{"wrong"} }, ErrJWTAudienceMismatch},
 		{"subject", func(f *oauthSourceFixture) { f.cfg.ExpectedSubject = "wrong" }, ErrJWTSubjectMismatch},
-		{"outage", func(f *oauthSourceFixture) { f.unavailable.Store(true) }, oauth2.ErrRejected},
+		{"outage", func(f *oauthSourceFixture) { f.unavailable.Store(true) }, oauth2.ErrUnavailable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newOAuthSourceFixture(t)
@@ -136,7 +136,7 @@ func TestOAuth2ManagerAcquiresOnLoginAndRecoversAfterOutage(t *testing.T) {
 	}
 	assertSharedOAuthStartup(t, f, manager)
 	f.unavailable.Store(true)
-	if err := manager.Refresh(t.Context()); !errors.Is(err, oauth2.ErrRejected) {
+	if err := manager.Refresh(t.Context()); !errors.Is(err, oauth2.ErrUnavailable) {
 		t.Fatalf("outage not classified: %v", err)
 	}
 	if token, err := manager.Token(t.Context()); err != nil || token != testBaoToken1 {

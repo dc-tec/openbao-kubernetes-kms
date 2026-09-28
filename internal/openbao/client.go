@@ -53,6 +53,12 @@ type TokenRecoverer interface {
 	RecoverToken(ctx context.Context, rejectedToken string) (string, error)
 }
 
+// TokenInvalidator discards a token rejected on the single recovery retry.
+// It must not start another login or retry the operation.
+type TokenInvalidator interface {
+	RejectToken(rejectedToken string)
+}
+
 // StaticTokenSource is useful for tests and manually supplied integration tokens.
 type StaticTokenSource struct {
 	TokenValue string
@@ -294,10 +300,8 @@ func (c *Client) do(
 		true,
 		c.observer,
 	)
-	var apiErr *Error
 	recoverer, ok := c.tokenSource.(TokenRecoverer)
-	if !ok || !errors.As(err, &apiErr) ||
-		(apiErr.Class != ErrorClassUnauthenticated && apiErr.Class != ErrorClassPermissionDenied) {
+	if !ok || !tokenRejected(err) {
 		return err
 	}
 	replacement, recoveryErr := recoverer.RecoverToken(ctx, token)
@@ -309,8 +313,18 @@ func (c *Client) do(
 	}
 	// Authentication rejects the request before Transit executes it. Retry once
 	// with the replacement; persistent denials retain their policy error class.
-	return doOpenBao(ctx, c.httpClient, c.baseURL, c.namespace, operation, method,
+	err = doOpenBao(ctx, c.httpClient, c.baseURL, c.namespace, operation, method,
 		apiPath, requestBody, response, replacement, true, c.observer)
+	if invalidator, ok := c.tokenSource.(TokenInvalidator); ok && tokenRejected(err) {
+		invalidator.RejectToken(replacement)
+	}
+	return err
+}
+
+func tokenRejected(err error) bool {
+	var apiErr *Error
+	return errors.As(err, &apiErr) &&
+		(apiErr.Class == ErrorClassUnauthenticated || apiErr.Class == ErrorClassPermissionDenied)
 }
 
 func (c *AuthClient) doUnauthenticated(

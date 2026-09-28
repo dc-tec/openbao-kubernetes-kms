@@ -1,6 +1,7 @@
 package oauth2
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,37 +12,63 @@ import (
 // A trailing newline is accepted. Other whitespace is preserved as credential data.
 func ReadClientSecret(path string) (string, error) {
 	if !filepath.IsAbs(path) {
-		return "", ErrCredential
+		return "", &CredentialError{Reason: CredentialPath}
 	}
 	before, err := os.Lstat(path)
-	if err != nil || !safeCredentialFile(before) {
-		return "", ErrCredential
+	if errors.Is(err, os.ErrNotExist) {
+		return "", &CredentialError{Reason: CredentialMissing}
+	}
+	if err != nil {
+		return "", &CredentialError{Reason: CredentialUnreadable}
+	}
+	if reason := credentialFileReason(before); reason != "" {
+		return "", &CredentialError{Reason: reason}
 	}
 	// #nosec G304 -- the credential path is administrator-supplied and checked before and after opening.
 	file, err := os.Open(path)
 	if err != nil {
-		return "", ErrCredential
+		return "", &CredentialError{Reason: CredentialUnreadable}
 	}
 	defer func() { _ = file.Close() }()
 	opened, err := file.Stat()
 	if err != nil || !safeCredentialFile(opened) || !os.SameFile(before, opened) {
-		return "", ErrCredential
+		return "", &CredentialError{Reason: CredentialChanged}
 	}
 	current, err := os.Lstat(path)
 	if err != nil || !safeCredentialFile(current) || !os.SameFile(opened, current) {
-		return "", ErrCredential
+		return "", &CredentialError{Reason: CredentialChanged}
 	}
 	content, err := io.ReadAll(io.LimitReader(file, maxSecretBytes+1))
-	if err != nil || len(content) > maxSecretBytes {
-		return "", ErrCredential
+	if err != nil {
+		return "", &CredentialError{Reason: CredentialUnreadable}
 	}
+	if len(content) > maxSecretBytes {
+		return "", &CredentialError{Reason: CredentialSize}
+	}
+	return parseClientSecret(content)
+}
+
+func parseClientSecret(content []byte) (string, error) {
 	secret := strings.TrimSuffix(strings.TrimSuffix(string(content), "\n"), "\r")
 	if secret == "" || strings.ContainsAny(secret, "\x00\r\n") {
-		return "", ErrCredential
+		return "", &CredentialError{Reason: CredentialContent}
 	}
 	return secret, nil
 }
 
 func safeCredentialFile(info os.FileInfo) bool {
-	return info.Mode().IsRegular() && info.Mode().Perm()&0o137 == 0
+	return credentialFileReason(info) == ""
+}
+
+func credentialFileReason(info os.FileInfo) CredentialReason {
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		return CredentialSymlink
+	case !info.Mode().IsRegular():
+		return CredentialType
+	case info.Mode().Perm()&0o137 != 0:
+		return CredentialPermissions
+	default:
+		return ""
+	}
 }

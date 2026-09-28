@@ -50,6 +50,7 @@ var safeAuthErrorClasses = []error{
 	oauth2.ErrCredential,
 	oauth2.ErrRequest,
 	oauth2.ErrRejected,
+	oauth2.ErrUnavailable,
 	oauth2.ErrResponse,
 	ErrJWTRead,
 	ErrJWTMalformed,
@@ -201,6 +202,8 @@ type Manager struct {
 	refreshTimeout      time.Duration
 	flight              *refreshFlight
 	nextRecoveryAt      clocktime.Deadline
+	recoveryQuietUntil  clocktime.Deadline
+	recoveryFailures    int
 	observer            Observer
 }
 
@@ -697,6 +700,8 @@ func authStatus(err error) string {
 		return "oauth2_credential"
 	case errors.Is(err, oauth2.ErrRejected):
 		return "oauth2_rejected"
+	case errors.Is(err, oauth2.ErrUnavailable):
+		return "oauth2_unavailable"
 	case errors.Is(err, oauth2.ErrResponse):
 		return "oauth2_response"
 	case errors.Is(err, oauth2.ErrRequest):

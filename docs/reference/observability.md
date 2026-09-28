@@ -63,7 +63,8 @@ publication. See [Persistence failures](/docs/architecture/rotation-model/#persi
 
 OAuth token acquisition failures use bounded `status` values on
 `openbao_kms_auth_login_total`: `oauth2_credential` for local credential failures,
-`oauth2_request` for transport failures, `oauth2_rejected` for non-200 responses,
+`oauth2_request` for transport failures, `oauth2_unavailable` for HTTP 429 or 5xx,
+`oauth2_rejected` for other non-200 responses,
 and `oauth2_response` for invalid responses. JWT claim failures retain the
 existing JWT status classes. Remote response bodies and credentials are never
 included in these labels or error messages.

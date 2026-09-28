@@ -120,7 +120,8 @@ func TestClientRejectsResponsesWithoutLeakingOrRetrying(t *testing.T) {
 		want              error
 	}{
 		{"unauthorized", 401, "application/json", `{"error_description":"sensitive upstream data"}`, ErrRejected},
-		{"unavailable", 503, "text/plain", "sensitive upstream data", ErrRejected},
+		{"rate limited", 429, "text/plain", "sensitive upstream data", ErrUnavailable},
+		{"unavailable", 503, "text/plain", "sensitive upstream data", ErrUnavailable},
 		{"redirect", 307, "text/plain", "sensitive upstream data", ErrRejected},
 		{"html", 200, "text/html", "sensitive upstream data", ErrResponse},
 		{"malformed", 200, "application/json", "sensitive upstream data", ErrResponse},

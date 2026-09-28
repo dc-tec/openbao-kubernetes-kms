@@ -79,8 +79,9 @@ Fields marked **required** have no usable default.
 | `auth.cert.pkcs11.maxSessions` | none | At least `2` for `pkcs11`. |
 
 After a `401` or `403`, the provider logs in again and retries the request
-once, at most once every five seconds and with exponential backoff for failed
-logins; see [Security: Auth model](/docs/security/auth-model/#plugin-authentication-lifecycle).
+once. Repeated denials back off from five seconds to five minutes even when
+login succeeds. Ten minutes without a rejection resets this delay. Failed
+logins also back off; see [Security: Auth model](/docs/security/auth-model/#plugin-authentication-lifecycle).
 
 For PKCS#11, the effective `auth.loginTimeout` limits each wait for a free
 session. A pool timeout fails that signing attempt; the provider retries login
