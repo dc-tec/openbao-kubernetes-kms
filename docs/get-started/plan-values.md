@@ -73,6 +73,22 @@ Use the numeric `openbao-kms-socket` group ID from the target host. Set
 `init` never contacts OpenBao or activates encryption. It refuses to overwrite
 an output directory containing files.
 
+Generation uses the values file and documented defaults. It ignores environment
+overrides and rejects `--config`, `--log-level`, `--metrics-address`, and
+`--health-address`; put those settings in the values file. The generated JWT
+role has a 30-minute TTL, so `auth.loginBeforeTokenExpiry` must be less than
+30 minutes. `init` rejects incompatible values before writing files.
+
+Use a dedicated policy name made of ASCII letters, digits, underscores, dots,
+and hyphens, starting with a letter, digit, or underscore. `root` and `default`
+are reserved. JWT role names follow the same path-component rules as Transit
+key names. Audience strings are serialized as a JSON array without splitting
+commas inside an audience.
+
+For static pods, keep CA and credential files in dedicated directories, outside
+the socket and state directories. The generator rejects broad parent mounts
+such as `/` and `/etc`, and writable directory overlaps.
+
 ## Review and record the output
 
 | File | Review |

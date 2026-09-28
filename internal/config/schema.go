@@ -84,7 +84,7 @@ const configSchemaJSON = `{
               }
             },
             "mountPath": {"type": "string", "minLength": 1},
-            "role": {"type": "string", "minLength": 1},
+            "role": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_]([A-Za-z0-9_.-]*[A-Za-z0-9_])?$"},
             "jwtFile": {"type": "string", "minLength": 1},
             "minRemainingTtl": {"type": "string"},
             "clockSkewLeeway": {"type": "string"},

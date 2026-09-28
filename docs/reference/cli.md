@@ -246,6 +246,12 @@ bao-kms-provider init --values values.yaml --out ./generated --new-key
 node's group. `init` then validates the result as `serve` would.
 With JWT auth it also needs `auth.jwt.expectedIssuer`,
 `expectedAudience`, and `expectedSubject`, because the OpenBao role binds them.
+Generation ignores environment overrides and rejects runtime configuration flags;
+set them in `--values` instead. The generated JWT role TTL is 30 minutes;
+`auth.loginBeforeTokenExpiry` must be shorter. Policy names must be dedicated
+ASCII names without path or list separators; `root` and `default` are reserved.
+See [Generate installation files](/docs/get-started/plan-values/) for mount
+constraints and [Prepare OpenBao](/docs/get-started/openbao/) for setup phases.
 
 | File | Contents |
 |---|---|

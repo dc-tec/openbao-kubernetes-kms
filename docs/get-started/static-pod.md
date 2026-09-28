@@ -108,6 +108,7 @@ every reboot:
 sudo sh -eu -c "
 install -d -m 0750 -o root -g 65532 /etc/openbao-kms
 install -d -m 0755 -o root -g root /etc/openbao-kms/tls
+install -d -m 0750 -o root -g 65532 /etc/openbao-kms/credentials
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state
 install -d -m 0750 -o root -g 65532 /var/lib/openbao-kms/credentials
@@ -134,6 +135,15 @@ the GID differ, regenerate from the resolved values without `--new-key` as
 shown in [Generate installation files](/docs/get-started/plan-values/).
 
 ## Step 6: Place the runtime files
+
+For native OAuth, install the client secret at the configured path instead of
+installing `identity.jwt`. For the default path:
+
+```sh
+sudo install -m 0640 -o root -g 65532 client-secret /etc/openbao-kms/credentials/client-secret
+```
+
+Omit the JWT file command below when `auth.jwt.source` is `oauth2`.
 
 From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`:
 

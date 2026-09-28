@@ -53,6 +53,31 @@ func valuesWithLineage() string {
 	return initValues + "    keyLineageId: 7d34fb7df15f4e4c95d6c2a50fe90d84\n"
 }
 
+func TestInitIgnoresEnvironmentAndRejectsRuntimeFlags(t *testing.T) {
+	values := writeValues(t, valuesWithLineage())
+	before, err := loadInitValues(initOptions{valuesPath: values, model: initModelSystemd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BAO_KMS_PROVIDER_SERVER_HEALTH_ADDRESS", "0.0.0.0:19082")
+	t.Setenv("BAO_KMS_PROVIDER_LOG_LEVEL", "debug")
+	after, err := loadInitValues(initOptions{valuesPath: values, model: initModelSystemd})
+	if err != nil || after.Server != before.Server || after.Logging.Level != before.Logging.Level {
+		t.Fatalf("init captured ambient environment: %v", err)
+	}
+	for _, flag := range []string{"config", "log-level", "metrics-address", "health-address"} {
+		out := filepath.Join(t.TempDir(), "generated")
+		_, err := executeCommand(t, "init", "--values", values, "--out", out, "--"+flag, "ignored")
+		requireExitCode(t, err, cli.ExitUsage)
+		if !strings.Contains(err.Error(), "does not apply to init") {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(out); !os.IsNotExist(err) {
+			t.Fatal("invalid flags produced installation files")
+		}
+	}
+}
+
 func readGenerated(t *testing.T, path string) string {
 	t.Helper()
 	// #nosec G304 -- tests read files they generated under t.TempDir.
