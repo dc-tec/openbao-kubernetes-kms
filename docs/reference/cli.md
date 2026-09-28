@@ -10,7 +10,7 @@ verifiedBy:
 
 Commands never print plaintext, JSON Web Tokens (JWTs), OpenBao tokens, or full
 ciphertext. Report-style commands (`doctor`, `verify-key`, `rotation-plan`,
-`verify-rotation`, `retire-versions`) take `--output text|json`; `text` is the
+`verify-rotation`, `retire-versions`, `restore-versions`) take `--output text|json`; `text` is the
 default and the JSON shape is stable.
 
 ## serve
@@ -190,12 +190,25 @@ bao-kms-provider retire-versions \
 
 The report lists `applied`, `beforeVersion`, `stateHash`, `nextStateHash`,
 `nextGeneration`, `activeKeyIdHash`, `removedVersions`, and `limitations`. The
-command needs existing local state and valid live metadata, and rejects a
-pending rotation or an active version that differs from Transit
-`latest_version`. `--apply` also needs the provider stopped and the state
+command needs existing local state and valid live metadata, and rejects
+a remote latest version below the local active version or any retained version
+that is no longer decryptable. Pending records remain unchanged. `--apply` also needs the provider stopped and the state
 directory owned by the invoking user. It exits with `4` when a check or the
 save fails. Removed identities stay in the state as hashed `removed` records;
 OpenBao is not changed.
+
+## restore-versions
+
+Use `restore-versions --versions <comma-separated-versions>` to plan recovery
+of accidentally removed historical records. Apply requires `--apply` and the
+reviewed `--expected-state-hash`, with the provider stopped. Matching Transit
+metadata and decryptable versions are required. Restoration advances the state
+chain without changing the active key. See
+[Rotation recovery](/docs/operate/rotation/#restore-an-accidentally-removed-version).
+
+
+The report includes `operation`, `restoredVersions`, and the same state hashes
+and generation fields as retirement. It exits with `4` on a failed check or save.
 
 ## benchmark
 

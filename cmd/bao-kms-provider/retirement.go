@@ -19,6 +19,7 @@ type retirementOptions struct {
 	BeforeVersion     int
 	Apply             bool
 	ExpectedStateHash string
+	RestoreVersions   []int
 }
 
 type retiredVersionReport struct {
@@ -27,14 +28,16 @@ type retiredVersionReport struct {
 }
 
 type retirementReport struct {
-	Applied         bool                   `json:"applied"`
-	BeforeVersion   int                    `json:"beforeVersion"`
-	StateHash       string                 `json:"stateHash"`
-	NextStateHash   string                 `json:"nextStateHash"`
-	NextGeneration  uint64                 `json:"nextGeneration"`
-	ActiveKeyIDHash string                 `json:"activeKeyIdHash"`
-	RemovedVersions []retiredVersionReport `json:"removedVersions"`
-	Limitations     string                 `json:"limitations"`
+	Operation        string                 `json:"operation"`
+	Applied          bool                   `json:"applied"`
+	BeforeVersion    int                    `json:"beforeVersion"`
+	StateHash        string                 `json:"stateHash"`
+	NextStateHash    string                 `json:"nextStateHash"`
+	NextGeneration   uint64                 `json:"nextGeneration"`
+	ActiveKeyIDHash  string                 `json:"activeKeyIdHash"`
+	RemovedVersions  []retiredVersionReport `json:"removedVersions"`
+	RestoredVersions []retiredVersionReport `json:"restoredVersions"`
+	Limitations      string                 `json:"limitations"`
 }
 
 func newRetireVersionsCommand(runtimeConfig *config.Runtime, configPath *string) *cobra.Command {
@@ -101,7 +104,7 @@ func runRetirement(
 	if opts.Apply && (opts.ExpectedStateHash == "" || opts.ExpectedStateHash != loaded.State.CurrentHash) {
 		return retirementReport{}, fmt.Errorf("state hash differs from reviewed plan; generate and review a new plan")
 	}
-	next, err := keyregistry.RetireVersions(loaded.State, opts.BeforeVersion)
+	next, err := planRetirementTransition(loaded.State, opts)
 	if err != nil {
 		return retirementReport{}, err
 	}
@@ -114,37 +117,67 @@ func runRetirement(
 	}
 	report := newRetirementReport(loaded.State, next, opts.BeforeVersion)
 	if opts.Apply {
-		if err := ctx.Err(); err != nil {
+		if err := applyRetirementTransition(ctx, cfg.State.Path, loaded.State, next); err != nil {
 			return retirementReport{}, err
-		}
-		store := status.FileStateStore{Path: cfg.State.Path}
-		// Finish an interrupted prior save before advancing another generation.
-		// Otherwise a second checkpoint failure could leave a generation gap.
-		confirmed, err := store.Load()
-		if err != nil {
-			return retirementReport{}, fmt.Errorf("confirm retirement checkpoint: %w", err)
-		}
-		if confirmed.CurrentHash != loaded.State.CurrentHash {
-			return retirementReport{}, fmt.Errorf("state changed before retirement; generate and review a new plan")
-		}
-		if err := store.Save(next); err != nil {
-			return retirementReport{}, fmt.Errorf("save retirement state/checkpoint: %w; inspect state before retrying", err)
 		}
 		report.Applied = true
 	}
 	return report, nil
 }
 
+func applyRetirementTransition(ctx context.Context, path string, previous, next keyregistry.StateFile) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	store := status.FileStateStore{Path: path}
+	// Complete an interrupted save before advancing another generation.
+	confirmed, err := store.Load()
+	if err != nil {
+		return fmt.Errorf("confirm registry checkpoint: %w", err)
+	}
+	if confirmed.CurrentHash != previous.CurrentHash {
+		return fmt.Errorf("state changed before apply; generate and review a new plan")
+	}
+	if next.CurrentHash == confirmed.CurrentHash {
+		return nil
+	}
+	if err := store.Save(next); err != nil {
+		return fmt.Errorf("save registry state/checkpoint: %w; inspect state before retrying", err)
+	}
+	return nil
+}
+
+func planRetirementTransition(state keyregistry.StateFile, opts retirementOptions) (keyregistry.StateFile, error) {
+	if opts.RestoreVersions != nil {
+		if opts.BeforeVersion != 0 {
+			return keyregistry.StateFile{}, fmt.Errorf("cannot retire and restore versions in the same transition")
+		}
+		return keyregistry.RestoreVersions(state, opts.RestoreVersions)
+	}
+	return keyregistry.RetireVersions(state, opts.BeforeVersion)
+}
+
 func newRetirementReport(previous, next keyregistry.StateFile, beforeVersion int) retirementReport {
 	report := retirementReport{
+		Operation:     "retire-versions",
 		BeforeVersion: beforeVersion, StateHash: previous.CurrentHash,
 		NextStateHash: next.CurrentHash, NextGeneration: next.Generation,
 		ActiveKeyIDHash: aad.HashValue(next.ActiveKeyID),
-		RemovedVersions: make([]retiredVersionReport, 0), Limitations: rotationLimitationsLocal,
+		RemovedVersions: make([]retiredVersionReport, 0), RestoredVersions: make([]retiredVersionReport, 0),
+		Limitations: rotationLimitationsLocal,
 	}
 	for _, record := range previous.Snapshots {
 		if keyregistry.SnapshotState(record.State) == keyregistry.StateRetired && record.TransitVersion < beforeVersion {
 			report.RemovedVersions = append(report.RemovedVersions, retiredVersionReport{
+				TransitVersion: record.TransitVersion, KeyIDHash: aad.HashValue(record.KubernetesKeyID),
+			})
+		}
+	}
+	for i, record := range next.Snapshots {
+		if previous.Snapshots[i].State == string(keyregistry.StateRemoved) &&
+			record.State == string(keyregistry.StateRetired) {
+			report.Operation = "restore-versions"
+			report.RestoredVersions = append(report.RestoredVersions, retiredVersionReport{
 				TransitVersion: record.TransitVersion, KeyIDHash: aad.HashValue(record.KubernetesKeyID),
 			})
 		}
@@ -157,14 +190,14 @@ func validateRetirementProfile(cfg config.Config, state keyregistry.StateFile, p
 	if err != nil {
 		return err
 	}
-	if profile.LatestVersion != active.TransitVersion {
-		return fmt.Errorf("retirement requires local active version to equal Transit latest_version")
+	if profile.LatestVersion < active.TransitVersion {
+		return fmt.Errorf("remote Transit latest_version is below the local active version")
 	}
 	observer, err := newRotationObserver(cfg)
 	if err != nil {
 		return err
 	}
-	return observer.ValidateStateProfile(state, profile)
+	return observer.ValidateRecoveryProfile(state, profile)
 }
 
 func printRetirementReport(out io.Writer, report retirementReport, output string) error {
@@ -174,15 +207,21 @@ func printRetirementReport(out io.Writer, report retirementReport, output string
 		return encoder.Encode(report)
 	}
 	_, err := fmt.Fprintf(out,
-		"retire-versions\napplied: %t\nbeforeVersion: %d\nstateHash: %s\nnextStateHash: %s\n"+
+		"%s\napplied: %t\nbeforeVersion: %d\nstateHash: %s\nnextStateHash: %s\n"+
 			"nextGeneration: %d\nactiveKeyIdHash: %s\nlimitations: %s\n",
-		report.Applied, report.BeforeVersion, report.StateHash, report.NextStateHash,
+		report.Operation, report.Applied, report.BeforeVersion, report.StateHash, report.NextStateHash,
 		report.NextGeneration, report.ActiveKeyIDHash, report.Limitations)
 	if err != nil {
 		return err
 	}
 	for _, version := range report.RemovedVersions {
 		if _, err := fmt.Fprintf(out, "remove: transitVersion=%d keyIdHash=%s\n",
+			version.TransitVersion, version.KeyIDHash); err != nil {
+			return err
+		}
+	}
+	for _, version := range report.RestoredVersions {
+		if _, err := fmt.Fprintf(out, "restore: transitVersion=%d keyIdHash=%s\n",
 			version.TransitVersion, version.KeyIDHash); err != nil {
 			return err
 		}

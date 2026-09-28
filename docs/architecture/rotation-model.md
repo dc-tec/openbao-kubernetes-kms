@@ -25,6 +25,7 @@ stateDiagram-v2
     Pending --> Retired: a newer candidate supersedes this version
     Active --> Retired: another version promoted
     Retired --> Removed: operator applies retire-versions
+    Removed --> Retired: operator applies validated restore-versions
 ```
 
 The states belong to individual snapshots. The previous active snapshot keeps

@@ -185,7 +185,7 @@ func TestStateProgressPreservesPendingDecryptEligibility(t *testing.T) {
 	}
 }
 
-func TestRetirementRejectsActiveRemovalAndPendingRotation(t *testing.T) {
+func TestRetirementRejectsActiveRemovalAndPreservesPendingRotation(t *testing.T) {
 	previous := retirementState(t)
 	for _, boundary := range []int{-1, 0, 1, 4} {
 		if _, err := keyregistry.RetireVersions(previous, boundary); err == nil {
@@ -200,7 +200,37 @@ func TestRetirementRejectsActiveRemovalAndPendingRotation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := keyregistry.RetireVersions(pending, 2); err == nil {
-		t.Fatal("retirement accepted with pending rotation")
+	next, err := keyregistry.RetireVersions(pending, 2)
+	if err != nil || next.Snapshots[1] != pending.Snapshots[1] {
+		t.Fatalf("retirement must preserve pending observation: %v", err)
+	}
+}
+
+func TestRestoreIsExplicitAndPreservesIdentity(t *testing.T) {
+	previous := retirementState(t)
+	removed, err := keyregistry.RetireVersions(previous, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := keyregistry.RestoreVersions(removed, []int{1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.ActiveKeyID != removed.ActiveKeyID || restored.Generation != removed.Generation+1 ||
+		restored.PreviousHash != removed.CurrentHash {
+		t.Fatal("restore must advance the current chain without changing the active key")
+	}
+	for i, record := range restored.Snapshots {
+		if record != previous.Snapshots[i] {
+			t.Fatal("restore changed snapshot identity or observation metadata")
+		}
+	}
+	if err := keyregistry.ValidateStateProgress(removed, restored); !errors.Is(err, keyregistry.ErrStateRollback) {
+		t.Fatalf("ordinary observation must not restore removed records: %v", err)
+	}
+	for _, selected := range [][]int{nil, {0}, {-1}, {1, 1}, {2}, {3}, {99}} {
+		if _, err := keyregistry.RestoreVersions(removed, selected); err == nil {
+			t.Fatalf("accepted invalid restore selection %v", selected)
+		}
 	}
 }
