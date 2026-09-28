@@ -77,8 +77,11 @@ minutes without a rejection resets this recovery delay. Failed logins also
 have exponential backoff. A replacement rejected on the retry is discarded;
 recovery never falls back to it or to the previous token. A late rejection or renewal for an old token
 never replaces the current one, and no extra policy capability is needed. A
-request denied again after recovery keeps its OpenBao error class, so a
-persistent `403` means checking both the auth role and the Transit policy. For the configuration fields, see [Reference: Configuration](/docs/reference/configuration/#auth).
+request denied again after recovery keeps its OpenBao error class. Later
+requests during the recovery delay have no usable token and fail with
+`Unauthenticated` (`auth_failed`), without contacting Transit. Check the
+preceding denial and both the auth role and the Transit policy. For the
+configuration fields, see [Reference: Configuration](/docs/reference/configuration/#auth).
 
 ## JWT source options
 

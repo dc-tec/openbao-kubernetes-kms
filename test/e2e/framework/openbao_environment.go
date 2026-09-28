@@ -548,6 +548,11 @@ func (f *OpenBaoEnvironment) InstallProviderPolicy(ctx context.Context, policy s
 	return f.write(ctx, httpClient, "sys/policies/acl/"+openBaoJWTPolicyName, policyRequestBody{Policy: policy})
 }
 
+// RestoreProviderPolicy restores the fixture's initial least-privilege policy.
+func (f *OpenBaoEnvironment) RestoreProviderPolicy(ctx context.Context) error {
+	return f.InstallProviderPolicy(ctx, f.providerPolicy())
+}
+
 func (f *OpenBaoEnvironment) SetTransitDisableUpsert(ctx context.Context, disabled bool) error {
 	httpClient, err := openbao.NewHTTPClient(f.CACertFile, openBaoTLSServerName, 5*time.Second)
 	if err != nil {
