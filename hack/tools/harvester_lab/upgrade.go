@@ -13,6 +13,10 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/scaffold"
 )
 
+// Container runtimes can report an image ID in image.image and retain the
+// requested tag separately in userSpecifiedImage.
+const criRequestedImageMatch = `(.image.image == $image or .image.userSpecifiedImage == $image)`
+
 func pullProviderBaseline(ctx context.Context, cfg *labConfig) (string, error) {
 	repository, digest, ok := strings.Cut(cfg.providerBaselineImage, "@")
 	if !ok {
@@ -114,7 +118,7 @@ func baselineAMD64Image(repository string, data []byte) (string, error) {
 func waitStaticPodImage(ctx context.Context, cfg *labConfig, host, image string) error {
 	command := "sudo crictl --config /dev/null --runtime-endpoint unix:///run/containerd/containerd.sock " +
 		"ps --name '^bao-kms-provider$' -o json | jq -e --arg image " + shellQuote(image) +
-		" '.containers | any(.image.image == $image and .state == \"CONTAINER_RUNNING\")' >/dev/null"
+		" '.containers | any(" + criRequestedImageMatch + " and .state == \"CONTAINER_RUNNING\")' >/dev/null"
 	return waitRemoteCommand(ctx, cfg, host, "selected provider image", 3*time.Minute, command)
 }
 
@@ -161,7 +165,7 @@ func verifyRejectedDowngrade(
 		return err
 	}
 	defer func() {
-		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
 		defer cancel()
 		if err := restoreCandidate(recoveryCtx); err != nil {
 			resultErr = errors.Join(resultErr, fmt.Errorf("restore candidate after rejected downgrade: %w", err))
@@ -221,7 +225,7 @@ func waitSystemdStateRejection(ctx context.Context, cfg *labConfig, host string)
 func waitStaticPodStateRejection(ctx context.Context, cfg *labConfig, host, image string) error {
 	crictl := "sudo crictl --config /dev/null --runtime-endpoint unix:///run/containerd/containerd.sock"
 	command := "id=$(" + crictl + " ps -a --name '^bao-kms-provider$' -o json | jq -r --arg image " +
-		shellQuote(image) + ` '.containers | map(select(.image.image == $image and .state == "CONTAINER_EXITED"))` +
+		shellQuote(image) + ` '.containers | map(select(` + criRequestedImageMatch + ` and .state == "CONTAINER_EXITED"))` +
 		` | sort_by(.createdAt) | last | .id // empty'); ` +
 		`test -n "$id" && ` + crictl + ` logs "$id" 2>&1 | ` +
 		`grep -F 'unknown field' | grep -F 'identityFingerprint' >/dev/null`

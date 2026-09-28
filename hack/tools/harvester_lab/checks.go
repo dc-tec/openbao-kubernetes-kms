@@ -687,7 +687,7 @@ func labVerifyOpenBaoOutage(ctx context.Context, cfg *labConfig, _ []string) (re
 		return err
 	}
 	defer func() {
-		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
+		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Minute)
 		defer cancel()
 		if err := recoverOpenBaoOutage(recoveryCtx, cfg, checks, corpus); err != nil {
 			retErr = errors.Join(retErr, err)
@@ -717,7 +717,9 @@ func labVerifyOpenBaoOutage(ctx context.Context, cfg *labConfig, _ []string) (re
 		if err := sshLab(ctx, cfg, check.host, crictlStopContainerCommand("^kube-apiserver$")); err != nil {
 			return err
 		}
-		time.Sleep(5 * time.Second)
+		if err := waitAPIEndpoint(ctx, cfg, check.kubeconfig); err != nil {
+			return err
+		}
 		if err := expectKMSWriteFailure(ctx, cfg, check, before); err != nil {
 			return err
 		}
@@ -745,7 +747,7 @@ func verifyOutageCachedWrite(ctx context.Context, cfg *labConfig, check kubeadmC
 func expectKMSWriteFailure(ctx context.Context, cfg *labConfig, check kubeadmCheck, before float64) error {
 	secret, cleanup, err := attemptOutageSecretCreate(ctx, cfg, check, "openbao-kms-outage-cold")
 	if err != nil {
-		if err := waitForFailedEncryption(ctx, cfg, check.host, before); err != nil {
+		if err := waitForKMSOutage(ctx, cfg, check, before); err != nil {
 			return err
 		}
 		fmt.Printf("KMS write failed after kube-apiserver restart with OpenBao stopped for %s (expected)\n", check.suffix)
@@ -1919,16 +1921,28 @@ func labelSafeValue(value string) string {
 	return cleaned
 }
 
-func labVerifyUpgradeRollback(ctx context.Context, cfg *labConfig, _ []string) error {
+func labVerifyUpgradeRollback(ctx context.Context, cfg *labConfig, args []string) error {
+	mode := ""
+	if len(args) == 1 {
+		mode = args[0]
+	}
+	if len(args) > 1 || (mode != "" && mode != providerModeSystemd && mode != providerModeStaticPod) {
+		return errors.New("usage: verify-upgrade-rollback [systemd|static-pod]")
+	}
 	if _, err := requireProviderInputs(cfg); err != nil {
 		return err
 	}
 	fmt.Printf("unsupported downgrade baseline: %s; candidate commit: %s\n",
 		cfg.providerBaselineImage, gitShortCommit(ctx, cfg))
-	if err := verifySystemdUpgradeRollback(ctx, cfg); err != nil {
-		return err
+	if mode != providerModeStaticPod {
+		if err := verifySystemdUpgradeRollback(ctx, cfg); err != nil {
+			return err
+		}
 	}
-	return verifyStaticPodUpgradeRollback(ctx, cfg)
+	if mode != providerModeSystemd {
+		return verifyStaticPodUpgradeRollback(ctx, cfg)
+	}
+	return nil
 }
 
 func labVerifyPairedRestore(ctx context.Context, cfg *labConfig, _ []string) error {

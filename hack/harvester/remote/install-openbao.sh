@@ -2,7 +2,7 @@
 set -eu
 
 OPENBAO_VERSION="${OPENBAO_VERSION:-2.7.0}"
-OPENBAO_ARCH="${OPENBAO_ARCH:-x86_64}"
+OPENBAO_ARCH="${OPENBAO_ARCH:-amd64}"
 OPENBAO_IP="${OPENBAO_IP:?OPENBAO_IP is required}"
 OPENBAO_TLS_SERVER_NAME="${OPENBAO_TLS_SERVER_NAME:-obk-openbao-1}"
 OPENBAO_LAB_DIR="${OPENBAO_LAB_DIR:-/root/openbao-kms-lab}"
@@ -21,11 +21,11 @@ apt-get install -y ca-certificates curl jq openssl tar
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-artifact="bao_${OPENBAO_VERSION}_Linux_${OPENBAO_ARCH}.tar.gz"
+artifact="openbao_${OPENBAO_VERSION}_linux_${OPENBAO_ARCH}.tar.gz"
 base_url="https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}"
 curl -fsSLo "$tmp/$artifact" "$base_url/$artifact"
-curl -fsSLo "$tmp/checksums-linux.txt" "$base_url/checksums-linux.txt"
-grep "  $artifact\$" "$tmp/checksums-linux.txt" >"$tmp/checksums-selected.txt"
+curl -fsSLo "$tmp/checksums.txt" "$base_url/checksums.txt"
+grep "  $artifact\$" "$tmp/checksums.txt" >"$tmp/checksums-selected.txt"
 (cd "$tmp" && sha256sum -c checksums-selected.txt)
 tar -xzf "$tmp/$artifact" -C "$tmp"
 install -m 0755 "$tmp/bao" /usr/local/bin/bao

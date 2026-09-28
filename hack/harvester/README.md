@@ -128,6 +128,19 @@ Web Token (JWT) authentication, then installs the pinned
 kubeadm, kubelet, and kubectl version from `.ci/versions.yaml` on both kubeadm
 VMs.
 
+The OpenBao installer uses the Linux archive and `checksums.txt` from the
+selected release. The generated provider configuration uses `auth.jwt` with
+the file credential source. A local harness test validates that configuration
+and its matching Kubernetes encryption configuration.
+The harness omits `auth.jwt.source`, which defaults to `file` in both the
+candidate and preview.2. This lets the downgrade check reach persisted-state
+validation instead of failing on an unsupported configuration field.
+Both deployment models read the host JWT from
+`/var/lib/openbao-kms/credentials/identity.jwt`. The static-pod manifest mounts
+that credential directory read-only.
+The guest bootstrap also installs `cri-tools` at the `.0` release for the
+selected Kubernetes minor version. Recovery checks use its `crictl` command.
+
 If the optional multi-control-plane topology is enabled, bootstrap it after the
 base guests are healthy:
 
@@ -216,6 +229,12 @@ make -C hack/harvester verify-decrypt-warmup
 make -C hack/harvester verify-decrypt-cold-start
 ```
 
+To rerun only one deployment's downgrade check, pass `systemd` or `static-pod`:
+
+```sh
+./hack/harvester/lab.sh verify-upgrade-rollback static-pod
+```
+
 `verify-upgrade-rollback` uses the digest-pinned published provider from
 `validation.provider.upgradeBaselineImage` in `.ci/versions.yaml` as its old
 version. Docker pulls its Linux amd64 image. The systemd check extracts that
@@ -239,14 +258,23 @@ the release artifact checks.
 
 `verify-recovery` writes a Secret corpus before rotation, confirms promotion
 from each validated registry, and cold-reads the original corpus after each
-restart or reboot. The outage check requires a new failed KMS Encrypt request
-in provider metrics before it counts a failed cold write as evidence. It also
-cold-reads the pre-outage corpus after OpenBao recovery.
+restart or reboot. After restarting the API server during an OpenBao outage,
+the harness waits for its version endpoint before attempting a cold write.
+A failed write counts as evidence only with a new failed KMS Encrypt request
+in provider metrics or an API server KMS health check that reports the
+provider's unhealthy Status. An unhealthy Status can prevent Kubernetes from
+calling Encrypt. Connection and authentication failures do not qualify.
+The check also cold-reads the pre-outage corpus after OpenBao recovery.
+API server waits allow six minutes because repeated fault scenarios can reach
+kubelet's five-minute container restart backoff. Each probe has a five-second
+request timeout.
 
 `verify-paired-restore` stops each provider while copying its registry and
 checkpoint. After backup, it confirms promotion and restarts the API servers
 before writing the post-backup markers. Restore must recover the pre-backup
 Secrets and remove the post-backup markers.
+The etcd restore uses the image from the VM's current etcd manifest and checks
+that it is available locally before stopping the API server or etcd.
 
 Set `HARVESTER_LOAD_SECRET_COUNT` to change the load-smoke size. The default is
 `25` Secrets per kubeadm cluster. These targets must remain local-only and must

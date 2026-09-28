@@ -17,6 +17,7 @@ func verifyColdHistoricalSecrets(
 	ctx context.Context, cfg *labConfig, checks []kubeadmCheck, corpus map[string]trackedSecret,
 ) error {
 	for _, check := range checks {
+		fmt.Printf("restarting API server for cold historical reads on %s\n", check.host)
 		if err := restartAPIServer(ctx, cfg, check); err != nil {
 			return err
 		}
@@ -120,17 +121,54 @@ func failedEncryptionCount(metrics string) (float64, error) {
 	return total, nil
 }
 
-func waitForFailedEncryption(ctx context.Context, cfg *labConfig, host string, before float64) error {
+// A cold API server can reject an unhealthy Status with an empty key ID before
+// calling Encrypt. Require KMS-specific evidence, not just a failed write.
+func waitForKMSOutage(ctx context.Context, cfg *labConfig, check kubeadmCheck, before float64) error {
 	deadline, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	for {
-		count, err := remoteFailedEncryptions(deadline, cfg, host)
+		count, err := remoteFailedEncryptions(deadline, cfg, check.host)
 		if err == nil && count > before {
+			fmt.Printf("confirmed new failed KMS Encrypt request on %s\n", check.host)
+			return nil
+		}
+		_, healthErr := outputCmdEnv(deadline, cfg, []string{"KUBECONFIG=" + check.kubeconfig},
+			"kubectl", "get", "--raw=/readyz/kms-providers", "--request-timeout=5s")
+		if isUnhealthyKMSStatus(healthErr) {
+			fmt.Printf("confirmed API server KMS health check rejected unhealthy provider Status on %s\n", check.host)
 			return nil
 		}
 		select {
 		case <-deadline.Done():
-			return fmt.Errorf("cold write failed without a new KMS Encrypt failure on %s: %w", host, deadline.Err())
+			return fmt.Errorf("cold write failed without KMS outage evidence on %s: %w", check.host, deadline.Err())
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func isUnhealthyKMSStatus(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "kmsv2 Provider openbao-kms-workload-a is not healthy") &&
+		strings.Contains(err.Error(), "got unexpected healthz status: unhealthy")
+}
+
+// Readiness cannot succeed while KMS is unavailable. The version endpoint proves
+// that the restarted API server can receive a request without requiring KMS.
+func waitAPIEndpoint(ctx context.Context, cfg *labConfig, kubeconfig string) error {
+	return waitAPIPath(ctx, cfg, kubeconfig, "/version")
+}
+
+func waitAPIPath(ctx context.Context, cfg *labConfig, kubeconfig, path string) error {
+	// Repeated fault scenarios can reach kubelet's five-minute restart backoff.
+	deadline, cancel := context.WithTimeout(ctx, 6*time.Minute)
+	defer cancel()
+	for {
+		if err := quietKubectl(deadline, cfg, []string{"KUBECONFIG=" + kubeconfig},
+			"get", "--raw="+path, "--request-timeout=5s"); err == nil {
+			return nil
+		}
+		select {
+		case <-deadline.Done():
+			return fmt.Errorf("API server %s unavailable (%s): %w", path, kubeconfig, deadline.Err())
 		case <-time.After(time.Second):
 		}
 	}

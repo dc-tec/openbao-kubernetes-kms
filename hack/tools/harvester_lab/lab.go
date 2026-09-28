@@ -1682,6 +1682,8 @@ func writeProviderConfig(
 }
 
 func providerConfigYAML(socketGroup string, clusterID string, openBaoIP string) string {
+	// Both the candidate and the published downgrade baseline default to file JWTs.
+	// Omit auth.jwt.source so the baseline reaches persisted-state validation.
 	return fmt.Sprintf(`configVersion: v1alpha1
 server:
   socketPath: /run/openbao-kms/kms.sock
@@ -1698,18 +1700,19 @@ openbao:
   instanceId: openbao-harvester-lab
 auth:
   method: jwt
-  mountPath: auth/k8s-workload-a-jwt
-  role: openbao-kms-control-plane
-  jwtFile: /var/lib/openbao-kms/identity.jwt
-  minJwtRemainingTtl: 2m
-  clockSkewLeeway: 30s
   loginBeforeTokenExpiry: 30s
   tokenRenewalIncrement: 1h
   loginTimeout: 0s
-  expectedIssuer: https://issuer.example.internal
-  expectedAudience:
-    - bao-kms-provider
-  expectedSubject: system:openbao-kms:workload-a
+  jwt:
+    mountPath: auth/k8s-workload-a-jwt
+    role: openbao-kms-control-plane
+    jwtFile: /var/lib/openbao-kms/credentials/identity.jwt
+    minRemainingTtl: 2m
+    clockSkewLeeway: 30s
+    expectedIssuer: https://issuer.example.internal
+    expectedAudience:
+      - bao-kms-provider
+    expectedSubject: system:openbao-kms:workload-a
 transit:
   mountPath: transit
   keyName: k8s-workload-a-etcd
@@ -1838,17 +1841,7 @@ func patchRemoteAPIServer(ctx context.Context, cfg *labConfig, host string, name
 }
 
 func waitAPIServer(ctx context.Context, cfg *labConfig, kubeconfig string) error {
-	deadline := time.Now().Add(4 * time.Minute)
-	for {
-		err := quietKubectl(ctx, cfg, []string{"KUBECONFIG=" + kubeconfig}, "get", "--raw=/readyz")
-		if err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out waiting for kube-apiserver: %s", kubeconfig)
-		}
-		time.Sleep(2 * time.Second)
-	}
+	return waitAPIPath(ctx, cfg, kubeconfig, "/readyz")
 }
 
 func labE2E(ctx context.Context, cfg *labConfig, _ []string) error {
