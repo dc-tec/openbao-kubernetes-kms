@@ -262,7 +262,9 @@ func expectPolicyDenied(ctx context.Context, client kmsapi.KeyManagementServiceC
 		KeyId:       sample.KeyID,
 		Annotations: sample.Annotations,
 	})
-	assertCode(err, codes.PermissionDenied, "decrypt with reduced Transit policy")
+	// Encrypt discarded the denied replacement token. Decrypt must fail
+	// without reusing that credential or starting another login during cooldown.
+	assertCode(err, codes.Unauthenticated, "decrypt during denied-token recovery cooldown")
 }
 
 func expectSocketUnavailable(ctx context.Context, client kmsapi.KeyManagementServiceClient) {

@@ -70,10 +70,10 @@ var _ = Describe("OAuth client credentials", func() {
 		validateOpenBaoTransit(ctx, client, environment.TransitMount, environment.TransitKey)
 		Expect(fixture.requests.Load()).To(Equal(int32(1)))
 		fixture.unavailable.Store(true)
-		Expect(manager.Refresh(ctx)).To(MatchError(ContainSubstring(oauth2.ErrRejected.Error())))
+		Expect(manager.Refresh(ctx)).To(MatchError(oauth2.ErrUnavailable))
 		// A fresh process has no OpenBao token to use during an issuer outage.
 		_, err = source.Login(ctx, bao, auth.RealClock{})
-		Expect(errors.Is(err, oauth2.ErrRejected)).To(BeTrue())
+		Expect(errors.Is(err, oauth2.ErrUnavailable)).To(BeTrue())
 		fixture.unavailable.Store(false)
 		fixture.secret.Store("replacement-secret")
 		_, err = source.Login(ctx, bao, auth.RealClock{})

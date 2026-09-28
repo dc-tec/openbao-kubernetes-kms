@@ -190,3 +190,13 @@ timestamps are floored at preceding event timestamps. Existing records are not
 rewritten. The `clock.regressed` warning uses the logger's current wall time and
 reports that timestamp ordering was preserved. These local timestamps do not
 change OpenBao creation metadata, key identity, or the elapsed-time countdown.
+
+## Request-triggered discovery
+
+An unknown valid key ID can trigger a shared metadata discovery. It runs with
+the provider lifecycle context and an overall deadline of `openbao.timeout`.
+The requesting KMS call can time out without canceling that shared work or
+changing provider health. Concurrent requests wait for the same attempt within
+the existing probe serialization and refresh interval. Discovery does not
+promote keys. Backend failures, an expired discovery deadline, and unsafe
+metadata still affect health and circuit-breaker accounting.

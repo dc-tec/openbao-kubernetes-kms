@@ -146,3 +146,18 @@ over `clientSecretFile`. The next grant reads the replacement. Use the issuer's
 credential overlap procedure when available, and verify a new login before
 retiring the old secret. Changes to the endpoint or CA configuration require a
 provider restart.
+
+## Credential and endpoint failures
+
+Local credential errors include a bounded reason: `file_missing`,
+`file_unreadable`, `symlink_unsupported`, `regular_file_required`,
+`unsafe_permissions`, `file_changed`, `file_too_large`, `invalid_content`, or
+`absolute_path_required`. Check the configured path and access as the provider
+user. Use a private regular file for the client secret; symlinked projected
+Secret files are unsupported. Complete atomic replacement before retrying a
+`file_changed` error. Keep the file within 64 KiB and use one nonempty line.
+
+HTTP 429 and 5xx responses report `oauth2_unavailable`. Other non-200 responses
+report `oauth2_rejected`. Transport failures retain typed internal causes but
+print no endpoint URL, credentials, or response body. Login backoff applies to
+these failures; it does not retry inside the OAuth HTTP client.

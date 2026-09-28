@@ -159,7 +159,7 @@ func (b runtimeBuilder) buildRuntime(
 		return serveDependencies{}, err
 	}
 
-	store, controller, scheduler, err := buildStatusRuntime(cfg, transitClient, observer)
+	store, controller, scheduler, err := buildStatusRuntime(ctx, cfg, transitClient, observer)
 	if err != nil {
 		return serveDependencies{}, err
 	}
@@ -227,6 +227,7 @@ func (b runtimeBuilder) buildRuntime(
 }
 
 func buildStatusRuntime(
+	ctx context.Context,
 	cfg config.Config,
 	transitClient openbao.TransitClient,
 	probeObserver status.ProbeObserver,
@@ -240,6 +241,8 @@ func buildStatusRuntime(
 		return nil, nil, nil, err
 	}
 	controller, err := status.NewController(status.ControllerOptions{
+		LifecycleContext:       ctx,
+		DecryptRefreshTimeout:  cfg.OpenBao.Timeout,
 		Store:                  store,
 		Observer:               observer,
 		Transit:                transitClient,

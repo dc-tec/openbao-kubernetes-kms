@@ -64,8 +64,10 @@ returns plaintext only after the local checks in
 [Key ID and AAD: Decrypt validation order](/docs/reference/key-id-and-aad/#decrypt-validation-order)
 pass. It never tries other keys or versions, and it never decrypts without AAD.
 
-A well-formed unknown `key_id` triggers metadata discovery, shared with the
-request timeout and limited to once per `status.probeInterval`. Discovery never
+A well-formed unknown `key_id` triggers shared metadata discovery, bounded by
+`openbao.timeout` and limited to once per `status.probeInterval`. Each caller
+waits with its own request deadline; canceling one caller does not cancel
+shared discovery. Provider shutdown cancels discovery. Discovery never
 advances promotion. A failed lookup returns `Unavailable` with
 `key_metadata_refresh_failed`; a successful lookup that does not find the
 identity returns `NotFound`. Pending snapshots decrypt once validated but never
@@ -88,6 +90,11 @@ checks the ciphertext size and key version of a real round trip so response
 drift shows up as a readiness failure. Oversized OpenBao responses fail as
 `openbao_unavailable`, detected by reading one byte past the limit rather than
 trusting `Content-Length`.
+
+A Transit `403` on the recovery retry returns `PermissionDenied`. After the
+token is discarded, requests during the recovery delay return `Unauthenticated`
+without contacting Transit. Encryption can also return `FailedPrecondition`
+once a background probe marks the provider unhealthy.
 
 Errors returned to Kubernetes carry a stable class and never contain secrets,
 plaintext, full ciphertext, or raw paths; see

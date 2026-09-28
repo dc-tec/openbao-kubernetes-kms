@@ -12,6 +12,7 @@ import (
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/auth"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/test/e2e/framework"
+	"github.com/onsi/gomega"
 )
 
 func TestProviderManagedTokenRecoveryE2E(t *testing.T) {
@@ -56,21 +57,52 @@ func TestProviderManagedTokenRecoveryE2E(t *testing.T) {
 	if _, err := client.Encrypt(ctx, request); err != nil {
 		t.Fatalf("encrypt after recovery: %v", err)
 	}
+	checkManagedPolicyRecovery(t, ctx, environment, manager, client, request)
+	decrypted, err = client.Decrypt(ctx, openbao.DecryptRequest{
+		MountPath: request.MountPath, KeyName: request.KeyName,
+		Ciphertext: encrypted.Ciphertext, AssociatedData: request.AssociatedData,
+	})
+	if err != nil || !bytes.Equal(decrypted.Plaintext, request.Plaintext) {
+		t.Fatalf("historical decrypt did not recover after policy repair: %v", err)
+	}
+}
+
+func checkManagedPolicyRecovery(
+	t *testing.T,
+	ctx context.Context,
+	environment *framework.OpenBaoEnvironment,
+	manager *auth.Manager,
+	client *openbao.Client,
+	request openbao.EncryptRequest,
+) {
+	t.Helper()
 	if err := environment.InstallProviderPolicy(ctx, environment.MetadataOnlyProviderPolicy()); err != nil {
 		t.Fatal(err)
 	}
-	// A denied replacement remains a policy error, and repeated requests during
-	// cooldown do not cause a new login for each request.
+	// The request that reaches Transit retains its policy error. Once that
+	// token is discarded, the cooldown blocks further requests and logins.
+	lastLogin := manager.State().LastLoginAt
+	_, err := client.Encrypt(ctx, request)
+	if !errors.Is(err, &openbao.Error{Class: openbao.ErrorClassPermissionDenied}) {
+		t.Fatalf("policy denial misclassified: %v", err)
+	}
 	for range 4 {
 		_, err := client.Encrypt(ctx, request)
-		if !errors.Is(err, &openbao.Error{Class: openbao.ErrorClassPermissionDenied}) {
-			t.Fatalf("policy denial misclassified: %v", err)
+		if !errors.Is(err, auth.ErrTokenUnavailable) {
+			t.Fatalf("request during recovery cooldown did not fail closed: %v", err)
 		}
 	}
 	current, err := manager.Token(ctx)
-	if err != nil || current != replacement {
-		t.Fatal("policy denial bypassed recovery cooldown")
+	if current != "" || !errors.Is(err, auth.ErrTokenUnavailable) || !manager.State().LastLoginAt.Equal(lastLogin) {
+		t.Fatal("policy denial reused the rejected token or bypassed recovery cooldown")
 	}
+	if err := environment.RestoreProviderPolicy(ctx); err != nil {
+		t.Fatal(err)
+	}
+	gomega.NewWithT(t).Eventually(func() error {
+		_, err := client.Encrypt(ctx, request)
+		return err
+	}, 10*time.Second, 100*time.Millisecond).WithContext(ctx).Should(gomega.Succeed())
 }
 
 func TestProviderTokenRevocationRecoveryE2E(t *testing.T) {

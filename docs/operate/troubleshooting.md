@@ -120,10 +120,14 @@ connectivity recovers.
 
 After a token revocation or an OpenBao restore, the provider logs in again on a
 `401` or `403` and retries the rejected request once, without waiting for the
-token TTL. Recovery starts at most once every five seconds, with exponential
-backoff for failed logins. OpenBao returns `403` for both invalid tokens and
+token TTL. Repeated denials increase the recovery interval from five seconds
+to five minutes; a successful login alone does not reset it. Ten minutes without
+a rejection resets the interval. Failed logins also back off. OpenBao returns `403` for both invalid tokens and
 policy denials, so a `403` that persists after a successful login points at the
-role's policies or the Transit capabilities. Local credential failures and
+role's policies or the Transit capabilities. After discarding a denied token,
+the provider returns `Unauthenticated` (`auth_failed`) for requests during the
+recovery delay. Check the preceding denial; repeated requests cannot bypass
+the delay. Local credential failures and
 rejected logins surface as `auth_failed`; see
 [Observability: Error classes](/docs/reference/observability/#error-classes).
 

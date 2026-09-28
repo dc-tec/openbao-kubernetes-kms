@@ -29,7 +29,7 @@ func TestPersistedStateRejectsBackendPathDrift(t *testing.T) {
 			}
 			// The replacement backend has the same versions and creation timestamps.
 			client := fakeDiagnosticTransitClient{profile: profile, disableUpsert: true}
-			if _, _, _, err := buildStatusRuntime(cfg, client, nil); !errors.Is(err, status.ErrConfigInvalid) {
+			if _, _, _, err := buildStatusRuntime(t.Context(), cfg, client, nil); !errors.Is(err, status.ErrConfigInvalid) {
 				t.Fatalf("runtime accepted backend drift: %v", err)
 			}
 			if _, err := loadConfiguredRegistryState(cfg); !errors.Is(err, status.ErrConfigInvalid) {
@@ -72,7 +72,7 @@ func TestLegacyUnboundStateRejectedWithoutRewriting(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := fakeDiagnosticTransitClient{profile: profile, disableUpsert: true}
-	if _, _, _, err := buildStatusRuntime(cfg, client, nil); !errors.Is(err, keyregistry.ErrStateCorrupt) ||
+	if _, _, _, err := buildStatusRuntime(t.Context(), cfg, client, nil); !errors.Is(err, keyregistry.ErrStateCorrupt) ||
 		!strings.Contains(err.Error(), "requires fresh bound state") {
 		t.Fatalf("legacy state was not rejected clearly: %v", err)
 	}
