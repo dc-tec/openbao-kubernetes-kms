@@ -158,15 +158,61 @@ local registry. This example keeps version `2` and later.
    `min_decryption_version` through your change process and check readiness,
    reads, and writes again.
 
-{{< callout type="warning" title="Retirement has no undo" >}}
+{{< callout type="warning" title="Retirement ends local decryption immediately" >}}
 A retired version stops decrypting on that node immediately, even while
 OpenBao still allows it, and lowering the OpenBao minimum does not bring it
 back. The command does not delete Transit key material or change OpenBao
-settings.
+settings. Recover an accidental local removal with the reviewed restoration
+procedure below, while matching Transit key material remains available.
 {{< /callout >}}
 
-`serve` and `retire-versions --apply` share the lock file
-`<state.path>.lock`; never delete it while either runs. If saving fails, inspect
+### Recover an out-of-order retirement
+
+If the OpenBao minimum was raised before local retirement, the provider rejects
+unusable historical records. `retire-versions` can remove those records even
+when a newer Transit version or pending local rotation exists. It preserves the
+active and pending records and requires every retained version to remain
+decryptable with matching creation metadata. Normal activation checks still
+control promotion and encryption after restart.
+
+Review the same data, backup, and peer evidence before applying this recovery.
+The command cannot prove that other nodes stopped writing with a removed key.
+Waiting an activation interval does not establish peer convergence. If the
+active or pending version is no longer decryptable, correct the backend
+restriction first; trimmed or deleted key material requires a valid backup.
+
+### Restore an accidentally removed version
+
+Stop the affected provider and run as its OS user. Select exact versions from
+the local `removed` records. Generate a read-only plan:
+
+```sh
+bao-kms-provider restore-versions \
+  --config /etc/openbao-kms/config.yaml --versions 1 --output json
+```
+
+Review `restoredVersions`, `activeKeyIdHash`, `stateHash`, and `nextStateHash`.
+Confirm the intended cluster, Transit key, and version history, then apply:
+
+```sh
+bao-kms-provider restore-versions \
+  --config /etc/openbao-kms/config.yaml --versions 1 --apply \
+  --expected-state-hash '<stateHash from this node’s reviewed plan>'
+```
+
+Restoration changes only selected historical records from `removed` to `retired`.
+It advances the current state/checkpoint chain, preserves the active identity,
+and verifies current backend restrictions and version creation metadata again
+at apply time. It never rolls back state, changes OpenBao settings, or recreates
+key material. Automatic discovery cannot restore removed versions.
+
+Restart the provider and verify retained ciphertext reads through each API
+server. Back up the new state/checkpoint pair. If a backend restriction still
+blocks a selected version or its creation metadata differs, restoration fails
+without changing the pair. Do not erase state to bypass that failure.
+
+`serve`, `retire-versions --apply`, and `restore-versions --apply` share the lock file
+`<state.path>.lock`; never delete it while any of them runs. If saving fails, inspect
 the state before retrying. Never restore one file of the state and checkpoint
 pair alone, and never edit either by hand.
 

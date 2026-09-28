@@ -127,6 +127,11 @@ the impact and whether migration is supported or a fresh installation is require
 changes nothing else: `key_id` derivation, annotations, AAD, the active key,
 and other historical identities stay the same.
 
+`restore-versions --apply` can restore selected removed historical records while
+matching Transit versions remain decryptable. It advances the current state
+chain; automatic observation still cannot restore removed records. Both commands
+require the provider to be stopped and the current reviewed state hash.
+
 Retirement adds `removed` records to the state file, which older binaries
 reject. Upgrade every provider before retiring versions, and afterwards never
 downgrade to such a binary or erase the records. The state directory must be

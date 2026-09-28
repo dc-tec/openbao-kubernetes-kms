@@ -412,6 +412,16 @@ func validateProfile(profile openbao.KeyProfile) error {
 // ValidateStateProfile checks persisted identities and usable versions without
 // advancing observations or promoting a pending version.
 func (o *Observer) ValidateStateProfile(state keyregistry.StateFile, profile openbao.KeyProfile) error {
+	if err := o.ValidateRecoveryProfile(state, profile); err != nil {
+		return err
+	}
+	return validateProfileForState(profile, state)
+}
+
+// ValidateRecoveryProfile checks identities and decrypt eligibility without
+// requiring the active key to encrypt. Recovery never promotes a pending key;
+// normal observation still controls whether encryption can resume.
+func (o *Observer) ValidateRecoveryProfile(state keyregistry.StateFile, profile openbao.KeyProfile) error {
 	if err := state.Validate(); err != nil {
 		return err
 	}
@@ -421,7 +431,7 @@ func (o *Observer) ValidateStateProfile(state keyregistry.StateFile, profile ope
 	if err := o.validateStateScope(state); err != nil {
 		return err
 	}
-	return validateProfileForState(profile, state)
+	return validateDecryptableState(profile, state)
 }
 
 func validateProfileForState(profile openbao.KeyProfile, state keyregistry.StateFile) error {

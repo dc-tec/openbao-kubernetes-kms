@@ -175,7 +175,7 @@ direct hash-linked successor can advance an older checkpoint, to complete a
 save interrupted between writing the state and checkpoint. Restore both files
 from the same backup or peer; generation numbers are local to each node.
 
-`serve` and `retire-versions --apply` take the same persistent
+`serve`, `retire-versions --apply`, and `restore-versions --apply` take the same persistent
 `<state.path>.lock` before writing, which needs a local filesystem with working
 advisory locks. The state directory must be owned by the process's OS user.
 

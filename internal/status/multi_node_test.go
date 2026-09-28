@@ -101,6 +101,63 @@ func assertCrossNodeDecrypt(t *testing.T, source, target *kmsv2.Server, crypto *
 	}
 }
 
+func TestExplicitRestoreRecoversReadsFromLaggingPeer(t *testing.T) {
+	clock := newFakeClock()
+	metadata := &fakeTransit{profile: profileForLatest(1, clock.Now())}
+	crypto := fakes.NewKMSTransit()
+	a, b := newTestStore(t, clock), newTestStore(t, clock)
+	ca := newTestController(t, clock, a, newTestObserver(t, clock, 1, 0),
+		metadata, &fakeStateStore{loadErr: keyregistry.ErrStateNotFound})
+	cb := newTestController(t, clock, b, newTestObserver(t, clock, 1, 0),
+		metadata, &fakeStateStore{loadErr: keyregistry.ErrStateNotFound})
+	for _, c := range []*status.Controller{ca, cb} {
+		if err := c.ProbeOnce(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.DeepProbeOnce(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	metadata.profile = profileForLatest(2, clock.Now())
+	if err := ca.ProbeOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	sa, sb := rotationServer(t, a, ca, crypto), rotationServer(t, b, cb, crypto)
+	state, _ := a.State()
+	removed, err := keyregistry.RetireVersions(state, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.PublishHealthy(removed, clock.Read()); err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := sb.Encrypt(t.Context(), &kmsapi.EncryptRequest{Plaintext: []byte("peer DEK")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := &kmsapi.DecryptRequest{
+		Ciphertext: sealed.GetCiphertext(), KeyId: sealed.GetKeyId(), Annotations: sealed.GetAnnotations(),
+	}
+	if _, err := sa.Decrypt(t.Context(), req); err == nil {
+		t.Fatal("ordinary discovery restored an operator-removed identity")
+	}
+	restored, err := keyregistry.RestoreVersions(removed, []int{1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := newTestObserver(t, clock, 1, 0).ValidateRecoveryProfile(restored, metadata.profile); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.PublishHealthy(restored, clock.Read()); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := sa.Decrypt(t.Context(), req)
+	if err != nil || string(opened.GetPlaintext()) != "peer DEK" {
+		t.Fatalf("explicit restore did not recover peer ciphertext: %v", err)
+	}
+	assertActiveVersion(t, restored, 2)
+}
+
 func TestControllerPersistsProgressWhileEncryptionMinimumBlocksActive(t *testing.T) {
 	clock := newFakeClock()
 	ctx := context.Background()
