@@ -44,6 +44,9 @@ func TestLiveSocketProbe(t *testing.T) {
 				if err != nil || !strings.Contains(output, probeTestKeyID) || !strings.Contains(output, "kms.decrypt") {
 					t.Fatalf("live socket probe failed: %v: %s", err, output)
 				}
+				if !strings.Contains(output, "caller owns the socket") {
+					t.Fatal("owner probe did not disclose that group access was untested")
+				}
 			} else if err == nil {
 				t.Fatalf("invalid provider passed the probe: %s", output)
 			}

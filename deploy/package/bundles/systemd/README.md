@@ -43,6 +43,8 @@ Follow [Run with systemd](https://dc-tec.github.io/openbao-kubernetes-kms/docs/g
 for configuration, file ownership, validation, and service start. Verify the
 artifact first with [Download the release](https://dc-tec.github.io/openbao-kubernetes-kms/docs/get-started/download/).
 
-After the service starts, run `sudo -u openbao-kms bao-kms-provider probe` to
-check Status, Encrypt, and Decrypt through its live Unix socket. Repeat on
-every node before API-server activation.
+After the service and local API server start, run `sudo sh bin/probe-apiserver`
+from this kit. It checks Status, Encrypt, and Decrypt using the API server's
+effective UID, GID, and supplementary groups. It requires `pgrep`, `awk`, and
+`setpriv`. Root or socket-owner warnings identify the limits of the permission
+check. Repeat on every node and complete the API-server activation checks.

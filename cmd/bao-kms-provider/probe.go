@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/cli"
@@ -81,11 +82,19 @@ func runSocketProbe(ctx context.Context, opts socketProbeOptions) cli.Report {
 		report.Pass("client.identity", "Caller identity", identity)
 	}
 	info, err := os.Lstat(opts.socketPath)
+	if errors.Is(err, os.ErrPermission) {
+		report.Fail("socket.path", "Unix socket", "access denied; check caller groups and parent-directory search permission")
+		return report
+	}
 	if err != nil || info.Mode()&os.ModeSocket == 0 {
 		report.Fail("socket.path", "Unix socket", "socket missing or wrong file type; check the path and provider readiness")
 		return report
 	}
 	report.Pass("socket.path", "Unix socket", "path is a Unix socket, not a symlink")
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok && int64(os.Geteuid()) == int64(stat.Uid) {
+		report.Warn("socket.access_scope", "Socket access scope",
+			"caller owns the socket; this round trip does not verify access through the socket group")
+	}
 	dialer := &net.Dialer{}
 	connection, err := grpc.NewClient("passthrough:///kms-probe",
 		// Unix permissions authenticate local access; this dialer cannot connect over TCP.

@@ -33,7 +33,9 @@ func TestInstallationKitsContainMatchingInputs(t *testing.T) {
 			}
 			first := readTestFile(t, cfg.output)
 			entries := readTestArchive(t, first)
-			for _, name := range []string{"README.md", "config/init-values-file.yaml", "config/init-values-oauth2.yaml"} {
+			for _, name := range []string{
+				"README.md", "bin/probe-apiserver", "config/init-values-file.yaml", "config/init-values-oauth2.yaml",
+			} {
 				if len(entries["kit/"+name]) == 0 {
 					t.Fatalf("missing installation input %s", name)
 				}

@@ -2,7 +2,7 @@
 ARG BUILDER_IMAGE
 FROM ${BUILDER_IMAGE}
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends systemd \
+    && apt-get install -y --no-install-recommends systemd binutils procps \
     && rm -rf /var/lib/apt/lists/*
 # The install test requests root with docker run --user; keep the image non-root by default.
 USER 65532:65532

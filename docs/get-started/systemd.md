@@ -183,11 +183,18 @@ curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/re
 Wait for HTTP 200 from `/ready` and confirm
 `/run/openbao-kms/kms.sock` exists. With `Type=exec`, systemd can report the
 process as active before authentication and initial probes finish. Check the
-running socket as the service user:
+running socket using the API server's identity:
 
 ```sh
-sudo -u openbao-kms bao-kms-provider probe --socket /run/openbao-kms/kms.sock
+sudo sh /usr/share/bao-kms-provider/probe-apiserver
 ```
+
+For a tarball installation, use `sudo sh bin/probe-apiserver` from the extracted
+kit. The helper requires `pgrep`, `awk`, `setpriv`, and exactly one local running
+`kube-apiserver`. It uses that process's effective UID, GID, and supplementary
+groups. If the API server has not started, repeat the check after it starts.
+Do not use the provider's socket-owner identity to claim group access. A root
+API server produces a warning because the check does not prove non-root access.
 
 Status, Encrypt, and Decrypt must pass. Continue to
 [Enable encryption](/docs/get-started/enable-encryption/) once the provider is

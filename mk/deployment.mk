@@ -6,6 +6,8 @@ deployment-samples-check: ## Validate deployment sample manifests and scripts.
 	@for script in hack/kubeadm/*.sh; do sh -n "$$script"; done
 	@for script in hack/harvester/*.sh hack/harvester/remote/*.sh; do sh -n "$$script"; done
 	@for script in deploy/package/linux/scripts/*.sh; do sh -n "$$script"; done
+	@for script in hack/install/*.sh; do sh -n "$$script"; done
+	@for script in test/deployment/*.sh; do bash -n "$$script"; done
 	@if command -v systemd-analyze >/dev/null 2>&1; then \
 		tmp="$$(mktemp -d)"; \
 		trap 'rm -rf "$$tmp"' EXIT; \
@@ -68,3 +70,24 @@ static-pod-install-check: ## Exercise the static-pod kit without activating a pr
 		--env KMS_INSTALL_TEST_CONTAINER=1 --env "BUNDLE_ARCHIVE=$(BUNDLE_ARCHIVE)" \
 		--workdir /src \
 		"$$(cat "$$tmp/image-id")" bash test/deployment/static-pod-install.sh
+
+.PHONY: native-package-install-check
+native-package-install-check: ## Install an exact deb/rpm artifact, check access and preservation, then remove it.
+	@set -eu; \
+	test -n "$(PACKAGE_FILE)"; test -n "$(PACKAGE_VERSION)"; \
+	case "$(PACKAGE_FILE)" in \
+	  *.deb) base_key=imageBuilderBase; dockerfile=test/deployment/Dockerfile.systemd-install; arg=BUILDER_IMAGE ;; \
+	  *.rpm) base_key=packageRPMTestBase; dockerfile=test/deployment/Dockerfile.rpm-install; arg=RPM_IMAGE ;; \
+	  *) printf '%s\n' 'PACKAGE_FILE must be a .deb or .rpm'; exit 2 ;; \
+	esac; \
+	base="$$(awk -v key="$$base_key:" '$$1 == key {print $$2}' .ci/versions.yaml)"; \
+	digest="$$(awk -v key="$${base_key}Digest:" '$$1 == key {print $$2}' .ci/versions.yaml)"; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	docker build --platform "$(IMAGE_PLATFORM)" --iidfile "$$tmp/image-id" \
+		--build-arg "$$arg=$$base@$$digest" -f "$$dockerfile" test/deployment; \
+	docker run --rm --platform "$(IMAGE_PLATFORM)" --network=none --user 0:0 \
+		--mount "type=bind,source=$(CURDIR),target=/src,readonly" \
+		--env KMS_INSTALL_TEST_CONTAINER=1 --env "PACKAGE_FILE=$(PACKAGE_FILE)" \
+		--env "PACKAGE_ARCH=$(patsubst linux/%,%,$(IMAGE_PLATFORM))" --env "PACKAGE_VERSION=$(PACKAGE_VERSION)" \
+		--workdir /src "$$(cat "$$tmp/image-id")" bash test/deployment/native-package-install.sh

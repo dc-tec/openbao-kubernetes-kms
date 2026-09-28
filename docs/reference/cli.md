@@ -92,7 +92,20 @@ bao-kms-provider probe --socket /run/openbao-kms/kms.sock --output json
 This command does not load provider configuration, credentials, or persisted
 state. It does not log in directly to OpenBao. Unix permissions govern access;
 run it with the intended socket client's UID and groups. A root invocation
-reports a warning because it cannot prove non-root access.
+reports a warning because it cannot prove non-root access. A socket-owner
+invocation also warns that group access remains untested. Path permission
+failures are reported separately from a missing socket.
+
+The installation kit includes `bin/probe-apiserver`; native packages install
+the same helper at `/usr/share/bao-kms-provider/probe-apiserver`. On Linux, run
+it as root with `pgrep`, `awk`, and `setpriv` installed. It requires exactly one
+local `kube-apiserver` process, reads its effective UID, GID, and supplementary
+groups from `/proc`, then executes the probe with those IDs. It does not add the
+socket group to the caller. Pass a socket path as its optional argument when
+using a path other than `/run/openbao-kms/kms.sock`. A root API server still
+produces the root warning.
+The helper tests host socket access; API-server reads and writes must separately
+validate the container's mounts, capabilities, and security policy.
 
 | Flag | Purpose |
 |---|---|

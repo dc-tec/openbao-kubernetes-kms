@@ -84,7 +84,25 @@ access. Systemd archives containing the minimal values files also exercise
 both JWT sources and identity reuse through the packaged `init` command.
 
 The release workflow runs both checks on amd64 and arm64 using the exact
-archives selected for publication. Publication depends on these jobs passing.
+archives selected for publication. It also installs the selected `.deb` and
+`.rpm` artifacts through `dpkg` and `rpm` in separate Debian and AlmaLinux
+containers. Run that check with:
+
+```sh
+make native-package-install-check IMAGE_PLATFORM=linux/amd64 \
+  PACKAGE_VERSION=0.1.0-preview.3 \
+  PACKAGE_FILE=dist/primary/bao-kms-provider_0.1.0-preview.3_linux_amd64.deb
+```
+
+The package check verifies the executable version and ELF architecture,
+maintainer-script account and directory setup, access as the service user,
+socket-group isolation, configuration retention across reinstall and removal,
+and the absence of automatic activation. RPM checks use the digest-pinned
+AlmaLinux fixture in `.ci/versions.yaml`. Installation runs offline after the
+test image is prepared. Archive checks also inspect ELF architecture so QEMU
+cannot conceal a package containing the wrong binary.
+
+Publication depends on these jobs passing.
 This gate covers host installation and file generation; API-server activation,
 credential recovery, and VM boot remain separate qualification steps.
 

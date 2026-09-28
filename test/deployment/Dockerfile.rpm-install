@@ -1,0 +1,5 @@
+ARG RPM_IMAGE
+FROM ${RPM_IMAGE}
+RUN dnf install -y systemd shadow-utils util-linux binutils procps-ng \
+    && dnf clean all
+USER 65532:65532

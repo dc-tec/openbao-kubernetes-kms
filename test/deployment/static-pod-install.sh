@@ -29,6 +29,7 @@ awk '
   END { if (!done) exit 1 }
 ' README.md > "$work/install.sh"
 bash "$work/install.sh"
+sh /src/test/deployment/check-architecture.sh "$arch" /usr/bin/bao-kms-provider
 gid=$(getent group openbao-kms-socket | cut -d: -f3)
 
 for source in file oauth2; do
