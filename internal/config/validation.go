@@ -287,7 +287,7 @@ func validateAuthValues(problems *[]ValidationProblem, auth AuthConfig) {
 func validateJWTAuthValues(problems *[]ValidationProblem, jwt JWTAuthConfig) {
 	validateJWTSource(problems, jwt)
 	validateMountPath(problems, "auth.jwt.mountPath", jwt.MountPath)
-	validateIdentifier(problems, "auth.jwt.role", jwt.Role)
+	validatePathName(problems, "auth.jwt.role", jwt.Role)
 	validateClaimExpectation(problems, "auth.jwt.expectedIssuer", jwt.ExpectedIssuer)
 	validateClaimExpectation(problems, "auth.jwt.expectedSubject", jwt.ExpectedSubject)
 	for _, audience := range jwt.ExpectedAudience {
@@ -531,11 +531,15 @@ func validateIdentifier(problems *[]ValidationProblem, field string, value strin
 }
 
 func validateTransitKeyName(problems *[]ValidationProblem, value string) {
+	validatePathName(problems, "transit.keyName", value)
+}
+
+func validatePathName(problems *[]ValidationProblem, field, value string) {
 	if value == "" {
 		return
 	}
 	if !transitKeyNamePattern.MatchString(value) {
-		appendProblem(problems, "transit.keyName",
+		appendProblem(problems, field,
 			"must start and end with an ASCII letter, digit, or underscore; interior characters may also be dots or hyphens")
 	}
 }

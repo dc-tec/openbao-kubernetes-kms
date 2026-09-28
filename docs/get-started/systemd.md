@@ -119,6 +119,16 @@ configuration, use the packaged example and the
 
 ## Step 4: Place the runtime files
 
+For native OAuth, create its credential directory and install the client secret
+as root. Use the path from your generated configuration. For the default path:
+
+```sh
+sudo install -d -m 0750 -o root -g openbao-kms /etc/openbao-kms/credentials
+sudo install -m 0640 -o root -g openbao-kms client-secret /etc/openbao-kms/credentials/client-secret
+```
+
+Omit the JWT file commands below when `auth.jwt.source` is `oauth2`.
+
 From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`,
 run as root:
 

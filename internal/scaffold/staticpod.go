@@ -173,13 +173,13 @@ func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, erro
 	runDir := filepath.Dir(cfg.Server.SocketPath)
 	stateDir := filepath.Dir(cfg.State.Path)
 	jwtDir := filepath.Dir(cfg.Auth.JWT.JWTFile)
+	if err := validateStaticPodDirectories(cfg, runDir, stateDir); err != nil {
+		return podManifest{}, err
+	}
 	if cfg.Auth.JWT.Source != config.JWTSourceOAuth2 {
 		if err := validateJWTCredentialDirectory(jwtDir, runDir, stateDir); err != nil {
 			return podManifest{}, err
 		}
-	}
-	if cfg.Auth.JWT.Source == config.JWTSourceOAuth2 && filepath.Dir(cfg.Auth.JWT.OAuth2.ClientSecretFile) == "/" {
-		return podManifest{}, errors.New("OAuth client secret must be in a dedicated directory, not the host root")
 	}
 
 	manifest := podManifest{
@@ -257,12 +257,40 @@ func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, erro
 }
 
 func validateJWTCredentialDirectory(dir, runDir, stateDir string) error {
+	return validateReadOnlyDirectory("JWT credential", dir, runDir, stateDir)
+}
+
+func validateStaticPodDirectories(cfg config.Config, runDir, stateDir string) error {
+	for _, dir := range []string{runDir, stateDir} {
+		if !filepath.IsAbs(dir) || pathContains(dir, ProviderConfigPath) {
+			return errors.New("socket and state paths must use dedicated absolute directories")
+		}
+	}
+	if pathContains(runDir, stateDir) || pathContains(stateDir, runDir) {
+		return errors.New("socket and state directories must not overlap")
+	}
+	if err := validateReadOnlyDirectory("OpenBao CA", filepath.Dir(cfg.OpenBao.CACertFile), runDir, stateDir); err != nil {
+		return err
+	}
+	if cfg.Auth.JWT.Source == config.JWTSourceOAuth2 {
+		if err := validateReadOnlyDirectory("OAuth credential",
+			filepath.Dir(cfg.Auth.JWT.OAuth2.ClientSecretFile), runDir, stateDir); err != nil {
+			return err
+		}
+		if cfg.Auth.JWT.OAuth2.CACertFile != "" {
+			return validateReadOnlyDirectory("OAuth CA", filepath.Dir(cfg.Auth.JWT.OAuth2.CACertFile), runDir, stateDir)
+		}
+	}
+	return nil
+}
+
+func validateReadOnlyDirectory(label, dir, runDir, stateDir string) error {
 	if !filepath.IsAbs(dir) || dir == "/" || pathContains(dir, ProviderConfigPath) {
-		return errors.New("JWT file must be in a dedicated absolute credential directory")
+		return fmt.Errorf("%s must be in a dedicated absolute directory", label)
 	}
 	for _, writable := range []string{runDir, stateDir} {
 		if pathContains(dir, writable) || pathContains(writable, dir) {
-			return errors.New("JWT credential directory must not overlap the socket or state directory")
+			return fmt.Errorf("%s directory must not overlap the socket or state directory", label)
 		}
 	}
 	return nil

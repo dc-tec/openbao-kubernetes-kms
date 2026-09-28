@@ -75,6 +75,12 @@ func newInitCommand() *cobra.Command {
 			"provider configuration format. init never contacts OpenBao and never writes outside --out.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			for _, name := range []string{"config", "log-level", "metrics-address", "health-address"} {
+				if cmd.Flags().Changed(name) {
+					return cli.WithExitCode(cli.ExitUsage,
+						fmt.Errorf("--%s does not apply to init; put configuration in --values", name))
+				}
+			}
 			return runInit(cmd.OutOrStdout(), opts)
 		},
 	}
@@ -159,7 +165,7 @@ func validateStaticPodFlags(opts initOptions) []string {
 // loadInitValues reads the values file through the same loader and validator
 // as serve, after filling the documented host layout for omitted paths.
 func loadInitValues(opts initOptions) (config.Config, error) {
-	cfg, err := config.Load(config.NewRuntime(), config.LoadOptions{Path: opts.valuesPath})
+	cfg, err := config.Load(config.NewFileRuntime(), config.LoadOptions{Path: opts.valuesPath})
 	if err != nil {
 		return config.Config{}, err
 	}
@@ -309,7 +315,7 @@ func renderInitFiles(cfg config.Config, opts initOptions) ([]initFile, error) {
 // checkGeneratedFiles loads the rendered files back through the provider's own
 // parsers and cross-checks them, so init never writes a pair doctor would reject.
 func checkGeneratedFiles(providerConfig []byte, encryptionConfig []byte) error {
-	reloaded, err := config.Load(config.NewRuntime(), config.LoadOptions{Content: providerConfig})
+	reloaded, err := config.Load(config.NewFileRuntime(), config.LoadOptions{Content: providerConfig})
 	if err != nil {
 		return fmt.Errorf("generated configuration does not load: %w", err)
 	}

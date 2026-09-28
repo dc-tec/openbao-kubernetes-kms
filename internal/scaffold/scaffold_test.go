@@ -240,9 +240,9 @@ func TestRenderOpenBaoSetupQuotesValues(t *testing.T) {
 		"bao secrets enable -path='transit' transit",
 		"bao write 'transit/keys/k8s-workload-a-etcd' type=aes256-gcm96",
 		"bao auth enable -path='k8s-workload-a-jwt' jwt",
-		`bound_subject='system:it'\''s-quoted'`,
-		"token_policies='openbao-kms-workload-a'",
-		"token_no_default_policy=true",
+		`"bound_subject":"system:it'\''s-quoted"`,
+		`"token_policies":["openbao-kms-workload-a"]`,
+		`"token_no_default_policy":true`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("setup script missing %q:\n%s", want, text)

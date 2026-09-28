@@ -237,11 +237,18 @@ type DebugCorrelationConfig struct {
 
 // NewRuntime returns a config runtime with project defaults.
 func NewRuntime() *Runtime {
+	runtime := NewFileRuntime()
+	bindAllowedEnv(runtime.v)
+	return runtime
+}
+
+// NewFileRuntime uses file values and defaults without ambient environment overrides.
+// Installation generators use it to produce the same output on different hosts.
+func NewFileRuntime() *Runtime {
 	v := viper.New()
 	v.SetConfigType("yaml")
 	v.SetEnvPrefix("BAO_KMS_PROVIDER")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-	bindAllowedEnv(v)
 	runtime := &Runtime{v: v}
 	applyDefaults(runtime)
 	return runtime

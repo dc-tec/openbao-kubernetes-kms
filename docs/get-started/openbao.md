@@ -42,6 +42,25 @@ Use the address and trust bundle for your OpenBao instance. The script applies
 a configured namespace itself. It expects new dedicated mounts and is not a
 reconciliation loop. Investigate any failure before rerunning commands.
 
+The script accepts one phase: `transit`, `policy`, `auth-mount`, `auth-config`,
+or `auth-role`. With no argument it runs all phases in that order. After a
+partial failure, inspect the completed resources against the generated commands
+and your recorded identity before running the remaining phases. A selected
+phase does not verify existing resources or adopt a different deployment.
+
+For example, if OIDC discovery failed after the JWT mount was enabled, correct
+the issuer connectivity, confirm that the mount is the intended JWT mount, and
+run:
+
+```sh
+sh generated/openbao-setup.sh auth-config
+sh generated/openbao-setup.sh auth-role
+```
+
+Do not rerun `transit` or generate another lineage ID to recover an auth setup
+failure. If creation stopped within the Transit phase, inspect the mount and
+key and complete only the missing reviewed commands by hand.
+
 `init --new-key` already recorded the key lineage ID in `generated/config.yaml`.
 Do not generate another one or repeat the manual creation steps below. After
 successful setup, continue with the selected systemd or static-pod guide.
