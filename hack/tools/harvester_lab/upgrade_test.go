@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,6 +19,35 @@ const testUpgradeAMD64 = "ghcr.io/dc-tec/bao-kms-provider@sha256:" +
 
 const testUpgradeManifest = `{"digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 "platform":{"os":"linux","architecture":"amd64"}}`
+
+func TestCRIRequestedImageSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name, imageJSON string
+		want            bool
+	}{
+		{"tag in image", `{"image":"repo:candidate"}`, true},
+		{"resolved ID and requested tag", `{"image":"sha256:abc","userSpecifiedImage":"repo:candidate"}`, true},
+		{"different requested tag", `{"image":"sha256:abc","userSpecifiedImage":"repo:old"}`, false},
+		{"ID without requested tag", `{"image":"sha256:abc"}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			command := exec.Command("jq", "-e", "--arg", "image", "repo:candidate", criRequestedImageMatch)
+			command.Stdin = strings.NewReader(`{"image":` + tc.imageJSON + `}`)
+			output, err := command.CombinedOutput()
+			if (err == nil) != tc.want || strings.TrimSpace(string(output)) != fmt.Sprint(tc.want) {
+				t.Fatalf("image match = %s, error = %v; want %v", output, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestUpgradeModeRejectsInvalidSelectionBeforeAccess(t *testing.T) {
+	for _, args := range [][]string{{"other"}, {"systemd", "static-pod"}} {
+		if err := labVerifyUpgradeRollback(context.Background(), nil, args); err == nil {
+			t.Fatalf("accepted invalid mode arguments %v", args)
+		}
+	}
+}
 
 func TestExtractPublishedBaseline(t *testing.T) {
 	for _, scenario := range []string{"success", "pull-failed", "copy-failed", "cleanup-failed"} {

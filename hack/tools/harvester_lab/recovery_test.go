@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestActiveVersionRequiresValidatedPromotion(t *testing.T) {
@@ -32,6 +34,47 @@ func TestActiveVersionRequiresValidatedPromotion(t *testing.T) {
 		if _, err := activeVersionFromState([]byte(data)); err == nil {
 			t.Fatal("accepted corrupt or incomplete registry as promotion evidence")
 		}
+	}
+}
+
+func TestColdOutageRequiresKMSEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name, counter, health string
+		wantError             bool
+	}{
+		{"new Encrypt failure", "4", "connection refused", false},
+		{"unhealthy Status", "3", "kmsv2 Provider openbao-kms-workload-a is not healthy, " +
+			"error: got unexpected healthz status: unhealthy", false},
+		{"unchanged counter", "3", "ok", true},
+		{"connection refused", "3", "connection refused", true},
+		{"forbidden", "3", "Forbidden", true},
+		{"timeout", "3", "context deadline exceeded", true},
+		{"unrelated failure", "3", "etcd health check failed", true},
+		{"other KMS provider", "3", "kmsv2 Provider other is not healthy, " +
+			"error: got unexpected healthz status: unhealthy", true},
+		{"invalid KMS version", "3", "kmsv2 Provider openbao-kms-workload-a is not healthy, " +
+			"error: expected KMSv2 API version v2", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			ssh := "#!/bin/sh\necho 'openbao_kms_grpc_requests_total{method=\"encrypt\",status=\"unavailable\"} " +
+				tc.counter + "'\n"
+			kubectl := "#!/bin/sh\ntest \"$2\" = '--raw=/readyz/kms-providers' || exit 2\n" +
+				"echo '" + tc.health + "' >&2\nexit 1\n"
+			for name, script := range map[string]string{"ssh": ssh, "kubectl": kubectl} {
+				// #nosec G306 -- executable command stubs in an isolated test directory.
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
+			err := waitForKMSOutage(ctx, &labConfig{root: dir}, kubeadmCheck{host: "test-host"}, 3)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("cold outage evidence error = %v, wantError %v", err, tc.wantError)
+			}
+		})
 	}
 }
 

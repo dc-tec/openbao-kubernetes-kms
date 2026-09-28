@@ -64,11 +64,20 @@ if [ -z "$kubernetes_package_version" ]; then
 	exit 1
 fi
 
+# crictl is used by the recovery checks and is not a kubeadm dependency.
+cri_tools_version="${KUBERNETES_MINOR}.0"
+cri_tools_package_version="$(apt-cache madison cri-tools | awk -v version="$cri_tools_version" 'index($3, version "-") == 1 { print $3; exit }')"
+if [ -z "$cri_tools_package_version" ]; then
+	printf 'cri-tools package version not found for %s\n' "$cri_tools_version" >&2
+	exit 1
+fi
+
 apt-get install -y \
 	"kubelet=${kubernetes_package_version}" \
 	"kubeadm=${kubernetes_package_version}" \
-	"kubectl=${kubernetes_package_version}"
-apt-mark hold kubelet kubeadm kubectl >/dev/null
+	"kubectl=${kubernetes_package_version}" \
+	"cri-tools=${cri_tools_package_version}"
+apt-mark hold kubelet kubeadm kubectl cri-tools >/dev/null
 systemctl enable --now kubelet
 
 if [ ! -f /etc/kubernetes/admin.conf ]; then

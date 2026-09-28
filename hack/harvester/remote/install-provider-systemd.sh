@@ -21,6 +21,7 @@ usermod -a -G openbao-kms-socket openbao-kms
 install -d -m 0750 -o root -g openbao-kms /etc/openbao-kms
 install -d -m 0755 -o root -g root /etc/openbao-kms/tls
 install -d -m 0750 -o openbao-kms -g openbao-kms /var/lib/openbao-kms
+install -d -m 0750 -o root -g openbao-kms /var/lib/openbao-kms/credentials
 install -d -m 0750 -o openbao-kms -g openbao-kms /var/lib/openbao-kms/state
 install -d -m 2750 -o openbao-kms -g openbao-kms-socket /run/openbao-kms
 install -d -m 0755 -o root -g root /etc/kubernetes/openbao-kms
@@ -34,7 +35,7 @@ systemd-tmpfiles --create /usr/lib/tmpfiles.d/openbao-kms.conf
 install -m 0755 -o root -g root "$ASSET_DIR/bao-kms-provider" /usr/bin/bao-kms-provider
 install -m 0640 -o root -g openbao-kms "$ASSET_DIR/provider.yaml" "$CONFIG_PATH"
 install -m 0644 -o root -g root "$ASSET_DIR/openbao-ca.crt" /etc/openbao-kms/tls/ca.crt
-install -m 0600 -o openbao-kms -g openbao-kms "$ASSET_DIR/identity.jwt" /var/lib/openbao-kms/identity.jwt
+install -m 0640 -o root -g openbao-kms "$ASSET_DIR/identity.jwt" /var/lib/openbao-kms/credentials/identity.jwt
 install -m 0644 -o root -g root "$ASSET_DIR/encryption-config.yaml" "$ENCRYPTION_CONFIG_PATH"
 install -m 0644 -o root -g root "$ASSET_DIR/bao-kms-provider.service" /etc/systemd/system/bao-kms-provider.service
 

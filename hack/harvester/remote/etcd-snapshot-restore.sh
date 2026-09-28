@@ -6,7 +6,7 @@ RESTORE_ID="${RESTORE_ID:?RESTORE_ID is required}"
 OPENBAO_LAB_DIR="${OPENBAO_LAB_DIR:-/root/openbao-kms-lab}"
 BACKUP_DIR="${OPENBAO_LAB_DIR}/backups"
 SNAPSHOT_PATH="${BACKUP_DIR}/etcd-${RESTORE_ID}.db"
-ETCD_IMAGE="${ETCD_IMAGE:-registry.k8s.io/etcd:3.6.5-0}"
+ETCD_IMAGE="${ETCD_IMAGE:-}"
 MANIFEST_DIR="${OPENBAO_LAB_DIR}/manifests-${RESTORE_ID}"
 
 crictl_cmd() {
@@ -70,6 +70,13 @@ snapshot)
 restore)
 	if [ ! -f "$SNAPSHOT_PATH" ]; then
 		printf 'etcd snapshot not found: %s\n' "$SNAPSHOT_PATH" >&2
+		exit 1
+	fi
+	if [ -z "$ETCD_IMAGE" ]; then
+		ETCD_IMAGE="$(awk '$1 == "image:" { print $2; exit }' /etc/kubernetes/manifests/etcd.yaml)"
+	fi
+	if [ -z "$ETCD_IMAGE" ] || ! ctr -n k8s.io images ls -q | grep -Fx -- "$ETCD_IMAGE" >/dev/null; then
+		printf 'etcd restore image is not available locally: %s\n' "$ETCD_IMAGE" >&2
 		exit 1
 	fi
 	previous_etcd_dir=""

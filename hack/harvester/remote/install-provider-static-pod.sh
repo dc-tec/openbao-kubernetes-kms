@@ -19,6 +19,7 @@ fi
 install -d -m 0750 -o root -g root /etc/openbao-kms
 install -d -m 0755 -o root -g root /etc/openbao-kms/tls
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
+install -d -m 0750 -o root -g 65532 /var/lib/openbao-kms/credentials
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state
 install -d -m 2750 -o 65532 -g "$SOCKET_GID" /run/openbao-kms
 install -d -m 0755 -o root -g root /etc/kubernetes/openbao-kms
@@ -32,7 +33,7 @@ systemd-tmpfiles --create /usr/lib/tmpfiles.d/openbao-kms-static-pod.conf
 install -m 0755 -o root -g root "$ASSET_DIR/bao-kms-provider" /usr/bin/bao-kms-provider
 install -m 0640 -o root -g 65532 "$ASSET_DIR/provider.yaml" "$CONFIG_PATH"
 install -m 0644 -o root -g root "$ASSET_DIR/openbao-ca.crt" /etc/openbao-kms/tls/ca.crt
-install -m 0600 -o 65532 -g 65532 "$ASSET_DIR/identity.jwt" /var/lib/openbao-kms/identity.jwt
+install -m 0640 -o root -g 65532 "$ASSET_DIR/identity.jwt" /var/lib/openbao-kms/credentials/identity.jwt
 install -m 0644 -o root -g root "$ASSET_DIR/encryption-config.yaml" "$ENCRYPTION_CONFIG_PATH"
 
 ctr -n k8s.io images import "$ASSET_DIR/bao-kms-provider-image.tar" >/dev/null
