@@ -119,7 +119,7 @@ A checkpoint without its state file, or with an older one, also fails startup.
 An unrelated higher generation or a generation gap fails startup too. Only a
 direct hash-linked successor can advance an older checkpoint, to complete a
 save interrupted between writing the state and checkpoint. Restore both files
-from the same backup or peer; generation numbers are local to each node.</p><p><code>serve</code> and <code>retire-versions --apply</code> take the same persistent
+from the same backup or peer; generation numbers are local to each node.</p><p><code>serve</code>, <code>retire-versions --apply</code>, and <code>restore-versions --apply</code> take the same persistent
 <code>&lt;state.path>.lock</code> before writing, which needs a local filesystem with working
 advisory locks. The state directory must be owned by the process&rsquo;s OS user.</p><p>The checkpoint detects corruption, unsafe restores, and replayed older state.
 It does not stop a host administrator who replaces both files with a

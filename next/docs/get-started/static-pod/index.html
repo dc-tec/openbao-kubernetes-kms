@@ -67,6 +67,7 @@ and a tmpfiles entry that recreates the socket directory under <code>/run</code>
 every reboot:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo sh -eu -c &#34;
 install -d -m 0750 -o root -g 65532 /etc/openbao-kms
 install -d -m 0755 -o root -g root /etc/openbao-kms/tls
+install -d -m 0750 -o root -g 65532 /etc/openbao-kms/credentials
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
 install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state
 install -d -m 0750 -o root -g 65532 /var/lib/openbao-kms/credentials
@@ -78,7 +79,8 @@ permission; the provider holds a lock file there across restarts.</p><h2 id=step
 the shared fingerprint matches <code>generated/installation.json</code>. If host paths or
 the GID differ, regenerate from the resolved values without <code>--new-key</code> as
 shown in <a href=/openbao-kubernetes-kms/next/docs/get-started/plan-values/>Generate installation files</a>
-.</p><h2 id=step-6-place-the-runtime-files>Step 6: Place the runtime files</h2><p>From the directory that holds <code>provider.yaml</code>, <code>ca.crt</code>, and <code>identity.jwt</code>:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo install -m 0640 -o root -g 65532 provider.yaml /etc/openbao-kms/config.yaml
+.</p><h2 id=step-6-place-the-runtime-files>Step 6: Place the runtime files</h2><p>For native OAuth, install the client secret at the configured path instead of
+installing <code>identity.jwt</code>. For the default path:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo install -m 0640 -o root -g 65532 client-secret /etc/openbao-kms/credentials/client-secret</code></pre></div><p>Omit the JWT file command below when <code>auth.jwt.source</code> is <code>oauth2</code>.</p><p>From the directory that holds <code>provider.yaml</code>, <code>ca.crt</code>, and <code>identity.jwt</code>:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo install -m 0640 -o root -g 65532 provider.yaml /etc/openbao-kms/config.yaml
 sudo install -m 0644 -o root -g root ca.crt /etc/openbao-kms/tls/ca.crt
 sudo install -m 0640 -o root -g 65532 identity.jwt /var/lib/openbao-kms/credentials/identity.jwt</code></pre></div><p>The pod mounts the credential directory read-only. Configure the host issuer
 agent to replace <code>identity.jwt</code> atomically within that directory and preserve
@@ -99,8 +101,11 @@ installation record.</p><p>Then hand the manifest to kubelet and wait for readin
   /etc/kubernetes/manifests/bao-kms-provider.yaml
 curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/ready</code></pre></div><p><code>/ready</code> returns HTTP 200 and <code>/run/openbao-kms/kms.sock</code> exists. If the pod
 does not become ready, inspect it with <code>sudo crictl ps -a --name bao-kms-provider</code>
-and <code>sudo crictl logs &lt;container-id></code>. Probe the running socket as the same identity:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo setpriv --reuid=65532 --regid=65532 --groups=&#34;$SOCKET_GID&#34; \
-  bao-kms-provider probe --socket /run/openbao-kms/kms.sock</code></pre></div><p>Status, Encrypt, and Decrypt must pass. This is a live provider check; API-server
+and <code>sudo crictl logs &lt;container-id></code>. From the extracted kit, probe the socket
+using the running API server&rsquo;s UID and groups:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo sh bin/probe-apiserver</code></pre></div><p>The helper requires <code>pgrep</code>, <code>awk</code>, and <code>setpriv</code>, and exactly one running local
+<code>kube-apiserver</code>. It reports root or socket-owner access as a limitation of the
+permission check. For an API server that has not started, repeat this check
+after it starts. Do not substitute the provider UID to claim consumer access.</p><p>Status, Encrypt, and Decrypt must pass. This is a live provider check; API-server
 activation is checked separately. Continue with
 <a href=/openbao-kubernetes-kms/next/docs/get-started/enable-encryption/>Enable encryption</a>
 once it runs on every

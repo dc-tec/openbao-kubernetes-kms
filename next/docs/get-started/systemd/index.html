@@ -67,7 +67,9 @@ in <code>/usr/lib/tmpfiles.d/openbao-kms.conf</code>, unless it holds other loca
 cluster identity. Keep the resolved values for subsequent nodes. For manual
 configuration, use the packaged example and the
 <a href=/openbao-kubernetes-kms/next/docs/reference/configuration/>configuration reference</a>
-.</p><h2 id=step-4-place-the-runtime-files>Step 4: Place the runtime files</h2><p>From the directory that holds <code>provider.yaml</code>, <code>ca.crt</code>, and <code>identity.jwt</code>,
+.</p><h2 id=step-4-place-the-runtime-files>Step 4: Place the runtime files</h2><p>For native OAuth, create its credential directory and install the client secret
+as root. Use the path from your generated configuration. For the default path:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo install -d -m 0750 -o root -g openbao-kms /etc/openbao-kms/credentials
+sudo install -m 0640 -o root -g openbao-kms client-secret /etc/openbao-kms/credentials/client-secret</code></pre></div><p>Omit the JWT file commands below when <code>auth.jwt.source</code> is <code>oauth2</code>.</p><p>From the directory that holds <code>provider.yaml</code>, <code>ca.crt</code>, and <code>identity.jwt</code>,
 run as root:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>set -eu
 test ! -e /etc/openbao-kms/config.yaml
 test ! -e /etc/openbao-kms/tls/ca.crt
@@ -90,7 +92,12 @@ systemctl status bao-kms-provider.service
 curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/ready</code></pre></div><p>Wait for HTTP 200 from <code>/ready</code> and confirm
 <code>/run/openbao-kms/kms.sock</code> exists. With <code>Type=exec</code>, systemd can report the
 process as active before authentication and initial probes finish. Check the
-running socket as the service user:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo -u openbao-kms bao-kms-provider probe --socket /run/openbao-kms/kms.sock</code></pre></div><p>Status, Encrypt, and Decrypt must pass. Continue to
+running socket using the API server&rsquo;s identity:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sudo sh /usr/share/bao-kms-provider/probe-apiserver</code></pre></div><p>For a tarball installation, use <code>sudo sh bin/probe-apiserver</code> from the extracted
+kit. The helper requires <code>pgrep</code>, <code>awk</code>, <code>setpriv</code>, and exactly one local running
+<code>kube-apiserver</code>. It uses that process&rsquo;s effective UID, GID, and supplementary
+groups. If the API server has not started, repeat the check after it starts.
+Do not use the provider&rsquo;s socket-owner identity to claim group access. A root
+API server produces a warning because the check does not prove non-root access.</p><p>Status, Encrypt, and Decrypt must pass. Continue to
 <a href=/openbao-kubernetes-kms/next/docs/get-started/enable-encryption/>Enable encryption</a>
 once the provider is
 ready on every control-plane node.</p><p>If the service does not become ready, check these common first-start causes:</p><ul><li>the socket directory group is not <code>openbao-kms-socket</code>,</li><li><code>ProtectSystem</code> blocks a configuration or auth material path,</li><li>the CA bundle path is missing,</li><li>host DNS is not ready when the service starts,</li><li>the OpenBao TLS server name does not match the certificate.</li></ul><h2 id=about-the-unit>About the unit</h2><p>The installed unit comes from <code>deploy/systemd/bao-kms-provider.service</code>. The

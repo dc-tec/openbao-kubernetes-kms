@@ -66,12 +66,17 @@ that context. PKCS#11 pool waits also use this timeout. Native PKCS#11 calls
 have a separate limit described in <a href=/openbao-kubernetes-kms/next/docs/reference/configuration/#auth>Reference: Configuration</a>
 .</p><p>OpenBao can return <code>403</code> for a revoked token as well as a policy denial. On a
 <code>401</code> or <code>403</code>, the provider replaces the rejected credential and retries the
-request once; concurrent rejections share one login. Recovery starts at most
-once every five seconds, even when the new token is denied too, and failed
-logins back off exponentially. A late rejection or renewal for an old token
+request once; concurrent rejections share one login. Repeated denials back off
+from five seconds to five minutes even when replacement login succeeds. Ten
+minutes without a rejection resets this recovery delay. Failed logins also
+have exponential backoff. A replacement rejected on the retry is discarded;
+recovery never falls back to it or to the previous token. A late rejection or renewal for an old token
 never replaces the current one, and no extra policy capability is needed. A
-request denied again after recovery keeps its OpenBao error class, so a
-persistent <code>403</code> means checking both the auth role and the Transit policy. For the configuration fields, see <a href=/openbao-kubernetes-kms/next/docs/reference/configuration/#auth>Reference: Configuration</a>
+request denied again after recovery keeps its OpenBao error class. Later
+requests during the recovery delay have no usable token and fail with
+<code>Unauthenticated</code> (<code>auth_failed</code>), without contacting Transit. Check the
+preceding denial and both the auth role and the Transit policy. For the
+configuration fields, see <a href=/openbao-kubernetes-kms/next/docs/reference/configuration/#auth>Reference: Configuration</a>
 .</p><h2 id=jwt-source-options>JWT source options</h2><p>Set <code>auth.jwt.source</code> to <code>oauth2</code> for native client credentials or <code>file</code> for
 an externally provisioned JWT. See <a href=/openbao-kubernetes-kms/next/docs/configure/oauth2/>OAuth 2.0 client credentials</a>
 for the supported protocol, independent bootstrap requirements, and secret rotation.</p><table><thead><tr><th>Option</th><th>Recommendation</th><th>Analysis</th></tr></thead><tbody><tr><td>External or management-plane JWT issuer</td><td>Preferred</td><td>Strongest bootstrap independence. OpenBao validates through OIDC discovery, JWKS, or pinned public keys. Recovery can proceed when the protected API server is down.</td></tr><tr><td>Kubernetes-issued ServiceAccount JWT from the protected cluster</td><td>Usable with recovery guardrails</td><td>Kubernetes ServiceAccount JWTs carry issuer, subject, audience, and expiry claims and validate offline through discovery. Offline validation does not prove that bound objects still exist. Renewal may depend on kubelet and API server behavior, so this must not be the only recovery credential.</td></tr><tr><td>Long-lived static JWT on disk</td><td>Emergency or constrained environments only</td><td>Does not depend on a renewal service, but has weaker security. Use response wrapping for initial distribution where practical. Do not store OpenBao client tokens on disk.</td></tr></tbody></table><h2 id=certificate-source-options>Certificate source options</h2><table><thead><tr><th>Source</th><th>Local validation</th><th>Operational notes</th></tr></thead><tbody><tr><td>PKCS#11</td><td>Certificate file safety, certificate lifetime, client-auth usage, weak signature rejection, and signer public key match.</td><td>The private key remains behind the PKCS#11 module. The certificate file must contain only PEM <code>CERTIFICATE</code> blocks. The PIN file must be local, regular, absolute, tightly permissioned, and single-line. CI exercises this path with SoftHSM, OpenBao cert auth, and Transit.</td></tr><tr><td>SPIFFE</td><td>X.509 SPIFFE Verifiable Identity Document (SVID) lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain.</td><td>Not a supported configuration; see <a href=#role-constraints>Role constraints</a>

@@ -38,7 +38,16 @@ script once for the new Transit key:</p><div class=command-block><div class=comm
 export BAO_CACERT=/path/to/openbao-ca.crt
 sh generated/openbao-setup.sh</code></pre></div><p>Use the address and trust bundle for your OpenBao instance. The script applies
 a configured namespace itself. It expects new dedicated mounts and is not a
-reconciliation loop. Investigate any failure before rerunning commands.</p><p><code>init --new-key</code> already recorded the key lineage ID in <code>generated/config.yaml</code>.
+reconciliation loop. Investigate any failure before rerunning commands.</p><p>The script accepts one phase: <code>transit</code>, <code>policy</code>, <code>auth-mount</code>, <code>auth-config</code>,
+or <code>auth-role</code>. With no argument it runs all phases in that order. After a
+partial failure, inspect the completed resources against the generated commands
+and your recorded identity before running the remaining phases. A selected
+phase does not verify existing resources or adopt a different deployment.</p><p>For example, if OIDC discovery failed after the JWT mount was enabled, correct
+the issuer connectivity, confirm that the mount is the intended JWT mount, and
+run:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>sh generated/openbao-setup.sh auth-config
+sh generated/openbao-setup.sh auth-role</code></pre></div><p>Do not rerun <code>transit</code> or generate another lineage ID to recover an auth setup
+failure. If creation stopped within the Transit phase, inspect the mount and
+key and complete only the missing reviewed commands by hand.</p><p><code>init --new-key</code> already recorded the key lineage ID in <code>generated/config.yaml</code>.
 Do not generate another one or repeat the manual creation steps below. After
 successful setup, continue with the selected systemd or static-pod guide.</p><h2 id=manual-alternative>Manual alternative</h2><p>Use the following reference steps only when managing the OpenBao resources by
 hand or through configuration management. Set these variables from your

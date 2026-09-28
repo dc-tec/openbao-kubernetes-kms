@@ -66,7 +66,10 @@ the impact and whether migration is supported or a fresh installation is require
 <a href=/openbao-kubernetes-kms/next/docs/reference/release-lifecycle/#versioning>Release and support lifecycle</a>
 .</p><h2 id=operator-retirement>Operator retirement</h2><p><code>retire-versions --apply</code> ends local decryption for the versions you select and
 changes nothing else: <code>key_id</code> derivation, annotations, AAD, the active key,
-and other historical identities stay the same.</p><p>Retirement adds <code>removed</code> records to the state file, which older binaries
+and other historical identities stay the same.</p><p><code>restore-versions --apply</code> can restore selected removed historical records while
+matching Transit versions remain decryptable. It advances the current state
+chain; automatic observation still cannot restore removed records. Both commands
+require the provider to be stopped and the current reviewed state hash.</p><p>Retirement adds <code>removed</code> records to the state file, which older binaries
 reject. Upgrade every provider before retiring versions, and afterwards never
 downgrade to such a binary or erase the records. The state directory must be
 owned by the provider&rsquo;s OS user, and retirement must run as that user. See

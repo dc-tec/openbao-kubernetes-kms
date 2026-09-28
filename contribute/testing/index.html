@@ -47,7 +47,17 @@ To test an existing systemd or static-pod archive, set <code>BUNDLE_ARCHIVE</cod
 path relative to the repository root. The container runs without network
 access. Systemd archives containing the minimal values files also exercise
 both JWT sources and identity reuse through the packaged <code>init</code> command.</p><p>The release workflow runs both checks on amd64 and arm64 using the exact
-archives selected for publication. Publication depends on these jobs passing.
+archives selected for publication. It also installs the selected <code>.deb</code> and
+<code>.rpm</code> artifacts through <code>dpkg</code> and <code>rpm</code> in separate Debian and AlmaLinux
+containers. Run that check with:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>make native-package-install-check IMAGE_PLATFORM=linux/amd64 \
+  PACKAGE_VERSION=0.1.0-preview.3 \
+  PACKAGE_FILE=dist/primary/bao-kms-provider_0.1.0-preview.3_linux_amd64.deb</code></pre></div><p>The package check verifies the executable version and ELF architecture,
+maintainer-script account and directory setup, access as the service user,
+socket-group isolation, configuration retention across reinstall and removal,
+and the absence of automatic activation. RPM checks use the digest-pinned
+AlmaLinux fixture in <code>.ci/versions.yaml</code>. Installation runs offline after the
+test image is prepared. Archive checks also inspect ELF architecture so QEMU
+cannot conceal a package containing the wrong binary.</p><p>Publication depends on these jobs passing.
 This gate covers host installation and file generation; API-server activation,
 credential recovery, and VM boot remain separate qualification steps.</p><h2 id=fuzzing>Fuzzing</h2><p><code>make ci-core</code> runs short fuzz smoke campaigns (<code>FUZZTIME=10s</code>). To run longer
 campaigns locally:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>FUZZTIME=1m make fuzz

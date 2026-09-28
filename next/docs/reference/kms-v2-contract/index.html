@@ -48,8 +48,10 @@ unavailable. It never creates or rotates a Transit key, relies on the implicit
 latest version, falls back to plaintext, or returns a stale <code>key_id</code>.</p><h2 id=decrypt>Decrypt</h2><p>Decrypt takes ciphertext, the <code>key_id</code>, annotations, and a request UID, and
 returns plaintext only after the local checks in
 <a href=/openbao-kubernetes-kms/next/docs/reference/key-id-and-aad/#decrypt-validation-order>Key ID and AAD: Decrypt validation order</a>
-pass. It never tries other keys or versions, and it never decrypts without AAD.</p><p>A well-formed unknown <code>key_id</code> triggers metadata discovery, shared with the
-request timeout and limited to once per <code>status.probeInterval</code>. Discovery never
+pass. It never tries other keys or versions, and it never decrypts without AAD.</p><p>A well-formed unknown <code>key_id</code> triggers shared metadata discovery, bounded by
+<code>openbao.timeout</code> and limited to once per <code>status.probeInterval</code>. Each caller
+waits with its own request deadline; canceling one caller does not cancel
+shared discovery. Provider shutdown cancels discovery. Discovery never
 advances promotion. A failed lookup returns <code>Unavailable</code> with
 <code>key_metadata_refresh_failed</code>; a successful lookup that does not find the
 identity returns <code>NotFound</code>. Pending snapshots decrypt once validated but never
@@ -58,7 +60,10 @@ closed if a Transit response would break the KMS v2 limits, and the deep probe
 checks the ciphertext size and key version of a real round trip so response
 drift shows up as a readiness failure. Oversized OpenBao responses fail as
 <code>openbao_unavailable</code>, detected by reading one byte past the limit rather than
-trusting <code>Content-Length</code>.</p><p>Errors returned to Kubernetes carry a stable class and never contain secrets,
+trusting <code>Content-Length</code>.</p><p>A Transit <code>403</code> on the recovery retry returns <code>PermissionDenied</code>. After the
+token is discarded, requests during the recovery delay return <code>Unauthenticated</code>
+without contacting Transit. Encryption can also return <code>FailedPrecondition</code>
+once a background probe marks the provider unhealthy.</p><p>Errors returned to Kubernetes carry a stable class and never contain secrets,
 plaintext, full ciphertext, or raw paths; see
 <a href=/openbao-kubernetes-kms/next/docs/reference/observability/#error-classes>Observability: Error classes</a>
 .</p><p>The provider does not micro-batch decrypt calls into Transit <code>batch_input</code>.
