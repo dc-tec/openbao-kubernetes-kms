@@ -16,6 +16,12 @@ license: Apache-2.0
 recommends:
   - systemd
 contents:
+  - src: hack/install/probe-apiserver.sh
+    dst: /usr/share/bao-kms-provider/probe-apiserver
+    file_info:
+      owner: root
+      group: root
+      mode: 0755
   - src: ${PACKAGE_BINARY}
     dst: /usr/bin/bao-kms-provider
     expand: true

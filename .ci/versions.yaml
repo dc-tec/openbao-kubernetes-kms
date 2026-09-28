@@ -172,6 +172,8 @@ artifacts:
   imageRuntimeUser: "65532:65532"
   imageBuilderBase: docker.io/library/golang:1.26.6-bookworm
   imageBuilderBaseDigest: sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36
+  packageRPMTestBase: docker.io/library/almalinux:9
+  packageRPMTestBaseDigest: sha256:3a3fa7f043b142bc8008c8b308d39b47d2c84008addcd52f9f9a7a82d2a90474
   dockerfileFrontend: docker.io/docker/dockerfile:1.7
   dockerfileFrontendDigest: sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
   binaryName: bao-kms-provider

@@ -149,6 +149,7 @@ func installKindKitNode(
 		return err == nil
 	})
 	probe := runKindKitDiagnostic(t, ctx, docker, node, gid, "probe", "--expected-key-id", expectedKey)
+	checkKindKitConsumerAccess(t, ctx, docker, node, gid)
 	for _, id := range []string{"client.identity", "socket.path", "kms.status", "kms.encrypt", "kms.decrypt"} {
 		requireKitCheck(t, probe, id)
 	}
@@ -163,6 +164,33 @@ func installKindKitNode(
 	}
 	t.Logf("kit node %s: uid=65532 gid=65532 socket_gid=%s identity=%s", node, gid, record.Fingerprint)
 	return record.Fingerprint + ":" + record.Lineage, requireKitCheck(t, probe, "kms.key_id")
+}
+
+func checkKindKitConsumerAccess(t *testing.T, ctx context.Context, docker, node, gid string) {
+	t.Helper()
+	// A separate, non-owner identity proves group access without access to provider credentials.
+	output, err := runDockerOutput(ctx, docker, "exec", node, "setpriv",
+		"--reuid=65531", "--regid=65531", "--groups="+gid,
+		"bao-kms-provider", "probe", "--timeout=5s", "--output=json")
+	if err != nil {
+		t.Fatalf("socket-group consumer could not probe: %v: %s", err, output)
+	}
+	if _, err := runDockerOutput(ctx, docker, "exec", node, "setpriv",
+		"--reuid=65531", "--regid=65531", "--clear-groups",
+		"bao-kms-provider", "probe", "--timeout=2s"); err == nil {
+		t.Fatal("consumer without the socket group reached the provider")
+	}
+	output, err = runDockerOutput(ctx, docker, "exec", node, "sh", kindKitDir+"/bin/probe-apiserver")
+	if err != nil {
+		t.Fatalf("actual API server identity could not probe: %v: %s", err, output)
+	}
+	var report cli.Report
+	if err := json.Unmarshal([]byte(output), &report); err != nil || report.HasFailures() {
+		t.Fatalf("invalid API server consumer probe: %v", err)
+	}
+	for _, id := range []string{"kms.status", "kms.encrypt", "kms.decrypt"} {
+		requireKitCheck(t, report, id)
+	}
 }
 
 const kindKitPrepareScript = `set -eu

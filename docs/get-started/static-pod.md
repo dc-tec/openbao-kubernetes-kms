@@ -194,12 +194,17 @@ curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/re
 
 `/ready` returns HTTP 200 and `/run/openbao-kms/kms.sock` exists. If the pod
 does not become ready, inspect it with `sudo crictl ps -a --name bao-kms-provider`
-and `sudo crictl logs <container-id>`. Probe the running socket as the same identity:
+and `sudo crictl logs <container-id>`. From the extracted kit, probe the socket
+using the running API server's UID and groups:
 
 ```sh
-sudo setpriv --reuid=65532 --regid=65532 --groups="$SOCKET_GID" \
-  bao-kms-provider probe --socket /run/openbao-kms/kms.sock
+sudo sh bin/probe-apiserver
 ```
+
+The helper requires `pgrep`, `awk`, and `setpriv`, and exactly one running local
+`kube-apiserver`. It reports root or socket-owner access as a limitation of the
+permission check. For an API server that has not started, repeat this check
+after it starts. Do not substitute the provider UID to claim consumer access.
 
 Status, Encrypt, and Decrypt must pass. This is a live provider check; API-server
 activation is checked separately. Continue with

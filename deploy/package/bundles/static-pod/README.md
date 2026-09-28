@@ -42,6 +42,12 @@ private working directory as `values.yaml`. Replace the example addresses and
 identities. Provision credentials independently of the protected API server.
 Keep secrets out of the values file.
 
+After the provider and local API server start, run `sh bin/probe-apiserver` as
+root from this kit. It uses the API server's effective UID, GID, and groups for
+a live socket round trip. It requires `pgrep`, `awk`, and `setpriv`. Root or
+socket-owner warnings identify the limits of the permission check. Complete
+the API-server activation checks separately.
+
 For a new Transit key, generate once with `--new-key`:
 
 ```sh

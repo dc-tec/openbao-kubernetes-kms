@@ -510,9 +510,9 @@ jobs:
           retention-days: 30
 
   installation-artifacts:
-    name: Install release archives (${{ matrix.arch }})
+    name: Install release artifacts (${{ matrix.arch }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     needs: [prepare, verify-artifacts]
     strategy:
       fail-fast: false
@@ -532,7 +532,7 @@ jobs:
         with:
           name: release-byte-verified-assets
           path: dist/primary
-      - name: Install the archives selected for publication
+      - name: Install archives and native packages selected for publication
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
           ARCH: ${{ matrix.arch }}
@@ -541,6 +541,10 @@ jobs:
           for model in systemd static-pod; do
             make "${model}-install-check" IMAGE_PLATFORM="linux/${ARCH}" \
               BUNDLE_ARCHIVE="dist/primary/bao-kms-provider_${VERSION}_${model}_linux_${ARCH}.tar.gz"
+          done
+          for format in deb rpm; do
+            make native-package-install-check IMAGE_PLATFORM="linux/${ARCH}" PACKAGE_VERSION="${VERSION}" \
+              PACKAGE_FILE="dist/primary/bao-kms-provider_${VERSION}_linux_${ARCH}.${format}"
           done
 
   promote:
