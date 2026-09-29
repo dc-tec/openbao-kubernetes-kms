@@ -14,7 +14,7 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.8.2
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
-	google.golang.org/grpc v1.84.0
+	google.golang.org/grpc v1.83.2
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/kms v0.37.1
 )
