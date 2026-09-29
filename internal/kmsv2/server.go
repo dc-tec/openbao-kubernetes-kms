@@ -194,20 +194,21 @@ func Register(registrar grpc.ServiceRegistrar, server *Server) {
 func (s *Server) Status(ctx context.Context, _ *kmsapi.StatusRequest) (response *kmsapi.StatusResponse, err error) {
 	start := time.Now()
 	observation := RequestObservation{Method: methodStatus}
-	defer func() {
-		if response != nil {
-			observation.Healthz = response.GetHealthz()
-			if response.GetKeyId() != "" {
-				observation.KeyIDHash = aad.HashValue(response.GetKeyId())
-			}
+	defer s.finishRequest(ctx, &observation, start, &err)
+	response, err = s.status(ctx, &observation)
+	if response != nil {
+		observation.Healthz = response.GetHealthz()
+		if response.GetKeyId() != "" {
+			observation.KeyIDHash = aad.HashValue(response.GetKeyId())
 		}
-		s.observeRequest(ctx, observation, err, time.Since(start))
-	}()
-	defer recoverRPC(&err, &observation)
+	}
+	return response, err
+}
+
+func (s *Server) status(ctx context.Context, observation *RequestObservation) (*kmsapi.StatusResponse, error) {
 	if !s.statusLimiter.tryAcquire() {
-		observation.ErrorClass = errorClass(ErrConcurrencyLimitExceeded)
 		observation.ConcurrencyRejected = true
-		return nil, rpcError(ErrConcurrencyLimitExceeded)
+		return nil, ErrConcurrencyLimitExceeded
 	}
 	defer s.statusLimiter.release()
 
@@ -217,7 +218,7 @@ func (s *Server) Status(ctx context.Context, _ *kmsapi.StatusRequest) (response 
 	cached, err := s.statusCache.Current(requestCtx)
 	if err != nil {
 		if contextError(err) {
-			return nil, rpcError(err)
+			return nil, err
 		}
 		return &kmsapi.StatusResponse{
 			Version: APIVersion,
@@ -238,19 +239,23 @@ func (s *Server) Encrypt(
 	if request != nil && request.GetUid() != "" {
 		observation.RequestUIDHash = aad.HashValue(request.GetUid())
 	}
-	defer func() {
-		s.observeRequest(ctx, observation, err, time.Since(start))
-	}()
-	defer recoverRPC(&err, &observation)
+	defer s.finishRequest(ctx, &observation, start, &err)
+	return s.encrypt(ctx, request, &observation)
+}
+
+func (s *Server) encrypt(
+	ctx context.Context,
+	request *kmsapi.EncryptRequest,
+	observation *RequestObservation,
+) (*kmsapi.EncryptResponse, error) {
 	if !s.encryptLimiter.tryAcquire() {
-		observation.ErrorClass = errorClass(ErrConcurrencyLimitExceeded)
 		observation.ConcurrencyRejected = true
-		return nil, rpcError(ErrConcurrencyLimitExceeded)
+		return nil, ErrConcurrencyLimitExceeded
 	}
 	defer s.encryptLimiter.release()
 
 	if request == nil || len(request.GetPlaintext()) == 0 {
-		return nil, rpcError(ErrPlaintextRequired)
+		return nil, ErrPlaintextRequired
 	}
 
 	requestCtx, cancel := s.requestContext(ctx)
@@ -258,21 +263,18 @@ func (s *Server) Encrypt(
 
 	active, keyID, err := s.activeStatus(requestCtx)
 	if err != nil {
-		observation.ErrorClass = errorClass(err)
-		return nil, rpcError(err)
+		return nil, err
 	}
 	observation.KeyIDHash = aad.HashValue(keyID)
 	observation.TransitKeyVersion = active.TransitVersion
 
 	annotations, err := aad.BuildAnnotations(active, s.pluginVersion)
 	if err != nil {
-		observation.ErrorClass = errorClass(err)
-		return nil, rpcError(err)
+		return nil, err
 	}
 	canonicalAAD, err := aad.BuildCanonical(active, annotations)
 	if err != nil {
-		observation.ErrorClass = errorClass(err)
-		return nil, rpcError(err)
+		return nil, err
 	}
 
 	encrypted, err := s.transit.Encrypt(requestCtx, TransitEncryptRequest{
@@ -281,26 +283,22 @@ func (s *Server) Encrypt(
 		KeyVersion:     active.TransitVersion,
 	})
 	if err != nil {
-		observation.ErrorClass = transitErrorClass(err)
-		return nil, transitRPCError(err, methodEncrypt)
+		return nil, &transitFailure{cause: err}
 	}
 	if len(encrypted.Ciphertext) == 0 {
-		observation.ErrorClass = errorClassUnknown
-		return nil, rpcError(ErrTransitInvalidResponse)
+		return nil, ErrTransitInvalidResponse
 	}
 	if encrypted.KeyVersion != 0 && encrypted.KeyVersion != active.TransitVersion {
-		observation.ErrorClass = errorClassUnknown
-		return nil, rpcError(ErrTransitInvalidResponse)
+		return nil, ErrTransitInvalidResponse
 	}
 
-	response = &kmsapi.EncryptResponse{
+	response := &kmsapi.EncryptResponse{
 		Ciphertext:  slices.Clone(encrypted.Ciphertext),
 		KeyId:       keyID,
 		Annotations: annotationsToProto(annotations),
 	}
 	if err := validateEncryptResponseLimits(response); err != nil {
-		observation.ErrorClass = errorClass(err)
-		return nil, rpcError(err)
+		return nil, err
 	}
 	return response, nil
 }
@@ -320,23 +318,26 @@ func (s *Server) Decrypt(
 			observation.KeyIDHash = aad.HashValue(request.GetKeyId())
 		}
 	}
-	defer func() {
-		s.observeRequest(ctx, observation, err, time.Since(start))
-	}()
-	defer recoverRPC(&err, &observation)
+	defer s.finishRequest(ctx, &observation, start, &err)
+	return s.decrypt(ctx, request, &observation)
+}
+
+func (s *Server) decrypt(
+	ctx context.Context,
+	request *kmsapi.DecryptRequest,
+	observation *RequestObservation,
+) (*kmsapi.DecryptResponse, error) {
 	if !s.decryptLimiter.tryAcquire() {
-		observation.ErrorClass = errorClass(ErrConcurrencyLimitExceeded)
 		observation.ConcurrencyRejected = true
-		return nil, rpcError(ErrConcurrencyLimitExceeded)
+		return nil, ErrConcurrencyLimitExceeded
 	}
 	defer s.decryptLimiter.release()
 
 	if request == nil || len(request.GetCiphertext()) == 0 {
-		return nil, rpcError(ErrCiphertextRequired)
+		return nil, ErrCiphertextRequired
 	}
 	if err := validateDecryptRequestLimits(request); err != nil {
-		observation.ErrorClass = errorClass(err)
-		return nil, rpcError(err)
+		return nil, err
 	}
 
 	requestCtx, cancel := s.requestContext(ctx)
@@ -345,8 +346,7 @@ func (s *Server) Decrypt(
 	annotations, err := annotationsFromProto(request.GetAnnotations())
 	if err != nil {
 		s.observeValidationError(err)
-		observation.ErrorClass = errorClass(err)
-		return nil, rpcError(err)
+		return nil, err
 	}
 	prepared, err := aad.PrepareDecrypt(s.registry, request.GetKeyId(), annotations)
 	if errors.Is(err, keyregistry.ErrUnknownKeyID) && s.keyRefresher != nil {
@@ -358,8 +358,7 @@ func (s *Server) Decrypt(
 	}
 	if err != nil {
 		s.observeValidationError(err)
-		observation.ErrorClass = errorClass(err)
-		return nil, rpcError(err)
+		return nil, err
 	}
 	observation.KeyIDHash = aad.HashValue(prepared.Snapshot.KubernetesKeyID)
 	observation.TransitKeyVersion = prepared.Snapshot.TransitVersion
@@ -369,8 +368,7 @@ func (s *Server) Decrypt(
 		AssociatedData: prepared.Canonical,
 	})
 	if err != nil {
-		observation.ErrorClass = transitErrorClass(err)
-		return nil, transitRPCError(err, methodDecrypt)
+		return nil, &transitFailure{cause: err}
 	}
 
 	return &kmsapi.DecryptResponse{Plaintext: slices.Clone(decrypted.Plaintext)}, nil
@@ -451,15 +449,4 @@ func annotationsFromProto(annotations map[string][]byte) (map[string]string, err
 		decoded[key] = string(value)
 	}
 	return decoded, nil
-}
-
-func recoverRPC(err *error, observation *RequestObservation) {
-	if recovered := recover(); recovered != nil {
-		if observation != nil {
-			observation.ErrorClass = errorClass(ErrPanicRecovered)
-			observation.PanicRecovered = true
-			observation.PanicType = fmt.Sprintf("%T", recovered)
-		}
-		*err = rpcError(ErrPanicRecovered)
-	}
 }
