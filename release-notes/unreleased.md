@@ -1,5 +1,11 @@
 # Unreleased
 
+## Go toolchain
+
+Builds use Go 1.27.1. The module, development environment, CI, and container
+builders use the same pinned version. Source builds require Go 1.27.1 or later.
+Staticcheck 0.8.1 and golangci-lint 2.13.2 support the updated toolchain.
+
 ## Preview.3 installation boundary
 
 `0.1.0-preview.3` requires fresh disposable installations with new Transit keys

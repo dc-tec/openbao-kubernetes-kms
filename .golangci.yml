@@ -31,6 +31,11 @@ linters:
   settings:
     dupl:
       threshold: 120
+    goconst:
+      # Preserve the scan scope used before goconst added composite literals.
+      exclude-types:
+        - Call
+        - CompositeLit
     forbidigo:
       forbid:
         - pattern: 'map\[string\]any'

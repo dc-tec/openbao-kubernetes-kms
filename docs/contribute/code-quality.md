@@ -56,6 +56,9 @@ custom rules below. `.golangci.yml` enables at least `bodyclose`, `errcheck`,
 `gosec`, `govet`, `ineffassign`, `misspell`, `revive`, `staticcheck`,
 `unparam`, and `unused`.
 
+`goconst` excludes string literals passed directly to function calls or stored
+directly in composite literals.
+
 `make ci-core` runs both the default lint pass and `make lint-tagged`.
 The tagged pass uses cgo and enables `certauth_pkcs11`, `certauth_spiffe`,
 `openbao_kms_e2e_spiffe_certauth`, and `e2e`. It checks optional certificate
