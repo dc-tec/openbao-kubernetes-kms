@@ -343,11 +343,7 @@ func (s *Server) decrypt(
 	requestCtx, cancel := s.requestContext(ctx)
 	defer cancel()
 
-	annotations, err := annotationsFromProto(request.GetAnnotations())
-	if err != nil {
-		s.observeValidationError(err)
-		return nil, err
-	}
+	annotations := annotationsFromValidatedProto(request.GetAnnotations())
 	prepared, err := aad.PrepareDecrypt(s.registry, request.GetKeyId(), annotations)
 	if errors.Is(err, keyregistry.ErrUnknownKeyID) && s.keyRefresher != nil {
 		if refreshErr := s.keyRefresher.RefreshForDecrypt(requestCtx, request.GetKeyId()); refreshErr != nil {
@@ -389,23 +385,30 @@ func (s *Server) activeStatus(ctx context.Context) (keyregistry.KeySnapshot, str
 		}
 		return keyregistry.KeySnapshot{}, "", ErrStatusUnavailable
 	}
+	active, err := validateCachedStatus(cached)
+	if err != nil {
+		return keyregistry.KeySnapshot{}, "", err
+	}
+	return active, cached.KeyID, nil
+}
+
+// validateCachedStatus checks the shared healthy-status and Encrypt preconditions
+// against one cached value. The caller chooses an unhealthy response or RPC error.
+func validateCachedStatus(cached CachedStatus) (keyregistry.KeySnapshot, error) {
 	if cached.Healthz != HealthOK {
-		return keyregistry.KeySnapshot{}, "", ErrStatusUnhealthy
+		return keyregistry.KeySnapshot{}, ErrStatusUnhealthy
 	}
 	active, err := cached.Active.Normalize()
 	if err != nil {
-		return keyregistry.KeySnapshot{}, "", fmt.Errorf("%w: %v", ErrActiveKeyUnavailable, err)
+		return keyregistry.KeySnapshot{}, fmt.Errorf("%w: %v", ErrActiveKeyUnavailable, err)
 	}
-	if active.State != keyregistry.StateActive {
-		return keyregistry.KeySnapshot{}, "", ErrActiveKeyUnavailable
-	}
-	if cached.KeyID == "" {
-		return keyregistry.KeySnapshot{}, "", ErrActiveKeyUnavailable
+	if active.State != keyregistry.StateActive || cached.KeyID == "" {
+		return keyregistry.KeySnapshot{}, ErrActiveKeyUnavailable
 	}
 	if cached.KeyID != active.KubernetesKeyID {
-		return keyregistry.KeySnapshot{}, "", ErrStatusKeyIDMismatch
+		return keyregistry.KeySnapshot{}, ErrStatusKeyIDMismatch
 	}
-	return active, cached.KeyID, nil
+	return active, nil
 }
 
 func statusResponse(cached CachedStatus) *kmsapi.StatusResponse {
@@ -414,12 +417,12 @@ func statusResponse(cached CachedStatus) *kmsapi.StatusResponse {
 	if healthz == "" {
 		healthz = HealthUnhealthy
 	}
+	// Preserve custom unhealthy values; only healthy responses need snapshot validation.
 	if healthz != HealthOK {
 		keyID = ""
 	}
 	if healthz == HealthOK {
-		active, err := cached.Active.Normalize()
-		if err != nil || active.State != keyregistry.StateActive || active.KubernetesKeyID != keyID {
+		if _, err := validateCachedStatus(cached); err != nil {
 			healthz = HealthUnhealthy
 			keyID = ""
 		}
@@ -440,13 +443,12 @@ func annotationsToProto(annotations map[string]string) map[string][]byte {
 	return encoded
 }
 
-func annotationsFromProto(annotations map[string][]byte) (map[string]string, error) {
-	if err := validateAnnotationsProtoLimits(annotations, ErrRequestLimitExceeded); err != nil {
-		return nil, err
-	}
+// annotationsFromValidatedProto converts annotations after
+// validateDecryptRequestLimits checks their encoding and total size.
+func annotationsFromValidatedProto(annotations map[string][]byte) map[string]string {
 	decoded := make(map[string]string, len(annotations))
 	for key, value := range annotations {
 		decoded[key] = string(value)
 	}
-	return decoded, nil
+	return decoded
 }

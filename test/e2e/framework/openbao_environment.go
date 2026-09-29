@@ -726,12 +726,65 @@ func (f *OpenBaoEnvironment) RestoreRaftSnapshot(ctx context.Context, storageVol
 	if err := f.restoreRaftSnapshotInContainer(ctx, freshToken); err != nil {
 		return err
 	}
-	f.Token = originalToken
-	f.unsealKey = originalUnsealKey
-	if err := f.unseal(ctx, httpClient); err != nil {
+	// Snapshot application continues after the restore command returns. A
+	// snapshot from another Shamir cluster seals this fresh target when its
+	// original keyring replaces the temporary one. Wait before restarting it.
+	if err := f.waitUntilSealed(ctx, httpClient, 45*time.Second); err != nil {
 		return err
 	}
+	f.Token = originalToken
+	f.unsealKey = originalUnsealKey
 	return f.restartRestoredContainer(ctx)
+}
+
+func (f *OpenBaoEnvironment) waitUntilSealed(
+	ctx context.Context,
+	httpClient *http.Client,
+	timeout time.Duration,
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+
+	var lastErr error
+	for {
+		sealed, err := f.isSealed(waitCtx, httpClient)
+		if err == nil && sealed {
+			return nil
+		}
+		lastErr = err
+		select {
+		case <-waitCtx.Done():
+			return openBaoReadinessTimeoutError("OpenBao snapshot restore target did not seal", waitCtx.Err(), lastErr)
+		case <-ticker.C:
+		}
+	}
+}
+
+func (f *OpenBaoEnvironment) isSealed(ctx context.Context, httpClient *http.Client) (bool, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, f.Address+"/v1/sys/seal-status", nil)
+	if err != nil {
+		return false, err
+	}
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, response.Body)
+		_ = response.Body.Close()
+	}()
+	if response.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("OpenBao seal status returned %d", response.StatusCode)
+	}
+	var body struct {
+		Sealed bool `json:"sealed"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		return false, fmt.Errorf("decode OpenBao seal status: %w", err)
+	}
+	return body.Sealed, nil
 }
 
 func (f *OpenBaoEnvironment) restartRestoredContainer(ctx context.Context) error {
