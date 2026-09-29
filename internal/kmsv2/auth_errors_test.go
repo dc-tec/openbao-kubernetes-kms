@@ -49,8 +49,8 @@ func TestAuthenticationErrorsRetainCauseClassification(t *testing.T) {
 			codes.ResourceExhausted,
 			errorClassOpenBaoRateLimited,
 		},
-		{"deadline", context.DeadlineExceeded, codes.DeadlineExceeded, contextErrorClass(context.DeadlineExceeded)},
-		{"canceled", context.Canceled, codes.Canceled, contextErrorClass(context.Canceled)},
+		{"deadline", context.DeadlineExceeded, codes.DeadlineExceeded, errorClassTimeout},
+		{"canceled", context.Canceled, codes.Canceled, errorClassCanceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := errors.Join(openbao.ErrAuthentication, tc.cause)

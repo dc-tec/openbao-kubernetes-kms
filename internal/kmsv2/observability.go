@@ -60,15 +60,6 @@ var grpcStatusLabels = map[codes.Code]string{
 	codes.Unauthenticated:    "unauthenticated",
 }
 
-var grpcErrorClasses = map[codes.Code]string{
-	codes.Canceled:         errorClassCanceled,
-	codes.DeadlineExceeded: errorClassTimeout,
-	codes.PermissionDenied: errorClassTransitPolicyDenied,
-	codes.Unauthenticated:  errorClassAuthFailed,
-	codes.NotFound:         errorClassTransitKeyMissing,
-	codes.Unavailable:      errorClassOpenBaoUnavailable,
-}
-
 // RequestObservation is one redacted KMS v2 request observation.
 type RequestObservation struct {
 	Method              string
@@ -134,60 +125,4 @@ func statusLabel(err error) string {
 		return label
 	}
 	return grpcStatusLabels[codes.Unknown]
-}
-
-func errorClass(err error) string {
-	if err == nil {
-		return ""
-	}
-	if class := contextErrorClass(err); class != "" {
-		return class
-	}
-	if class := validationErrorClass(err); class != "" {
-		return class
-	}
-	if class, ok := grpcErrorClasses[grpcstatus.Code(err)]; ok {
-		return class
-	}
-	return errorClassUnknown
-}
-
-func contextErrorClass(err error) string {
-	if contextError(err) {
-		if errors.Is(err, context.Canceled) {
-			return errorClassCanceled
-		}
-		return errorClassTimeout
-	}
-	return ""
-}
-
-func validationErrorClass(err error) string {
-	switch {
-	case errors.Is(err, ErrKeyMetadataRefresh):
-		return errorClassKeyMetadataRefresh
-	case errors.Is(err, keyregistry.ErrMalformedKeyID):
-		return errorClassKeyIDMalformed
-	case errors.Is(err, keyregistry.ErrUnknownKeyID):
-		return errorClassKeyIDUnknown
-	case errors.Is(err, aad.ErrAADRequired):
-		return errorClassAADMissing
-	case errors.Is(err, aad.ErrInvalidAnnotations):
-		return errorClassAnnotationInvalid
-	case errors.Is(err, aad.ErrAnnotationMismatch):
-		return errorClassAADMismatched
-	case errors.Is(err, ErrPanicRecovered):
-		return errorClassPanic
-	case errors.Is(err, ErrRequestLimitExceeded),
-		errors.Is(err, ErrResponseLimitExceeded):
-		return errorClassProtocolLimit
-	case errors.Is(err, ErrConcurrencyLimitExceeded):
-		return errorClassConcurrencyLimit
-	case errors.Is(err, ErrStatusUnavailable),
-		errors.Is(err, ErrStatusUnhealthy),
-		errors.Is(err, ErrActiveKeyUnavailable),
-		errors.Is(err, ErrStatusKeyIDMismatch):
-		return errorClassStatusStale
-	}
-	return ""
 }
