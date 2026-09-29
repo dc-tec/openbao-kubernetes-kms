@@ -23,11 +23,16 @@ type sentinelErrorPolicy struct {
 	errorPolicy
 }
 
+var (
+	canceledErrorPolicy = errorPolicy{codes.Canceled, "request canceled", errorClassCanceled}
+	timeoutErrorPolicy  = errorPolicy{codes.DeadlineExceeded, "request timed out", errorClassTimeout}
+)
+
 // Match causes with errors.Is, including wrapped refresh failures. Context
 // cancellation and deadlines take precedence over the operation that failed.
 var sentinelErrorPolicies = []sentinelErrorPolicy{
-	{context.Canceled, errorPolicy{codes.Canceled, "request canceled", errorClassCanceled}},
-	{context.DeadlineExceeded, errorPolicy{codes.DeadlineExceeded, "request timed out", errorClassTimeout}},
+	{context.Canceled, canceledErrorPolicy},
+	{context.DeadlineExceeded, timeoutErrorPolicy},
 	{ErrKeyMetadataRefresh, errorPolicy{codes.Unavailable, ErrKeyMetadataRefresh.Error(), errorClassKeyMetadataRefresh}},
 	{ErrPlaintextRequired, errorPolicy{codes.InvalidArgument, "plaintext is required", errorClassUnknown}},
 	{ErrCiphertextRequired, errorPolicy{codes.InvalidArgument, "ciphertext is required", errorClassUnknown}},
@@ -63,8 +68,8 @@ var unknownLocalErrorPolicy = errorPolicy{codes.Internal, "kms request failed", 
 // A gRPC code does not identify every backend cause. Typed OpenBao errors below
 // retain sealed, rate-limit, and transport classes even when codes are shared.
 var transitCodePolicies = map[codes.Code]errorPolicy{
-	codes.Canceled:          {codes.Canceled, "request canceled", errorClassCanceled},
-	codes.DeadlineExceeded:  {codes.DeadlineExceeded, "request timed out", errorClassTimeout},
+	codes.Canceled:          canceledErrorPolicy,
+	codes.DeadlineExceeded:  timeoutErrorPolicy,
 	codes.PermissionDenied:  {codes.PermissionDenied, "transit permission denied", errorClassTransitPolicyDenied},
 	codes.Unauthenticated:   {codes.Unauthenticated, "transit authentication failed", errorClassAuthFailed},
 	codes.NotFound:          {codes.NotFound, "transit key not found", errorClassTransitKeyMissing},
@@ -199,12 +204,4 @@ func authenticationError(err error) bool {
 
 func contextError(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-func contextErrorClass(err error) string {
-	if contextError(err) {
-		policy, _ := lookupLocalErrorPolicy(err)
-		return policy.class
-	}
-	return ""
 }
