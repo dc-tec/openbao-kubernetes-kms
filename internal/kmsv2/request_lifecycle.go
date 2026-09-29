@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 // transitFailure preserves the backend cause until the RPC boundary classifies
@@ -44,7 +46,9 @@ func requestErrorPolicy(err error, method string) errorPolicy {
 	}
 	policy, ok := lookupLocalErrorPolicy(err)
 	if !ok {
-		policy.class = errorClass(err)
+		// A registry implementation can return a gRPC status. Preserve its
+		// observation class while using the unknown-local response policy.
+		policy.class = transitCodePolicy(grpcstatus.Code(err), method).class
 	}
 	return policy
 }

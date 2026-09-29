@@ -118,6 +118,38 @@ func TestRequestFinalizationObservesUnhealthyStatusWithoutRPCFailure(t *testing.
 	}
 }
 
+func TestRequestFinalizationPreservesUnrecognizedLookupClassification(t *testing.T) {
+	observer := &fakeObserver{}
+	lookup := failingSnapshotLookup{err: grpcstatus.Error(codes.PermissionDenied, "sensitive registry failure")}
+	server, _, transit, active := newTestServerWithOptions(t, kmsv2.Options{Observer: observer, Registry: lookup})
+	annotations, err := aad.BuildAnnotations(active, pluginVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
+		Ciphertext: []byte(testCiphertext), KeyId: active.KubernetesKeyID,
+		Annotations: protoAnnotations(annotations),
+	})
+	status := grpcstatus.Convert(err)
+	if response != nil || status.Code() != codes.Internal || status.Message() != "kms request failed" {
+		t.Fatalf("unrecognized lookup failure was not redacted: %v, %v", response, status)
+	}
+	if len(observer.requests) != 1 || observer.requests[0].ErrorClass != "transit_policy_denied" {
+		t.Fatalf("unrecognized lookup classification changed: %#v", observer.requests)
+	}
+	if transit.DecryptCalls() != 0 {
+		t.Fatal("failed registry lookup reached Transit")
+	}
+}
+
+type failingSnapshotLookup struct {
+	err error
+}
+
+func (lookup failingSnapshotLookup) Lookup(string) (keyregistry.KeySnapshot, error) {
+	return keyregistry.KeySnapshot{}, lookup.err
+}
+
 func TestRequestFinalizationObservesEmptyRequests(t *testing.T) {
 	for _, tc := range []struct {
 		method string

@@ -93,9 +93,6 @@ func (s *Server) observeRequest(
 	}
 	observation.Status = statusLabel(err)
 	observation.Duration = duration
-	if observation.ErrorClass == "" {
-		observation.ErrorClass = errorClass(err)
-	}
 	s.observer.ObserveKMSRequest(ctx, observation)
 }
 
