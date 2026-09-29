@@ -10,7 +10,7 @@ verifiedBy:
 ---
 
 The module is `github.com/dc-tec/openbao-kubernetes-kms`, the binary is
-`bao-kms-provider`, and the Go toolchain is pinned in `.go-version` and
+`bao-kms-provider`, and Go 1.27.1 is pinned in `.go-version` and
 `.ci/versions.yaml`. The repository's `CONTRIBUTING.md` covers commit format
 and the Developer Certificate of Origin.
 
