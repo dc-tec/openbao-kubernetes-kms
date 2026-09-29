@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/test/fakes"
 )
@@ -50,7 +51,7 @@ func TestManagerLogsInAndReturnsToken(t *testing.T) {
 	state := manager.State()
 	if state.Status != StatusAuthenticated ||
 		state.LastTokenSource != tokenSourceMemory ||
-		state.AuthMethod != authMethodJWT {
+		state.AuthMethod != config.AuthMethodJWT {
 		t.Fatalf("unexpected state: %#v", state)
 	}
 }
@@ -67,7 +68,7 @@ func TestManagerStateBeforeLoginHasZeroTTLs(t *testing.T) {
 	if state.TokenTTL != 0 || state.JWTTTL != 0 {
 		t.Fatalf("expected zero TTLs before login, got token=%s jwt=%s", state.TokenTTL, state.JWTTTL)
 	}
-	if state.AuthMethod != authMethodJWT {
+	if state.AuthMethod != config.AuthMethodJWT {
 		t.Fatalf("expected JWT source before login, got %#v", state)
 	}
 }

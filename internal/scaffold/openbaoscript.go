@@ -36,7 +36,7 @@ func ValidateSetup(cfg config.Config, opts SetupOptions) error {
 	if !policyNamePattern.MatchString(opts.PolicyName) || opts.PolicyName == "root" || opts.PolicyName == "default" {
 		problems = append(problems, "policy name must be a dedicated ASCII name without path or list separators")
 	}
-	if cfg.Auth.Method == authMethodJWT {
+	if cfg.Auth.Method == config.AuthMethodJWT {
 		if cfg.Auth.LoginBeforeTokenExpiry >= 30*time.Minute {
 			problems = append(problems, "auth.loginBeforeTokenExpiry must be less than the generated JWT role TTL of 30m")
 		}
@@ -105,7 +105,7 @@ func RenderOpenBaoSetup(cfg config.Config, opts SetupOptions) ([]byte, error) {
 	script.blank()
 
 	switch cfg.Auth.Method {
-	case authMethodJWT:
+	case config.AuthMethodJWT:
 		mountPath := cfg.Auth.JWT.MountPath
 		script.comment("JWT auth through OIDC discovery on the provider's issuer. The issuer must stay")
 		script.comment("reachable when the protected API server is down.")
@@ -132,7 +132,7 @@ func RenderOpenBaoSetup(cfg config.Config, opts SetupOptions) ([]byte, error) {
 		script.command(lit("printf"), lit("'%s\\n'"), val(string(role)), lit("|"),
 			lit("bao"), lit("write"), val(mountPath+"/role/"+cfg.Auth.JWT.Role), lit("-"))
 		script.raw("fi")
-	case authMethodCert:
+	case config.AuthMethodCert:
 		script.comment("Certificate auth: create the cert auth mount and a role bound to the provider")
 		script.comment("certificate identity, attaching the policy above. See Configure: OpenBao auth and policy.")
 	}

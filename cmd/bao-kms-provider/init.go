@@ -21,7 +21,6 @@ import (
 const (
 	initModelSystemd   = "systemd"
 	initModelStaticPod = "static-pod"
-	initAuthMethodJWT  = "jwt"
 
 	initDefaultCACertFile  = "/etc/openbao-kms/tls/ca.crt"
 	initDefaultJWTFile     = "/var/lib/openbao-kms/identity.jwt"
@@ -176,7 +175,7 @@ func loadInitValues(opts initOptions) (config.Config, error) {
 	if err := config.Validate(cfg, config.ValidationOptions{}); err != nil {
 		return config.Config{}, err
 	}
-	if opts.model == initModelStaticPod && cfg.Auth.Method != initAuthMethodJWT {
+	if opts.model == initModelStaticPod && cfg.Auth.Method != config.AuthMethodJWT {
 		return config.Config{}, errInitStaticPodAuth
 	}
 	return cfg, nil
@@ -186,7 +185,8 @@ func applyInitHostLayout(cfg *config.Config, opts initOptions) {
 	if cfg.OpenBao.CACertFile == "" {
 		cfg.OpenBao.CACertFile = initDefaultCACertFile
 	}
-	if cfg.Auth.Method == initAuthMethodJWT && cfg.Auth.JWT.Source == config.JWTSourceFile && cfg.Auth.JWT.JWTFile == "" {
+	if cfg.Auth.Method == config.AuthMethodJWT && cfg.Auth.JWT.Source == config.JWTSourceFile &&
+		cfg.Auth.JWT.JWTFile == "" {
 		cfg.Auth.JWT.JWTFile = initDefaultJWTFile
 		if opts.model == initModelStaticPod {
 			cfg.Auth.JWT.JWTFile = initStaticPodJWTFile

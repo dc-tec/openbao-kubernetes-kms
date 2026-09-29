@@ -15,7 +15,7 @@ import (
 
 func TestBuildAuthManagerRejectsCertAuthInDefaultBuild(t *testing.T) {
 	cfg := config.Config{}
-	cfg.Auth.Method = authMethodCert
+	cfg.Auth.Method = config.AuthMethodCert
 
 	_, err := buildAuthManager(context.Background(), cfg, nil)
 	if !errors.Is(err, auth.ErrAuthConfig) {
@@ -28,8 +28,8 @@ func TestBuildAuthManagerRejectsCertAuthInDefaultBuild(t *testing.T) {
 
 func TestDoctorCertAuthDefaultBuildFailsLocalSourceCheck(t *testing.T) {
 	cfg := config.Config{}
-	cfg.Auth.Method = authMethodCert
-	cfg.Auth.Cert.Source = certSourceSPIFFE
+	cfg.Auth.Method = config.AuthMethodCert
+	cfg.Auth.Cert.Source = config.CertificateSourceSPIFFE
 	report := cli.Report{Name: reportNameDoctor}
 
 	if checkLocalAuthForDoctor(context.Background(), &report, cfg) {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/oauth2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
@@ -20,20 +21,17 @@ const (
 	tokenSourceMemory          = "memory"
 	defaultRefreshRetryBackoff = time.Second
 	defaultMaxRefreshBackoff   = time.Minute
-	authMethodJWT              = "jwt"
-	authMethodCert             = "cert"
-	certSourcePKCS11           = "pkcs11"
-	certSourceSPIFFE           = "spiffe"
-	authStatusOK               = "ok"
-	authStatusError            = "error"
-	authStatusJWTExpired       = "jwt_expired"
-	authStatusJWTNearExpiry    = "jwt_near_expiry"
-	authStatusJWTInvalid       = "jwt_invalid"
-	authStatusCertExpired      = "cert_expired"
-	authStatusCertNearExpiry   = "cert_near_expiry"
-	authStatusCertInvalid      = "cert_invalid"
-	authStatusAuthFailed       = "auth_failed"
-	authStatusNoUsableSession  = "no_usable_session"
+
+	authStatusOK              = "ok"
+	authStatusError           = "error"
+	authStatusJWTExpired      = "jwt_expired"
+	authStatusJWTNearExpiry   = "jwt_near_expiry"
+	authStatusJWTInvalid      = "jwt_invalid"
+	authStatusCertExpired     = "cert_expired"
+	authStatusCertNearExpiry  = "cert_near_expiry"
+	authStatusCertInvalid     = "cert_invalid"
+	authStatusAuthFailed      = "auth_failed"
+	authStatusNoUsableSession = "no_usable_session"
 )
 
 var (
@@ -133,8 +131,8 @@ type JWTLoginSource struct {
 
 // SourceInfo contains bounded method/source labels for redacted auth state.
 type SourceInfo struct {
-	AuthMethod        string
-	CertificateSource string
+	AuthMethod        config.AuthMethod
+	CertificateSource config.CertificateSource
 }
 
 // ManagerOptions contains testable lifecycle behavior settings.
@@ -159,8 +157,8 @@ type Observer interface {
 
 // State is the redacted auth state exposed to status and readiness code.
 type State struct {
-	AuthMethod          string
-	CertificateSource   string
+	AuthMethod          config.AuthMethod
+	CertificateSource   config.CertificateSource
 	Status              Status
 	TokenRenewable      bool
 	TokenExpiresAt      time.Time
@@ -565,7 +563,7 @@ func NewJWTLoginSource(cfg ManagerConfig) (*JWTLoginSource, error) {
 
 // SourceInfo returns bounded metadata for the JWT auth source.
 func (s *JWTLoginSource) SourceInfo() SourceInfo {
-	return SourceInfo{AuthMethod: authMethodJWT}
+	return SourceInfo{AuthMethod: config.AuthMethodJWT}
 }
 
 // Login validates the current JWT file and exchanges it for an OpenBao token.

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/test/fakes"
 )
@@ -37,7 +38,10 @@ type recoveryLoginSource struct {
 func (s recoveryLoginSource) Login(ctx context.Context, _ OpenBaoAuthClient, _ Clock) (LoginResult, error) {
 	return s.login(ctx)
 }
-func (recoveryLoginSource) SourceInfo() SourceInfo { return SourceInfo{AuthMethod: authMethodJWT} }
+
+func (recoveryLoginSource) SourceInfo() SourceInfo {
+	return SourceInfo{AuthMethod: config.AuthMethodJWT}
+}
 
 func recoveryManager(t *testing.T, source recoveryLoginSource, opts ManagerOptions) *Manager {
 	t.Helper()

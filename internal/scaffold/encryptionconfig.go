@@ -5,9 +5,6 @@ import (
 )
 
 const (
-	authMethodJWT  = "jwt"
-	authMethodCert = "cert"
-
 	encryptionConfigAPIVersion = "apiserver.config.k8s.io/v1"
 	encryptionConfigKind       = "EncryptionConfiguration"
 	kmsAPIVersion              = "v2"
