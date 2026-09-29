@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	clocktime "github.com/dc-tec/openbao-kubernetes-kms/internal/clock"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/oauth2"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
@@ -34,7 +35,7 @@ func NewOAuth2LoginSource(cfg ManagerConfig, clientConfig oauth2.Config) (*OAuth
 
 // SourceInfo returns bounded metadata for the JWT auth method.
 func (s *OAuth2LoginSource) SourceInfo() SourceInfo {
-	return SourceInfo{AuthMethod: authMethodJWT}
+	return SourceInfo{AuthMethod: config.AuthMethodJWT}
 }
 
 // Login acquires, checks, and exchanges a JWT within the manager's shared deadline.

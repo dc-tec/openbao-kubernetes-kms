@@ -58,7 +58,7 @@ func TestRenderProviderConfigRoundTripsJWT(t *testing.T) {
 
 func TestRenderProviderConfigRoundTripsPKCS11(t *testing.T) {
 	want := loadConfig(t, systemdSamplePath)
-	want.Auth.Method = authMethodCert
+	want.Auth.Method = config.AuthMethodCert
 	want.Auth.JWT = config.JWTAuthConfig{
 		MinRemainingTTL: want.Auth.JWT.MinRemainingTTL,
 		ClockSkewLeeway: want.Auth.JWT.ClockSkewLeeway,
@@ -83,7 +83,7 @@ func TestRenderProviderConfigRoundTripsPKCS11(t *testing.T) {
 		t.Fatalf("certificate configuration must not render a jwt section:\n%s", rendered)
 	}
 	got := loadContent(t, rendered)
-	if !reflect.DeepEqual(got.Auth.Cert, want.Auth.Cert) || got.Auth.Method != authMethodCert {
+	if !reflect.DeepEqual(got.Auth.Cert, want.Auth.Cert) || got.Auth.Method != config.AuthMethodCert {
 		t.Fatalf("certificate auth changed on round trip:\ngot  %+v\nwant %+v", got.Auth, want.Auth)
 	}
 }
@@ -160,7 +160,7 @@ func TestRenderStaticPodRejectsUnsafeInput(t *testing.T) {
 	if _, err := RenderStaticPod(cfg, StaticPodOptions{Image: sampleImage}); err == nil {
 		t.Fatal("expected a missing socket GID to be rejected")
 	}
-	cfg.Auth.Method = authMethodCert
+	cfg.Auth.Method = config.AuthMethodCert
 	if _, err := RenderStaticPod(cfg, StaticPodOptions{Image: sampleImage, SocketGID: 1234}); err == nil {
 		t.Fatal("expected certificate auth to be rejected")
 	}
@@ -313,7 +313,7 @@ func TestOAuth2ScaffoldRoundTripAndCredentialMount(t *testing.T) {
 	}
 	var credentialMounted bool
 	for _, volume := range manifest.Spec.Volumes {
-		if volume.Name == authMethodJWT {
+		if volume.Name == string(config.AuthMethodJWT) {
 			t.Fatal("OAuth pod depends on a JWT file")
 		}
 		if volume.Name == "oauth2-credentials" {

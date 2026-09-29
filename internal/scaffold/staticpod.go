@@ -149,7 +149,7 @@ func RenderStaticPod(cfg config.Config, opts StaticPodOptions) ([]byte, error) {
 }
 
 func buildStaticPod(cfg config.Config, opts StaticPodOptions) (podManifest, error) {
-	if cfg.Auth.Method != authMethodJWT {
+	if cfg.Auth.Method != config.AuthMethodJWT {
 		return podManifest{}, errors.New(
 			"static pod manifests are generated for JWT auth only; mount certificate auth material by hand")
 	}

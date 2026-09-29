@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 )
 
@@ -48,7 +49,7 @@ type SPIFFEProviderConfig struct {
 type CertLoginSourceConfig struct {
 	MountPath        string
 	Name             string
-	Source           string
+	Source           config.CertificateSource
 	MinRemainingTTL  time.Duration
 	ClockSkewLeeway  time.Duration
 	ExpectedSPIFFEID string
@@ -79,7 +80,7 @@ func NewCertLoginSource(
 // SourceInfo returns bounded metadata for the certificate auth source.
 func (s *CertLoginSource) SourceInfo() SourceInfo {
 	return SourceInfo{
-		AuthMethod:        authMethodCert,
+		AuthMethod:        config.AuthMethodCert,
 		CertificateSource: s.cfg.Source,
 	}
 }
@@ -123,7 +124,7 @@ func (s *CertLoginSource) Login(
 func validateCertLoginSourceConfig(cfg CertLoginSourceConfig) (CertLoginSourceConfig, error) {
 	cfg.MountPath = strings.TrimSpace(cfg.MountPath)
 	cfg.Name = strings.TrimSpace(cfg.Name)
-	cfg.Source = strings.TrimSpace(cfg.Source)
+	cfg.Source = config.CertificateSource(strings.TrimSpace(string(cfg.Source)))
 	cfg.ExpectedSPIFFEID = strings.TrimSpace(cfg.ExpectedSPIFFEID)
 	cfg.TrustDomain = strings.TrimSpace(cfg.TrustDomain)
 	if cfg.MountPath == "" {
@@ -139,7 +140,7 @@ func validateCertLoginSourceConfig(cfg CertLoginSourceConfig) (CertLoginSourceCo
 		return CertLoginSourceConfig{}, fmt.Errorf("%w: auth cert name contains unsafe characters", ErrAuthConfig)
 	}
 	switch cfg.Source {
-	case certSourcePKCS11, certSourceSPIFFE:
+	case config.CertificateSourcePKCS11, config.CertificateSourceSPIFFE:
 	case "":
 		return CertLoginSourceConfig{}, fmt.Errorf("%w: auth certificate source is required", ErrAuthConfig)
 	default:

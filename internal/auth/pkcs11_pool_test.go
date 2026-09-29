@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ThalesGroup/crypto11"
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/test/fakes"
 )
@@ -28,7 +29,7 @@ func TestPKCS11PoolTimeoutSoftHSM(t *testing.T) {
 		{ClientToken: testBaoToken2, LeaseDuration: time.Minute},
 	}}
 	source, err := NewCertLoginSource(CertLoginSourceConfig{
-		MountPath: "auth/cert", Source: certSourcePKCS11, MinRemainingTTL: time.Minute,
+		MountPath: "auth/cert", Source: config.CertificateSourcePKCS11, MinRemainingTTL: time.Minute,
 	}, provider)
 	if err != nil {
 		t.Fatal(err)

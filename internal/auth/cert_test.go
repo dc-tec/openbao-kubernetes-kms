@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/openbao"
 	"github.com/dc-tec/openbao-kubernetes-kms/test/fakes"
 )
@@ -264,7 +265,7 @@ func TestCertLoginSourceLogsInWithValidatedCertificate(t *testing.T) {
 	source, err := NewCertLoginSource(CertLoginSourceConfig{
 		MountPath:        "auth/k8s-workload-a-cert",
 		Name:             "openbao-kms-control-plane",
-		Source:           certSourceSPIFFE,
+		Source:           config.CertificateSourceSPIFFE,
 		MinRemainingTTL:  24 * time.Hour,
 		ClockSkewLeeway:  time.Minute,
 		ExpectedSPIFFEID: testSPIFFEID,
@@ -314,7 +315,7 @@ func TestCertLoginSourceLogsInWithValidatedCertificate(t *testing.T) {
 	if state.CertExpiresAt.IsZero() || state.CertTTL <= 0 {
 		t.Fatalf("expected certificate TTL state, got %#v", state)
 	}
-	if state.AuthMethod != authMethodCert || state.CertificateSource != certSourceSPIFFE {
+	if state.AuthMethod != config.AuthMethodCert || state.CertificateSource != config.CertificateSourceSPIFFE {
 		t.Fatalf("unexpected cert auth source state: %#v", state)
 	}
 }
@@ -328,7 +329,7 @@ func TestCertLoginSourceFailsClosedBeforeOpenBao(t *testing.T) {
 	})
 	source, err := NewCertLoginSource(CertLoginSourceConfig{
 		MountPath:        "auth/k8s-workload-a-cert",
-		Source:           certSourcePKCS11,
+		Source:           config.CertificateSourcePKCS11,
 		MinRemainingTTL:  24 * time.Hour,
 		ClockSkewLeeway:  time.Minute,
 		ExpectedSPIFFEID: "spiffe://example.org/openbao-kms/other",

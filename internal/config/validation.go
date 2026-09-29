@@ -31,12 +31,6 @@ const (
 	maxDebugCorrelationTTL   = time.Hour
 	maxIncidentIDLength      = 64
 	maxConcurrentKMSRequests = 1024
-
-	authMethodJWT  = "jwt"
-	authMethodCert = "cert"
-
-	certSourcePKCS11 = "pkcs11"
-	certSourceSPIFFE = "spiffe"
 )
 
 var (
@@ -169,7 +163,7 @@ func validateRequired(cfg Config) []ValidationProblem {
 	appendRequired(&problems, "openbao.caCertFile", cfg.OpenBao.CACertFile)
 	appendRequired(&problems, "openbao.tlsServerName", cfg.OpenBao.TLSServerName)
 	appendRequired(&problems, "openbao.instanceId", cfg.OpenBao.InstanceID)
-	appendRequired(&problems, "auth.method", cfg.Auth.Method)
+	appendRequired(&problems, "auth.method", string(cfg.Auth.Method))
 	appendAuthRequired(&problems, cfg.Auth)
 	appendRequired(&problems, "transit.mountPath", cfg.Transit.MountPath)
 	appendRequired(&problems, "transit.keyName", cfg.Transit.KeyName)
@@ -182,29 +176,29 @@ func validateRequired(cfg Config) []ValidationProblem {
 
 func appendAuthRequired(problems *[]ValidationProblem, auth AuthConfig) {
 	switch auth.Method {
-	case authMethodJWT:
+	case AuthMethodJWT:
 		appendRequired(problems, "auth.jwt.mountPath", auth.JWT.MountPath)
 		appendRequired(problems, "auth.jwt.role", auth.JWT.Role)
 		appendRequired(problems, "auth.jwt.source", auth.JWT.Source)
 		if auth.JWT.Source == JWTSourceFile {
 			appendRequired(problems, "auth.jwt.jwtFile", auth.JWT.JWTFile)
 		}
-	case authMethodCert:
+	case AuthMethodCert:
 		appendRequired(problems, "auth.cert.mountPath", auth.Cert.MountPath)
-		appendRequired(problems, "auth.cert.source", auth.Cert.Source)
+		appendRequired(problems, "auth.cert.source", string(auth.Cert.Source))
 		appendCertSourceRequired(problems, auth.Cert)
 	}
 }
 
 func appendCertSourceRequired(problems *[]ValidationProblem, cert CertAuthConfig) {
 	switch cert.Source {
-	case certSourcePKCS11:
+	case CertificateSourcePKCS11:
 		appendRequired(problems, "auth.cert.pkcs11.certificateFile", cert.PKCS11.CertificateFile)
 		appendRequired(problems, "auth.cert.pkcs11.modulePath", cert.PKCS11.ModulePath)
 		appendRequired(problems, "auth.cert.pkcs11.tokenLabel", cert.PKCS11.TokenLabel)
 		appendRequired(problems, "auth.cert.pkcs11.keyLabel", cert.PKCS11.KeyLabel)
 		appendRequired(problems, "auth.cert.pkcs11.pinFile", cert.PKCS11.PINFile)
-	case certSourceSPIFFE:
+	case CertificateSourceSPIFFE:
 		if unsupportedSPIFFECertAuthAllowed {
 			appendRequired(problems, "auth.cert.spiffe.workloadAPISocket", cert.SPIFFE.WorkloadAPISocket)
 			appendRequired(problems, "auth.cert.spiffe.spiffeID", cert.SPIFFE.SPIFFEID)
@@ -273,9 +267,9 @@ func validateConcurrencyLimit(problems *[]ValidationProblem, field string, value
 
 func validateAuthValues(problems *[]ValidationProblem, auth AuthConfig) {
 	switch auth.Method {
-	case authMethodJWT:
+	case AuthMethodJWT:
 		validateJWTAuthValues(problems, auth.JWT)
-	case authMethodCert:
+	case AuthMethodCert:
 		validateCertAuthValues(problems, auth.Cert)
 	default:
 		if auth.Method != "" {
@@ -307,9 +301,9 @@ func validateCertAuthValues(problems *[]ValidationProblem, cert CertAuthConfig) 
 	validatePositiveDuration(problems, "auth.cert.minRemainingTtl", cert.MinRemainingTTL)
 	validateNonNegativeDuration(problems, "auth.cert.clockSkewLeeway", cert.ClockSkewLeeway)
 	switch cert.Source {
-	case certSourcePKCS11:
+	case CertificateSourcePKCS11:
 		validatePKCS11AuthValues(problems, cert.PKCS11)
-	case certSourceSPIFFE:
+	case CertificateSourceSPIFFE:
 		if !unsupportedSPIFFECertAuthAllowed {
 			appendProblem(
 				problems,
@@ -418,7 +412,7 @@ func validateFilesystem(cfg Config, opts ValidationOptions) []ValidationProblem 
 	}
 	validateRegularFile(&problems, "openbao.caCertFile", cfg.OpenBao.CACertFile, caFileDisallowedMode)
 	switch cfg.Auth.Method {
-	case authMethodJWT:
+	case AuthMethodJWT:
 		switch cfg.Auth.JWT.Source {
 		case JWTSourceFile:
 			validateRegularFile(&problems, "auth.jwt.jwtFile", cfg.Auth.JWT.JWTFile, jwtFileDisallowedMode)
@@ -429,8 +423,8 @@ func validateFilesystem(cfg Config, opts ValidationOptions) []ValidationProblem 
 				validateRegularFile(&problems, "auth.jwt.oauth2.caCertFile", cfg.Auth.JWT.OAuth2.CACertFile, caFileDisallowedMode)
 			}
 		}
-	case authMethodCert:
-		if cfg.Auth.Cert.Source == certSourcePKCS11 {
+	case AuthMethodCert:
+		if cfg.Auth.Cert.Source == CertificateSourcePKCS11 {
 			validateRegularFile(
 				&problems,
 				"auth.cert.pkcs11.certificateFile",
@@ -574,7 +568,7 @@ func validateSPIFFEID(problems *[]ValidationProblem, value string, trustDomain s
 	}
 	parsed, err := url.Parse(value)
 	if err != nil ||
-		parsed.Scheme != certSourceSPIFFE ||
+		parsed.Scheme != "spiffe" ||
 		parsed.Host == "" ||
 		parsed.RawQuery != "" ||
 		parsed.Fragment != "" ||

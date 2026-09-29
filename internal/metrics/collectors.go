@@ -3,19 +3,17 @@ package metrics
 import (
 	"time"
 
+	"github.com/dc-tec/openbao-kubernetes-kms/internal/config"
 	"github.com/dc-tec/openbao-kubernetes-kms/internal/status"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
-	rotationStateActive     = "active"
-	rotationStatePending    = "pending"
-	rotationStateUnknown    = "unknown"
-	authMethodJWT           = "jwt"
-	authMethodCert          = "cert"
-	certificateSourceNone   = "none"
-	certificateSourcePKCS11 = "pkcs11"
-	certificateSourceSPIFFE = "spiffe"
+	rotationStateActive  = "active"
+	rotationStatePending = "pending"
+	rotationStateUnknown = "unknown"
+
+	certificateSourceNone = "none"
 )
 
 type diagnosticsCollector struct {
@@ -230,25 +228,25 @@ func nonNegativeSeconds(value time.Duration) float64 {
 	return value.Seconds()
 }
 
-func authMethodLabel(value string) string {
-	switch normalize(value) {
-	case authMethodJWT:
-		return authMethodJWT
-	case authMethodCert:
-		return authMethodCert
+func authMethodLabel(value config.AuthMethod) string {
+	switch config.AuthMethod(normalize(string(value))) {
+	case config.AuthMethodJWT:
+		return string(config.AuthMethodJWT)
+	case config.AuthMethodCert:
+		return string(config.AuthMethodCert)
 	default:
 		return statusUnknown
 	}
 }
 
-func certificateSourceLabel(value string) string {
-	switch normalize(value) {
+func certificateSourceLabel(value config.CertificateSource) string {
+	switch config.CertificateSource(normalize(string(value))) {
 	case "":
 		return certificateSourceNone
-	case certificateSourcePKCS11:
-		return certificateSourcePKCS11
-	case certificateSourceSPIFFE:
-		return certificateSourceSPIFFE
+	case config.CertificateSourcePKCS11:
+		return string(config.CertificateSourcePKCS11)
+	case config.CertificateSourceSPIFFE:
+		return string(config.CertificateSourceSPIFFE)
 	case statusUnknown:
 		return certificateSourceNone
 	default:

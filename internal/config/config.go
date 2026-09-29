@@ -31,7 +31,7 @@ const (
 	defaultMaxConcurrentEncrypt   = 32
 	defaultMaxConcurrentDecrypt   = 64
 	defaultOpenBaoTimeout         = 2 * time.Second
-	defaultAuthMethod             = "jwt"
+	defaultAuthMethod             = AuthMethodJWT
 	defaultMinJWTRemainingTTL     = 2 * time.Minute
 	defaultMinCertRemainingTTL    = 24 * time.Hour
 	defaultClockSkewLeeway        = 30 * time.Second
@@ -102,7 +102,7 @@ type OpenBaoConfig struct {
 
 // AuthConfig contains OpenBao authentication settings.
 type AuthConfig struct {
-	Method                 string         `mapstructure:"method"`
+	Method                 AuthMethod     `mapstructure:"method"`
 	LoginBeforeTokenExpiry time.Duration  `mapstructure:"loginBeforeTokenExpiry"`
 	TokenRenewalIncrement  time.Duration  `mapstructure:"tokenRenewalIncrement"`
 	LoginTimeout           time.Duration  `mapstructure:"loginTimeout"`
@@ -157,7 +157,7 @@ type CertAuthConfig struct {
 	Name            string               `mapstructure:"name"`
 	MinRemainingTTL time.Duration        `mapstructure:"minRemainingTtl"`
 	ClockSkewLeeway time.Duration        `mapstructure:"clockSkewLeeway"`
-	Source          string               `mapstructure:"source"`
+	Source          CertificateSource    `mapstructure:"source"`
 	PKCS11          PKCS11CertAuthConfig `mapstructure:"pkcs11"`
 	SPIFFE          SPIFFECertAuthConfig `mapstructure:"spiffe"`
 }
@@ -335,7 +335,7 @@ func Load(runtime *Runtime, opts LoadOptions) (Config, error) {
 // Before OAuth support, jwtFile selected the only JWT source. Explicit source
 // values (including null) and OAuth settings must never trigger file inference.
 func legacyFileJWT(runtime *Runtime, cfg Config) bool {
-	if cfg.Auth.Method != "jwt" || cfg.Auth.JWT.JWTFile == "" {
+	if cfg.Auth.Method != AuthMethodJWT || cfg.Auth.JWT.JWTFile == "" {
 		return false
 	}
 	if runtime.v.InConfig("auth.jwt.oauth2") {

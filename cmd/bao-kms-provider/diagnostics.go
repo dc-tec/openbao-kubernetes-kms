@@ -198,7 +198,7 @@ func jwtValidationOptions(cfg config.Config) auth.JWTValidationOptions {
 
 func checkLocalAuthForDoctor(ctx context.Context, report *cli.Report, cfg config.Config) bool {
 	switch cfg.Auth.Method {
-	case authMethodJWT:
+	case config.AuthMethodJWT:
 		if cfg.Auth.JWT.Source == config.JWTSourceOAuth2 {
 			if _, err := oauth2.ReadClientSecret(cfg.Auth.JWT.OAuth2.ClientSecretFile); err != nil {
 				report.Fail("oauth2.local", "OAuth 2.0 client credential", safeMessage(err))
@@ -213,7 +213,7 @@ func checkLocalAuthForDoctor(ctx context.Context, report *cli.Report, cfg config
 		}
 		report.Pass(checkJWTLocal, "JWT file", "readable and locally valid")
 		return true
-	case authMethodCert:
+	case config.AuthMethodCert:
 		return checkLocalCertificateAuthForDoctor(ctx, report, cfg)
 	default:
 		report.Skip(checkCertLocal, "Certificate identity", "unsupported auth method")
@@ -279,7 +279,7 @@ func authenticateForDiagnostics(
 		report.Fail(checkOpenBaoAuth, openBaoAuthCheckName(cfg), safeMessage(err))
 		return diagnosticClients{}, false
 	}
-	if cfg.Auth.Method == authMethodJWT && cfg.Auth.JWT.Source == config.JWTSourceOAuth2 {
+	if cfg.Auth.Method == config.AuthMethodJWT && cfg.Auth.JWT.Source == config.JWTSourceOAuth2 {
 		report.Pass("oauth2.acquire", "OAuth 2.0 token acquisition", "access token acquired and accepted by OpenBao")
 	}
 	report.Pass(checkOpenBaoAuth, openBaoAuthCheckName(cfg), openBaoAuthPassMessage(cfg))
@@ -305,14 +305,14 @@ func isOAuth2Error(err error) bool {
 }
 
 func openBaoAuthCheckName(cfg config.Config) string {
-	if cfg.Auth.Method == authMethodCert {
+	if cfg.Auth.Method == config.AuthMethodCert {
 		return "OpenBao cert login"
 	}
 	return "OpenBao JWT login"
 }
 
 func openBaoAuthPassMessage(cfg config.Config) string {
-	if cfg.Auth.Method == authMethodCert {
+	if cfg.Auth.Method == config.AuthMethodCert {
 		return "authenticated with configured certificate role"
 	}
 	return "authenticated with configured JWT role"
@@ -320,9 +320,9 @@ func openBaoAuthPassMessage(cfg config.Config) string {
 
 func certificateSourceCheckID(cfg config.Config) string {
 	switch cfg.Auth.Cert.Source {
-	case certSourcePKCS11:
+	case config.CertificateSourcePKCS11:
 		return checkCertPKCS11
-	case certSourceSPIFFE:
+	case config.CertificateSourceSPIFFE:
 		return checkCertSPIFFE
 	default:
 		return checkCertLocal
@@ -331,9 +331,9 @@ func certificateSourceCheckID(cfg config.Config) string {
 
 func certificateSourceCheckTitle(cfg config.Config) string {
 	switch cfg.Auth.Cert.Source {
-	case certSourcePKCS11:
+	case config.CertificateSourcePKCS11:
 		return "PKCS#11 certificate source"
-	case certSourceSPIFFE:
+	case config.CertificateSourceSPIFFE:
 		return "SPIFFE certificate source"
 	default:
 		return "Certificate source"

@@ -167,7 +167,7 @@ func RenderProviderConfig(cfg config.Config) ([]byte, error) {
 			InstanceID:    cfg.OpenBao.InstanceID,
 		},
 		Auth: authConfigFile{
-			Method:                 cfg.Auth.Method,
+			Method:                 string(cfg.Auth.Method),
 			LoginBeforeTokenExpiry: formatDuration(cfg.Auth.LoginBeforeTokenExpiry),
 			TokenRenewalIncrement:  formatDuration(cfg.Auth.TokenRenewalIncrement),
 			LoginTimeout:           formatDuration(cfg.Auth.LoginTimeout),
@@ -211,7 +211,7 @@ func RenderProviderConfig(cfg config.Config) ([]byte, error) {
 	}
 
 	switch cfg.Auth.Method {
-	case authMethodJWT:
+	case config.AuthMethodJWT:
 		audience := cfg.Auth.JWT.ExpectedAudience
 		if audience == nil {
 			audience = []string{}
@@ -235,13 +235,13 @@ func RenderProviderConfig(cfg config.Config) ([]byte, error) {
 				Resources: oauth.Resources, CACertFile: oauth.CACertFile,
 			}
 		}
-	case authMethodCert:
+	case config.AuthMethodCert:
 		file.Auth.Cert = &certAuthFile{
 			MountPath:       cfg.Auth.Cert.MountPath,
 			Name:            cfg.Auth.Cert.Name,
 			MinRemainingTTL: formatDuration(cfg.Auth.Cert.MinRemainingTTL),
 			ClockSkewLeeway: formatDuration(cfg.Auth.Cert.ClockSkewLeeway),
-			Source:          cfg.Auth.Cert.Source,
+			Source:          string(cfg.Auth.Cert.Source),
 			PKCS11: pkcs11AuthFile{
 				CertificateFile: cfg.Auth.Cert.PKCS11.CertificateFile,
 				ModulePath:      cfg.Auth.Cert.PKCS11.ModulePath,
