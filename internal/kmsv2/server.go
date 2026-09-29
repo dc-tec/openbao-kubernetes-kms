@@ -417,6 +417,7 @@ func statusResponse(cached CachedStatus) *kmsapi.StatusResponse {
 	if healthz == "" {
 		healthz = HealthUnhealthy
 	}
+	// Preserve custom unhealthy values; only healthy responses need snapshot validation.
 	if healthz != HealthOK {
 		keyID = ""
 	}
