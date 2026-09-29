@@ -12,6 +12,10 @@ updates:
     labels:
       - dependencies
       - go
+    ignore:
+      # GO-2026-6443 affects this release; keep the patched 1.83.2 pin.
+      - dependency-name: google.golang.org/grpc
+        versions: ["1.84.0"]
     groups:
       go-runtime:
         patterns:
