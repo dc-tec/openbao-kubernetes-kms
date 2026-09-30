@@ -51,7 +51,6 @@ systemd-install-check: ## Exercise the documented tarball installation in a disp
 	docker run --rm --platform "$(IMAGE_PLATFORM)" --network=none --user 0:0 \
 		--mount "type=bind,source=$(CURDIR),target=/src,readonly" \
 		--env KMS_INSTALL_TEST_CONTAINER=1 --env "BUNDLE_ARCHIVE=$(BUNDLE_ARCHIVE)" \
-		--env "APPLY_PREVIEW_FIX=$(APPLY_PREVIEW_FIX)" \
 		--workdir /src \
 		"$$(cat "$$tmp/image-id")" bash test/deployment/systemd-install.sh
 

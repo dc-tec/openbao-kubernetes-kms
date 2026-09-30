@@ -7,6 +7,7 @@ verifiedBy:
   - .github/workflows/release.yml
   - .github/workflows/reusable-build.yml
   - hack/tools/release_bundle/main.go
+  - hack/install/download-release.sh
 ---
 
 The provider runs on the Kubernetes API server boot path with access to the
@@ -32,6 +33,73 @@ Each release publishes:
 - a reproducibility report,
 - `provenance-index.json`, an index of the provenance material.
 
+## Verify build provenance
+
+[Download the release](/docs/get-started/download/#download-and-verify-the-artifact)
+verifies the checksum signature and the artifact checksum with `cosign`. The
+build-provenance attestation adds that GitHub-hosted runners built the artifact
+from the selected tag. Checking it needs an authenticated GitHub CLI (`gh`).
+From the download directory:
+
+```sh
+gh attestation verify "./${ARTIFACT}" \
+  --repo "${REPO}" \
+  --signer-workflow "${REPO}/.github/workflows/release.yml" \
+  --source-ref "refs/tags/${VERSION}" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --deny-self-hosted-runners
+```
+
+The command exits with status `0` and names the expected repository, workflow,
+source tag, and artifact digest. Stop if it fails.
+
+## Transfer to a disconnected environment
+
+Perform download and signature/provenance verification on a connected staging
+host. Transfer the selected artifact, `checksums.txt`, `checksums.txt.bundle`,
+and `selected-checksum.txt` together over your approved transfer path. On the
+destination, run:
+
+```sh
+sha256sum --check selected-checksum.txt
+```
+
+Every listed file must report `OK`. This checks transfer integrity against the
+checksum trusted on the staging host; it does not repeat signature verification.
+Keep the verified originals and the verification output in your release record.
+
+For static pods, verify the OCI image as described in
+[Run as a static pod](/docs/get-started/static-pod/#step-2-verify-the-provider-image).
+On a connected Linux staging host with containerd, export the selected platform:
+
+```sh
+IMAGE=$(cat image-ref.txt)
+sudo ctr -n k8s.io images pull --platform "linux/${ARCH}" "$IMAGE"
+sudo ctr -n k8s.io images export --platform "linux/${ARCH}" provider-image.tar "$IMAGE"
+sha256sum provider-image.tar > provider-image.tar.sha256
+```
+
+Transfer the image archive and its checksum with the kit. On each matching
+control-plane host, verify the checksum and preload the image:
+
+```sh
+sha256sum --check provider-image.tar.sha256
+sudo ctr -n k8s.io images import --platform "linux/${ARCH}" provider-image.tar
+sudo crictl inspecti "$IMAGE" >/dev/null
+```
+
+Keep the digest reference in the generated manifest and `IfNotPresent` pull
+policy. If using a registry mirror, copy all platforms while preserving image
+digests, verify the destination digest against `image-ref.txt`, then pass that
+mirror repository with the same digest to `init --image`. Stop if the digest
+changes; a repackaged image is not the verified release image.
+
+Transfer the selected release's instructions, OS dependencies, TLS trust
+bundles, reviewed generated files, and independently provisioned credentials
+through their respective trusted channels. The kit does not supply kubelet,
+containerd, systemd, OpenBao, or the issuer. Check DNS, time synchronization,
+OpenBao, and issuer reachability without Internet access or the protected API.
+
 ## What each check proves
 
 | Check | Proves | Identity it checks |
@@ -43,7 +111,9 @@ Each release publishes:
 | `gh attestation verify` on the image | The image was built by the reusable build workflow from the selected tag on GitHub-hosted runners. | `reusable-build.yml`, source ref `refs/tags/<version>` |
 
 The checksum check only means something after the signature check succeeds.
-Run all checks for the artifact you install, and stop if any check fails.
+The signature and checksum checks are required; the attestation checks are
+recommended where an authenticated GitHub CLI is available. Stop if any check
+you run fails.
 
 ## Rules
 

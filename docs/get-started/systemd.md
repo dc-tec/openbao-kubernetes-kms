@@ -1,8 +1,8 @@
 ---
 title: Run with systemd
 description: "Install the provider as a hardened systemd service on each control-plane node, configure it, validate it with doctor, and start it."
-eyebrow: Get started · Step 7
-weight: 70
+eyebrow: Get started · Step 5
+weight: 50
 verifiedBy:
   - deploy/systemd/bao-kms-provider.service
   - deploy/package/linux
@@ -25,9 +25,10 @@ runs as the non-root `openbao-kms` user, listens on
   `identity.jwt` from your identity provisioning process. The JWT must be
   renewable without the protected API server.
 
-For native token acquisition, follow [OAuth 2.0 client credentials](/docs/configure/oauth2/).
-Set `auth.jwt.source: oauth2` and stage the client secret and issuer CA bundle
-instead of `identity.jwt` in the steps below. The service unit supports both sources.
+If your values use `auth.jwt.source: oauth2`, stage the client secret and
+issuer CA bundle instead of `identity.jwt` in the steps below; see
+[OAuth 2.0 client credentials](/docs/configure/oauth2/). The service unit
+supports both sources.
 
 ## Step 1: Install the package or tarball
 
@@ -82,29 +83,7 @@ systemctl daemon-reload
 
 The package and tarball leave the service disabled and stopped.
 
-## Step 2: Correct directory access on preview releases
-
-The packages and tarballs for `0.1.0-preview.1` and `0.1.0-preview.2` create
-`/etc/openbao-kms` with group `root`, so the service user cannot read its
-configuration. On these releases, run this block as root. It adds a persistent
-tmpfiles override so the fix survives reboot. If an override already exists,
-update its `/etc/openbao-kms` entry by hand instead.
-
-<!-- systemd-preview-permissions -->
-```sh
-set -eu
-test ! -e /etc/tmpfiles.d/openbao-kms.conf
-install -d -o root -g root -m 0755 /etc/tmpfiles.d
-sed 's@^d /etc/openbao-kms 0750 root root -$@d /etc/openbao-kms 0750 root openbao-kms -@' \
-  /usr/lib/tmpfiles.d/openbao-kms.conf > /etc/tmpfiles.d/openbao-kms.conf
-chmod 0644 /etc/tmpfiles.d/openbao-kms.conf
-systemd-tmpfiles --create /etc/tmpfiles.d/openbao-kms.conf
-```
-
-Remove the override once an installed release sets the group to `openbao-kms`
-in `/usr/lib/tmpfiles.d/openbao-kms.conf`, unless it holds other local changes.
-
-## Step 3: Write the provider configuration
+## Step 2: Write the provider configuration
 
 Copy the configuration from your reviewed installation directory:
 
@@ -117,7 +96,7 @@ cluster identity. Keep the resolved values for subsequent nodes. For manual
 configuration, use the packaged example and the
 [configuration reference](/docs/reference/configuration/).
 
-## Step 4: Place the runtime files
+## Step 3: Place the runtime files
 
 For native OAuth, create its credential directory and install the client secret
 as root. Use the path from your generated configuration. For the default path:
@@ -147,7 +126,7 @@ The `test` lines stop the block on a node that already has a deployment. For
 an existing node, follow [Operate: Upgrade](/docs/operate/upgrade/) instead and
 keep its identity and state.
 
-## Step 5: Validate as the service user
+## Step 4: Validate as the service user
 
 Run the checks as `openbao-kms`, so an unreadable file fails here the same way
 it would fail in the service.
@@ -172,7 +151,7 @@ identity fingerprint. `doctor` failures on a new setup are usually policy or
 auth problems; see [Operate: Troubleshooting](/docs/operate/troubleshooting/)
 and [Reference: CLI](/docs/reference/cli/#doctor).
 
-## Step 6: Start the service
+## Step 5: Start the service
 
 ```sh
 systemctl enable --now bao-kms-provider.service

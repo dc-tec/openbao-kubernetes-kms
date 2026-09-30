@@ -15,7 +15,7 @@ verifiedBy:
 The provider reads one YAML file, `/etc/openbao-kms/config.yaml` by default.
 Start from `deploy/config/provider-systemd.yaml` or
 `deploy/config/provider-static-pod.yaml`, and see
-[Generate installation files](/docs/get-started/plan-values/#generate-the-files-with-init)
+[Generate installation files](/docs/get-started/plan-values/#generate-the-files)
 for the fields every deployment changes. `bao-kms-provider config schema`
 prints the JSON Schema, which rejects unknown fields.
 

@@ -76,7 +76,7 @@ comma, period, parentheses, or rewrite the sentence.
 - State each caveat, version matrix, or list of values on the page that owns
   it, and link to that page elsewhere. Support caveats belong to
   [Compatibility](/docs/reference/compatibility/), identity-bearing values to
-  [Plan identity values](/docs/get-started/plan-values/), and incident rules to
+  [Generate installation files](/docs/get-started/plan-values/), and incident rules to
   [Disaster recovery](/docs/operate/disaster-recovery/#during-an-incident).
 - Do not open a page by restating its description. The template already shows
   it as the lede.

@@ -258,7 +258,7 @@ bao-kms-provider init --values values.yaml --out ./generated --new-key
 
 | Flag | Meaning |
 |---|---|
-| `--values <path>` | Required. A file in the provider configuration format with the values you choose; see [Plan identity values](/docs/get-started/plan-values/#generate-the-files-with-init). |
+| `--values <path>` | Required. A file in the provider configuration format with the values you choose; see [Generate installation files](/docs/get-started/plan-values/#write-the-values-file). |
 | `--out <dir>` | Required. Output directory; it must be absent or empty. |
 | `--model systemd\|static-pod` | Deployment model. Default: `systemd`. |
 | `--new-key` | Generate `transit.keyIdScope.keyLineageId` for a Transit key you are about to create. Rejected if the values file already sets one. |
@@ -275,9 +275,14 @@ With JWT auth it also needs `auth.jwt.expectedIssuer`,
 Generation ignores environment overrides and rejects runtime configuration flags;
 set them in `--values` instead. The generated JWT role TTL is 30 minutes;
 `auth.loginBeforeTokenExpiry` must be shorter. Policy names must be dedicated
-ASCII names without path or list separators; `root` and `default` are reserved.
-See [Generate installation files](/docs/get-started/plan-values/) for mount
-constraints and [Prepare OpenBao](/docs/get-started/openbao/) for setup phases.
+ASCII names made of letters, digits, underscores, dots, and hyphens, starting
+with a letter, digit, or underscore; `root` and `default` are reserved. JWT role
+names follow the same path-component rules as Transit key names. Audiences are
+written to the role as a JSON array, so commas inside an audience are kept.
+For static pods, CA and credential files must live in dedicated directories
+outside the socket and state directories; `init` rejects broad parent mounts
+such as `/` and `/etc`, and writable directory overlaps.
+See [Prepare OpenBao](/docs/get-started/openbao/) for setup phases.
 
 | File | Contents |
 |---|---|

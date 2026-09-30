@@ -14,6 +14,15 @@ full picture, see
 the [Kubernetes KMS provider docs](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/),
 and [OpenBao Transit](https://openbao.org/docs/secrets/transit/).
 
+## Why a provider is needed
+
+OpenBao Transit encrypts and decrypts caller-supplied data, but OpenBao does
+not implement the Kubernetes KMS gRPC protocol. The API server calls a local
+KMS plugin over a Unix domain socket and never calls Transit directly.
+`bao-kms-provider` adapts the two protocols and adds the Kubernetes-specific
+rules for `key_id` stability, additional authenticated data (AAD) binding,
+decrypt validation, and rotation.
+
 ## Kubernetes KMS v2
 
 - The API server encrypts resources listed in its `EncryptionConfiguration`

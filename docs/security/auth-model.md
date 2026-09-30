@@ -13,8 +13,8 @@ verifiedBy:
 
 The provider logs in to OpenBao with a JSON Web Token (JWT) by default, or with
 a client certificate from a PKCS#11 token in a separate opt-in build. For the
-setup commands, see [Prepare OpenBao](/docs/get-started/openbao/#step-5-configure-jwt-auth)
-and [Configure: OpenBao auth and policy](/docs/configure/openbao-auth/); for the
+setup commands, see [Prepare OpenBao](/docs/get-started/openbao/) and
+[Configure: OpenBao auth and policy](/docs/configure/openbao-auth/); for the
 required controls, see [Hardening](/docs/security/hardening/#auth-material).
 
 ## Supported auth methods

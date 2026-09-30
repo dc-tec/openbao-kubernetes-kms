@@ -56,10 +56,6 @@ extract_commands README.md systemd-bundle-install > "$work/archive-install.sh"
 cmp "$work/install.sh" "$work/archive-install.sh"
 bash "$work/install.sh"
 sh /src/test/deployment/check-architecture.sh "$ARCH" /usr/bin/bao-kms-provider
-if [[ "${APPLY_PREVIEW_FIX:-false}" == true ]]; then
-  extract_commands "$repo/docs/get-started/systemd.md" systemd-preview-permissions > "$work/permissions.sh"
-  bash "$work/permissions.sh"
-fi
 
 # Run the documented initial file placement with non-secret fixtures.
 cp config/provider-systemd.yaml provider.yaml
