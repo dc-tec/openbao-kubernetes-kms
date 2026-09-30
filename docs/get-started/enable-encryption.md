@@ -1,8 +1,8 @@
 ---
 title: Enable encryption
 description: "Stage KMS readers on every API server before enabling encrypted writes in a fresh preview cluster."
-eyebrow: Get started · Step 8
-weight: 80
+eyebrow: Get started · Step 6
+weight: 60
 verifiedBy:
   - deploy/kubernetes/encryption-config.yaml
   - hack/tools/harvester_lab/main.go
@@ -21,8 +21,8 @@ It does not migrate existing encrypted data or retire old providers.
 - Identify every API-server endpoint and a kubeconfig that can reach each one
   directly, with valid TLS verification.
 - Inspect each API server's arguments. If `--encryption-provider-config`
-  already points to a configuration, stop. Do not overwrite it with this
-  fresh-install example.
+  already points to a configuration, stop. Do not overwrite it with these
+  fresh-install files.
 - Save the API-server manifests or service configuration so you can restore
   the configuration before KMS writes begin.
 
@@ -31,31 +31,19 @@ must target each API server directly.
 
 ## Step 1: Stage the reader configuration
 
-Write `/etc/kubernetes/openbao-kms/encryption-config.yaml` on every
-control-plane node. Put `identity` first so writes remain plaintext while
-servers acquire the KMS reader:
+On every control-plane node, install the phase 1 file from
+[Generate installation files](/docs/get-started/plan-values/). It lists
+`identity` first, so writes stay plaintext while each API server gains the KMS
+reader:
 
-```yaml
-apiVersion: apiserver.config.k8s.io/v1
-kind: EncryptionConfiguration
-resources:
-  - resources:
-      - secrets
-    providers:
-      - identity: {}
-      - kms:
-          apiVersion: v2
-          name: openbao-kms-workload-a
-          endpoint: unix:///run/openbao-kms/kms.sock
-          timeout: 3s
+```sh
+sudo install -D -m 0644 -o root -g root generated/encryption-config-readers.yaml \
+  /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
 
-If you used `init`, copy `generated/encryption-config-readers.yaml` for this
-phase instead of writing the example by hand.
-
-Set `kms.name` to `transit.keyIdScope.providerName` and `kms.endpoint` to
-`unix://` plus `server.socketPath`. Keep those values identical across the
-configuration files. KMS v1 is not implemented.
+`init` cross-checks the provider name and socket in this file against
+`config.yaml`. For the fields, see
+[Reference: EncryptionConfiguration](/docs/reference/encryption-config/).
 
 Run the configuration check on each node:
 
@@ -130,18 +118,12 @@ configuration. No KMS writes have been enabled by this procedure yet.
 
 ## Step 3: Enable KMS writes
 
-After every server has the KMS reader, install the generated
-`encryption-config.yaml`, or change the provider order on one node
-at a time to:
+After every server has the KMS reader, install the phase 2 file on one node at
+a time. It lists KMS first and keeps `identity` second:
 
-```yaml
-providers:
-  - kms:
-      apiVersion: v2
-      name: openbao-kms-workload-a
-      endpoint: unix:///run/openbao-kms/kms.sock
-      timeout: 3s
-  - identity: {}
+```sh
+sudo install -m 0644 -o root -g root generated/encryption-config.yaml \
+  /etc/kubernetes/openbao-kms/encryption-config.yaml
 ```
 
 Restart that API server, or wait for a successful configuration reload if you
@@ -157,19 +139,21 @@ configuration with no KMS reader.
 
 ## Step 4: Check a write through every API server
 
-Create a probe through one API server, then read it through each endpoint:
+Create a probe Secret with a value you can search for, through one API server,
+then read it through each endpoint:
 
 ```sh
-kubectl --server="${API_SERVER}" create secret generic openbao-kms-bootstrap-probe \
-  --from-literal=value=probe
-kubectl --server="${API_SERVER}" get secret openbao-kms-bootstrap-probe \
+kubectl --server="${API_SERVER}" create secret generic openbao-kms-first-encrypt \
+  --from-literal=value='probe-do-not-store-plaintext'
+kubectl --server="${API_SERVER}" get secret openbao-kms-first-encrypt \
   -o jsonpath='{.data.value}' | base64 -d
 ```
 
-The read prints `probe`. Change `API_SERVER` for every node and repeat the
-read. To check writes through the other servers, delete the probe and repeat
-creation through the next endpoint, then repeat the reads through every node.
-Delete the probe when finished.
+The read prints `probe-do-not-store-plaintext`. Change `API_SERVER` for every
+node and repeat the read. To check writes through the other servers, delete the
+probe and create it through the next endpoint, then read it through every node
+again. Leave the last probe in place for
+[Verify encryption](/docs/get-started/verify/).
 
 Keep `identity` as the second provider throughout this preview evaluation.
 Existing plaintext objects remain readable; they are not rewritten by this

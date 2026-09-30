@@ -28,7 +28,7 @@ Back up together, and keep for as long as any etcd backup can need them:
 - deployment manifests or systemd units.
 
 Record with every backup set the identity values from
-[Plan identity values](/docs/get-started/plan-values/), the active Transit key
+[Generate installation files](/docs/get-started/plan-values/), the active Transit key
 version, the active `key_id` hash, and the provider version.
 
 Never raise OpenBao `min_decryption_version` above a version that a retained

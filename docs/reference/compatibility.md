@@ -179,7 +179,7 @@ the backend key and existing encrypted data.
 New static-pod scaffolds place file JWTs in
 `/var/lib/openbao-kms/credentials/identity.jwt` and mount the directory read-only
 so atomic replacement is visible. Existing file mounts need a one-time
-[manifest and credential-path migration](/docs/get-started/static-pod/#migrate-an-existing-jwt-file-mount).
+[manifest and credential-path migration](/docs/operate/upgrade/#migrate-a-static-pod-jwt-file-mount).
 The generator rejects JWT directories that overlap provider state or socket
 directories. Existing deployments are not changed automatically. Systemd
 paths and the encryption format are unchanged.

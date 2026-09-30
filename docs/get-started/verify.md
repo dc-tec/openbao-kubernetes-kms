@@ -1,8 +1,8 @@
 ---
 title: Verify encryption
 description: "Confirm that etcd stores the probe Secret as KMS v2 ciphertext and that every provider reports the same healthy key."
-eyebrow: Get started · Step 9
-weight: 90
+eyebrow: Get started · Step 7
+weight: 70
 verifiedBy:
   - test/dev-env/scripts/verify-kms.sh
   - internal/metrics
@@ -10,25 +10,13 @@ verifiedBy:
 ---
 
 A Secret that reads back through `kubectl` proves only that the API server
-works. This step checks that the probe is stored as ciphertext and that every
-provider is healthy. It does not prove complete encryption of existing data.
-Keep the `identity` reader for plaintext objects in this preview evaluation.
+works. This page checks that the `openbao-kms-first-encrypt` probe from
+[Enable encryption](/docs/get-started/enable-encryption/#step-4-check-a-write-through-every-api-server)
+is stored as ciphertext and that every provider is healthy. It does not prove
+complete encryption of existing data. Keep the `identity` reader for plaintext
+objects in this preview evaluation.
 
-## Step 1: Create a probe Secret
-
-Create a Secret with a value you can search for, and read it back:
-
-```sh
-kubectl create secret generic openbao-kms-first-encrypt \
-  --from-literal=value='probe-do-not-store-plaintext'
-kubectl get secret openbao-kms-first-encrypt -o jsonpath='{.data.value}' | base64 -d
-```
-
-The second command prints `probe-do-not-store-plaintext`. If it fails, check
-the API server log for the provider error class; see
-[Reference: Observability](/docs/reference/observability/).
-
-## Step 2: Check the stored value in etcd
+## Step 1: Check the stored value in etcd
 
 On a control-plane node, read the Secret straight from etcd with the `etcdctl`
 inside the etcd static pod, and check the stored bytes without printing them:
@@ -53,7 +41,7 @@ plaintext appears nowhere in the stored value. The commands assume kubeadm's
 stacked etcd; for external etcd, run `etcdctl` with that cluster's client
 certificates.
 
-## Step 3: Check the provider on every node
+## Step 2: Check the provider on every node
 
 On each control-plane node, check the provider's health endpoints and the
 active `key_id` hash:
@@ -96,7 +84,7 @@ curl -fsS http://127.0.0.1:8081/metrics | grep -E 'openbao_kms_grpc_requests_tot
 The encrypt counter increases when you write a Secret. Decrypt counts can stay
 flat because the API server serves many reads from its cache.
 
-## Step 4: Clean up
+## Step 3: Clean up
 
 ```sh
 kubectl delete secret openbao-kms-first-encrypt

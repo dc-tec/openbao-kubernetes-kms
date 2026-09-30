@@ -1,8 +1,8 @@
 ---
 title: Run as a static pod
 description: "Verify and preload the provider image, prepare host files with numeric ownership, validate with doctor, and start the provider as a kubelet-managed static pod on each control-plane node."
-eyebrow: Get started · Step 7
-weight: 70
+eyebrow: Get started · Step 5
+weight: 50
 verifiedBy:
   - deploy/static-pod/bao-kms-provider.yaml
   - deploy/config/provider-static-pod.yaml
@@ -20,20 +20,21 @@ Everything the provider needs comes from host files.
 
 ## Before you begin
 
+- Use a kubeadm-style control plane that runs `kube-apiserver` as a static pod
+  on containerd.
 - Download and verify the static-pod bundle in
   [Download the release](/docs/get-started/download/), and keep that shell with
-  `VERSION`, `ARCH`, `REPO`, and `WORKFLOW_IDENTITY` set.
-- Have the values from [Plan identity values](/docs/get-started/plan-values/)
-  and the lineage ID from [Prepare OpenBao](/docs/get-started/openbao/).
+  `VERSION` and `ARCH` set.
+- Have the reviewed output of `init --model static-pod` from
+  [Generate installation files](/docs/get-started/plan-values/), and complete
+  [Prepare OpenBao](/docs/get-started/openbao/).
 - Obtain the OpenBao CA bundle as `ca.crt` and the provider host JWT as
   `identity.jwt`. The JWT must be renewable without the protected API server.
 
-For native [OAuth 2.0 client credentials](/docs/configure/oauth2/), set
-`auth.jwt.source: oauth2` and generate the manifest with `init --model static-pod`.
-Stage the client secret and issuer CA bundle instead of `identity.jwt`.
-The generated pod mounts the credential directory read-only for secret rotation.
-- Use a kubeadm-style control plane that runs `kube-apiserver` as a static pod
-  on containerd.
+If your values use `auth.jwt.source: oauth2`, stage the client secret and
+issuer CA bundle instead of `identity.jwt`; see
+[OAuth 2.0 client credentials](/docs/configure/oauth2/). The generated pod
+mounts the credential directory read-only for secret rotation.
 
 ## Step 1: Extract the bundle
 
@@ -53,18 +54,24 @@ sudo install -o root -g root -m 0755 bin/bao-kms-provider /usr/bin/bao-kms-provi
 
 ## Step 2: Verify the provider image
 
-Read `IMAGE` from the verified kit, then verify the image signature from the release workflow and
-its build provenance from the reusable build workflow:
+Read `IMAGE` from the verified kit, then verify that the release workflow
+signed the image digest:
 
 ```sh
 IMAGE=$(cat image-ref.txt)
+REPO=dc-tec/openbao-kubernetes-kms
 
 cosign verify \
   --new-bundle-format=true \
-  --certificate-identity "${WORKFLOW_IDENTITY}" \
+  --certificate-identity "https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${VERSION}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   "${IMAGE}"
+```
 
+The command exits with status `0`. Stop if it fails. With an authenticated
+GitHub CLI, also verify the image's build provenance:
+
+```sh
 gh attestation verify "oci://${IMAGE}" \
   --repo "${REPO}" \
   --signer-workflow "${REPO}/.github/workflows/reusable-build.yml" \
@@ -72,8 +79,6 @@ gh attestation verify "oci://${IMAGE}" \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
   --deny-self-hosted-runners
 ```
-
-Both commands exit with status `0`. Stop if either fails.
 
 ## Step 3: Preload the image
 
@@ -90,9 +95,10 @@ for rollback.
 
 ## Step 4: Prepare the host
 
-Create the socket group if it does not exist and record its numeric group ID
-(GID). The distroless image has no host group names, so the pod and the
-provider configuration both use this number:
+Read the numeric socket group ID (GID). The distroless image has no host group
+names, so the pod and the provider configuration both use this number. The
+command creates the group if you skipped it in
+[Read the static-pod socket GID](/docs/get-started/plan-values/#read-the-static-pod-socket-gid):
 
 ```sh
 getent group openbao-kms-socket >/dev/null || sudo groupadd --system openbao-kms-socket
@@ -129,10 +135,10 @@ Use the reviewed output from `init --model static-pod`:
 cp generated/config.yaml provider.yaml
 ```
 
-Check that `server.socketGroup` equals the target host's `SOCKET_GID`, and that
-the shared fingerprint matches `generated/installation.json`. If host paths or
-the GID differ, regenerate from the resolved values without `--new-key` as
-shown in [Generate installation files](/docs/get-started/plan-values/).
+Check that `server.socketGroup` equals this host's `SOCKET_GID`, and that the
+fingerprint matches `generated/installation.json`. If host paths or the GID
+differ, generate this node's files as shown in
+[Reuse the identity on other nodes](/docs/get-started/plan-values/#reuse-the-identity-on-other-nodes).
 
 ## Step 6: Place the runtime files
 
@@ -235,26 +241,3 @@ the provider's boot path. If any of them is broken, the provider does not
 start and the API server cannot decrypt existing resources. For single-node
 control planes, prefer [Run with systemd](/docs/get-started/systemd/). For the
 full hardening surface, see [Security: Hardening](/docs/security/hardening/).
-
-## Migrate an existing JWT file mount
-
-For manifests that mount `/var/lib/openbao-kms/identity.jwt` as a file, update
-one control-plane node at a time. Schedule an API outage for a single-node
-control plane. The provider must restart once to change its mounts.
-
-1. Create `/var/lib/openbao-kms/credentials` with the permissions in Step 4.
-2. Configure the host issuer agent to publish a current JWT as
-   `/var/lib/openbao-kms/credentials/identity.jwt` with the permissions in Step 6.
-3. Change `auth.jwt.jwtFile` in the host configuration to the new path. Preserve
-   all identity values and the state directory.
-4. Update both the JWT volume and its mount to the credential directory,
-   with hostPath type `Directory` and a read-only mount. Regenerate the manifest
-   with `init --model static-pod` or use the current sample. The generator
-   rejects credential directories that overlap state or socket directories.
-5. Install the updated configuration and manifest. Wait for the new container
-   and HTTP 200 from `/ready`. Verify an existing encrypted resource remains
-   readable before continuing to the next node.
-
-Subsequent atomic JWT replacements do not require a provider restart. This
-path change does not change key IDs, AAD, Transit keys, or encrypted data.
-Existing systemd JWT paths remain supported.

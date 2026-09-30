@@ -31,7 +31,7 @@ For why promotion works this way, see
 ## Step 1: Rotate the Transit key
 
 As an OpenBao administrator, using the values from
-[Plan identity values](/docs/get-started/plan-values/):
+[Generate installation files](/docs/get-started/plan-values/):
 
 ```sh
 bao write -f "${TRANSIT_MOUNT}/keys/${KEY_NAME}/rotate"

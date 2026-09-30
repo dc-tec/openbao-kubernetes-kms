@@ -319,7 +319,7 @@ func TestPublicDeploymentSurfacesAvoidFloatingInputs(t *testing.T) {
 	publicSurfaces := []string{
 		"README.md",
 		"docs/get-started/download.md",
-		"docs/get-started/deployment-model.md",
+		"docs/get-started/before-you-begin.md",
 		"docs/get-started/static-pod.md",
 		"docs/get-started/systemd.md",
 		"deploy/README.md",

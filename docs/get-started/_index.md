@@ -19,15 +19,13 @@ evaluation. Do not protect production control planes with it.
 
 | Step | Page | Outcome |
 |---|---|---|
-| 1 | [What the provider does](/docs/get-started/overview/) | You know what the provider protects, what it does not, and whether your platform fits. |
-| 2 | [Choose a deployment model](/docs/get-started/deployment-model/) | You pick systemd or static pod for the control-plane nodes. |
-| 3 | [Choose credentials](/docs/get-started/credentials/) | The issuer and credential renewal work independently of the protected API. |
-| 4 | [Download the release](/docs/get-started/download/) | You select one version and the matching binary or image. |
-| 5 | [Generate installation files](/docs/get-started/plan-values/) | One values file produces matching configs, policy, setup commands, and an installation record. |
-| 6 | [Prepare OpenBao](/docs/get-started/openbao/) | An administrator reviews and runs the generated setup once. |
-| 7 | [Run with systemd](/docs/get-started/systemd/) or [Run as a static pod](/docs/get-started/static-pod/) | The provider runs on every control-plane node and passes local diagnostics. |
-| 8 | [Enable encryption](/docs/get-started/enable-encryption/) | Every API server gets a KMS reader before any enables KMS writes. |
-| 9 | [Verify encryption](/docs/get-started/verify/) | The probe is stored as ciphertext and reads through every API server. |
+| 1 | [Before you begin](/docs/get-started/before-you-begin/) | You know whether the provider fits, and you pick a deployment model and a credential source. |
+| 2 | [Download the release](/docs/get-started/download/) | You have one verified release artifact. |
+| 3 | [Generate installation files](/docs/get-started/plan-values/) | One values file produces matching configs, policy, OpenBao setup, and an installation record. |
+| 4 | [Prepare OpenBao](/docs/get-started/openbao/) | An administrator reviews and runs the generated setup once. |
+| 5 | [Run with systemd](/docs/get-started/systemd/) or [Run as a static pod](/docs/get-started/static-pod/) | The provider runs on every control-plane node and passes its checks. |
+| 6 | [Enable encryption](/docs/get-started/enable-encryption/) | Every API server reads KMS before any writes it, and a probe Secret reads through each one. |
+| 7 | [Verify encryption](/docs/get-started/verify/) | etcd stores the probe as ciphertext and every provider reports the same key. |
 
 ## What you need
 
@@ -38,8 +36,8 @@ evaluation. Do not protect production control planes with it.
   and an administrator token for it.
 - A JWT issuer for the provider's host credential that keeps working when the
   protected API server is down.
-- On your workstation: the `bao` CLI, `cosign`, and an authenticated GitHub
-  CLI (`gh`).
+- On your workstation: the `bao` CLI, `curl`, and `cosign`. An authenticated
+  GitHub CLI (`gh`) is optional, for build provenance checks.
 
 To try the provider without a cluster or OpenBao of your own, contributors
 maintain a local lab that builds the provider from source and wires it into a

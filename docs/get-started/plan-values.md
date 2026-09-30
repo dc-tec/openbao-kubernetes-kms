@@ -1,8 +1,8 @@
 ---
 title: Generate installation files
 description: "Enter shared identity values once and generate a reviewable installation directory with init."
-eyebrow: Get started · Step 5
-weight: 50
+eyebrow: Get started · Step 3
+weight: 30
 verifiedBy:
   - cmd/bao-kms-provider/init.go
   - cmd/bao-kms-provider/init_record.go
@@ -10,15 +10,16 @@ verifiedBy:
   - deploy/config/init-values-oauth2.yaml
 ---
 
-Use `init` as the setup path for a fresh, disposable evaluation cluster.
-Choose [credentials](/docs/get-started/credentials/) and obtain the matching
-[artifact](/docs/get-started/download/) first. These Next instructions require
-an unreleased candidate; preview.2 does not contain `init`.
+`init` turns one values file into every file that must agree on the provider's
+identity: the provider configuration, both encryption configurations, the
+OpenBao policy and setup script, and for static pods the manifest. It never
+contacts OpenBao or changes a host. Run it on a workstation for a fresh,
+disposable evaluation cluster.
 
-## Generate the files with init
+## Write the values file
 
-Save this minimal example as `values.yaml` and replace its addresses and
-identity values. Use `deploy/config/init-values-oauth2.yaml` for native OAuth
+Save this example as `values.yaml` and replace its addresses and identity
+values. For native OAuth, start from `deploy/config/init-values-oauth2.yaml`
 instead. Do not put a JWT, client secret, or OpenBao token in the values file.
 
 ```yaml
@@ -46,83 +47,10 @@ transit:
     clusterId: workload-a
     transitMountId: transit-prod-primary
     # Omit keyLineageId only when --new-key creates it for a new Transit key.
-
 ```
 
-Generate files for a new Transit key:
-
-```sh
-bao-kms-provider init --values values.yaml --out generated --new-key
-```
-
-On a workstation without the Linux binary, use the same candidate image by
-its verified digest:
-
-```sh
-IMAGE=ghcr.io/dc-tec/bao-kms-provider@sha256:<digest>
-docker run --rm --user "$(id -u):$(id -g)" \
-  -v "$PWD:/work" -w /work "${IMAGE}" \
-  init --values values.yaml --out generated --new-key
-```
-
-For a static pod, add `--model static-pod --image "${IMAGE}" --socket-gid <gid>`.
-Use the numeric `openbao-kms-socket` group ID from the target host. Set
-`--policy-name` only if you need a policy name other than
-`openbao-kms-<clusterId>`.
-
-`init` never contacts OpenBao or activates encryption. It refuses to overwrite
-an output directory containing files.
-
-Generation uses the values file and documented defaults. It ignores environment
-overrides and rejects `--config`, `--log-level`, `--metrics-address`, and
-`--health-address`; put those settings in the values file. The generated JWT
-role has a 30-minute TTL, so `auth.loginBeforeTokenExpiry` must be less than
-30 minutes. `init` rejects incompatible values before writing files.
-
-Use a dedicated policy name made of ASCII letters, digits, underscores, dots,
-and hyphens, starting with a letter, digit, or underscore. `root` and `default`
-are reserved. JWT role names follow the same path-component rules as Transit
-key names. Audience strings are serialized as a JSON array without splitting
-commas inside an audience.
-
-For static pods, keep CA and credential files in dedicated directories, outside
-the socket and state directories. The generator rejects broad parent mounts
-such as `/` and `/etc`, and writable directory overlaps.
-
-## Review and record the output
-
-| File | Review |
-|---|---|
-| `config.yaml` | Resolved values, host paths, and the generated lineage ID. Keep this as the input for subsequent nodes. |
-| `encryption-config-readers.yaml` | Phase 1: `identity` first, KMS second. Stage this on every API server before enabling KMS writes. |
-| `encryption-config.yaml` | Phase 2: KMS first, `identity` second. Install only after every API server has the KMS reader. |
-| `openbao-policy.hcl` | Provider permissions without key administration. |
-| `openbao-setup.sh` | Commands for an OpenBao administrator to review and run once for the new key. |
-| `bao-kms-provider.yaml` | Static pod only: pinned image, credential mounts, UID/GID, and socket group. |
-| `installation.json` | Generator version and commit, image digest when supplied, identity fingerprint, host inputs, file list, and remaining actions. |
-
-Record the identity fingerprint and lineage ID in configuration management.
-The record describes generated inputs; it is not an installation or activation
-success report. Credentials are not copied into it.
-
-## Reuse the identity on other nodes
-
-Use `generated/config.yaml` as the resolved values input. Omit `--new-key`:
-
-```sh
-bao-kms-provider init --values generated/config.yaml --out generated-node-2
-```
-
-Keep the deployment model consistent. For static pods, pass the same image and
-the target host's socket GID again; adjust `server.socketGroup` in that node's
-values if its GID differs. Credential and state paths can also differ by node.
-All nodes must retain the same identity-bearing values and fingerprint.
-
-Never generate a new lineage ID for another node using the same Transit key.
-`--new-key` rejects an input that already contains a lineage ID. For an existing
-key, provide its recorded lineage ID; do not invent a replacement.
-
-## Choose the values
+Choose each value as follows. Identity-bearing values are part of every
+`key_id` and must stay the same on every node for the life of the key.
 
 | Value | Identity-bearing | How to choose it | Example |
 |---|---|---|---|
@@ -136,15 +64,95 @@ key, provide its recorded lineage ID; do not invent a replacement.
 | Key lineage ID | Yes | A random, non-secret ID generated once when the Transit key is created. `init --new-key` generates it and records it in `config.yaml`. | `7d34fb7df15f4e4c95d6c2a50fe90d84` |
 | JWT auth mount path | No | A dedicated JWT auth mount for this cluster's providers. | `k8s-workload-a-jwt` |
 | JWT role | No | The OpenBao role the provider logs in with. | `openbao-kms-control-plane` |
-| OpenBao policy name | No | The least-privilege policy attached to that role. | `openbao-kms-workload-a` |
+| OpenBao policy name | No | The least-privilege policy attached to that role. Default: `openbao-kms-<clusterId>`; override with `--policy-name`. | `openbao-kms-workload-a` |
 | JWT issuer | No | The issuer of the provider's host JWT. It must stay reachable when the protected API server is down. | `https://issuer.example.internal` |
 | JWT audience and subject | No | The audience and subject the issuer puts in the provider JWT. | `bao-kms-provider`, `system:openbao-kms:workload-a` |
 | Socket path | No | The Unix socket the API server connects to. Keep the default. | `/run/openbao-kms/kms.sock` |
 
 Do not derive identity values from mutable topology such as URLs, node names,
 or mount accessors. For the reasoning, see
-[Reference: Key ID and AAD](/docs/reference/key-id-and-aad/).
+[Reference: Key ID and AAD](/docs/reference/key-id-and-aad/). For every flag
+and the checks `init` applies to the values, see
+[Reference: CLI](/docs/reference/cli/#init).
 
+## Read the static-pod socket GID
 
-Continue with [Prepare OpenBao](/docs/get-started/openbao/) to review and run
-the generated setup commands.
+Skip this section for systemd; the package creates the socket group.
+
+A static pod needs the numeric ID of the host group that the API server uses
+to reach the provider socket. On each control-plane node, create the group if
+it does not exist and print its GID:
+
+```sh
+getent group openbao-kms-socket >/dev/null || sudo groupadd --system openbao-kms-socket
+getent group openbao-kms-socket | cut -d: -f3
+```
+
+Use the same GID on every node where possible. If a node differs, generate its
+files separately as shown in [Reuse the identity on other nodes](#reuse-the-identity-on-other-nodes).
+
+## Generate the files
+
+Generate files for a new Transit key:
+
+```sh
+bao-kms-provider init --values values.yaml --out generated --new-key
+```
+
+For a static pod, add the verified image reference from `image-ref.txt` and the
+socket GID:
+
+```sh
+bao-kms-provider init --values values.yaml --out generated --new-key \
+  --model static-pod --image "$(cat image-ref.txt)" --socket-gid <gid>
+```
+
+On a workstation without the Linux binary, run the same command through the
+verified release image:
+
+```sh
+IMAGE=ghcr.io/dc-tec/bao-kms-provider@sha256:<digest>
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD:/work" -w /work "${IMAGE}" \
+  init --values values.yaml --out generated --new-key
+```
+
+`init` prints the identity fingerprint and the new lineage ID. It rejects
+incompatible values before writing anything and refuses to write into an output
+directory that contains files.
+
+## Review and record the output
+
+| File | Review |
+|---|---|
+| `config.yaml` | Resolved values, host paths, and the generated lineage ID. Keep this as the input for other nodes. |
+| `encryption-config-readers.yaml` | Phase 1: `identity` first, KMS second. Used in [Enable encryption](/docs/get-started/enable-encryption/). |
+| `encryption-config.yaml` | Phase 2: KMS first, `identity` second. Install only after every API server has the KMS reader. |
+| `openbao-policy.hcl` | Provider permissions without key administration. |
+| `openbao-setup.sh` | Commands for an OpenBao administrator to review and run once for the new key. |
+| `bao-kms-provider.yaml` | Static pod only: pinned image, credential mounts, UID/GID, and socket group. |
+| `installation.json` | Generator version, image digest when supplied, identity fingerprint, host inputs, file list, and remaining actions. |
+
+Record the identity fingerprint and lineage ID in configuration management.
+`installation.json` describes the generated inputs. It contains no credentials
+and does not report installation or activation success.
+
+## Reuse the identity on other nodes
+
+The same `generated/` directory serves every node that shares its host paths
+and socket GID. For a node that differs, generate from the resolved
+configuration and omit `--new-key`:
+
+```sh
+bao-kms-provider init --values generated/config.yaml --out generated-node-2
+```
+
+For static pods, pass the same `--model` and `--image`, and that node's
+`--socket-gid`. Credential and state paths can also differ by node. Every node
+must print the same identity fingerprint.
+
+Never generate a new lineage ID for another node using the same Transit key.
+`--new-key` rejects an input that already contains a lineage ID. For an existing
+key, provide its recorded lineage ID; do not invent a replacement.
+
+Continue with [Prepare OpenBao](/docs/get-started/openbao/).

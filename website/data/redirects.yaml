@@ -27,10 +27,10 @@
   to: docs/architecture/transit-key-model/
   reason: Documentation moved under /docs/.
 - from: deployment
-  to: docs/get-started/deployment-model/
+  to: docs/get-started/before-you-begin/
   reason: Page moved in the documentation restructure.
 - from: deployment/choosing-a-model
-  to: docs/get-started/deployment-model/
+  to: docs/get-started/before-you-begin/
   reason: Page moved in the documentation restructure.
 - from: deployment/linux-identity-model
   to: docs/security/linux-identity-model/
@@ -87,7 +87,7 @@
   to: docs/get-started/openbao/
   reason: Page moved in the documentation restructure.
 - from: getting-started/overview
-  to: docs/get-started/overview/
+  to: docs/get-started/before-you-begin/
   reason: Page moved in the documentation restructure.
 - from: operations
   to: docs/operate/
