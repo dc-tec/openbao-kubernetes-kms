@@ -1,6 +1,6 @@
 ---
 title: Run with systemd
-description: "Install the provider as a hardened systemd service on each control-plane node, configure it, validate it with doctor, and start it."
+description: "Install the provider as a hardened systemd service on each control-plane node, then run the generated node setup phases to install its files, check it, and start it."
 eyebrow: Get started · Step 5
 weight: 50
 verifiedBy:
@@ -8,6 +8,7 @@ verifiedBy:
   - deploy/package/linux
   - deploy/config/provider-systemd.yaml
   - test/deployment/systemd-install.sh
+  - internal/scaffold/nodescript.go
 ---
 
 Repeat this procedure on every control-plane node. At the end, the provider
@@ -83,86 +84,60 @@ systemctl daemon-reload
 
 The package and tarball leave the service disabled and stopped.
 
-## Step 2: Write the provider configuration
+## Step 2: Copy the generated files
 
-Copy the configuration from your reviewed installation directory:
+Copy the reviewed `generated/` directory from
+[Generate installation files](/docs/get-started/plan-values/) to the node, next
+to `ca.crt` and the credential. Read `generated/node-setup.sh` before you run
+it: it is plain `sh`, and every path, owner, and mode comes from
+`generated/config.yaml`.
 
-```sh
-cp generated/config.yaml provider.yaml
-```
-
-Compare its fingerprint with `generated/installation.json` and your recorded
-cluster identity. Keep the resolved values for subsequent nodes. For manual
-configuration, use the packaged example and the
-[configuration reference](/docs/reference/configuration/).
-
-## Step 3: Place the runtime files
-
-For native OAuth, create its credential directory and install the client secret
-as root. Use the path from your generated configuration. For the default path:
+Run it without arguments to print its phases and the identity fingerprint:
 
 ```sh
-sudo install -d -m 0750 -o root -g openbao-kms /etc/openbao-kms/credentials
-sudo install -m 0640 -o root -g openbao-kms client-secret /etc/openbao-kms/credentials/client-secret
+sh generated/node-setup.sh
 ```
 
-Omit the JWT file commands below when `auth.jwt.source` is `oauth2`.
+Compare the fingerprint with `generated/installation.json` and your recorded
+cluster identity. Every node must print the same fingerprint.
 
-From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`,
-run as root:
+## Step 3: Run the node setup phases
 
-<!-- systemd-runtime-files -->
-```sh
-set -eu
-test ! -e /etc/openbao-kms/config.yaml
-test ! -e /etc/openbao-kms/tls/ca.crt
-test ! -e /var/lib/openbao-kms/identity.jwt
-install -o root -g openbao-kms -m 0640 provider.yaml /etc/openbao-kms/config.yaml
-install -o root -g root -m 0644 ca.crt /etc/openbao-kms/tls/ca.crt
-install -o root -g openbao-kms -m 0640 identity.jwt /var/lib/openbao-kms/identity.jwt
-```
-
-The `test` lines stop the block on a node that already has a deployment. For
-an existing node, follow [Operate: Upgrade](/docs/operate/upgrade/) instead and
-keep its identity and state.
-
-## Step 4: Validate as the service user
-
-Run the checks as `openbao-kms`, so an unreadable file fails here the same way
-it would fail in the service.
-
-Resolve the configuration and print its identity fingerprint:
+Run each phase as root, in order. Each phase prints what it changed and the
+command for the next one, and stops with a non-zero exit status when something
+is wrong.
 
 ```sh
-sudo -u openbao-kms bao-kms-provider config --config /etc/openbao-kms/config.yaml
+sudo sh generated/node-setup.sh prepare
+sudo sh generated/node-setup.sh install --ca ca.crt --credential identity.jwt
+sudo sh generated/node-setup.sh check
+sudo sh generated/node-setup.sh start
 ```
 
-Check the Transit key profile, then run the full bootstrap check against
-OpenBao:
+| Phase | What it does |
+|---|---|
+| `prepare` | Checks the host tools, the package files, the `openbao-kms` user, and the socket group. Creates any missing credential or CA directory. |
+| `install` | Installs `config.yaml`, the CA bundle, and the credential with the owner and mode the service user needs. Stops if any of them already exists. |
+| `check` | Runs `config`, `verify-key`, and `doctor` as the `openbao-kms` user and confirms the fingerprint. |
+| `start` | Enables and starts `bao-kms-provider.service`, then waits for HTTP 200 from `/ready`. Runs only after a passed `check` within the last hour. |
 
-```sh
-sudo -u openbao-kms bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
-sudo -u openbao-kms bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
-```
+For native OAuth, pass the client secret as `--credential`, and the issuer CA
+bundle as `--issuer-ca` when the configuration sets
+`auth.jwt.oauth2.caCertFile`; see
+[OAuth 2.0 client credentials](/docs/configure/oauth2/).
 
-Each command exits with status `0`, and neither `verify-key` nor `doctor`
-reports a `[fail]` check. Every control-plane node must print the same
-identity fingerprint. `doctor` failures on a new setup are usually policy or
-auth problems; see [Operate: Troubleshooting](/docs/operate/troubleshooting/)
-and [Reference: CLI](/docs/reference/cli/#doctor).
+`install` refuses a node that already has a deployment. For an existing node,
+follow [Operate: Upgrade](/docs/operate/upgrade/) instead and keep its identity
+and state.
 
-## Step 5: Start the service
+`check` exits with status `4` when `verify-key` or `doctor` reports a `[fail]`
+check. Failures on a new setup are usually policy or auth problems; see
+[Operate: Troubleshooting](/docs/operate/troubleshooting/) and
+[Reference: CLI](/docs/reference/cli/#doctor). Read any `[warn]` lines before
+you run `start`.
 
-```sh
-systemctl enable --now bao-kms-provider.service
-systemctl status bao-kms-provider.service
-curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/ready
-```
-
-Wait for HTTP 200 from `/ready` and confirm
-`/run/openbao-kms/kms.sock` exists. With `Type=exec`, systemd can report the
-process as active before authentication and initial probes finish. Check the
-running socket using the API server's identity:
+After the local API server starts using the socket, check its access with the
+API server's own identity:
 
 ```sh
 sudo sh /usr/share/bao-kms-provider/probe-apiserver
@@ -170,22 +145,18 @@ sudo sh /usr/share/bao-kms-provider/probe-apiserver
 
 For a tarball installation, use `sudo sh bin/probe-apiserver` from the extracted
 kit. The helper requires `pgrep`, `awk`, `setpriv`, and exactly one local running
-`kube-apiserver`. It uses that process's effective UID, GID, and supplementary
-groups. If the API server has not started, repeat the check after it starts.
-Do not use the provider's socket-owner identity to claim group access. A root
-API server produces a warning because the check does not prove non-root access.
+`kube-apiserver`. Status, Encrypt, and Decrypt must pass. A root API server
+produces a warning because the check does not prove non-root access.
 
-Status, Encrypt, and Decrypt must pass. Continue to
-[Enable encryption](/docs/get-started/enable-encryption/) once the provider is
-ready on every control-plane node.
+If `start` times out waiting for `/ready`, check `journalctl -u
+bao-kms-provider.service` for these common first-start causes:
 
-If the service does not become ready, check these common first-start causes:
-
-- the socket directory group is not `openbao-kms-socket`,
-- `ProtectSystem` blocks a configuration or auth material path,
-- the CA bundle path is missing,
 - host DNS is not ready when the service starts,
-- the OpenBao TLS server name does not match the certificate.
+- the OpenBao TLS server name does not match the certificate,
+- the credential is expired or has the wrong audience or subject.
+
+Continue to [Enable encryption](/docs/get-started/enable-encryption/) once the
+provider is ready on every control-plane node.
 
 ## About the unit
 

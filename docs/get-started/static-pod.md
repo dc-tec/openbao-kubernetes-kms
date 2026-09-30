@@ -1,6 +1,6 @@
 ---
 title: Run as a static pod
-description: "Verify and preload the provider image, prepare host files with numeric ownership, validate with doctor, and start the provider as a kubelet-managed static pod on each control-plane node."
+description: "Stage the kit and preload the provider image, then run the generated node setup phases to prepare the host, install its files, check it, and start the provider as a kubelet static pod on each control-plane node."
 eyebrow: Get started · Step 5
 weight: 50
 verifiedBy:
@@ -8,6 +8,7 @@ verifiedBy:
   - deploy/config/provider-static-pod.yaml
   - hack/harvester/remote/install-provider-static-pod.sh
   - test/dev-env/scripts/stage-provider.sh
+  - internal/scaffold/nodescript.go
 ---
 
 Repeat this procedure on every control-plane node. At the end, kubelet runs the
@@ -36,186 +37,102 @@ issuer CA bundle instead of `identity.jwt`; see
 [OAuth 2.0 client credentials](/docs/configure/oauth2/). The generated pod
 mounts the credential directory read-only for secret rotation.
 
-## Step 1: Extract the bundle
+## Step 1: Stage the kit and image
+
+Extract the verified kit on the node and install its host binary. `node-setup.sh`
+runs its checks with this binary:
 
 ```sh
 tar -xzf "bao-kms-provider_${VERSION}_static-pod_linux_${ARCH}.tar.gz"
 cd "bao-kms-provider_${VERSION}_static-pod_linux_${ARCH}"
-cat image-ref.txt
-```
-
-`image-ref.txt` holds the provider image reference, ending in
-`@sha256:<digest>`. The kit includes the matching Linux binary for `init`,
-`config`, and diagnostics. Install it on the host:
-
-```sh
 sudo install -o root -g root -m 0755 bin/bao-kms-provider /usr/bin/bao-kms-provider
 ```
 
-## Step 2: Verify the provider image
-
-Read `IMAGE` from the verified kit, then verify that the release workflow
-signed the image digest:
+Preload the provider image into containerd, so the provider can start during
+recovery without registry access:
 
 ```sh
-IMAGE=$(cat image-ref.txt)
-REPO=dc-tec/openbao-kubernetes-kms
-
-cosign verify \
-  --new-bundle-format=true \
-  --certificate-identity "https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${VERSION}" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  "${IMAGE}"
+sudo crictl pull "$(cat image-ref.txt)"
 ```
 
-The command exits with status `0`. Stop if it fails. With an authenticated
-GitHub CLI, also verify the image's build provenance:
+`image-ref.txt` pins the image by `@sha256` digest. The kit's signed checksum
+already covers that digest, and containerd pulls only content that matches it,
+so no separate image check is required. For an additional signature and build
+provenance check, see
+[Security: Verify release artifacts](/docs/security/verify-release-artifacts/#verify-the-provider-image).
+
+For air-gapped nodes, export the image once and import it on each node; see
+[Transfer to a disconnected environment](/docs/security/verify-release-artifacts/#transfer-to-a-disconnected-environment).
+Keep the previous release's image on every node for rollback.
+
+## Step 2: Copy the generated files
+
+Copy the reviewed `generated/` directory from `init --model static-pod` to the
+node, next to `ca.crt` and the credential. Read `generated/node-setup.sh`
+before you run it: it is plain `sh`, and every path, owner, mode, the image
+digest, and the socket GID come from the same generation as the manifest.
+
+Run it without arguments to print its phases and the identity fingerprint:
 
 ```sh
-gh attestation verify "oci://${IMAGE}" \
-  --repo "${REPO}" \
-  --signer-workflow "${REPO}/.github/workflows/reusable-build.yml" \
-  --source-ref "refs/tags/${VERSION}" \
-  --cert-oidc-issuer https://token.actions.githubusercontent.com \
-  --deny-self-hosted-runners
+sh generated/node-setup.sh
 ```
 
-## Step 3: Preload the image
+Compare the fingerprint with `generated/installation.json` and your recorded
+cluster identity. Every node must print the same fingerprint.
 
-Pull the verified digest into containerd on every control-plane node, so the
-provider can start during recovery without registry access:
+## Step 3: Run the node setup phases
+
+Run each phase as root, in order. Each phase prints what it changed and the
+command for the next one, and stops with a non-zero exit status when something
+is wrong.
 
 ```sh
-sudo crictl pull "${IMAGE}"
+sudo sh generated/node-setup.sh prepare
+sudo sh generated/node-setup.sh install --ca ca.crt --credential identity.jwt
+sudo sh generated/node-setup.sh check
+sudo sh generated/node-setup.sh start
 ```
 
-For air-gapped nodes, export the image once and import it on each node with
-`ctr -n k8s.io images import`. Keep the previous release's image on every node
-for rollback.
+| Phase | What it does |
+|---|---|
+| `prepare` | Checks the host tools, the installed binary, the preloaded image, and that `openbao-kms-socket` has the GID used at generation. Creates the directories with numeric owner `65532` and the tmpfiles entry that recreates the socket directory after every reboot. |
+| `install` | Installs `config.yaml`, the CA bundle, and the credential with group `65532`. Stops if any of them already exists. |
+| `check` | Runs `config`, `verify-key`, and `doctor` as UID `65532` with the socket group, and confirms the fingerprint. |
+| `start` | Installs `bao-kms-provider.yaml` in `/etc/kubernetes/manifests`, then waits for HTTP 200 from `/ready`. Runs only after a passed `check` within the last hour. |
 
-## Step 4: Prepare the host
-
-Read the numeric socket group ID (GID). The distroless image has no host group
-names, so the pod and the provider configuration both use this number. The
-command creates the group if you skipped it in
-[Read the static-pod socket GID](/docs/get-started/plan-values/#read-the-static-pod-socket-gid):
-
-```sh
-getent group openbao-kms-socket >/dev/null || sudo groupadd --system openbao-kms-socket
-SOCKET_GID=$(getent group openbao-kms-socket | cut -d: -f3)
-echo "${SOCKET_GID}"
-```
-
-Create the directories with numeric ownership for the container user `65532`,
-and a tmpfiles entry that recreates the socket directory under `/run` after
-every reboot:
-
-```sh
-sudo sh -eu -c "
-install -d -m 0750 -o root -g 65532 /etc/openbao-kms
-install -d -m 0755 -o root -g root /etc/openbao-kms/tls
-install -d -m 0750 -o root -g 65532 /etc/openbao-kms/credentials
-install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
-install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state
-install -d -m 0750 -o root -g 65532 /var/lib/openbao-kms/credentials
-install -d -m 0755 -o root -g root /etc/kubernetes/openbao-kms
-printf 'd /run/openbao-kms 2750 65532 ${SOCKET_GID} -\n' > /etc/tmpfiles.d/openbao-kms-static-pod.conf
-systemd-tmpfiles --create /etc/tmpfiles.d/openbao-kms-static-pod.conf
-"
-```
-
-The state directory must stay owned by `65532` without group or world write
-permission; the provider holds a lock file there across restarts.
-
-## Step 5: Write the provider configuration
-
-Use the reviewed output from `init --model static-pod`:
-
-```sh
-cp generated/config.yaml provider.yaml
-```
-
-Check that `server.socketGroup` equals this host's `SOCKET_GID`, and that the
-fingerprint matches `generated/installation.json`. If host paths or the GID
-differ, generate this node's files as shown in
+If `prepare` reports a different socket GID on this node, generate this node's
+files with the command it prints, as described in
 [Reuse the identity on other nodes](/docs/get-started/plan-values/#reuse-the-identity-on-other-nodes).
 
-## Step 6: Place the runtime files
-
-For native OAuth, install the client secret at the configured path instead of
-installing `identity.jwt`. For the default path:
-
-```sh
-sudo install -m 0640 -o root -g 65532 client-secret /etc/openbao-kms/credentials/client-secret
-```
-
-Omit the JWT file command below when `auth.jwt.source` is `oauth2`.
-
-From the directory that holds `provider.yaml`, `ca.crt`, and `identity.jwt`:
-
-```sh
-sudo install -m 0640 -o root -g 65532 provider.yaml /etc/openbao-kms/config.yaml
-sudo install -m 0644 -o root -g root ca.crt /etc/openbao-kms/tls/ca.crt
-sudo install -m 0640 -o root -g 65532 identity.jwt /var/lib/openbao-kms/credentials/identity.jwt
-```
+For native OAuth, pass the client secret as `--credential`, and the issuer CA
+bundle as `--issuer-ca` when the configuration sets
+`auth.jwt.oauth2.caCertFile`; see
+[OAuth 2.0 client credentials](/docs/configure/oauth2/).
 
 The pod mounts the credential directory read-only. Configure the host issuer
-agent to replace `identity.jwt` atomically within that directory and preserve
+agent to replace the credential atomically within that directory and preserve
 its permissions. Keep unrelated files out of this directory. A file-only bind
 mount retains the old JWT after atomic replacement.
 
-## Step 7: Validate the configuration
+`check` exits with status `4` when `verify-key` or `doctor` reports a `[fail]`
+check. Read any `[warn]` lines before you run `start`. If `start` times out
+waiting for `/ready`, inspect the pod with
+`sudo crictl ps -a --name bao-kms-provider` and `sudo crictl logs <container-id>`.
 
-Resolve the configuration, check the Transit key profile, and run the full
-bootstrap check against OpenBao:
-
-```sh
-sudo setpriv --reuid=65532 --regid=65532 --groups="$SOCKET_GID" \
-  bao-kms-provider config --config /etc/openbao-kms/config.yaml
-sudo setpriv --reuid=65532 --regid=65532 --groups="$SOCKET_GID" \
-  bao-kms-provider verify-key --config /etc/openbao-kms/config.yaml
-sudo setpriv --reuid=65532 --regid=65532 --groups="$SOCKET_GID" \
-  bao-kms-provider doctor --config /etc/openbao-kms/config.yaml
-```
-
-Each command exits with status `0`, and neither `verify-key` nor `doctor`
-reports a `[fail]` check. Every control-plane node must print the same identity
-fingerprint. These commands require `setpriv` from util-linux. They check host
-file access under the provider UID and groups. A root-only check does not prove
-that the provider can read its files.
-
-## Step 8: Start the static pod
-
-Use `generated/bao-kms-provider.yaml` from the same generation as the installed
-configuration. Check its image digest and supplemental socket GID against the
-installation record.
-
-Then hand the manifest to kubelet and wait for readiness:
-
-```sh
-sudo install -m 0644 -o root -g root generated/bao-kms-provider.yaml \
-  /etc/kubernetes/manifests/bao-kms-provider.yaml
-curl -fsS --retry 60 --retry-delay 2 --retry-all-errors http://127.0.0.1:8082/ready
-```
-
-`/ready` returns HTTP 200 and `/run/openbao-kms/kms.sock` exists. If the pod
-does not become ready, inspect it with `sudo crictl ps -a --name bao-kms-provider`
-and `sudo crictl logs <container-id>`. From the extracted kit, probe the socket
-using the running API server's UID and groups:
+After the local API server starts using the socket, probe it from the
+extracted kit with the API server's own UID and groups:
 
 ```sh
 sudo sh bin/probe-apiserver
 ```
 
 The helper requires `pgrep`, `awk`, and `setpriv`, and exactly one running local
-`kube-apiserver`. It reports root or socket-owner access as a limitation of the
-permission check. For an API server that has not started, repeat this check
-after it starts. Do not substitute the provider UID to claim consumer access.
+`kube-apiserver`. Status, Encrypt, and Decrypt must pass. Do not substitute the
+provider UID to claim consumer access.
 
-Status, Encrypt, and Decrypt must pass. This is a live provider check; API-server
-activation is checked separately. Continue with
-[Enable encryption](/docs/get-started/enable-encryption/) once it runs on every
-control-plane node.
+Continue with [Enable encryption](/docs/get-started/enable-encryption/) once the
+provider runs on every control-plane node.
 
 ## About the manifest
 

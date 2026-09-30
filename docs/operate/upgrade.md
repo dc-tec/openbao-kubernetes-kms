@@ -84,11 +84,10 @@ For manifests that mount `/var/lib/openbao-kms/identity.jwt` as a file, update
 one control-plane node at a time. Schedule an API outage for a single-node
 control plane. The provider must restart once to change its mounts.
 
-1. Create `/var/lib/openbao-kms/credentials` with the permissions in
-   [Run as a static pod, Step 4](/docs/get-started/static-pod/#step-4-prepare-the-host).
+1. Create `/var/lib/openbao-kms/credentials` as `root:65532` with mode `0750`;
+   see [Security: Linux identity model](/docs/security/linux-identity-model/#file-ownership).
 2. Configure the host issuer agent to publish a current JWT as
-   `/var/lib/openbao-kms/credentials/identity.jwt` with the permissions in
-   [Run as a static pod, Step 6](/docs/get-started/static-pod/#step-6-place-the-runtime-files).
+   `/var/lib/openbao-kms/credentials/identity.jwt` as `root:65532` with mode `0640`.
 3. Change `auth.jwt.jwtFile` in the host configuration to the new path. Preserve
    all identity values and the state directory.
 4. Update both the JWT volume and its mount to the credential directory,

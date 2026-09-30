@@ -66,8 +66,13 @@ client identity. For a systemd installation:
 sudo -u openbao-kms bao-kms-provider probe --socket /run/openbao-kms/kms.sock --output json
 ```
 
-For static pods, use the UID and groups shown in
-[Run as a static pod](/docs/get-started/static-pod/#step-8-start-the-static-pod).
+For static pods, use the container UID and the socket GID:
+
+```sh
+sudo setpriv --reuid=65532 --regid=65532 --groups="$(getent group openbao-kms-socket | cut -d: -f3)" \
+  bao-kms-provider probe --socket /run/openbao-kms/kms.sock --output json
+```
+
 All Status, Encrypt, and Decrypt checks must pass. Record the successful
 `kms.key_id` value from one node, then require it on the other nodes with
 `--expected-key-id`. Different active keys can indicate identity drift or

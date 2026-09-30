@@ -18,8 +18,8 @@ The procedures run the checks where you use the artifact:
 
 - [Download the release](/docs/get-started/download/#download-and-verify-the-artifact)
   verifies the package, tarball, or static-pod bundle you download.
-- [Run as a static pod](/docs/get-started/static-pod/#step-2-verify-the-provider-image)
-  verifies the provider image digest the static pod runs.
+- [Run as a static pod](/docs/get-started/static-pod/#step-1-stage-the-kit-and-image)
+  pulls the provider image by the digest in the verified kit.
 
 ## Verification material
 
@@ -53,6 +53,38 @@ gh attestation verify "./${ARTIFACT}" \
 The command exits with status `0` and names the expected repository, workflow,
 source tag, and artifact digest. Stop if it fails.
 
+## Verify the provider image
+
+The static-pod kit's signed checksum covers `image-ref.txt`, and containerd
+pulls only content that matches its `@sha256` digest. That chain already ties
+the image to the release, as long as every node runs exactly that digest. The
+following checks verify the image directly, as defense in depth, for example
+when the image reaches a node through a mirror. From the extracted kit:
+
+```sh
+IMAGE=$(cat image-ref.txt)
+REPO=dc-tec/openbao-kubernetes-kms
+
+cosign verify \
+  --new-bundle-format=true \
+  --certificate-identity "https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${VERSION}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "${IMAGE}"
+```
+
+With an authenticated GitHub CLI, also verify the image's build provenance:
+
+```sh
+gh attestation verify "oci://${IMAGE}" \
+  --repo "${REPO}" \
+  --signer-workflow "${REPO}/.github/workflows/reusable-build.yml" \
+  --source-ref "refs/tags/${VERSION}" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --deny-self-hosted-runners
+```
+
+Both commands exit with status `0`. Stop if either fails.
+
 ## Transfer to a disconnected environment
 
 Perform download and signature/provenance verification on a connected staging
@@ -68,9 +100,8 @@ Every listed file must report `OK`. This checks transfer integrity against the
 checksum trusted on the staging host; it does not repeat signature verification.
 Keep the verified originals and the verification output in your release record.
 
-For static pods, verify the OCI image as described in
-[Run as a static pod](/docs/get-started/static-pod/#step-2-verify-the-provider-image).
-On a connected Linux staging host with containerd, export the selected platform:
+For static pods, the image digest in `image-ref.txt` is covered by the kit's
+checksum. On a connected Linux staging host with containerd, export the selected platform:
 
 ```sh
 IMAGE=$(cat image-ref.txt)
@@ -111,8 +142,10 @@ OpenBao, and issuer reachability without Internet access or the protected API.
 | `gh attestation verify` on the image | The image was built by the reusable build workflow from the selected tag on GitHub-hosted runners. | `reusable-build.yml`, source ref `refs/tags/<version>` |
 
 The checksum check only means something after the signature check succeeds.
-The signature and checksum checks are required; the attestation checks are
-recommended where an authenticated GitHub CLI is available. Stop if any check
+The checksum signature and the artifact checksum are required. The image
+signature is recommended defense in depth, because the verified kit already
+pins the image digest. The attestation checks are recommended where an
+authenticated GitHub CLI is available. Stop if any check
 you run fails.
 
 ## Rules

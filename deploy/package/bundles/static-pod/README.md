@@ -11,9 +11,9 @@ do not import or migrate an existing encryption configuration.
 
 ## Prepare each host
 
-Run from the extracted kit on a Linux host with GNU `install`, `getent`,
-`groupadd`, `systemd-tmpfiles`, containerd, and kubelet. Install the binary and
-create the socket group. Record the GID separately on each node:
+Run from the extracted kit on a Linux host with GNU `install`, `getent`, and
+`groupadd`. Install the binary and create the socket group, then record the GID
+separately on each node:
 
 <!-- static-pod-kit-install -->
 ```sh
@@ -21,19 +21,10 @@ set -eu
 install -o root -g root -m 0755 bin/bao-kms-provider /usr/bin/bao-kms-provider
 getent group openbao-kms-socket >/dev/null || groupadd --system openbao-kms-socket
 SOCKET_GID=$(getent group openbao-kms-socket | cut -d: -f3)
-install -d -m 0750 -o root -g 65532 /etc/openbao-kms
-install -d -m 0755 -o root -g root /etc/openbao-kms/tls
-install -d -m 0750 -o root -g 65532 /etc/openbao-kms/credentials
-install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms
-install -d -m 0750 -o 65532 -g 65532 /var/lib/openbao-kms/state
-install -d -m 0750 -o root -g 65532 /var/lib/openbao-kms/credentials
-install -d -m 0755 -o root -g root /etc/kubernetes/openbao-kms
-printf 'd /run/openbao-kms 2750 65532 %s -\n' "$SOCKET_GID" > /etc/tmpfiles.d/openbao-kms-static-pod.conf
-systemd-tmpfiles --create /etc/tmpfiles.d/openbao-kms-static-pod.conf
 ```
 
 This block runs as root. It does not install runtime configuration or activate
-the provider. Reuse the socket group; do not add it to credential permissions.
+the provider. The generated `node-setup.sh` creates the provider directories.
 
 ## Generate and review files
 
@@ -41,12 +32,6 @@ Copy `config/init-values-file.yaml` or `config/init-values-oauth2.yaml` to a
 private working directory as `values.yaml`. Replace the example addresses and
 identities. Provision credentials independently of the protected API server.
 Keep secrets out of the values file.
-
-After the provider and local API server start, run `sh bin/probe-apiserver` as
-root from this kit. It uses the API server's effective UID, GID, and groups for
-a live socket round trip. It requires `pgrep`, `awk`, and `setpriv`. Root or
-socket-owner warnings identify the limits of the permission check. Complete
-the API-server activation checks separately.
 
 For a new Transit key, generate once with `--new-key`:
 
@@ -56,18 +41,11 @@ bao-kms-provider init --values values.yaml --out generated --new-key \
 ```
 
 For another node, use `generated/config.yaml` as the input, select a new output
-directory, and omit `--new-key`. Set that node's socket GID. Compare the shared
-fingerprint and lineage in `installation.json`; they must match across nodes.
-The required `--socket-gid` flag replaces the input configuration's socket
-group for that node. It does not change the shared identity.
+directory, and omit `--new-key`. Set that node's socket GID. The shared
+fingerprint and lineage in `installation.json` must match across nodes.
 
 Review `openbao-policy.hcl` and `openbao-setup.sh`, then apply them through the
-OpenBao administrator. Place the generated configuration at
-`/etc/openbao-kms/config.yaml` with owner `root:65532` and mode `0640`. Install
-the configured CA files and credential using their recorded paths. Credentials
-must be readable by UID/GID `65532` and inaccessible to other users. The host
-JWT agent must renew with atomic file replacement; OAuth client secrets must
-be replaced atomically when rotated.
+OpenBao administrator.
 
 ## Stage and activate
 
@@ -78,17 +56,22 @@ verification instructions, then preload the digest from `image-ref.txt`:
 crictl pull "$(cat image-ref.txt)"
 ```
 
-Validate configuration and credential access under UID/GID `65532` with the
-supplemental socket GID. `doctor` performs local and OpenBao checks; it does
-not prove that the running provider or Kubernetes API server works.
+Review `generated/node-setup.sh`, then run its phases as root in order. Pass the
+CA bundle and the JWT or OAuth client secret to `install`:
 
-Install `generated/bao-kms-provider.yaml` under `/etc/kubernetes/manifests/`
-only after reviewing it. Wait for HTTP 200 from `http://127.0.0.1:8082/ready`
-on every node. Run `bao-kms-provider probe` under UID/GID `65532` with the
-supplemental socket GID to check the running socket. Status, Encrypt, and
-Decrypt must pass. Stage `encryption-config-readers.yaml` on every API server
-before promoting any server to `encryption-config.yaml`. Retain `identity`.
-Verify readiness and Secret reads/writes through every API server directly.
+```sh
+sh generated/node-setup.sh prepare
+sh generated/node-setup.sh install --ca ca.crt --credential identity.jwt
+sh generated/node-setup.sh check
+sh generated/node-setup.sh start
+```
+
+`start` installs the manifest and waits for `/ready`. After the local API server
+uses the socket, run `sh bin/probe-apiserver` as root from this kit. Status,
+Encrypt, and Decrypt must pass. Stage `encryption-config-readers.yaml` on every
+API server before promoting any server to `encryption-config.yaml`. Retain
+`identity`. Verify readiness and Secret reads/writes through every API server
+directly.
 
 Use the documentation for the selected release for the complete activation
 and recovery procedure. No command in this kit declares migration complete.

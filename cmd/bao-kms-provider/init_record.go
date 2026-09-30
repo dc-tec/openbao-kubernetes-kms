@@ -46,9 +46,9 @@ func renderInstallationRecord(cfg config.Config, opts initOptions, files []initF
 			"Record config.yaml as the resolved values, including its lineage ID. Reuse it without --new-key for other nodes.",
 			"Review openbao-setup.sh and have an OpenBao administrator run it once for the new Transit key.",
 			"Provision independently renewable credentials and TLS trust on each node before starting the provider.",
-			"Install the matching artifact on each node. Set file ownership for its runtime user and socket group.",
-			"Run doctor with the runtime user and groups. " +
-				"Run probe against each live socket and compare identity fingerprints and active key IDs across nodes.",
+			"Install the matching artifact on each node, copy this directory to it, and run node-setup.sh " +
+				"prepare, install, check, and start as root.",
+			"Run probe against each live socket and compare identity fingerprints and active key IDs across nodes.",
 			"Install encryption-config-readers.yaml on every API server. " +
 				"Verify readiness and reads through each endpoint directly.",
 			"Only after all readers are ready, " +

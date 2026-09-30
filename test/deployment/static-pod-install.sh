@@ -18,6 +18,16 @@ else
     -binary "$work/provider" -output "$archive" \
     -image-ref "ghcr.io/dc-tec/bao-kms-provider@sha256:$(printf '%064d' 0)"
 fi
+expect_exit() {
+  local want=$1 message=$2 code=0
+  shift 2
+  "$@" > "$work/out" 2>&1 || code=$?
+  if [[ "$code" != "$want" ]] || ! grep -qF -- "$message" "$work/out"; then
+    printf 'FAIL: %s exited %s, want %s with %q:\n' "$*" "$code" "$want" "$message" >&2
+    cat "$work/out" >&2
+    exit 1
+  fi
+}
 mkdir "$work/extracted"
 tar -xzf "$archive" -C "$work/extracted" --strip-components=1
 cd "$work/extracted"
@@ -39,9 +49,28 @@ for source in file oauth2; do
     --model static-pod --socket-gid "$gid" --image "$(cat image-ref.txt)"
   cmp "$work/$source/installation.json" "$work/$source-node2/installation.json"
 done
-install -m 0640 -o root -g 65532 "$work/file/config.yaml" /etc/openbao-kms/config.yaml
+# Run the generated node setup; the container has no containerd, so a stub
+# reports the digest as preloaded.
+mkdir -p /etc/kubernetes/manifests
+printf '#!/bin/sh\ntest "$1" = inspecti\n' > /usr/local/bin/crictl
+chmod 0755 /usr/local/bin/crictl
+node_setup="$work/file/node-setup.sh"
+bao-kms-provider init --values "$work/file/config.yaml" --out "$work/other-gid" \
+  --model static-pod --socket-gid 4242 --image "$(cat image-ref.txt)"
+expect_exit 3 'GID is' sh "$work/other-gid/node-setup.sh" prepare
+expect_exit 3 'run check before start' sh "$node_setup" start
+expect_exit 0 'Next: sh' sh "$node_setup" prepare
+printf 'test CA fixture\n' > "$work/ca.crt"
 printf 'non-secret credential fixture\n' > "$work/credential"
-install -m 0640 -o root -g 65532 "$work/credential" /var/lib/openbao-kms/credentials/identity.jwt
+expect_exit 0 'Next: sh' sh "$node_setup" install --ca "$work/ca.crt" --credential "$work/credential"
+expect_exit 3 'already exists' sh "$node_setup" install --ca "$work/ca.crt" --credential "$work/credential"
+test "$(stat -c '%u:%g:%a' /etc/openbao-kms/config.yaml)" = 0:65532:640
+test "$(stat -c '%u:%g:%a' /var/lib/openbao-kms/credentials/identity.jwt)" = 0:65532:640
+test "$(stat -c '%u:%g:%a' /var/lib/openbao-kms/state)" = 65532:65532:750
+test "$(stat -c '%u:%g:%a' /run/openbao-kms)" = "65532:$gid:2750"
+# config and the fingerprint pass as UID 65532; verify-key needs OpenBao.
+expect_exit 4 'verify-key failed' sh "$node_setup" check
+expect_exit 3 'run check before start' sh "$node_setup" start
 setpriv --reuid=65532 --regid=65532 --groups="$gid" sh -eu -c '
   bao-kms-provider config --config /etc/openbao-kms/config.yaml >/dev/null
   test -r /var/lib/openbao-kms/credentials/identity.jwt
@@ -58,6 +87,7 @@ setpriv --reuid=65531 --regid="$gid" --clear-groups sh -eu -c '
 sha256sum /etc/openbao-kms/config.yaml /var/lib/openbao-kms/credentials/identity.jwt \
   /var/lib/openbao-kms/state/install-check > "$work/preserved.sha256"
 bash "$work/install.sh"
+expect_exit 0 'Next: sh' sh "$node_setup" prepare
 sha256sum --check "$work/preserved.sha256"
 test ! -e /etc/kubernetes/manifests/bao-kms-provider.yaml
-printf 'PASS: linux/%s kit, both init sources, runtime ownership, isolation, and reinstall preservation\n' "$arch"
+printf 'PASS: linux/%s kit, both init sources, generated node setup, runtime ownership, isolation, and reinstall preservation\n' "$arch"

@@ -43,8 +43,23 @@ configuration management.
 /run/openbao-kms/kms.sock                openbao-kms:openbao-kms-socket  0660
 ```
 
-Static pods use the same modes with the numeric container user `65532` in place
-of `openbao-kms`, as in [Run as a static pod](/docs/get-started/static-pod/#step-4-prepare-the-host).
+Static pods use the numeric container user `65532` in place of `openbao-kms`,
+and the numeric socket GID for the runtime directory:
+
+```text
+/etc/openbao-kms                                   root:65532           0750
+/etc/openbao-kms/tls                               root:root            0755
+/etc/openbao-kms/config.yaml                       root:65532           0640
+/etc/openbao-kms/tls/ca.crt                        root:root            0644
+/var/lib/openbao-kms/credentials                   root:65532           0750
+/var/lib/openbao-kms/credentials/identity.jwt      root:65532           0640
+/var/lib/openbao-kms/state                         65532:65532          0750
+/run/openbao-kms                                   65532:<socket GID>   2750
+```
+
+The generated `node-setup.sh` creates this layout from the resolved
+configuration; see [Run as a static pod](/docs/get-started/static-pod/#step-3-run-the-node-setup-phases).
+Use these tables when you manage the host through your own automation.
 
 | Actor | Needs | Must not have |
 |---|---|---|

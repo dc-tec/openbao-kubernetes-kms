@@ -34,6 +34,7 @@ const (
 	initFileInstallation      = "installation.json"
 	initFileSetupScript       = "openbao-setup.sh"
 	initFileStaticPod         = "bao-kms-provider.yaml"
+	initFileNodeSetup         = "node-setup.sh"
 )
 
 var (
@@ -300,6 +301,14 @@ func renderInitFiles(cfg config.Config, opts initOptions) ([]initFile, error) {
 			purpose: "static pod manifest for /etc/kubernetes/manifests",
 		})
 	}
+	nodeSetup, err := renderInitNodeSetup(cfg, opts)
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, initFile{
+		name: initFileNodeSetup, mode: 0o750, content: nodeSetup,
+		purpose: "per-node phases to run as root: prepare, install, check, start",
+	})
 	files = append(files, initFile{
 		name: initFileInstallation, mode: 0o640,
 		purpose: "installation record and remaining operator actions",
@@ -310,6 +319,22 @@ func renderInitFiles(cfg config.Config, opts initOptions) ([]initFile, error) {
 	}
 	files[len(files)-1].content = record
 	return files, nil
+}
+
+func renderInitNodeSetup(cfg config.Config, opts initOptions) ([]byte, error) {
+	fingerprint, err := config.IdentityFingerprint(cfg)
+	if err != nil {
+		return nil, err
+	}
+	setupOpts := scaffold.NodeSetupOptions{
+		Model: opts.model, Fingerprint: fingerprint, ConfigFile: initFileConfig,
+	}
+	if opts.model == initModelStaticPod {
+		setupOpts.ManifestFile = initFileStaticPod
+		setupOpts.Image = opts.image
+		setupOpts.SocketGID = opts.socketGID
+	}
+	return scaffold.RenderNodeSetup(cfg, setupOpts)
 }
 
 // checkGeneratedFiles loads the rendered files back through the provider's own

@@ -33,10 +33,12 @@ make dev-env-up
 
 The target generates a local JWT signer and provider JWT, creates the Kind
 cluster, starts OpenBao, Prometheus, and Grafana, and builds and loads the
-provider image. It then configures OpenBao through the OpenTofu module in
-`deploy/opentofu/openbao-kubernetes-kms`, stages the provider static pod,
-enables KMS encryption on `kube-apiserver`, and checks that a new Secret reads
-back and is stored in etcd with the `k8s:enc:kms:v2:` prefix.
+provider image. It configures OpenBao through the OpenTofu module in
+`deploy/opentofu/openbao-kubernetes-kms`. It stages the provider with
+`init --model static-pod` and the generated `node-setup.sh`, as in
+[Run as a static pod](/docs/get-started/static-pod/). Finally it enables KMS
+encryption on `kube-apiserver` and checks that a new Secret reads back and is
+stored in etcd with the `k8s:enc:kms:v2:` prefix.
 
 To exercise PKCS#11 certificate auth with SoftHSM instead of JWT:
 

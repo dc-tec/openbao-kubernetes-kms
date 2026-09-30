@@ -49,7 +49,9 @@ default:
 3. Start OpenBao, Prometheus, and Grafana.
 4. Build and load the provider image into Kind.
 5. Configure OpenBao with OpenTofu.
-6. Stage the provider static pod and encryption config.
+6. Generate the installation files with `init --model static-pod` and run the
+   generated `node-setup.sh` phases in the control-plane node. `make dev-env-stage`
+   expects a fresh node; run `make dev-env-reset` before staging again.
 7. Patch `kube-apiserver` with the KMS config.
 8. Verify Secret readback and raw etcd KMS v2 envelope storage.
 
