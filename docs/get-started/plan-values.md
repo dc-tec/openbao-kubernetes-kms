@@ -107,15 +107,10 @@ bao-kms-provider init --values values.yaml --out generated --new-key \
   --model static-pod --image "$(cat image-ref.txt)" --socket-gid <gid>
 ```
 
-On a workstation without the Linux binary, run the same command through the
-verified release image:
-
-```sh
-IMAGE=ghcr.io/dc-tec/bao-kms-provider@sha256:<digest>
-docker run --rm --user "$(id -u):$(id -g)" \
-  -v "$PWD:/work" -w /work "${IMAGE}" \
-  init --values values.yaml --out generated --new-key
-```
+Run `init` with the binary for your workstation. On macOS, download and verify
+`bao-kms-provider_<version>_darwin_<arch>` as described in
+[Download the release](/docs/get-started/download/#choose-the-artifact). On
+Windows, use the Linux binary inside WSL2.
 
 `init` prints the identity fingerprint and the new lineage ID. It rejects
 incompatible values before writing anything and refuses to write into an output

@@ -61,7 +61,7 @@ image-smoke: image ## Build and smoke-test local container image.
 build-linux: release-artifacts ## Cross-compile Linux release artifacts.
 
 .PHONY: release-artifacts
-release-artifacts: clean-dist ## Build Linux release binaries and checksums.
+release-artifacts: clean-dist ## Build Linux release binaries, macOS CLI binaries, and checksums.
 	@$(MAKE) release-artifacts-default
 	@$(MAKE) checksums
 
@@ -69,7 +69,7 @@ release-artifacts: clean-dist ## Build Linux release binaries and checksums.
 release-artifacts-default:
 	@set -eu; \
 	mkdir -p "$(DIST_DIR)"; \
-	for target in $(RELEASE_TARGETS); do \
+	for target in $(RELEASE_TARGETS) $(CLI_TARGETS); do \
 		goos="$${target%/*}"; \
 		goarch="$${target#*/}"; \
 		artifact="$(DIST_DIR)/$(BINARY_NAME)_$(VERSION)_$${goos}_$${goarch}"; \
