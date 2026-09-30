@@ -35,7 +35,7 @@ For why promotion works this way, see
 pass, and every node must report the same <code>openbao_kms_status_key_id_hash</code>.</li><li>Confirm OpenBao <code>min_decryption_version</code> still allows every version present
 in etcd and in retained backups.</li><li>Record the current <code>key_id</code> hash, Transit key version, backup IDs, provider
 version, and control-plane node list.</li></ul><h2 id=step-1-rotate-the-transit-key>Step 1: Rotate the Transit key</h2><p>As an OpenBao administrator, using the values from
-<a href=/openbao-kubernetes-kms/next/docs/get-started/plan-values/>Plan identity values</a>
+<a href=/openbao-kubernetes-kms/next/docs/get-started/plan-values/>Generate installation files</a>
 :</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao write -f &#34;${TRANSIT_MOUNT}/keys/${KEY_NAME}/rotate&#34;</code></pre></div><p>The provider&rsquo;s own token cannot rotate the key; its policy leaves out that
 capability.</p><h2 id=step-2-wait-for-promotion-on-every-node>Step 2: Wait for promotion on every node</h2><p>Each provider observes the new version, waits for
 <code>rotation.requireStableObservationCount</code> successful observations and then

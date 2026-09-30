@@ -1,4 +1,4 @@
-<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Variants of the default OpenBao setup: policy details and capabilities to avoid, JWKS or pinned JWT keys, certificate auth with PKCS#11, and generating the policy from configuration."><meta name=robots content="noindex,follow"><title>OpenBao auth and policy · Next · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/configure/openbao-auth/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="OpenBao auth and policy · OpenBao Kubernetes KMS"><meta property="og:description" content="Variants of the default OpenBao setup: policy details and capabilities to avoid, JWKS or pinned JWT keys, certificate auth with PKCS#11, and generating the policy from configuration."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/configure/openbao-auth/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
+<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="dark light"><meta name=theme-color content="#08141d"><meta name=description content="Variants of the default OpenBao setup: manual or OpenTofu setup, policy details and capabilities to avoid, host JWT agent requirements, JWKS or pinned JWT keys, and certificate auth with PKCS#11."><meta name=robots content="noindex,follow"><title>OpenBao auth and policy · Next · OpenBao Kubernetes KMS</title><link rel=canonical href=https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/configure/openbao-auth/><link rel=icon type=image/png href=/openbao-kubernetes-kms/img/brand/favicon.png><meta property="og:title" content="OpenBao auth and policy · OpenBao Kubernetes KMS"><meta property="og:description" content="Variants of the default OpenBao setup: manual or OpenTofu setup, policy details and capabilities to avoid, host JWT agent requirements, JWKS or pinned JWT keys, and certificate auth with PKCS#11."><meta property="og:type" content="article"><meta property="og:url" content="https://dc-tec.github.io/openbao-kubernetes-kms/next/docs/configure/openbao-auth/"><link rel=stylesheet href=/openbao-kubernetes-kms/css/bundle.min.ca814f6519d660920569c09d36e57da5f230fcef05ef43c023b490e4158a3b73.css integrity="sha256-yoFPZRnWYJIFacCdNuV9pfIw/O8F70PAI7SQ5BWKO3M="><script defer src=/openbao-kubernetes-kms/js/site.min.081c206edf9f256e166d6a7947bc342f5ff6a605e3bbec82d0db6ed54762e333.js integrity="sha256-CBwgbt+fJW4WbWp5R7w0L1/2pgXju+yC0Ntu1Udi4zM="></script></head><body class="is-doc has-doc-sidebar"><a class=skip-link href=#main-content>Skip to content</a><header class=site-header><div class=header-inner><button class="icon-button nav-toggle" type=button aria-label="Open documentation navigation" aria-controls=site-sidebar aria-expanded=false data-nav-toggle>
 <span></span><span></span><span></span>
 </button>
 <a class=brand href=/openbao-kubernetes-kms/next/ aria-label="OpenBao KMS documentation home"><img class=brand-logo src=/openbao-kubernetes-kms/img/brand/logo.svg alt>
@@ -22,17 +22,100 @@
 <a href=/openbao-kubernetes-kms/next/docs/configure/>Configure</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
 <span aria-current=page>OpenBao auth and policy</span></nav><aside class="version-notice version-notice-next" aria-label="Documentation version notice"><strong>Next · Unreleased</strong>
-<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>OpenBao auth and policy</h1><p class=article-lede>Variants of the default OpenBao setup: policy details and capabilities to avoid, JWKS or pinned JWT keys, certificate auth with PKCS#11, and generating the policy from configuration.</p><p class=page-meta>Updated 30 September 2026 · 4 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#policy>Policy</a></li><li><a href=#credential-files>Credential files</a></li><li><a href=#jwt-key-sources>JWT key sources</a></li><li><a href=#certificate-auth>Certificate auth</a></li></ul></nav></details><div class=article-content><p><a href=/openbao-kubernetes-kms/next/docs/get-started/openbao/>Prepare OpenBao</a>
-sets up the default: a JWT role
-using OIDC discovery and the standard policy. This page covers the variants.
-Commands use the shell variables from
-<a href=/openbao-kubernetes-kms/next/docs/get-started/openbao/#manual-alternative>Prepare OpenBao</a>
+<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>OpenBao auth and policy</h1><p class=article-lede>Variants of the default OpenBao setup: manual or OpenTofu setup, policy details and capabilities to avoid, host JWT agent requirements, JWKS or pinned JWT keys, and certificate auth with PKCS#11.</p><p class=page-meta>Updated 30 September 2026 · 8 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#manual-setup>Manual setup</a><ul><li><a href=#step-1-enable-the-transit-mount>Step 1: Enable the Transit mount</a></li><li><a href=#step-2-create-the-transit-key>Step 2: Create the Transit key</a></li><li><a href=#step-3-capture-the-key-lineage-id>Step 3: Capture the key lineage ID</a></li><li><a href=#step-4-create-the-policy>Step 4: Create the policy</a></li><li><a href=#step-5-configure-jwt-auth>Step 5: Configure JWT auth</a></li></ul></li><li><a href=#policy>Policy</a></li><li><a href=#credential-files>Credential files</a><ul><li><a href=#host-jwt-agent>Host JWT agent</a></li></ul></li><li><a href=#jwt-key-sources>JWT key sources</a></li><li><a href=#certificate-auth>Certificate auth</a></li></ul></nav></details><div class=article-content><p><a href=/openbao-kubernetes-kms/next/docs/get-started/openbao/>Prepare OpenBao</a>
+runs the generated setup for the
+default: a JWT role using OIDC discovery and the standard policy. This page
+covers the variants. Commands use the shell variables from
+<a href=#manual-setup>Manual setup</a>
 .</p><p>The provider accepts a JWT file or obtains a JWT directly through
 <a href=/openbao-kubernetes-kms/next/docs/configure/oauth2/>OAuth 2.0 client credentials</a>
 . Both sources use the
 same OpenBao JWT auth mount and role. OAuth requires an authorization server
 that issues signed JWT access tokens and works independently of the protected
-Kubernetes API.</p><h2 id=policy>Policy</h2><p>The standard policy grants metadata read, encrypt, and decrypt on the key,
+Kubernetes API.</p><h2 id=manual-setup>Manual setup</h2><p>Use these steps instead of the generated <code>openbao-setup.sh</code> when you manage
+the OpenBao resources by hand or through configuration management. Set these
+variables from your recorded values:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>TRANSIT_MOUNT=transit
+KEY_NAME=k8s-workload-a-etcd
+JWT_MOUNT=k8s-workload-a-jwt
+JWT_ROLE=openbao-kms-control-plane
+POLICY_NAME=openbao-kms-workload-a
+JWT_ISSUER=https://issuer.example.internal
+JWT_AUDIENCE=bao-kms-provider
+JWT_SUBJECT=system:openbao-kms:workload-a</code></pre></div><p>Export <code>BAO_NAMESPACE</code> as well when using a non-root OpenBao namespace.</p><aside class="callout callout-tip" role=note><div class=callout-icon aria-hidden=true>✓</div><div><p class=callout-title>Manage OpenBao with OpenTofu</p><div class=callout-body>The OpenTofu module in <code>deploy/opentofu/openbao-kubernetes-kms</code> creates the
+Transit mount, <code>disable_upsert</code>, the key, and the policy from Steps 1, 2, and 4.
+Pin its source to the release you install:
+<code>git::https://github.com/dc-tec/openbao-kubernetes-kms.git//deploy/opentofu/openbao-kubernetes-kms?ref=&lt;release-tag></code>.
+You still generate the lineage ID and configure auth with Steps 3 and 5.</div></div></aside><h3 id=step-1-enable-the-transit-mount>Step 1: Enable the Transit mount</h3><p>Enable a dedicated Transit mount, then disable upsert so an encrypt call to a
+misspelled key name fails instead of creating a new key:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao secrets enable -path=&#34;${TRANSIT_MOUNT}&#34; transit
+bao write &#34;${TRANSIT_MOUNT}/config/keys&#34; disable_upsert=true</code></pre></div><p><code>disable_upsert</code> applies to the whole mount, which is one reason the mount must
+not be shared with other workloads.</p><h3 id=step-2-create-the-transit-key>Step 2: Create the Transit key</h3><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao write &#34;${TRANSIT_MOUNT}/keys/${KEY_NAME}&#34; \
+  type=aes256-gcm96 \
+  exportable=false \
+  allow_plaintext_backup=false</code></pre></div><p>Confirm the key profile:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao read &#34;${TRANSIT_MOUNT}/keys/${KEY_NAME}&#34;</code></pre></div><p>The output shows <code>type</code> <code>aes256-gcm96</code> and <code>false</code> for <code>derived</code>,
+<code>convergent_encryption</code>, <code>exportable</code>, <code>allow_plaintext_backup</code>, and
+<code>deletion_allowed</code>, with <code>auto_rotate_period</code> <code>0s</code>. <code>aes256-gcm96</code> is the only
+tested key type in the current release line.</p><aside class="callout callout-warning" role=note><div class=callout-icon aria-hidden=true>!</div><div><p class=callout-title>Irreversible key settings</p><div class=callout-body>Never enable <code>exportable</code> or <code>allow_plaintext_backup</code> on this key. OpenBao
+cannot turn either setting off again. Keep <code>deletion_allowed=false</code>; enabling
+it permits key deletion by any token with delete capability.</div></div></aside><h3 id=step-3-capture-the-key-lineage-id>Step 3: Capture the key lineage ID</h3><p>If you generated files with <code>init --new-key</code>, use the lineage ID recorded in
+<code>generated/config.yaml</code> and skip this step. Otherwise, generate the lineage ID
+for this key and record it with the other values:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>KEY_LINEAGE_ID=$(openssl rand -hex 16)
+echo &#34;${KEY_LINEAGE_ID}&#34;</code></pre></div><p>The lineage ID is not a secret. Generate it once, when the key is created, and
+keep it for the key&rsquo;s whole lifetime. If the Transit key is ever deleted and
+recreated, generate a new lineage ID and treat the change as a destructive
+migration; the provider rejects ciphertext from a different key generation.</p><h3 id=step-4-create-the-policy>Step 4: Create the policy</h3><p>Write the least-privilege policy for the provider token:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao policy write &#34;${POLICY_NAME}&#34; - &lt;&lt;EOF
+# Read Transit key metadata.
+path &#34;${TRANSIT_MOUNT}/keys/${KEY_NAME}&#34; {
+  capabilities = [&#34;read&#34;]
+}
+
+# Encrypt with the existing key.
+path &#34;${TRANSIT_MOUNT}/encrypt/${KEY_NAME}&#34; {
+  capabilities = [&#34;update&#34;]
+}
+
+# Decrypt existing ciphertext.
+path &#34;${TRANSIT_MOUNT}/decrypt/${KEY_NAME}&#34; {
+  capabilities = [&#34;update&#34;]
+}
+
+# Inspect Transit disable_upsert.
+path &#34;${TRANSIT_MOUNT}/config/keys&#34; {
+  capabilities = [&#34;read&#34;]
+}
+
+# Allow doctor to inspect this token&#39;s capabilities.
+path &#34;sys/capabilities-self&#34; {
+  capabilities = [&#34;update&#34;]
+}
+
+# Allow token renewal when the auth role disables the default policy.
+path &#34;auth/token/renew-self&#34; {
+  capabilities = [&#34;update&#34;]
+}
+EOF</code></pre></div><p>The policy deliberately omits <code>create</code> on the encrypt path, <code>update</code> on the key
+path (rotation stays with operators), and any delete, export, or backup
+capability. For variants and the full list of capabilities to avoid, see
+<a href=/openbao-kubernetes-kms/next/docs/configure/openbao-auth/>Configure: OpenBao auth and policy</a>
+.</p><h3 id=step-5-configure-jwt-auth>Step 5: Configure JWT auth</h3><p>Enable JWT auth at a dedicated path and trust the issuer that signs the
+provider host JWT. This example uses OpenID Connect (OIDC) discovery; for a
+JSON Web Key Set (JWKS) URL or pinned public keys, see
+<a href=/openbao-kubernetes-kms/next/docs/configure/openbao-auth/>Configure: OpenBao auth and policy</a>
+.</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao auth enable -path=&#34;${JWT_MOUNT}&#34; jwt
+bao write &#34;auth/${JWT_MOUNT}/config&#34; \
+  oidc_discovery_url=&#34;${JWT_ISSUER}&#34; \
+  bound_issuer=&#34;${JWT_ISSUER}&#34;</code></pre></div><p>Create the role the provider logs in with. It binds the audience and subject,
+attaches only the policy from Step 4, and issues short-lived tokens:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao write &#34;auth/${JWT_MOUNT}/role/${JWT_ROLE}&#34; \
+  role_type=jwt \
+  bound_audiences=&#34;${JWT_AUDIENCE}&#34; \
+  bound_subject=&#34;${JWT_SUBJECT}&#34; \
+  user_claim=sub \
+  token_policies=&#34;${POLICY_NAME}&#34; \
+  token_ttl=30m \
+  token_max_ttl=1h \
+  token_no_default_policy=true</code></pre></div><p>If the issuer adds a cluster or environment claim, bind it as well with
+<code>bound_claims</code>.</p><p>The provider reads its JWT from a file on the host. Do not rely on a Kubernetes
+ServiceAccount token from the protected cluster as the only credential: if that
+API server is down, the provider cannot refresh its token during recovery.</p><h2 id=policy>Policy</h2><p>The standard policy grants metadata read, encrypt, and decrypt on the key,
 read on <code>&lt;mount>/config/keys</code> so the provider can verify <code>disable_upsert</code>, and
 update on <code>sys/capabilities-self</code> so <code>doctor</code> can check the token.</p><ul><li>Generated policies include update on <code>auth/token/renew-self</code>, including when
 the role sets <code>token_no_default_policy=true</code>. Both <code>init</code> and <code>policy openbao</code>
@@ -67,7 +150,11 @@ file format requirement but does not remove its issuer or renewal dependency.
 See <a href=/openbao-kubernetes-kms/next/docs/security/auth-model/#jwt-source-options>Security: Auth model</a>
 and
 <a href=/openbao-kubernetes-kms/next/docs/get-started/static-pod/>Static pod credential delivery</a>
-.</p><h2 id=jwt-key-sources>JWT key sources</h2><p>The default JWT config uses OIDC discovery. To use a JSON Web Key Set URL
+.</p><h3 id=host-jwt-agent>Host JWT agent</h3><p>For <code>auth.jwt.source: file</code>, the provider reads the JWT file and never obtains
+a replacement itself. Before installation, verify that the host agent:</p><ul><li>starts and renews without calling the protected Kubernetes API,</li><li>obtains JWTs with the expected issuer, audience, and subject, and enough
+lifetime to exceed <code>auth.jwt.minRemainingTtl</code> plus renewal and outage margin,</li><li>replaces the file atomically as described above, without symlinks,</li><li>reports renewal failure and has a documented way to recover its own identity.</li></ul><p>Test a renewal and a cold provider start with the protected API stopped in a
+disposable environment. This contract does not qualify every host agent; keep
+evidence for the agent and issuer your platform uses.</p><h2 id=jwt-key-sources>JWT key sources</h2><p>The default JWT config uses OIDC discovery. To use a JSON Web Key Set URL
 instead, replace <code>&lt;jwks-url></code> with the issuer&rsquo;s key set URL:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>bao write &#34;auth/${JWT_MOUNT}/config&#34; \
   jwks_url=&#34;&lt;jwks-url&gt;&#34; \
   bound_issuer=&#34;${JWT_ISSUER}&#34;</code></pre></div><p>For recovery or isolated environments without a reachable issuer, pin the
@@ -97,7 +184,7 @@ Keep <code>disable_binding=false</code> so renewal stays tied to the login certi
 service validates the selected auth material during startup. For static pods, mount the certificate chain,
 PIN file, and PKCS#11 module instead of the JWT.</p></div></article><footer class=site-footer><p>OpenBao Kubernetes KMS is an independent open source project.</p><div><a href=https://github.com/dc-tec/openbao-kubernetes-kms>GitHub</a>
 <a href=https://github.com/dc-tec/openbao-kubernetes-kms/releases>Releases</a>
-<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#policy>Policy</a></li><li><a href=#credential-files>Credential files</a></li><li><a href=#jwt-key-sources>JWT key sources</a></li><li><a href=#certificate-auth>Certificate auth</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/configure/openbao-auth.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/next/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
+<a href=/openbao-kubernetes-kms/contribute/>Contribute</a></div></footer></main><aside class=page-toc><p>On this page</p><nav id=TableOfContents><ul><li><a href=#manual-setup>Manual setup</a><ul><li><a href=#step-1-enable-the-transit-mount>Step 1: Enable the Transit mount</a></li><li><a href=#step-2-create-the-transit-key>Step 2: Create the Transit key</a></li><li><a href=#step-3-capture-the-key-lineage-id>Step 3: Capture the key lineage ID</a></li><li><a href=#step-4-create-the-policy>Step 4: Create the policy</a></li><li><a href=#step-5-configure-jwt-auth>Step 5: Configure JWT auth</a></li></ul></li><li><a href=#policy>Policy</a></li><li><a href=#credential-files>Credential files</a><ul><li><a href=#host-jwt-agent>Host JWT agent</a></li></ul></li><li><a href=#jwt-key-sources>JWT key sources</a></li><li><a href=#certificate-auth>Certificate auth</a></li></ul></nav><a class=edit-link href=https://github.com/dc-tec/openbao-kubernetes-kms/edit/main/docs/configure/openbao-auth.md>Edit this page <span>↗</span></a></aside></div><dialog class=search-dialog aria-label="Search documentation" data-search-dialog data-search-hint="Try “doctor”, “rotation”, or “key_id”." data-search-index=/openbao-kubernetes-kms/next/index.json><section class=search-panel><div class=search-box><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35M19 11A8 8 0 113 11a8 8 0 0116 0z"/></svg>
 <label class=sr-only for=site-search>Search documentation</label>
 <input id=site-search type=search autocomplete=off placeholder="Search the KMS provider docs…" data-search-input>
 <button class=search-close type=button aria-label="Close search" data-search-close>Close <kbd>Esc</kbd></button></div><div class=search-state role=status aria-live=polite data-search-state><div><p id=search-title>Search the handbook</p><span>Try “doctor”, “rotation”, or “key_id”.</span></div></div><ol class=search-results aria-label="Search results" data-search-results></ol><footer><span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span></footer></section></dialog></body></html>

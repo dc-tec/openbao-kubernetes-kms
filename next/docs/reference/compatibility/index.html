@@ -95,7 +95,7 @@ do not rename an existing configuration to bypass validation without checking
 the backend key and existing encrypted data.</p><h3 id=unreleased-static-pod-jwt-mount-correction>Unreleased static-pod JWT mount correction</h3><p>New static-pod scaffolds place file JWTs in
 <code>/var/lib/openbao-kms/credentials/identity.jwt</code> and mount the directory read-only
 so atomic replacement is visible. Existing file mounts need a one-time
-<a href=/openbao-kubernetes-kms/next/docs/get-started/static-pod/#migrate-an-existing-jwt-file-mount>manifest and credential-path migration</a>
+<a href=/openbao-kubernetes-kms/next/docs/operate/upgrade/#migrate-a-static-pod-jwt-file-mount>manifest and credential-path migration</a>
 .
 The generator rejects JWT directories that overlap provider state or socket
 directories. Existing deployments are not changed automatically. Systemd

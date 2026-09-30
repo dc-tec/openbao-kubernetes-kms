@@ -29,7 +29,7 @@ existing KMS ciphertext, and a Transit key recreated with the same name is a
 new key, not a recovery.</p><h2 id=back-up>Back up</h2><p>Back up together, and keep for as long as any etcd backup can need them:</p><ul><li>etcd snapshots and OpenBao storage snapshots, including Transit key versions
 with their original creation timestamps,</li><li>provider configuration, the local registry state file and its adjacent
 checkpoint, and the CA bundle,</li><li>OpenBao auth configuration and policies,</li><li>deployment manifests or systemd units.</li></ul><p>Record with every backup set the identity values from
-<a href=/openbao-kubernetes-kms/next/docs/get-started/plan-values/>Plan identity values</a>
+<a href=/openbao-kubernetes-kms/next/docs/get-started/plan-values/>Generate installation files</a>
 , the active Transit key
 version, the active <code>key_id</code> hash, and the provider version.</p><p>Never raise OpenBao <code>min_decryption_version</code> above a version that a retained
 etcd backup might still need.</p><h2 id=local-registry-state>Local registry state</h2><p>Restore only state supported by the installed release. Preview.3 rejects
