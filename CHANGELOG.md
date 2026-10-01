@@ -95,6 +95,63 @@ Key IDs, AAD, annotations, and state schema remain unchanged. Upgrade all nodes
 before rotating Transit keys. Older binaries do not provide pending-key decrypt
 coverage. See [rotation upgrade guidance](docs/reference/compatibility.md#unreleased-rotation-corrections).
 
+## [0.1.0-preview.3](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.2...0.1.0-preview.3) (2026-10-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **auth:** JWT authentication now requires auth.jwt.source to select file or oauth2. Existing JWT file configurations must set source: file.
+
+### Features
+
+* **auth:** add native OAuth client credentials ([#88](https://github.com/dc-tec/openbao-kubernetes-kms/issues/88)) ([185a53b](https://github.com/dc-tec/openbao-kubernetes-kms/commit/185a53bcabb932656a9d9c313a65bd87abb0cb38))
+* **cli:** add init to generate matching deployment files ([#82](https://github.com/dc-tec/openbao-kubernetes-kms/issues/82)) ([8410475](https://github.com/dc-tec/openbao-kubernetes-kms/commit/84104759494bb1bb95b3fc05e52cc086b728d2d8))
+* **cli:** verify running provider sockets under the caller identity ([#120](https://github.com/dc-tec/openbao-kubernetes-kms/issues/120)) ([94b5e2b](https://github.com/dc-tec/openbao-kubernetes-kms/commit/94b5e2b9627f3a7e11400f715faa0d1face57d17))
+* **distribution:** add pinned release downloads and offline transfer guidance ([#118](https://github.com/dc-tec/openbao-kubernetes-kms/issues/118)) ([a8e69c6](https://github.com/dc-tec/openbao-kubernetes-kms/commit/a8e69c62e405a63a3350550e71118ed224c5f164))
+* **init:** generate a per-node node-setup.sh ([#145](https://github.com/dc-tec/openbao-kubernetes-kms/issues/145)) ([cbefdcc](https://github.com/dc-tec/openbao-kubernetes-kms/commit/cbefdccbe7b45437d1eaebf7a3fb4644a789ca7e))
+* **init:** record installation inputs and stage KMS readers ([#115](https://github.com/dc-tec/openbao-kubernetes-kms/issues/115)) ([e472b98](https://github.com/dc-tec/openbao-kubernetes-kms/commit/e472b9866be5facae7828a1a7257a6c11156a024))
+* **metrics:** expose runtime and process health signals ([#104](https://github.com/dc-tec/openbao-kubernetes-kms/issues/104)) ([19d1a45](https://github.com/dc-tec/openbao-kubernetes-kms/commit/19d1a4568460b61ea5535bf3e5639603c279b757))
+* **packaging:** ship complete architecture-specific installation kits ([#117](https://github.com/dc-tec/openbao-kubernetes-kms/issues/117)) ([06b94df](https://github.com/dc-tec/openbao-kubernetes-kms/commit/06b94df41fbd424f9fdb372987cda57463f47791))
+
+
+### Bug Fixes
+
+* **auth:** bound PKCS[#11](https://github.com/dc-tec/openbao-kubernetes-kms/issues/11) session pool waits ([#84](https://github.com/dc-tec/openbao-kubernetes-kms/issues/84)) ([dbb2739](https://github.com/dc-tec/openbao-kubernetes-kms/commit/dbb2739c4f93efff2a15f26bef2f5fc6557dfb1e))
+* **auth:** recover rejected tokens and isolate shared refresh ([#79](https://github.com/dc-tec/openbao-kubernetes-kms/issues/79)) ([e55d44d](https://github.com/dc-tec/openbao-kubernetes-kms/commit/e55d44d4f8db6edf8795a4ef1c3978b00dc90faa))
+* **cli:** harden diagnostic checks and rotation reporting ([#80](https://github.com/dc-tec/openbao-kubernetes-kms/issues/80)) ([fdb12ac](https://github.com/dc-tec/openbao-kubernetes-kms/commit/fdb12ac7ce6242cd63ce0f03a9cc25058716eb4f))
+* **cli:** honor usage and configuration exit codes ([#98](https://github.com/dc-tec/openbao-kubernetes-kms/issues/98)) ([c210bf0](https://github.com/dc-tec/openbao-kubernetes-kms/commit/c210bf0947463d65d8bf55e137529a674ba1a6df))
+* **clock:** bound runtime lifetimes with elapsed time ([#100](https://github.com/dc-tec/openbao-kubernetes-kms/issues/100)) ([d2eb8f8](https://github.com/dc-tec/openbao-kubernetes-kms/commit/d2eb8f8d437c22c10cd0c851ae9d3e934a19f5ff))
+* **compatibility:** preserve file JWT upgrades and qualify provider lifecycle ([#111](https://github.com/dc-tec/openbao-kubernetes-kms/issues/111)) ([7546305](https://github.com/dc-tec/openbao-kubernetes-kms/commit/7546305249d24fe765cb6263a76fe65eee8ef721))
+* **config:** enforce Transit key name and URL contracts ([#96](https://github.com/dc-tec/openbao-kubernetes-kms/issues/96)) ([73f83b5](https://github.com/dc-tec/openbao-kubernetes-kms/commit/73f83b56dc3b47f3e6db23530cd6688a464b3bcb))
+* **config:** reject contradictory timing and listener settings ([#97](https://github.com/dc-tec/openbao-kubernetes-kms/issues/97)) ([402d2e6](https://github.com/dc-tec/openbao-kubernetes-kms/commit/402d2e6762adfacd4eefcf5094e27545144d793b))
+* **config:** reject implicit scalar coercion ([#75](https://github.com/dc-tec/openbao-kubernetes-kms/issues/75)) ([edd3d29](https://github.com/dc-tec/openbao-kubernetes-kms/commit/edd3d29ed9374f82de9520fa47c68d0ca6edc556))
+* **deployment:** make systemd installation usable and testable ([#73](https://github.com/dc-tec/openbao-kubernetes-kms/issues/73)) ([684db20](https://github.com/dc-tec/openbao-kubernetes-kms/commit/684db2071cc62ad0decc90fcbc7442d93158d4c5))
+* **deployment:** preserve atomic static-pod JWT rotation ([#92](https://github.com/dc-tec/openbao-kubernetes-kms/issues/92)) ([c9e7eef](https://github.com/dc-tec/openbao-kubernetes-kms/commit/c9e7eef7d83036bae0ad6a4710ffeab3213af816))
+* **filesystem:** validate opened state and socket ownership ([#105](https://github.com/dc-tec/openbao-kubernetes-kms/issues/105)) ([85b9d06](https://github.com/dc-tec/openbao-kubernetes-kms/commit/85b9d06a6385a1cf565cf652773aabe83237a11e))
+* **init:** reuse values with node-specific socket groups ([#127](https://github.com/dc-tec/openbao-kubernetes-kms/issues/127)) ([fafa0c0](https://github.com/dc-tec/openbao-kubernetes-kms/commit/fafa0c00ab13659c6a2b26fdb82180a11da98cca))
+* **init:** validate generated setup boundaries and inputs ([#132](https://github.com/dc-tec/openbao-kubernetes-kms/issues/132)) ([e9384da](https://github.com/dc-tec/openbao-kubernetes-kms/commit/e9384da3f969353b28b524b2873a61d58e7c85df))
+* **install:** verify consumer access and native release packages ([#135](https://github.com/dc-tec/openbao-kubernetes-kms/issues/135)) ([0657955](https://github.com/dc-tec/openbao-kubernetes-kms/commit/065795592fae25f9fcc41c6628bfc5f274c81614))
+* **lab:** align Harvester bootstrap and recovery qualification ([#137](https://github.com/dc-tec/openbao-kubernetes-kms/issues/137)) ([d7ca395](https://github.com/dc-tec/openbao-kubernetes-kms/commit/d7ca395b089a191e9d17a7490f185c36861b932e))
+* **observability:** explain readiness and runtime transitions ([#86](https://github.com/dc-tec/openbao-kubernetes-kms/issues/86)) ([1fa3ba2](https://github.com/dc-tec/openbao-kubernetes-kms/commit/1fa3ba25b23483bbc9be590a5c4d7e0b5debef7a))
+* **observability:** preserve OpenBao transport failure classes ([#85](https://github.com/dc-tec/openbao-kubernetes-kms/issues/85)) ([88f0e1a](https://github.com/dc-tec/openbao-kubernetes-kms/commit/88f0e1abaafe24c5d964bd3e60b60848137b2dac))
+* **policy:** align generated token renewal permissions ([#103](https://github.com/dc-tec/openbao-kubernetes-kms/issues/103)) ([35d76a9](https://github.com/dc-tec/openbao-kubernetes-kms/commit/35d76a950c2ddf2e36c827680cecfeb4e57321b0))
+* **rotation:** add guarded operator key retirement ([#77](https://github.com/dc-tec/openbao-kubernetes-kms/issues/77)) ([2e13e70](https://github.com/dc-tec/openbao-kubernetes-kms/commit/2e13e7021395992f99af3dca6d384a2a2abb9d34))
+* **rotation:** preserve decrypt coverage during promotion ([#78](https://github.com/dc-tec/openbao-kubernetes-kms/issues/78)) ([afbcd82](https://github.com/dc-tec/openbao-kubernetes-kms/commit/afbcd824b7802a53667430adf841103cf1ca446b))
+* **rotation:** preserve service during deferred observation saves ([#90](https://github.com/dc-tec/openbao-kubernetes-kms/issues/90)) ([24d7b48](https://github.com/dc-tec/openbao-kubernetes-kms/commit/24d7b4861c9f2abc509df0fc08c02d2b0e40ceae))
+* **rotation:** reconcile failed state persistence before recovery ([#89](https://github.com/dc-tec/openbao-kubernetes-kms/issues/89)) ([ba92060](https://github.com/dc-tec/openbao-kubernetes-kms/commit/ba920607887742666bd6eff37fabcabc3552ed92))
+* **rotation:** recover reviewed historical version retirement ([#133](https://github.com/dc-tec/openbao-kubernetes-kms/issues/133)) ([bb91732](https://github.com/dc-tec/openbao-kubernetes-kms/commit/bb91732dee0c16378f9313b2dcb648ced8e1d1da))
+* **rotation:** require elapsed activation delay after restart ([#101](https://github.com/dc-tec/openbao-kubernetes-kms/issues/101)) ([ba3b2ee](https://github.com/dc-tec/openbao-kubernetes-kms/commit/ba3b2eec19159911f72d64f52089924a7103b570))
+* **runtime:** bound denial recovery and isolate discovery cancellation ([#134](https://github.com/dc-tec/openbao-kubernetes-kms/issues/134)) ([828ba7e](https://github.com/dc-tec/openbao-kubernetes-kms/commit/828ba7e98d7c6ef0ef00fb7aecb663e1de0b74e8))
+* **state:** bind persisted backend identity ([#124](https://github.com/dc-tec/openbao-kubernetes-kms/issues/124)) ([a0ebca4](https://github.com/dc-tec/openbao-kubernetes-kms/commit/a0ebca428b14822bb6f0e6ea290fe8f7aa404fc8))
+* **state:** validate checkpoint successor history ([#123](https://github.com/dc-tec/openbao-kubernetes-kms/issues/123)) ([6162731](https://github.com/dc-tec/openbao-kubernetes-kms/commit/6162731eed89f4a70811ae8f9f0c3d8e3bbc37c2))
+* **status:** recover deep probes and protect pod startup ([#76](https://github.com/dc-tec/openbao-kubernetes-kms/issues/76)) ([d2ff1e1](https://github.com/dc-tec/openbao-kubernetes-kms/commit/d2ff1e1878ffff2d1a7bcb187db0f8acaf81e5d0))
+* **test:** qualify VM upgrades against the published provider baseline ([#121](https://github.com/dc-tec/openbao-kubernetes-kms/issues/121)) ([69510f1](https://github.com/dc-tec/openbao-kubernetes-kms/commit/69510f1a3216aa62fb1951551180af5f7911c8fc))
+
+
+### Continuous Integration
+
+* **release:** gate publication on installation of the selected archives ([#122](https://github.com/dc-tec/openbao-kubernetes-kms/issues/122)) ([0181e05](https://github.com/dc-tec/openbao-kubernetes-kms/commit/0181e050a44d414c80cd96206d28e8cacdc9e5c5))
+
 ## [0.1.0-preview.2](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.1...0.1.0-preview.2) (2026-09-21)
 
 
