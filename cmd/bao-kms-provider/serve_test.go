@@ -152,3 +152,13 @@ func TestBuildFailureLogsLifecycleWithoutRawError(t *testing.T) {
 		t.Fatalf("failed startup claimed readiness or exposed input: %s", logs)
 	}
 }
+
+func TestCheckServePlatformAllowsOnlyLinux(t *testing.T) {
+	if err := checkServePlatform("linux"); err != nil {
+		t.Fatalf("checkServePlatform(linux) = %v, want nil", err)
+	}
+	err := checkServePlatform("darwin")
+	if err == nil || !strings.Contains(err.Error(), "only on Linux") {
+		t.Fatalf("checkServePlatform(darwin) = %v, want Linux-only error", err)
+	}
+}

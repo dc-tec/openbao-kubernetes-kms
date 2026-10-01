@@ -21,6 +21,14 @@ before it reaches a control-plane node.
 | systemd on other hosts | `bao-kms-provider_<version>_systemd_linux_<arch>.tar.gz` | Same files as the packages, installed with the commands in [Run with systemd](/docs/get-started/systemd/). |
 | Static pod | `bao-kms-provider_<version>_static-pod_linux_<arch>.tar.gz` | Matching host binary, minimal values, manifest inputs, host preparation instructions, and image digest in `image-ref.txt`. |
 
+Workstations need the CLI for `init` and `policy`. Use the plain
+`bao-kms-provider_<version>_linux_<arch>` binary on Linux, or
+`bao-kms-provider_<version>_darwin_<arch>` on macOS (`amd64` or `arm64`). The
+macOS binary runs workstation commands only; `serve` refuses to start outside
+Linux. Download it with `curl` as below, then make it executable with
+`chmod +x`. A browser download is quarantined, and macOS blocks the unsigned
+binary. On Windows, use the Linux binary inside WSL2.
+
 The static-pod bundle references the distroless provider image, which runs as
 `65532:65532` and is always pulled by digest. Published artifacts use JSON Web
 Token (JWT) auth; PKCS#11 certificate auth needs a separate build, see

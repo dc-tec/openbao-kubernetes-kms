@@ -432,6 +432,8 @@ jobs:
         run: |
           BINARY_PATH="dist/primary/bao-kms-provider_${VERSION}_linux_amd64" OUTPUT_PATH="dist/primary/sbom-bao-kms-provider-linux-amd64.spdx.json" GOOS=linux GOARCH=amd64 bash hack/ci/generate-go-binary-sbom.sh
           BINARY_PATH="dist/primary/bao-kms-provider_${VERSION}_linux_arm64" OUTPUT_PATH="dist/primary/sbom-bao-kms-provider-linux-arm64.spdx.json" GOOS=linux GOARCH=arm64 bash hack/ci/generate-go-binary-sbom.sh
+          BINARY_PATH="dist/primary/bao-kms-provider_${VERSION}_darwin_amd64" OUTPUT_PATH="dist/primary/sbom-bao-kms-provider-darwin-amd64.spdx.json" GOOS=darwin GOARCH=amd64 bash hack/ci/generate-go-binary-sbom.sh
+          BINARY_PATH="dist/primary/bao-kms-provider_${VERSION}_darwin_arm64" OUTPUT_PATH="dist/primary/sbom-bao-kms-provider-darwin-arm64.spdx.json" GOOS=darwin GOARCH=arm64 bash hack/ci/generate-go-binary-sbom.sh
 
       - name: Generate binary SBOMs (rebuild)
         env:
@@ -441,6 +443,8 @@ jobs:
         run: |
           BINARY_PATH="dist/rebuild/bao-kms-provider_${VERSION}_linux_amd64" OUTPUT_PATH="dist/rebuild/sbom-bao-kms-provider-linux-amd64.spdx.json" GOOS=linux GOARCH=amd64 bash hack/ci/generate-go-binary-sbom.sh
           BINARY_PATH="dist/rebuild/bao-kms-provider_${VERSION}_linux_arm64" OUTPUT_PATH="dist/rebuild/sbom-bao-kms-provider-linux-arm64.spdx.json" GOOS=linux GOARCH=arm64 bash hack/ci/generate-go-binary-sbom.sh
+          BINARY_PATH="dist/rebuild/bao-kms-provider_${VERSION}_darwin_amd64" OUTPUT_PATH="dist/rebuild/sbom-bao-kms-provider-darwin-amd64.spdx.json" GOOS=darwin GOARCH=amd64 bash hack/ci/generate-go-binary-sbom.sh
+          BINARY_PATH="dist/rebuild/bao-kms-provider_${VERSION}_darwin_arm64" OUTPUT_PATH="dist/rebuild/sbom-bao-kms-provider-darwin-arm64.spdx.json" GOOS=darwin GOARCH=arm64 bash hack/ci/generate-go-binary-sbom.sh
 
       - name: Normalize SBOM JSON
         env:
@@ -450,9 +454,13 @@ jobs:
             dist/primary/sbom-bao-kms-provider-image.spdx.json \
             dist/primary/sbom-bao-kms-provider-linux-amd64.spdx.json \
             dist/primary/sbom-bao-kms-provider-linux-arm64.spdx.json \
+            dist/primary/sbom-bao-kms-provider-darwin-amd64.spdx.json \
+            dist/primary/sbom-bao-kms-provider-darwin-arm64.spdx.json \
             dist/rebuild/sbom-bao-kms-provider-image.spdx.json \
             dist/rebuild/sbom-bao-kms-provider-linux-amd64.spdx.json \
-            dist/rebuild/sbom-bao-kms-provider-linux-arm64.spdx.json
+            dist/rebuild/sbom-bao-kms-provider-linux-arm64.spdx.json \
+            dist/rebuild/sbom-bao-kms-provider-darwin-amd64.spdx.json \
+            dist/rebuild/sbom-bao-kms-provider-darwin-arm64.spdx.json
 
       - name: Generate deterministic checksums
         run: |

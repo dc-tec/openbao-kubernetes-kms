@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/user"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -33,6 +34,16 @@ const (
 	messageContextRequired = "context is required"
 )
 
+// checkServePlatform keeps the workstation CLI builds from running the provider.
+// Only Linux control-plane hosts are tested and supported for serve.
+func checkServePlatform(goos string) error {
+	if goos != "linux" {
+		return fmt.Errorf("serve runs only on Linux control-plane hosts; "+
+			"this %s build is for workstation commands such as init", goos)
+	}
+	return nil
+}
+
 type runtimeBuilder struct {
 	info      version.Info
 	logWriter io.Writer
@@ -55,6 +66,9 @@ func newServeCommand(runtimeConfig *config.Runtime, configPath *string, info ver
 			cfg, err := loadAndValidateConfig(runtimeConfig, *configPath, true)
 			if err != nil {
 				return err
+			}
+			if err := checkServePlatform(runtime.GOOS); err != nil {
+				return cli.WithExitCode(cli.ExitUsage, err)
 			}
 			lock, err := keyregistry.LockState(cfg.State.Path)
 			if err != nil {

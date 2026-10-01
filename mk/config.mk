@@ -53,6 +53,9 @@ DIST_DIR ?= dist/release
 CHECKSUM_FILE ?= $(DIST_DIR)/checksums.txt
 CHECKSUM ?= shasum -a 256
 RELEASE_TARGETS ?= linux/amd64 linux/arm64
+# Workstation-only CLI builds for init, policy, config, and schema. They get no
+# packages, bundles, or image, and serve refuses to start on them.
+CLI_TARGETS ?= darwin/amd64 darwin/arm64
 PACKAGE_FORMATS ?= deb rpm
 PACKAGE_RELEASE ?= 1
 NFPM_CONFIG ?= deploy/package/linux/nfpm.yaml
