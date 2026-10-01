@@ -22,7 +22,7 @@
 <a href=/openbao-kubernetes-kms/next/docs/operate/>Operate</a>
 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
 <span aria-current=page>Upgrade</span></nav><aside class="version-notice version-notice-next" aria-label="Documentation version notice"><strong>Next · Unreleased</strong>
-<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>Upgrade</h1><p class=article-lede>Upgrade the provider one control-plane node at a time, confirm each node rejoins with the same key, and roll back only when the older release can read every stored format.</p><p class=page-meta>Updated 30 September 2026 · 3 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#before-you-begin>Before you begin</a></li><li><a href=#upgrade-each-node>Upgrade each node</a></li><li><a href=#roll-back>Roll back</a></li><li><a href=#migrate-a-static-pod-jwt-file-mount>Migrate a static-pod JWT file mount</a></li></ul></nav></details><div class=article-content><p><code>0.1.0-preview.3</code> requires a fresh disposable installation. Do not use this
+<span>Unreleased development documentation. Features and commands on these pages might not exist in published artifacts. Select the release documentation when installing a release.</span></aside><article class=doc-article><header class=article-header><h1>Upgrade</h1><p class=article-lede>Upgrade the provider one control-plane node at a time, confirm each node rejoins with the same key, and roll back only when the older release can read every stored format.</p><p class=page-meta>Updated 1 October 2026 · 3 min read</p></header><details class=mobile-toc><summary>On this page</summary><nav id=MobileTableOfContents><ul><li><a href=#before-you-begin>Before you begin</a></li><li><a href=#upgrade-each-node>Upgrade each node</a></li><li><a href=#roll-back>Roll back</a></li><li><a href=#migrate-a-static-pod-jwt-file-mount>Migrate a static-pod JWT file mount</a></li></ul></nav></details><div class=article-content><p><code>0.1.0-preview.3</code> requires a fresh disposable installation. Do not use this
 procedure to upgrade an earlier preview: its unbound registry state is rejected.
 Keep the old state, checkpoint, and key material intact. See
 <a href=/openbao-kubernetes-kms/next/docs/reference/compatibility/#preview3-fresh-installation-boundary>Compatibility</a>
@@ -53,12 +53,10 @@ unknown <code>key_id</code> errors appear, return to the newer release and follo
 <a href=/openbao-kubernetes-kms/next/docs/operate/troubleshooting/#unknown-key-id>Troubleshooting: Unknown key ID</a>
 .</p><h2 id=migrate-a-static-pod-jwt-file-mount>Migrate a static-pod JWT file mount</h2><p>For manifests that mount <code>/var/lib/openbao-kms/identity.jwt</code> as a file, update
 one control-plane node at a time. Schedule an API outage for a single-node
-control plane. The provider must restart once to change its mounts.</p><ol><li>Create <code>/var/lib/openbao-kms/credentials</code> with the permissions in
-<a href=/openbao-kubernetes-kms/next/docs/get-started/static-pod/#step-4-prepare-the-host>Run as a static pod, Step 4</a>
+control plane. The provider must restart once to change its mounts.</p><ol><li>Create <code>/var/lib/openbao-kms/credentials</code> as <code>root:65532</code> with mode <code>0750</code>;
+see <a href=/openbao-kubernetes-kms/next/docs/security/linux-identity-model/#file-ownership>Security: Linux identity model</a>
 .</li><li>Configure the host issuer agent to publish a current JWT as
-<code>/var/lib/openbao-kms/credentials/identity.jwt</code> with the permissions in
-<a href=/openbao-kubernetes-kms/next/docs/get-started/static-pod/#step-6-place-the-runtime-files>Run as a static pod, Step 6</a>
-.</li><li>Change <code>auth.jwt.jwtFile</code> in the host configuration to the new path. Preserve
+<code>/var/lib/openbao-kms/credentials/identity.jwt</code> as <code>root:65532</code> with mode <code>0640</code>.</li><li>Change <code>auth.jwt.jwtFile</code> in the host configuration to the new path. Preserve
 all identity values and the state directory.</li><li>Update both the JWT volume and its mount to the credential directory,
 with hostPath type <code>Directory</code> and a read-only mount. Regenerate the manifest
 with <code>init --model static-pod</code> or use the current sample. The generator
