@@ -260,7 +260,7 @@ retained backups are expired or still decryptable.
 the socket is missing.
 
 **Fix:** import the verified image digest on the node, and restart kubelet if
-needed. See [Run as a static pod: Preload the image](/docs/get-started/static-pod/#step-3-preload-the-image).
+needed. See [Run as a static pod: Stage the kit and image](/docs/get-started/static-pod/#step-1-stage-the-kit-and-image).
 
 ## Identity fallback issues
 

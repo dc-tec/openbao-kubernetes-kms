@@ -131,6 +131,7 @@ directory that contains files.
 | `openbao-policy.hcl` | Provider permissions without key administration. |
 | `openbao-setup.sh` | Commands for an OpenBao administrator to review and run once for the new key. |
 | `bao-kms-provider.yaml` | Static pod only: pinned image, credential mounts, UID/GID, and socket group. |
+| `node-setup.sh` | The phases each node runs as root to create its directories, install its files, check them, and start the provider. |
 | `installation.json` | Generator version, image digest when supplied, identity fingerprint, host inputs, file list, and remaining actions. |
 
 Record the identity fingerprint and lineage ID in configuration management.

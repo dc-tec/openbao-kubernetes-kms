@@ -24,7 +24,7 @@ auth:
     source: file
     mountPath: auth/kind-dev-jwt
     role: openbao-kms-control-plane
-    jwtFile: /var/lib/openbao-kms/identity.jwt
+    jwtFile: /var/lib/openbao-kms/credentials/identity.jwt
     minRemainingTtl: 2m
     clockSkewLeeway: 30s
     expectedIssuer: "{{JWT_ISSUER}}"

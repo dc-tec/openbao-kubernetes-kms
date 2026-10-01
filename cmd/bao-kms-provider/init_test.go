@@ -115,6 +115,7 @@ func TestInitWritesSystemdFiles(t *testing.T) {
 		"installation.json":              0o640,
 		"openbao-policy.hcl":             0o644,
 		"openbao-setup.sh":               0o750,
+		"node-setup.sh":                  0o750,
 	}
 	for name, mode := range modes {
 		info, err := os.Stat(filepath.Join(out, name))
@@ -282,7 +283,7 @@ func TestInitExamplesPreserveIdentityAcrossNodes(t *testing.T) {
 			if firstRecord.Generator != version.BuildInfo() {
 				t.Fatal("record has incorrect build metadata")
 			}
-			if len(secondRecord.Files) != 7 {
+			if len(secondRecord.Files) != 8 {
 				t.Fatalf("record lists %d files", len(secondRecord.Files))
 			}
 			requireInitEncryptionStages(t, first, cfg)

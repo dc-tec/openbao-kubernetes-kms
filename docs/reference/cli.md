@@ -260,7 +260,7 @@ bao-kms-provider init --values values.yaml --out ./generated --new-key
 |---|---|
 | `--values <path>` | Required. A file in the provider configuration format with the values you choose; see [Generate installation files](/docs/get-started/plan-values/#write-the-values-file). |
 | `--out <dir>` | Required. Output directory; it must be absent or empty. |
-| `--model systemd\|static-pod` | Deployment model. Default: `systemd`. |
+| `--model systemd\|static-pod` | Deployment model. Default: `systemd`. For systemd, `server.socketPath` and `state.path` must stay in `/run/openbao-kms` and `/var/lib/openbao-kms/state`, the only paths the packaged unit may write. |
 | `--new-key` | Generate `transit.keyIdScope.keyLineageId` for a Transit key you are about to create. Rejected if the values file already sets one. |
 | `--policy-name <name>` | OpenBao policy name. Default: `openbao-kms-<clusterId>`. |
 | `--image <ref>` | Static pod only, required. The provider image pinned by `@sha256` digest. |
@@ -292,6 +292,7 @@ See [Prepare OpenBao](/docs/get-started/openbao/) for setup phases.
 | `openbao-policy.hcl` | The least-privilege policy, including token renewal. |
 | `openbao-setup.sh` | The `bao` commands for the Transit mount, key, policy, and JWT role, for an administrator to review and run. |
 | `bao-kms-provider.yaml` | Static pod only: the manifest with the image digest and socket GID. |
+| `node-setup.sh` | The per-node phases to run as root: `prepare`, `install --ca <file> --credential <file>`, `check`, and `start`. `start` runs only after a passed `check` of the same identity within the last hour. |
 | `installation.json` | Generator build metadata, shared fingerprint and lineage ID, model, image when supplied, runtime identity, host paths, generated files, and remaining actions. No credentials or activation success claim. |
 
 `init` prints the identity fingerprint, and the generated lineage ID with

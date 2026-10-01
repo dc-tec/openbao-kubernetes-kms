@@ -134,20 +134,22 @@ func installKindKitNode(
 			t.Fatalf("install generated provider policy: %v", err)
 		}
 	}
-	dockerCopy(t, ctx, docker, bao.CACertFile, node+":"+kindProviderCAPath)
-	dockerCopy(t, ctx, docker, bao.JWTFile, node+":"+kindProviderJWTPath)
-	runDocker(t, ctx, docker, "exec", node, "sh", "-c", kindKitStageScript)
+	// The generated node setup installs the files, checks them as UID 65532, and starts the pod.
+	dockerCopy(t, ctx, docker, bao.CACertFile, node+":"+kindKitDir+"/ca.crt")
+	dockerCopy(t, ctx, docker, bao.JWTFile, node+":"+kindKitDir+"/identity.jwt")
+	setup := kindKitDir + "/generated/node-setup.sh"
+	runDocker(t, ctx, docker, "exec", node, "sh", setup, "prepare")
+	runDocker(t, ctx, docker, "exec", node, "sh", setup, "install",
+		"--ca", kindKitDir+"/ca.crt", "--credential", kindKitDir+"/identity.jwt")
+	runDocker(t, ctx, docker, "exec", node, "sh", setup, "check")
 	doctor := runKindKitDiagnostic(t, ctx, docker, node, gid, "doctor", "--config", kindProviderConfigPath)
 	for _, id := range []string{"config.validate", "jwt.local", "openbao.auth", "transit.probe", "kms.status_encrypt"} {
 		requireKitCheck(t, doctor, id)
 	}
-	runDocker(t, ctx, docker, "exec", node, "install", "-m", "0644",
-		kindKitDir+"/generated/bao-kms-provider.yaml", kindProviderStaticPodPath)
+	runDocker(t, ctx, docker, "exec", node, "sh", setup, "start")
 	waitForKindProviderSocket(t, ctx, docker, node)
-	waitKindOAuthCondition(t, ctx, "kit provider readiness", func() bool {
-		_, err := runDockerOutput(ctx, docker, "exec", node, "curl", "--fail", "--silent", "http://127.0.0.1:8082/ready")
-		return err == nil
-	})
+	runDocker(t, ctx, docker, "exec", node, "install", "-D", "-m", "0644",
+		kindKitDir+"/generated/encryption-config-readers.yaml", kindEncryptionConfigPath)
 	probe := runKindKitDiagnostic(t, ctx, docker, node, gid, "probe", "--expected-key-id", expectedKey)
 	checkKindKitConsumerAccess(t, ctx, docker, node, gid)
 	for _, id := range []string{"client.identity", "socket.path", "kms.status", "kms.encrypt", "kms.decrypt"} {
@@ -204,15 +206,6 @@ awk '
 ' README.md > install.sh
 sh install.sh
 test ! -e /etc/kubernetes/manifests/bao-kms-provider.yaml
-`
-
-const kindKitStageScript = `set -eu
-install -m 0640 -o root -g 65532 /root/kms-install-kit/generated/config.yaml /etc/openbao-kms/config.yaml
-chown root:65532 /var/lib/openbao-kms/credentials/identity.jwt
-chmod 0640 /var/lib/openbao-kms/credentials/identity.jwt
-chmod 0644 /etc/openbao-kms/tls/ca.crt
-install -m 0644 /root/kms-install-kit/generated/encryption-config-readers.yaml \
-  /etc/kubernetes/encryption/openbao-kms/encryption-config.yaml
 `
 
 func runKindKitDiagnostic(t *testing.T, ctx context.Context, docker, node, gid string, args ...string) cli.Report {

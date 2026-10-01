@@ -28,11 +28,21 @@ extract_commands() {
   ' "$file"
 }
 
+expect_exit() {
+  local want=$1 message=$2 code=0
+  shift 2
+  "$@" > "$work/out" 2>&1 || code=$?
+  if [[ "$code" != "$want" ]] || ! grep -qF -- "$message" "$work/out"; then
+    printf 'FAIL: %s exited %s, want %s with %q:\n' "$*" "$code" "$want" "$message" >&2
+    cat "$work/out" >&2
+    exit 1
+  fi
+}
+
 extract_commands "$repo/docs/get-started/systemd.md" systemd-bundle-install > "$work/install.sh"
 extract_commands "$repo/deploy/package/bundles/systemd/README.md" systemd-bundle-install > "$work/readme-install.sh"
 cmp "$work/install.sh" "$work/readme-install.sh"
 extract_commands "$repo/docs/get-started/systemd.md" systemd-bundle-extract > "$work/extract.sh"
-extract_commands "$repo/docs/get-started/systemd.md" systemd-runtime-files > "$work/runtime.sh"
 
 if [[ -n "${BUNDLE_ARCHIVE:-}" ]]; then
   archive=$(basename "$BUNDLE_ARCHIVE")
@@ -57,19 +67,28 @@ cmp "$work/install.sh" "$work/archive-install.sh"
 bash "$work/install.sh"
 sh /src/test/deployment/check-architecture.sh "$ARCH" /usr/bin/bao-kms-provider
 
-# Run the documented initial file placement with non-secret fixtures.
-cp config/provider-systemd.yaml provider.yaml
-if [[ -f config/init-values-file.yaml ]]; then
-  for source in file oauth2; do
-    bao-kms-provider init --values "config/init-values-$source.yaml" --out "$work/$source" --new-key
-    bao-kms-provider init --values "$work/$source/config.yaml" --out "$work/$source-node2"
-    cmp "$work/$source/installation.json" "$work/$source-node2/installation.json"
-  done
-  cp "$work/file/config.yaml" provider.yaml
-fi
+# Generate from the kit's values and run the generated node setup with non-secret fixtures.
+for source in file oauth2; do
+  bao-kms-provider init --values "config/init-values-$source.yaml" --out "$work/$source" --new-key
+  bao-kms-provider init --values "$work/$source/config.yaml" --out "$work/$source-node2"
+  cmp "$work/$source/installation.json" "$work/$source-node2/installation.json"
+done
+node_setup="$work/file/node-setup.sh"
 printf 'test CA fixture\n' > ca.crt
 printf 'test JWT fixture\n' > identity.jwt
-bash "$work/runtime.sh"
+expect_exit 3 'run check before start' sh "$node_setup" start
+expect_exit 0 'Next: sh' sh "$node_setup" prepare
+expect_exit 2 '--credential <file> is required' sh "$node_setup" install --ca ca.crt
+expect_exit 0 'Next: sh' sh "$node_setup" install --ca ca.crt --credential identity.jwt
+expect_exit 3 'already exists' sh "$node_setup" install --ca ca.crt --credential identity.jwt
+test "$(stat -c '%U:%G:%a' /etc/openbao-kms/config.yaml)" = root:openbao-kms:640
+test "$(stat -c '%U:%G:%a' /var/lib/openbao-kms/identity.jwt)" = root:openbao-kms:640
+test "$(stat -c '%U:%G:%a' /etc/openbao-kms/tls/ca.crt)" = root:root:644
+# config and the fingerprint pass as the service user; verify-key needs OpenBao.
+expect_exit 4 'verify-key failed' sh "$node_setup" check
+fingerprint=$(awk -F'"' '/"identityFingerprint"/ {print $4}' "$work/file/installation.json")
+grep -qxF "identityFingerprint: $fingerprint" "$work/out"
+expect_exit 3 'run check before start' sh "$node_setup" start
 systemd-analyze verify /usr/lib/systemd/system/bao-kms-provider.service
 
 # Exercise actual filesystem access as the service identity, not as root.
@@ -104,4 +123,4 @@ systemd-tmpfiles --create --prefix=/etc/openbao-kms --prefix=/var/lib/openbao-km
 sha256sum --check "$work/before.sha256"
 runuser -u openbao-kms -- bao-kms-provider config --config /etc/openbao-kms/config.yaml > /dev/null
 test ! -e /etc/systemd/system/multi-user.target.wants/bao-kms-provider.service
-printf '%s\n' 'PASS: documented install, service-user access, socket-group isolation, and reinstall preservation'
+printf '%s\n' 'PASS: documented install, generated node setup, service-user access, socket-group isolation, and reinstall preservation'

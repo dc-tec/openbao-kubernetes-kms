@@ -194,7 +194,6 @@ func TestStaticPodStartupProbeAllowsBootstrapGrace(t *testing.T) {
 	cfg := loadProviderConfig(t, "deploy/config/provider-static-pod.yaml")
 	for _, manifest := range []string{
 		"deploy/static-pod/bao-kms-provider.yaml",
-		"test/dev-env/kind/provider-static-pod.yaml.tmpl",
 		"test/dev-env/kind/provider-static-pod-pkcs11.yaml.tmpl",
 	} {
 		t.Run(manifest, func(t *testing.T) {
