@@ -1,10 +1,34 @@
 # Unreleased
 
-## Go toolchain
+## Security and Go toolchain
 
-Builds use Go 1.27.1. The module, development environment, CI, and container
-builders use the same pinned version. Source builds require Go 1.27.1 or later.
-Staticcheck 0.8.1 and golangci-lint 2.13.2 support the updated toolchain.
+Builds use Go 1.27.3. The module, development environment, CI, and container
+builders use the same pinned version. Source builds require Go 1.27.3 or later.
+Staticcheck 0.8.2 and golangci-lint 2.15.0 support the updated toolchain.
+
+Go 1.27.3 rejects certificate chains containing any of the eight compromised
+eMudhra intermediate CA public keys. OpenBao connections trust only the
+configured CA bundle. OAuth token requests use system roots when
+`auth.jwt.oauth2.caCertFile` is omitted; setting that field replaces system
+roots with the configured bundle. Connections that trust an affected chain
+fail verification after this update. Replace affected certificates rather
+than disabling TLS verification.
+
+The update also includes the Go 1.27.2 security fixes and updates
+`golang.org/x/net` to v0.60.0 for the October HTTP/2 security fixes. Rebuild
+provider binaries and images to include these fixes. This does not update the
+separate OpenBao or Kubernetes API server binaries.
+
+See the [Go security fix](https://github.com/golang/go/issues/82345),
+[Go release history](https://go.dev/doc/devel/release#go1.27.3), and
+[HTTP/2 advisory](https://pkg.go.dev/vuln/GO-2026-6617).
+
+## File JWT compatibility
+
+Existing file JWT configurations can omit `auth.jwt.source` when `jwtFile`
+is set and no `oauth2` section is present. These configurations continue to
+use file authentication. Empty source values and mixed file/OAuth settings
+fail validation. OAuth authentication never falls back to a JWT file.
 
 ## Preview.3 installation boundary
 
