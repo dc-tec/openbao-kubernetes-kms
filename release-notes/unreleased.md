@@ -4,7 +4,7 @@
 
 Builds use Go 1.27.3. The module, development environment, CI, and container
 builders use the same pinned version. Source builds require Go 1.27.3 or later.
-Staticcheck 0.8.1 and golangci-lint 2.13.2 support the updated toolchain.
+Staticcheck 0.8.2 and golangci-lint 2.15.0 support the updated toolchain.
 
 Go 1.27.3 rejects certificate chains containing any of the eight compromised
 eMudhra intermediate CA public keys. OpenBao connections trust only the
