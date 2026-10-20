@@ -32,7 +32,7 @@ hugo.toml             site configuration, theme strings, and module mounts
 ```
 
 The default documentation describes the published `0.1.x` preview line through
-`0.1.0-preview.2`. Unreleased behavior publishes under `/next/docs/` with the
+`0.1.0-preview.3`. Unreleased behavior publishes under `/next/docs/` with the
 **Next · Unreleased** notice. This follows the OpenBao Operator site's native
 Hugo version convention. Repository `docs/` remains the editable source for
 Next; released content is maintained under
@@ -68,11 +68,12 @@ To add a new top-level docs section:
 ## Navigation
 
 `website/data/navigation.yaml` defines the Next sidebar.
-`website/data/navigation_release.yaml` preserves the preview.2 layout. Both use
-the same sidebar partials and page lookup within the selected version. The `primary` list holds
-the documentation sections, and the `secondary` list holds global guides such
-as Contribute. Items with a `step` field form the Previous and Next path of
-their group. Items that share a step are alternatives, such as the systemd and
+`website/data/navigation_release.yaml` defines the preview.3 release layout,
+including its historical corrections page. Both use the same sidebar partials
+and page lookup within the selected version. The `primary` list holds the
+documentation sections, and the `secondary` list holds global guides such as
+Contribute. Items with a `step` field form the Previous and Next path of their
+group. Items that share a step are alternatives, such as the systemd and
 static-pod pages: the path leads from the step before them to each alternative
 and from each alternative to the step after them. Section landing pages list
 their child pages by `weight` unless they set `hideChildren: true`.
@@ -84,8 +85,11 @@ The content adapter in `website/content/_content.gotmpl` publishes a redirect
 page for each entry. When a page moves, add a ledger entry for the old route in
 the same change. `website/data/release_aliases.yaml` preserves the newer URLs
 that were published before the release/development split. Each alias names its
-target version. Release-only routes retain their release destination; pages
-that exist only in Next redirect to a page with the unreleased notice.
+target version. Release-only routes retain their release destination; pages that
+exist only in Next redirect to a page with the unreleased notice. Released
+OAuth, `init`, and installation pages use canonical release routes. Retired
+preview.2 routes redirect directly to their release or global Contribute
+destinations.
 
 ## Local builds
 
