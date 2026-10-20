@@ -1,112 +1,162 @@
 [
   {
-    "path": "docs/configure/",
-    "target": "docs/configure/",
-    "version": "next"
-  },
-  {
-    "path": "docs/configure/monitor/",
-    "target": "docs/deployment/observability/",
+    "path": "docs/deployment/",
+    "target": "docs/get-started/before-you-begin/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/configure/oauth2/",
-    "target": "docs/configure/oauth2/",
-    "version": "next"
-  },
-  {
-    "path": "docs/configure/openbao-auth/",
-    "target": "docs/reference/transit-policy-examples/",
+    "path": "docs/deployment/choosing-a-model/",
+    "target": "docs/get-started/before-you-begin/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/get-started/",
-    "target": "docs/getting-started/",
+    "path": "docs/deployment/linux-identity-model/",
+    "target": "docs/security/linux-identity-model/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/deployment/observability/",
+    "target": "docs/configure/monitor/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/deployment/static-pod/",
+    "target": "docs/get-started/static-pod/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/deployment/systemd/",
+    "target": "docs/get-started/systemd/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/",
+    "target": "contribute/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/benchmark-results/",
+    "target": "contribute/benchmark-results/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/ci-supply-chain/",
+    "target": "contribute/ci-supply-chain/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/code-quality/",
+    "target": "contribute/code-quality/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/contributing/",
+    "target": "contribute/contributing/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/docs-site/",
+    "target": "contribute/docs-site/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/docs-style-guide/",
+    "target": "contribute/docs-style-guide/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/e2e-framework/",
+    "target": "contribute/e2e-framework/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/development/testing/",
+    "target": "contribute/testing/",
     "version": "0.1.x"
   },
   {
     "path": "docs/get-started/deployment-model/",
-    "target": "docs/deployment/",
-    "version": "0.1.x"
-  },
-  {
-    "path": "docs/get-started/download/",
-    "target": "docs/getting-started/install/",
-    "version": "0.1.x"
-  },
-  {
-    "path": "docs/get-started/enable-encryption/",
-    "target": "docs/getting-started/kubernetes-encryption-config/",
-    "version": "0.1.x"
-  },
-  {
-    "path": "docs/get-started/openbao/",
-    "target": "docs/getting-started/openbao-setup/",
+    "target": "docs/get-started/before-you-begin/",
     "version": "0.1.x"
   },
   {
     "path": "docs/get-started/overview/",
-    "target": "docs/getting-started/overview/",
+    "target": "docs/get-started/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/get-started/plan-values/",
-    "target": "docs/get-started/plan-values/",
-    "version": "next"
-  },
-  {
-    "path": "docs/get-started/static-pod/",
-    "target": "docs/deployment/static-pod/",
+    "path": "docs/getting-started/",
+    "target": "docs/get-started/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/get-started/systemd/",
-    "target": "docs/deployment/systemd/",
+    "path": "docs/getting-started/first-encrypt/",
+    "target": "docs/get-started/verify/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/get-started/verify/",
-    "target": "docs/getting-started/first-encrypt/",
+    "path": "docs/getting-started/install/",
+    "target": "docs/get-started/download/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/operate/",
-    "target": "docs/operations/",
+    "path": "docs/getting-started/kubernetes-encryption-config/",
+    "target": "docs/get-started/enable-encryption/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/operate/disaster-recovery/",
-    "target": "docs/operations/disaster-recovery/",
+    "path": "docs/getting-started/openbao-setup/",
+    "target": "docs/get-started/openbao/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/operate/rotation/",
-    "target": "docs/operations/rotation/",
+    "path": "docs/getting-started/overview/",
+    "target": "docs/get-started/before-you-begin/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/operate/troubleshooting/",
-    "target": "docs/operations/troubleshooting/",
+    "path": "docs/operations/",
+    "target": "docs/operate/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/operate/upgrade/",
-    "target": "docs/operations/upgrade/",
+    "path": "docs/operations/disaster-recovery/",
+    "target": "docs/operate/disaster-recovery/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/reference/release-lifecycle/",
-    "target": "docs/reference/release-policy/",
+    "path": "docs/operations/rotation/",
+    "target": "docs/operate/rotation/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/security/linux-identity-model/",
-    "target": "docs/deployment/linux-identity-model/",
+    "path": "docs/operations/troubleshooting/",
+    "target": "docs/operate/troubleshooting/",
     "version": "0.1.x"
   },
   {
-    "path": "docs/security/verify-release-artifacts/",
-    "target": "docs/security/verify-release-artifacts/",
-    "version": "next"
+    "path": "docs/operations/upgrade/",
+    "target": "docs/operate/upgrade/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/reference/metrics/",
+    "target": "docs/reference/observability/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/reference/release-policy/",
+    "target": "docs/reference/release-lifecycle/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/reference/support-policy/",
+    "target": "docs/reference/release-lifecycle/",
+    "version": "0.1.x"
+  },
+  {
+    "path": "docs/reference/transit-policy-examples/",
+    "target": "docs/configure/openbao-auth/",
+    "version": "0.1.x"
   }
 ]

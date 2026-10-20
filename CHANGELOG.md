@@ -91,9 +91,14 @@
 
 ### Compatibility
 
-Key IDs, AAD, annotations, and state schema remain unchanged. Upgrade all nodes
-before rotating Transit keys. Older binaries do not provide pending-key decrypt
-coverage. See [rotation upgrade guidance](docs/reference/compatibility.md#unreleased-rotation-corrections).
+These rotation corrections preserve key IDs, AAD, annotations, and the
+preview.3 registry schema. This compatibility applies only within the
+preview.3 state format. Preview.3 requires a fresh disposable installation with
+a new Transit key and provider identity; preview.2 state cannot be upgraded in
+place. Keep all nodes on matching artifacts before rotating Transit keys.
+Older binaries do not provide all current pending-key decrypt guarantees. See
+[the fresh-installation boundary](docs/reference/compatibility.md#preview3-fresh-installation-boundary)
+and [rotation corrections](docs/reference/compatibility.md#unreleased-rotation-corrections).
 
 ## [0.1.0-preview.3](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.2...0.1.0-preview.3) (2026-10-20)
 
