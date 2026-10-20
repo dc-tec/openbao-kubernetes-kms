@@ -17,7 +17,7 @@
 cluster, a single-node OpenBao in Docker Compose, the provider as a static pod,
 and Prometheus and Grafana. It builds the provider from your checkout, so it is
 suited to development and evaluation. It is not a release install and does not
-replace the end-to-end release gates.</p><h2 id=prerequisites>Prerequisites</h2><ul><li>Docker with Compose v2</li><li>Kind</li><li>kubectl</li><li>OpenTofu</li><li>OpenSSL</li></ul><h2 id=start-the-lab>Start the lab</h2><p>From the repository root:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>make dev-env-up</code></pre></div><p>The target generates a local JWT signer and provider JWT, creates the Kind
+replace the end-to-end release gates.</p><h2 id=prerequisites>Prerequisites</h2><ul><li>Docker with Compose v2</li><li>Kind</li><li>kubectl</li><li>OpenTofu</li><li>OpenSSL</li><li>curl</li></ul><h2 id=start-the-lab>Start the lab</h2><p>From the repository root:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>make dev-env-up</code></pre></div><p>The target generates a local JWT signer and provider JWT, creates the Kind
 cluster, starts OpenBao, Prometheus, and Grafana, and builds and loads the
 provider image. It configures OpenBao through the OpenTofu module in
 <code>deploy/opentofu/openbao-kubernetes-kms</code>. It stages the provider with
@@ -25,7 +25,15 @@ provider image. It configures OpenBao through the OpenTofu module in
 <a href=/openbao-kubernetes-kms/next/docs/get-started/static-pod/>Run as a static pod</a>
 . Finally it enables KMS
 encryption on <code>kube-apiserver</code> and checks that a new Secret reads back and is
-stored in etcd with the <code>k8s:enc:kms:v2:</code> prefix.</p><p>To exercise PKCS#11 certificate auth with SoftHSM instead of JWT:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>make dev-env-reset
+stored in etcd with the <code>k8s:enc:kms:v2:</code> prefix.</p><p>To exercise native OAuth 2.0 client credentials with a Keycloak issuer instead
+of a JWT file:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>make dev-env-reset
+make dev-env-up AUTH=oauth2</code></pre></div><p>Keycloak runs in Compose with a realm built from
+<code>deploy/config/keycloak-client.json</code>, and OpenBao validates its tokens through
+OpenID Connect discovery. The provider obtains tokens itself; this mode does not
+install a JWT refresh helper. The issuer runs outside the Kind cluster so token
+acquisition does not depend on the API server that the provider protects.</p><p>Resetting the lab deletes its cluster and generated state. Use a fresh lab when
+changing authentication modes. See <code>test/dev-env/README.md</code> for issuer outage
+commands and the behavior of an existing OpenBao token.</p><p>To exercise PKCS#11 certificate auth with SoftHSM instead of JWT:</p><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>make dev-env-reset
 make dev-env-up AUTH=pkcs11</code></pre></div><p>Grafana runs at <code>http://127.0.0.1:18300</code> with user and password <code>admin</code>, and
 shows the dashboard shipped in <code>deploy/grafana/dashboards/</code>.</p><h2 id=stop-the-lab>Stop the lab</h2><div class=command-block><div class=command-head><div><span>terminal</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-sh>make dev-env-down    # stop services and delete the cluster, keep generated state
 make dev-env-reset   # also delete the generated state under .state/</code></pre></div><p>Generated secrets, including the OpenBao root token, seal key, TLS keys, and
