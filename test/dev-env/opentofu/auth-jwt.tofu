@@ -1,9 +1,14 @@
 resource "vault_jwt_auth_backend" "provider" {
   count = var.enable_jwt_auth ? 1 : 0
 
-  path                   = var.jwt_auth_backend_path
-  jwt_validation_pubkeys = [file(var.jwt_public_key_file)]
-  bound_issuer           = var.jwt_issuer
+  path         = var.jwt_auth_backend_path
+  bound_issuer = var.jwt_issuer
+
+  # AUTH=oauth2 validates Keycloak tokens through OIDC discovery; the default
+  # mode pins the locally generated signing key.
+  jwt_validation_pubkeys = var.jwt_oidc_discovery_url == "" ? [file(var.jwt_public_key_file)] : null
+  oidc_discovery_url     = var.jwt_oidc_discovery_url == "" ? null : var.jwt_oidc_discovery_url
+  oidc_discovery_ca_pem  = var.jwt_oidc_discovery_url == "" ? null : file(var.jwt_oidc_discovery_ca_file)
 }
 
 resource "vault_jwt_auth_backend_role" "provider" {

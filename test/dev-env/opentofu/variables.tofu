@@ -61,6 +61,18 @@ variable "jwt_public_key_file" {
   description = "Local JWT validation public key file."
 }
 
+variable "jwt_oidc_discovery_url" {
+  type        = string
+  description = "OIDC discovery URL for the JWT issuer. Empty pins jwt_public_key_file instead."
+  default     = ""
+}
+
+variable "jwt_oidc_discovery_ca_file" {
+  type        = string
+  description = "CA certificate file OpenBao uses to reach the OIDC discovery URL."
+  default     = ""
+}
+
 variable "jwt_issuer" {
   type        = string
   description = "JWT issuer bound by OpenBao and expected by the provider."

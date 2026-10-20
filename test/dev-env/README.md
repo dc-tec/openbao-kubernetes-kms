@@ -19,6 +19,8 @@ evidence by itself and does not replace the end-to-end (E2E) release gates.
 - a Kubernetes `EncryptionConfiguration` that points `kube-apiserver` at the
   provider Unix socket,
 - Prometheus and Grafana for local metric inspection.
+- with `AUTH=oauth2`, a Keycloak issuer on the Kind Docker network that issues
+  the provider's JWT through OAuth 2.0 client credentials.
 
 Generated identity material, OpenBao TLS material, OpenTofu state, and rendered
 provider files live under `.state/`, which is ignored by git.
@@ -31,7 +33,8 @@ Install these tools locally:
 - Kind,
 - kubectl,
 - OpenTofu,
-- OpenSSL.
+- OpenSSL,
+- curl.
 
 ## Run
 
@@ -54,6 +57,48 @@ default:
    expects a fresh node; run `make dev-env-reset` before staging again.
 7. Patch `kube-apiserver` with the KMS config.
 8. Verify Secret readback and raw etcd KMS v2 envelope storage.
+
+To test native OAuth 2.0 client credentials with Keycloak, start a fresh lab.
+The reset command deletes the lab cluster and its generated state.
+
+```sh
+make dev-env-reset
+make dev-env-up AUTH=oauth2
+```
+
+This mode starts Keycloak with a realm built from
+`deploy/config/keycloak-client.json`, so the lab uses the documented client
+settings. Keycloak serves TLS from a certificate signed by the lab CA, at
+`https://keycloak:8443` inside the Kind network and `https://localhost:18443`
+from the host. OpenBao validates the provider's tokens through Keycloak's
+OpenID Connect discovery, and `node-setup.sh install` receives the client
+secret and the issuer CA. To observe the provider during an issuer outage,
+stop Keycloak and follow the provider's auth metrics in Grafana:
+
+```sh
+docker compose -f test/dev-env/compose.yaml --project-name openbao-kms-dev-env --profile oauth2 stop keycloak
+```
+
+A running provider can continue using and renewing a valid OpenBao token while
+Keycloak is unavailable. New token acquisition requires Keycloak. To restore the
+issuer and check a client credentials grant:
+
+```sh
+docker compose -f test/dev-env/compose.yaml --project-name openbao-kms-dev-env --profile oauth2 start keycloak
+make dev-env-keycloak AUTH=oauth2
+```
+
+The runtime OAuth E2E lane uses short OpenBao token lifetimes to verify issuer
+outage rejection, credential rotation, and cold recovery while the protected API
+server is stopped:
+
+```sh
+make test-e2e-kind-oauth2
+```
+
+The loopback ports can be changed with `DEV_ENV_OPENBAO_PORT`,
+`DEV_ENV_KEYCLOAK_PORT`, `DEV_ENV_PROMETHEUS_PORT`, and `DEV_ENV_GRAFANA_PORT`.
+Keep the same values for each command that operates on that lab.
 
 To test the PKCS#11 certificate-auth path with SoftHSM:
 
@@ -85,6 +130,7 @@ make dev-env-generate
 make dev-env-kind
 make dev-env-compose-up
 make dev-env-openbao
+make dev-env-keycloak AUTH=oauth2
 make dev-env-build
 make dev-env-pkcs11-material AUTH=pkcs11
 make dev-env-tofu

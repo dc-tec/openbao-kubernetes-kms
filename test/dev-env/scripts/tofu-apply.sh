@@ -34,6 +34,13 @@ else
 	export TF_VAR_enable_jwt_auth=true
 	export TF_VAR_enable_pkcs11_cert_auth=false
 fi
+if [ "$DEV_ENV_AUTH" = "oauth2" ]; then
+	# The Keycloak certificate is signed by the dev CA that OpenBao already uses.
+	export TF_VAR_jwt_issuer="$KEYCLOAK_ISSUER"
+	export TF_VAR_jwt_subject="$KEYCLOAK_SUBJECT"
+	export TF_VAR_jwt_oidc_discovery_url="$KEYCLOAK_ISSUER"
+	export TF_VAR_jwt_oidc_discovery_ca_file="$ca_file"
+fi
 
 tofu -chdir="$DEV_ENV_DIR/opentofu" init
 tofu -chdir="$DEV_ENV_DIR/opentofu" apply -auto-approve
