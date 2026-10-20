@@ -51,13 +51,15 @@ policy, socket handling, auth material handling, and log and metric
 redaction, plus failure validation for key deletion, recreated keys, and a
 premature <code>min_decryption_version</code>,</li><li>signed and attested artifacts with SBOMs, reproducibility reports, and a
 provenance index,</li><li>reviewed compatibility and support documentation.</li></ul><h2 id=artifacts>Artifacts</h2><p>Each release publishes GitHub release assets and a digest-addressed image on
-GHCR for <code>linux/amd64</code> and <code>linux/arm64</code>:</p><div class=command-block><div class=command-head><div><span>text</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-text>bao-kms-provider_${VERSION}_linux_${GOARCH}                  binary
+GHCR for <code>linux/amd64</code> and <code>linux/arm64</code>:</p><div class=command-block><div class=command-head><div><span>text</span></div><button type=button data-copy-button>Copy</button></div><pre><code class=language-text>bao-kms-provider_${VERSION}_linux_${GOARCH}                  Linux binary
+bao-kms-provider_${VERSION}_darwin_${GOARCH}                 macOS workstation CLI
 bao-kms-provider_${VERSION}_linux_${GOARCH}.deb              systemd package
 bao-kms-provider_${VERSION}_linux_${GOARCH}.rpm              systemd package
 bao-kms-provider_${VERSION}_systemd_linux_${GOARCH}.tar.gz   systemd tarball
 bao-kms-provider_${VERSION}_static-pod_linux_${GOARCH}.tar.gz static-pod kit
 bao-kms-provider-certauth-pkcs11_${VERSION}_${GOOS}_${GOARCH} PKCS#11 host build, when published
-checksums.txt                                                SHA-256 of every artifact</code></pre></div><p>The release also publishes the signature bundle for <code>checksums.txt</code>, provenance
+checksums.txt                                                SHA-256 of every artifact</code></pre></div><p>The macOS binaries run workstation CLI commands such as <code>init</code> and <code>policy</code>.
+They do not run the provider service; <code>serve</code> refuses to start outside Linux.</p><p>The release also publishes the signature bundle for <code>checksums.txt</code>, provenance
 attestations, SBOMs, a vulnerability scan summary, a reproducibility report,
 and <code>provenance-index.json</code>. See
 <a href=/openbao-kubernetes-kms/next/docs/security/verify-release-artifacts/>Security: Verify release artifacts</a>
