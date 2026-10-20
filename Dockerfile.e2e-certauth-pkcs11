@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-FROM --platform=$TARGETPLATFORM docker.io/library/golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS build
+FROM --platform=$TARGETPLATFORM docker.io/library/golang:1.27.3-bookworm@sha256:5c3e9b43cfd3bb95c7937462e29d87ada57b481a96fa23ad0eb61778d7a00110 AS build
 
 WORKDIR /src
 
@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     && CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH go test -c -race -tags certauth_pkcs11 \
       -o /out/certauth-pkcs11.test ./internal/auth
 
-FROM docker.io/library/golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
+FROM docker.io/library/golang:1.27.3-bookworm@sha256:5c3e9b43cfd3bb95c7937462e29d87ada57b481a96fa23ad0eb61778d7a00110
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates softhsm2 \
