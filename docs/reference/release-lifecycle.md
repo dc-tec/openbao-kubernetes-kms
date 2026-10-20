@@ -85,7 +85,8 @@ Each release publishes GitHub release assets and a digest-addressed image on
 GHCR for `linux/amd64` and `linux/arm64`:
 
 ```text
-bao-kms-provider_${VERSION}_linux_${GOARCH}                  binary
+bao-kms-provider_${VERSION}_linux_${GOARCH}                  Linux binary
+bao-kms-provider_${VERSION}_darwin_${GOARCH}                 macOS workstation CLI
 bao-kms-provider_${VERSION}_linux_${GOARCH}.deb              systemd package
 bao-kms-provider_${VERSION}_linux_${GOARCH}.rpm              systemd package
 bao-kms-provider_${VERSION}_systemd_linux_${GOARCH}.tar.gz   systemd tarball
@@ -93,6 +94,9 @@ bao-kms-provider_${VERSION}_static-pod_linux_${GOARCH}.tar.gz static-pod kit
 bao-kms-provider-certauth-pkcs11_${VERSION}_${GOOS}_${GOARCH} PKCS#11 host build, when published
 checksums.txt                                                SHA-256 of every artifact
 ```
+
+The macOS binaries run workstation CLI commands such as `init` and `policy`.
+They do not run the provider service; `serve` refuses to start outside Linux.
 
 The release also publishes the signature bundle for `checksums.txt`, provenance
 attestations, SBOMs, a vulnerability scan summary, a reproducibility report,
