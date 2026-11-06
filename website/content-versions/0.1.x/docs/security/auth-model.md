@@ -1,31 +1,40 @@
 ---
-title: "Auth Model"
-description: "Authentication design for bao-kms-provider: JWT auth, certificate auth, token lifecycle, role constraints, local validation, and renewal considerations."
+title: Auth model
+description: "Why the provider authenticates to OpenBao without the protected API server, how its token lifecycle works, and what the auth model does and does not protect."
+eyebrow: Security · Authentication
 weight: 30
+verifiedBy:
+  - internal/auth
+  - internal/config/validation.go
+  - test/e2e/openbao_cert_auth_test.go
+  - test/e2e/provider_failure_test.go
+  - test/e2e/auth_recovery_test.go
 ---
 
-`bao-kms-provider` authenticates to OpenBao with a JSON Web Token (JWT) or a client certificate. For the commands that provision OpenBao auth, see [OpenBao Setup: Step 5](/docs/getting-started/openbao-setup/#step-5-configure-jwt-auth). For the configuration fields, see [Configuration: Auth Timing](/docs/reference/configuration/#auth-timing).
+The provider logs in to OpenBao with a JSON Web Token (JWT) by default, or with
+a client certificate from a PKCS#11 token in a separate opt-in build. For the
+setup commands, see [Prepare OpenBao](/docs/get-started/openbao/) and
+[Configure: OpenBao auth and policy](/docs/configure/openbao-auth/); for the
+required controls, see [Hardening](/docs/security/hardening/#auth-material).
 
-## Supported Auth Methods
+## Supported auth methods
 
 | Method | Status | Use when |
 |---|---|---|
-| `jwt` | Default build and release path | A file-backed JWT issuer can be validated by OpenBao without calling the protected Kubernetes API server. |
+| `jwt` | Default build and release path | A JWT from a file or OAuth client credentials can be validated by OpenBao without calling the protected Kubernetes API server. |
 | `cert` with `pkcs11` source | Opt-in preview when the selected release marks it as tested | The deployment has a PKCS#11 hardware or software token that can hold the private key outside the filesystem. |
 | `cert` with `spiffe` source | Not user-configurable in preview | SPIFFE workload identity source wiring remains in tree for local verification, but it is not a supported preview configuration. |
 
-The default public release artifacts are JWT-only. PKCS#11 certificate auth is a
-separate opt-in artifact family, and it is covered only when the selected
-release publishes the matching artifact and marks that path as tested. SPIFFE
-and combined cert-auth artifacts are not supported preview user configurations.
-
-OpenBao Kubernetes auth is intentionally not a provider auth method. It calls Kubernetes TokenReview, which depends on the API server that the KMS provider plugin may be required to unlock during bootstrap or disaster recovery.
-
-OpenBao JWT auth verifies JWTs cryptographically by using local keys, a JSON Web Key Set (JWKS), or OpenID Connect (OIDC) discovery. OpenBao cert auth verifies the TLS client certificate chain and configured role constraints. Both avoid TokenReview on the protected cluster.
+OpenBao Kubernetes auth is deliberately not supported. It calls TokenReview on
+the API server that might need the provider to start. [JWT auth](https://openbao.org/api-docs/auth/jwt/) validates tokens
+with local keys, a JSON Web Key Set (JWKS), or OpenID Connect (OIDC) discovery,
+and [cert auth](https://openbao.org/docs/auth/cert/) validates the client certificate chain; neither calls the
+protected cluster. Support for each method per release is listed in
+[Reference: Compatibility](/docs/reference/compatibility/).
 
 <a id="plugin-authentication-lifecycle"></a>
 
-## Provider Authentication Lifecycle
+## Provider authentication lifecycle
 
 ```mermaid
 stateDiagram-v2
@@ -37,6 +46,7 @@ stateDiagram-v2
     Login --> AuthUnhealthy: login fails
     TokenReady --> TransitCalls: use token for Transit calls
     TransitCalls --> TrackTTL: track token TTL
+    TransitCalls --> ReLogin: 401 or 403 and recovery cooldown elapsed
     TrackTTL --> Renew: renewal configured and allowed
     TrackTTL --> ReLogin: renewal unavailable or not allowed
     Renew --> TokenReady: renewal succeeds
@@ -46,51 +56,38 @@ stateDiagram-v2
     AuthUnhealthy --> ReadyFalse: ready endpoint fails
 ```
 
-JWT configuration:
+The provider keeps its OpenBao token in memory only. Before every login, it
+reads the JWT file, obtains a new OAuth access token, or reads the certificate
+chain, according to the configured source. OAuth access tokens remain in
+memory. OpenBao token renewal does not acquire another OAuth token.
 
-```yaml
-auth:
-  method: jwt
-  loginBeforeTokenExpiry: 5m
-  tokenRenewalIncrement: 1h
-  loginTimeout: 0s
-  jwt:
-    mountPath: auth/k8s-workload-a-jwt
-    role: openbao-kms-control-plane
-    jwtFile: /var/lib/openbao-kms/identity.jwt
-    minRemainingTtl: 2m
-    clockSkewLeeway: 30s
-    expectedIssuer: ""
-    expectedAudience: []
-    expectedSubject: ""
-```
+When a request reaches the refresh-ahead threshold, the provider starts one
+shared renewal or login. Requests keep using the current token while it is
+valid; requests without a usable token wait for the shared attempt, and
+canceling a request stops only its own wait. `auth.loginTimeout` sets the
+deadline for renewal plus any fallback login, and provider shutdown cancels
+that context. PKCS#11 pool waits also use this timeout. Native PKCS#11 calls
+have a separate limit described in [Reference: Configuration](/docs/reference/configuration/#auth).
 
-Certificate configuration:
+OpenBao can return `403` for a revoked token as well as a policy denial. On a
+`401` or `403`, the provider replaces the rejected credential and retries the
+request once; concurrent rejections share one login. Repeated denials back off
+from five seconds to five minutes even when replacement login succeeds. Ten
+minutes without a rejection resets this recovery delay. Failed logins also
+have exponential backoff. A replacement rejected on the retry is discarded;
+recovery never falls back to it or to the previous token. A late rejection or renewal for an old token
+never replaces the current one, and no extra policy capability is needed. A
+request denied again after recovery keeps its OpenBao error class. Later
+requests during the recovery delay have no usable token and fail with
+`Unauthenticated` (`auth_failed`), without contacting Transit. Check the
+preceding denial and both the auth role and the Transit policy. For the
+configuration fields, see [Reference: Configuration](/docs/reference/configuration/#auth).
 
-```yaml
-auth:
-  method: cert
-  loginBeforeTokenExpiry: 5m
-  tokenRenewalIncrement: 1h
-  loginTimeout: 0s
-  cert:
-    mountPath: auth/k8s-workload-a-cert
-    name: openbao-kms-control-plane
-    minRemainingTtl: 24h
-    clockSkewLeeway: 30s
-    source: pkcs11
-    pkcs11:
-      certificateFile: /etc/openbao-kms/client/client-chain.pem
-      modulePath: /usr/lib/softhsm/libsofthsm2.so
-      tokenLabel: openbao-kms
-      keyLabel: openbao-kms-client
-      pinFile: /etc/openbao-kms/pkcs11/pin
-      maxSessions: 4
-```
+## JWT source options
 
-The provider keeps the OpenBao client token in memory only. File-backed JWTs and certificate chains are re-read before re-login.
-
-## JWT Source Options
+Set `auth.jwt.source` to `oauth2` for native client credentials or `file` for
+an externally provisioned JWT. See [OAuth 2.0 client credentials](/docs/configure/oauth2/)
+for the supported protocol, independent bootstrap requirements, and secret rotation.
 
 | Option | Recommendation | Analysis |
 |---|---|---|
@@ -98,82 +95,49 @@ The provider keeps the OpenBao client token in memory only. File-backed JWTs and
 | Kubernetes-issued ServiceAccount JWT from the protected cluster | Usable with recovery guardrails | Kubernetes ServiceAccount JWTs carry issuer, subject, audience, and expiry claims and validate offline through discovery. Offline validation does not prove that bound objects still exist. Renewal may depend on kubelet and API server behavior, so this must not be the only recovery credential. |
 | Long-lived static JWT on disk | Emergency or constrained environments only | Does not depend on a renewal service, but has weaker security. Use response wrapping for initial distribution where practical. Do not store OpenBao client tokens on disk. |
 
-## Certificate Source Options
+## Certificate source options
 
 | Source | Local validation | Operational notes |
 |---|---|---|
 | PKCS#11 | Certificate file safety, certificate lifetime, client-auth usage, weak signature rejection, and signer public key match. | The private key remains behind the PKCS#11 module. The certificate file must contain only PEM `CERTIFICATE` blocks. The PIN file must be local, regular, absolute, tightly permissioned, and single-line. CI exercises this path with SoftHSM, OpenBao cert auth, and Transit. |
-| SPIFFE | X.509 SPIFFE Verifiable Identity Document (SVID) lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | Wiring is present for local verification, but the SPIRE lane is not part of CI or the preview release gate. It is not a supported user configuration yet. |
+| SPIFFE | X.509 SPIFFE Verifiable Identity Document (SVID) lifetime, client-auth usage, weak signature rejection, expected SPIFFE ID, and trust domain. | Not a supported configuration; see [Role constraints](#role-constraints). |
 
-The provider does not accept a PEM private key file as a certificate source.
 
-## Recommended JWT Role Constraints
+## Role constraints
 
-The OpenBao JWT role should require:
+The required role bindings are listed in
+[Hardening: Auth material](/docs/security/hardening/#auth-material). Two
+details matter beyond that list. OpenBao JWT roles need at least one bound
+audience, subject, or claim. The provider's `auth.jwt.expected*` settings
+repeat the check locally, so a misplaced JWT file fails before any login
+attempt.
 
-- `bound_issuer`,
-- `bound_audiences`,
-- `bound_subject` or strong `bound_claims`,
-- a short OpenBao token TTL,
-- a limited maximum TTL,
-- no default policy,
-- one dedicated Transit policy,
-- a clock-skew leeway sized to the environment.
+`auth.cert.source: spiffe` is rejected by configuration validation: OpenBao
+`2.6.0` cert auth can enforce `allowed_uri_sans` but cannot derive an identity
+alias from a URI SAN, which stock SPIRE SVIDs rely on.
 
-OpenBao JWT roles require at least one bound value such as audience, subject, or claims. The role configuration also controls token TTL, max TTL, attached policies, and the default-policy switch.
-
-Set `auth.jwt.expectedIssuer`, `auth.jwt.expectedAudience`, and `auth.jwt.expectedSubject` in the provider configuration when those claims are stable. These local checks catch misissued or misplaced JWT files before an OpenBao login attempt.
-
-The portable OpenBao/provider end-to-end (E2E) lanes exercise bound issuer,
-audience, and subject rejection plus pinned public-key rollover. Validate
-issuer-specific JWKS or OIDC discovery rotation during issuer integration.
-
-## Recommended Cert Role Constraints
-
-The OpenBao cert role should require:
-
-- one dedicated certificate auth mount for the provider trust boundary,
-- `allowed_uri_sans`, `allowed_common_names`, `allowed_dns_sans`, or
-  `required_extensions` only when they are stable and meaningful for the
-  issuing CA,
-- short OpenBao token TTL,
-- limited token max TTL,
-- no default policy,
-- one dedicated Transit policy.
-
-The OpenBao listener used by the provider must request TLS client certificates.
-In OpenBao listener terms, keep TLS enabled and do not set
-`tls_disable_client_certs=true`. Do not set `disable_binding=true` on the cert
-auth method. Renewal must remain bound to the certificate identity used at
-login. If the role uses Online Certificate Status Protocol (OCSP) checks, keep
-`ocsp_fail_open=false`.
-
-Stock SPIRE X.509 SVIDs are SPIFFE URI SAN identities and do not include a Common
-Name by default. OpenBao `2.6.0` cert auth can enforce `allowed_uri_sans`, but
-it cannot derive the identity alias from a URI SAN. For that reason,
-`auth.cert.source: spiffe` is rejected by provider configuration validation
-until the supported OpenBao version includes compatible cert-auth alias
-behavior.
-
-## Token Renewal Considerations
+## Token renewal considerations
 
 | Issue | Design response |
 |---|---|
 | Clock skew | Validate `nbf`, `iat`, and `exp` with configurable leeway. Alert on host clock drift. |
-| JWT expiry | Refuse startup when JWT remaining TTL is below `auth.jwt.minRemainingTtl`. Re-read the JWT file before re-login. |
+| JWT expiry | Refuse login when JWT remaining TTL is at or below `auth.jwt.minRemainingTtl`. Acquire a new OAuth token or re-read the JWT file before re-login. |
+| OAuth issuer outage | Use the current OpenBao token while usable; new logins require token acquisition. Failed grants back off and never switch sources. |
 | Certificate expiry | Refuse login when the certificate remaining TTL is below `auth.cert.minRemainingTtl`. Track certificate TTL through metrics. |
 | JWKS rotation | Support OIDC discovery and JWKS cache behavior. Provide recovery mode with pinned public keys when discovery is unavailable. |
 | Issuer rotation | Treat issuer change as planned migration. Configure overlapping trust only during a bounded window. |
-| OpenBao token expiry | Re-login before expiry by default. Token renewal is supported when the role allows `auth/token/renew-self`. |
+| OpenBao token expiry | Start a shared renewal or login before expiry and keep using the current token while it is valid. Renewal requires `auth/token/renew-self`. |
+| OpenBao token revocation or backend restore | Log in again after a rejected request, within the recovery cooldown, without waiting for the token TTL. |
 | Revoked JWT | Pure JWT auth cannot detect revocation until expiry. Mitigate with short JWT TTL where renewal is reliable, or use external issuer revocation controls. |
 | Revoked certificate | Use OpenBao certificate revocation list (CRL) or OCSP configuration for the cert auth mount. Prefer fail-closed OCSP behavior. |
 | API server down | Avoid TokenReview dependency. The external JWT issuer and PKCS#11 token must not depend on the protected API server. |
 
-## Response Wrapping
+## Response wrapping
 
-Response wrapping is not part of the provider runtime path. It is useful for initial delivery of a fallback static credential, for emergency recovery material, or for one-time bootstrap secret handoff. OpenBao response wrapping stores a response behind a single-use wrapping token with a TTL, which can detect mishandling during the handoff.
+Response wrapping is not part of the runtime path. Use it for one-time
+handoff of a fallback static credential or emergency recovery material.
 
-## What This Auth Model Protects
+## What this auth model protects
 
 The auth model defends against:
 
@@ -191,10 +155,15 @@ It does not defend against:
 - OpenBao administrative actions that revoke or modify the role,
 - a compromised host that can read JWT files, certificate chains, PIN files, or process memory directly.
 
-## Source References
+## Clock corrections
 
-- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
-- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
-- [OpenBao TCP listener configuration](https://openbao.org/docs/configuration/listener/tcp/)
-- [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)
-- [SPIFFE X.509-SVID](https://spiffe.io/docs/latest/spiffe-specs/x509-svid/)
+The provider measures OpenBao token leases, refresh backoff, and rejected-token
+recovery cooldowns with process-local elapsed time. Token lifetime also uses
+wall time as a conservative bound. A forward clock correction or host suspension
+can cause early expiry; a later backward correction cannot revive that token.
+Successful login or renewal establishes a new lifetime.
+
+JWT and certificate validity use UTC wall time and their configured clock-skew
+leeway. OAuth `expires_in` is a separate relative lifetime bound; it does not
+replace the JWT `exp` claim. Both bounds must leave enough time for login.
+Keep host time synchronized with the issuer and OpenBao.

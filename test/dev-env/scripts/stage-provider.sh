@@ -11,6 +11,10 @@ if [ "$DEV_ENV_AUTH" = "jwt" ] && [ ! -s "$STATE_DIR/jwt/identity.jwt" ]; then
 	printf '%s\n' "JWT file is missing; run make dev-env-generate first" >&2
 	exit 1
 fi
+if [ "$DEV_ENV_AUTH" = "oauth2" ] && [ ! -s "$STATE_DIR/oauth2/client-secret" ]; then
+	printf '%s\n' "OAuth client secret is missing; run make dev-env-generate AUTH=oauth2 first" >&2
+	exit 1
+fi
 if [ "$DEV_ENV_AUTH" = "pkcs11" ]; then
 	for required_file in \
 		"$STATE_DIR/pkcs11/client-ca.pem" \
@@ -35,8 +39,8 @@ export PKCS11_MODULE_PATH
 export PKCS11_TOKEN_LABEL
 export PKCS11_KEY_LABEL
 
-if [ "$DEV_ENV_AUTH" = "jwt" ]; then
-	# JWT mode follows the documented path: init generates the files and the
+if [ "$DEV_ENV_AUTH" != "pkcs11" ]; then
+	# JWT and OAuth modes follow the documented path: init generates the files and the
 	# node runs the generated node-setup.sh phases.
 	if docker exec "$KIND_NODE" test -e /etc/openbao-kms/config.yaml; then
 		printf '%s\n' "provider is already staged in $KIND_NODE; run make dev-env-reset for a fresh node" >&2
@@ -58,7 +62,7 @@ if [ "$DEV_ENV_AUTH" = "jwt" ]; then
 	docker exec "$KIND_NODE" sh -c 'getent group openbao-kms-socket >/dev/null || groupadd --system --gid 1234 openbao-kms-socket'
 	socket_gid="$(docker exec "$KIND_NODE" getent group openbao-kms-socket | cut -d: -f3)"
 
-	render_template "$DEV_ENV_DIR/config/provider-jwt.yaml.tmpl" "$STATE_DIR/kind/values.yaml"
+	render_template "$DEV_ENV_DIR/config/provider-$DEV_ENV_AUTH.yaml.tmpl" "$STATE_DIR/kind/values.yaml"
 	rm -rf "$STATE_DIR/kind/generated"
 	(cd "$REPO_ROOT" &&
 		go run ./cmd/bao-kms-provider init --values "$STATE_DIR/kind/values.yaml" --out "$STATE_DIR/kind/generated" \
@@ -71,15 +75,21 @@ if [ "$DEV_ENV_AUTH" = "jwt" ]; then
 	docker exec "$KIND_NODE" chmod 0755 /usr/bin/bao-kms-provider
 	docker cp "$STATE_DIR/kind/generated" "$KIND_NODE:/root/openbao-kms-stage/generated"
 	docker cp "$ca_file" "$KIND_NODE:/root/openbao-kms-stage/ca.crt"
-	docker cp "$STATE_DIR/jwt/identity.jwt" "$KIND_NODE:/root/openbao-kms-stage/identity.jwt"
+	if [ "$DEV_ENV_AUTH" = "oauth2" ]; then
+		docker cp "$STATE_DIR/oauth2/client-secret" "$KIND_NODE:/root/openbao-kms-stage/credential"
+		# The dev CA signs both OpenBao and Keycloak.
+		set -- --credential /root/openbao-kms-stage/credential --issuer-ca /root/openbao-kms-stage/ca.crt
+	else
+		docker cp "$STATE_DIR/jwt/identity.jwt" "$KIND_NODE:/root/openbao-kms-stage/credential"
+		set -- --credential /root/openbao-kms-stage/credential
+	fi
 	docker cp "$DEV_ENV_DIR/kind/encryption-config.yaml" \
 		"$KIND_NODE:/etc/kubernetes/encryption/openbao-kms/encryption-config.yaml"
 	docker exec "$KIND_NODE" chmod 0644 /etc/kubernetes/encryption/openbao-kms/encryption-config.yaml
 
 	setup=/root/openbao-kms-stage/generated/node-setup.sh
 	docker exec "$KIND_NODE" sh "$setup" prepare
-	docker exec "$KIND_NODE" sh "$setup" install \
-		--ca /root/openbao-kms-stage/ca.crt --credential /root/openbao-kms-stage/identity.jwt
+	docker exec "$KIND_NODE" sh "$setup" install --ca /root/openbao-kms-stage/ca.crt "$@"
 	docker exec "$KIND_NODE" sh "$setup" check
 	docker exec "$KIND_NODE" sh "$setup" start
 	printf '%s\n' "provider started through node-setup.sh in $KIND_NODE"

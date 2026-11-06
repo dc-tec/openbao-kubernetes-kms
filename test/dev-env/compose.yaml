@@ -22,7 +22,7 @@ services:
       - ./.state/openbao/tls/openbao-kms-dev-openbao-01/full-chain.pem:/vault/certs/openbao-kms-dev-openbao-01/full-chain.pem:ro
       - ./.state/openbao/tls/openbao-kms-dev-openbao-01/private-key.pem:/vault/certs/openbao-kms-dev-openbao-01/private-key.pem:ro
     ports:
-      - "127.0.0.1:18200:8200"
+      - "127.0.0.1:${DEV_ENV_OPENBAO_PORT:-18200}:8200"
     healthcheck:
       test:
         - CMD
@@ -40,6 +40,35 @@ services:
         aliases:
           - openbao
 
+  # Started only with AUTH=oauth2 (COMPOSE_PROFILES=oauth2). The issuer runs
+  # outside the Kind cluster it serves, as the credential model requires.
+  keycloak:
+    profiles:
+      - oauth2
+    image: ${DEV_ENV_KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.6.3@sha256:9b0330756022422149aa6502eb2def8cd47c6e1b000c7c65cdb13e7c0133e992}
+    # Root reads the private generated TLS key and realm import, as in the E2E fixture.
+    user: "0:0"
+    env_file:
+      - path: ./.state/keycloak/admin.env
+        required: false
+    command:
+      - start-dev
+      - --import-realm
+      - --http-enabled=false
+      - --https-certificate-file=/opt/keycloak/conf/tls/full-chain.pem
+      - --https-certificate-key-file=/opt/keycloak/conf/tls/private-key.pem
+      - --hostname=https://keycloak:8443
+    volumes:
+      - ./.state/keycloak/realm.json:/opt/keycloak/data/import/kms-dev-realm.json:ro
+      - ./.state/keycloak/tls/full-chain.pem:/opt/keycloak/conf/tls/full-chain.pem:ro
+      - ./.state/keycloak/tls/private-key.pem:/opt/keycloak/conf/tls/private-key.pem:ro
+    ports:
+      - "127.0.0.1:${DEV_ENV_KEYCLOAK_PORT:-18443}:8443"
+    networks:
+      kind:
+        aliases:
+          - keycloak
+
   prometheus:
     image: ${DEV_ENV_PROMETHEUS_IMAGE:-docker.io/prom/prometheus:v2.55.1}
     command:
@@ -51,7 +80,7 @@ services:
       - ../../deploy/prometheus/rules/openbao-kms.rules.yaml:/etc/prometheus/rules/openbao-kms.rules.yaml:ro
       - ./.state/prometheus:/prometheus
     ports:
-      - "127.0.0.1:19090:9090"
+      - "127.0.0.1:${DEV_ENV_PROMETHEUS_PORT:-19090}:9090"
     networks:
       - kind
     depends_on:
@@ -71,7 +100,7 @@ services:
       - ../../deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./.state/grafana:/var/lib/grafana
     ports:
-      - "127.0.0.1:18300:3000"
+      - "127.0.0.1:${DEV_ENV_GRAFANA_PORT:-18300}:3000"
     networks:
       - kind
     depends_on:

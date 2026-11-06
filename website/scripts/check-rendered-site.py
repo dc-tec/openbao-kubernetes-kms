@@ -24,6 +24,8 @@ class Document(HTMLParser):
         self.ids: list[str] = []
         self.hrefs: list[str] = []
         self.text: list[str] = []
+        self.content_text: list[str] = []
+        self._content_div_depth = 0
         self.command_blocks: list[str] = []
         self.canonical: str | None = None
         self.is_redirect = False
@@ -61,6 +63,10 @@ class Document(HTMLParser):
             if values.get("aria-current") == "page":
                 self.navigation_current_hrefs.append(values["href"] or "")
         if tag == "div":
+            if self._content_div_depth > 0:
+                self._content_div_depth += 1
+            elif "article-content" in classes:
+                self._content_div_depth = 1
             if self._command_div_depth > 0:
                 self._command_div_depth += 1
             elif "command-block" in classes:
@@ -70,10 +76,14 @@ class Document(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         self.text.append(data)
+        if self._content_div_depth:
+            self.content_text.append(data)
         if self._command_code is not None:
             self._command_code.append(data)
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "div" and self._content_div_depth:
+            self._content_div_depth -= 1
         if tag == "nav" and self._navigation_depth:
             self._navigation_depth -= 1
             if not self._navigation_depth:
@@ -221,20 +231,124 @@ def validate_version_contract(
             continue
         is_next = route.startswith("/next/")
         text = "".join(document.text)
-        expected_notice = "Next · Unreleased" if is_next else "Documentation for 0.1.0-preview.2"
+        expected_notice = "Next · Unreleased" if is_next else "Documentation for 0.1.0-preview.3"
         if expected_notice not in text:
             errors.append(f"missing version notice: {route}")
+        if not is_next:
+            for marker in ("private draft", "private snapshot", "tagged artifacts pending", "artifact acceptance remains pending"):
+                if marker in text.casefold():
+                    errors.append(f"unpublished release marker: {route}: {marker}")
         expected_index = "/next/index.json" if is_next else "/index.json"
         if document.search_indexes != [BASE_PATH + expected_index]:
             errors.append(f"wrong version search index: {route}")
 
-    for route, has_init in (("/docs/reference/cli/", False), ("/next/docs/reference/cli/", True)):
+    for route, has_init in (("/docs/reference/cli/", True), ("/next/docs/reference/cli/", True)):
         if route not in routes:
             errors.append(f"missing version CLI: {route}")
             continue
         document = load_document(routes[route], documents)
         if ("init" in document.ids) != has_init:
             errors.append(f"incorrect init availability: {route}")
+
+    canonical_guides = (
+        "docs/configure/oauth2/",
+        "docs/configure/keycloak/",
+        "docs/get-started/",
+        "docs/get-started/before-you-begin/",
+        "docs/get-started/download/",
+        "docs/get-started/plan-values/",
+        "docs/security/verify-release-artifacts/",
+        "docs/reference/cli/",
+        "docs/reference/configuration/",
+        "docs/reference/kms-v2-contract/",
+    )
+    for prefix in ("/", "/next/"):
+        for guide in canonical_guides:
+            route = prefix + guide
+            if route not in routes:
+                errors.append(f"missing canonical version guide: {route}")
+                continue
+            document = load_document(routes[route], documents)
+            if document.is_redirect or normalize_internal_path(route, document.canonical or "") != (route, ""):
+                errors.append(f"version guide redirects instead of rendering: {route}")
+
+    release_contracts = {
+        "/docs/reference/compatibility/": (
+            "fresh disposable installation", "new Transit key", "provider identity",
+            "In-place upgrades from earlier previews are unsupported",
+            "without rewriting its state or checkpoint", "no automatic adoption or migration command",
+            "Preview.3 qualification scope", "Published preview.3 matrix", "Historical preview.2 matrix",
+            "20 October 2026", "passed all 13 jobs", "passed all 15 jobs",
+            "1.34.11", "1.35.8", "1.36.4", "1.37.0", "2.6.3", "2.7.0",
+            "do not repeat every cross-pair", "three API servers",
+            "CLI artifacts", "distribution targets", "not native execution qualification",
+            "Linux arm64 checks use QEMU", "provider service runs only on Linux",
+            "does not qualify an upgrade to preview.3 or a downgrade of preview.3 state",
+        ),
+        "/docs/get-started/": ("fresh disposable installation", "new Transit key", "provider identity"),
+        "/docs/get-started/before-you-begin/": (
+            "fresh disposable installation", "new Transit key", "provider identity",
+            "protected Kubernetes API is down", "Linux control-plane nodes",
+        ),
+        "/docs/get-started/download/": (
+            "fresh disposable installation", "new Transit key", "provider identity",
+            "darwin", "macOS binary runs workstation commands only", "refuses to start outside Linux",
+            "0.1.0-preview.3",
+        ),
+        "/docs/reference/configuration/": (
+            "An omitted source selects", "only when", "jwtFile", "no", "oauth2",
+            "Explicit empty values are invalid", "forbidden for",
+        ),
+        "/docs/configure/oauth2/": (
+            "new access token before each OpenBao JWT login", "no automatic method fallback",
+            "while the protected Kubernetes API is unavailable", "independent process",
+            "existing OpenBao token usable", "New logins require the issuer",
+            "cannot fall back to a JWT file or another authentication method",
+            "does not revoke OpenBao tokens already issued", "client_secret_basic", "client_secret_post",
+        ),
+        "/docs/security/auth-model/": (
+            "OpenBao token renewal does not acquire another OAuth token",
+            "memory only", "TokenReview",
+        ),
+        "/docs/operate/upgrade/": (
+            "requires a fresh disposable installation", "Do not use this procedure to upgrade an earlier preview",
+            "Keep the old state, checkpoint, and key material intact",
+        ),
+        "/docs/operate/rotation/": (
+            "retire-versions", "restore-versions", "--expected-state-hash", "Stop the provider",
+            "every backup that needs the old versions has expired", "never restore one file",
+        ),
+        "/docs/operate/disaster-recovery/": (
+            "registry state file and its adjacent checkpoint", "back up the two files together",
+            "a Transit key recreated with the same name is a new key, not a recovery",
+        ),
+        "/docs/reference/release-lifecycle/": (
+            "best effort", "production", "darwin", "PKCS#11",
+        ),
+        "/docs/errata/": (
+            "Historical preview.2 corrections", "apply only to", "0.1.0-preview.2",
+            "do not describe preview.3 installation behavior", "fresh disposable installation",
+        ),
+    }
+    for route, required_phrases in release_contracts.items():
+        if route not in routes:
+            errors.append(f"missing release contract page: {route}")
+            continue
+        text = " ".join(" ".join(load_document(routes[route], documents).content_text).split()).casefold()
+        for phrase in required_phrases:
+            if phrase.casefold() not in text:
+                errors.append(f"missing release contract: {route}: {phrase}")
+
+    errata_route = "/docs/errata/"
+    if errata_route in routes:
+        historical_anchors = {
+            "available-commands-and-authentication", "systemd-directory-permissions",
+            "systemd-tarball-layout", "static-pod-diagnostic-binary",
+            "fresh-evaluation-clusters", "diagnostic-scope",
+        }
+        actual = set(load_document(routes[errata_route], documents).ids)
+        for anchor in sorted(historical_anchors - actual):
+            errors.append(f"missing historical correction anchor: {errata_route}#{anchor}")
 
     for prefix in ("", "next/"):
         index_file = root / prefix / "index.json"
@@ -251,6 +365,35 @@ def validate_version_contract(
                 errors.append(f"search crosses documentation versions: {prefix}: {route}")
             if route not in routes or load_document(routes[route], documents).is_redirect:
                 errors.append(f"noncanonical search entry: {route}")
+    return errors
+
+
+def validate_redirects(routes: dict[str, Path], documents: dict[Path, Document]) -> list[str]:
+    """Require internal redirects to resolve directly to canonical content."""
+    errors: list[str] = []
+    for route, html_file in routes.items():
+        document = load_document(html_file, documents)
+        if not document.is_redirect:
+            continue
+        target = normalize_internal_path(route, document.canonical or "")
+        if target is None or target[0] not in routes:
+            errors.append(f"redirect has no internal canonical target: {route}")
+            continue
+        target_route = target[0]
+        seen = {route}
+        while target_route in routes:
+            if target_route in seen:
+                errors.append(f"redirect cycle: {route} -> {target_route}")
+                break
+            seen.add(target_route)
+            target_document = load_document(routes[target_route], documents)
+            if not target_document.is_redirect:
+                break
+            errors.append(f"redirect chain: {route} -> {target_route}")
+            next_target = normalize_internal_path(target_route, target_document.canonical or "")
+            if next_target is None:
+                break
+            target_route = next_target[0]
     return errors
 
 
@@ -273,6 +416,9 @@ def main() -> int:
     routes = {route_for(root, path): path for path in html_files}
     documents: dict[Path, Document] = {}
     errors: list[str] = []
+    for route, count in Counter(route_for(root, path) for path in html_files).items():
+        if count > 1:
+            errors.append(f"duplicate rendered route: {route} ({count})")
 
     required_routes = ("/", "/docs/", "/next/docs/", "/docs/errata/", "/next/docs/configure/oauth2/", "/404/")
     for route in required_routes:
@@ -317,6 +463,7 @@ def main() -> int:
                 if fragment not in target_document.ids:
                     errors.append(f"missing fragment: {route}: {href}")
 
+    errors.extend(validate_redirects(routes, documents))
     errors.extend(validate_navigation(routes, documents))
     errors.extend(validate_version_contract(root, routes, documents))
 

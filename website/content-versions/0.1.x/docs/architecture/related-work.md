@@ -1,51 +1,95 @@
 ---
-title: "Related Work"
-description: "Existing Vault Transit Kubernetes KMS plugin work that informed bao-kms-provider, and the project-specific design boundaries this implementation chooses."
+title: Related work
+description: "A revision-pinned comparison with the Vault Transit KMS plugin, including identity, authentication, startup, and recovery tradeoffs."
+eyebrow: Architecture
 weight: 60
+verifiedBy:
+  - internal/kmsv2/server.go
+  - internal/scaffold/staticpod.go
+  - internal/socket/listener.go
+  - docs/reference/compatibility.md
 ---
 
-The closest existing project in this space is [`FalcoSuessgott/vault-kubernetes-kms`](https://github.com/FalcoSuessgott/vault-kubernetes-kms), a Kubernetes KMS plugin that integrates with HashiCorp Vault Transit. It is useful related work for this project because it demonstrates that a Transit-backed KMS plugin can operate in real Kubernetes control-plane deployments.
+The closest related project is
+[`FalcoSuessgott/vault-kubernetes-kms`](https://github.com/FalcoSuessgott/vault-kubernetes-kms),
+a Kubernetes KMS plugin for HashiCorp Vault Transit. Its deployment model
+informed this project's treatment of bootstrap dependencies, local sockets,
+token renewal, and observability.
 
-The surrounding ecosystem influenced this design, but project constraints led to a separate OpenBao-native implementation. This record identifies that lineage and explains the project's release boundary.
+This comparison was reviewed on **27 September 2026** against upstream
+[`v1.4.0`, commit `a4ce7ca`](https://github.com/FalcoSuessgott/vault-kubernetes-kms/tree/a4ce7ca04aa211fefa6610dd2d695b89f9c65a32).
+It compares source behavior, not deployment history or release qualification.
+For `bao-kms-provider`, support is limited to the tested matrix and artifacts
+listed in [Compatibility](/docs/reference/compatibility/) for the selected
+release. Later changes need their own source and artifact qualification.
 
-## Design Influences
+## KMS and identity
 
-The existing Vault Transit plugin work reinforced several choices in this project:
+`bao-kms-provider` is a separate implementation with an OpenBao-specific
+configuration, policy, and identity contract.
 
-- the KMS plugin must be available before `kube-apiserver` can reliably start with encrypted data,
-- static-pod deployment needs special care because static pods cannot depend on ConfigMaps, Secrets, or ServiceAccounts,
-- the remote Transit service should be reachable independently of the protected Kubernetes API server,
-- Unix socket placement and permissions are part of the security boundary,
-- token renewal and runtime observability are operational requirements,
-- KMS v2 is the default target for current Kubernetes clusters.
-
-Those lessons are reflected in the deployment, hardening, and operations docs for this provider.
-
-## Project-Specific Boundaries
-
-`bao-kms-provider` makes these explicit design choices:
-
-| Boundary | Choice in `bao-kms-provider` | Reason |
+| Area | `bao-kms-provider` | Compared Vault provider |
 |---|---|---|
-| KMS API | KMS v2 only. | Keeps the implementation focused on the stable current Kubernetes contract. |
-| OpenBao integration | OpenBao-native naming, configuration, policy examples, and operational docs. | Keeps the public contract specific to OpenBao. |
-| Authentication | JSON Web Token (JWT) auth by default, with certificate auth backed by a PKCS#11 hardware or software token. | Avoids TokenReview dependency on the protected API server during bootstrap and recovery. |
-| Deployment model | systemd is the recommended default when operators control the host OS; static pod remains supported. | systemd removes kubelet and container runtime from the provider boot path. |
-| Status path | Status returns cached health and active `key_id`. | Kubernetes polls Status continually, so live Transit encrypt/decrypt work belongs in background probes. |
-| Encrypt versioning | Encrypt passes an explicit Transit `key_version` from the active snapshot. | Avoids implicit-latest races during Transit rotation. |
-| Kubernetes `key_id` | Opaque scoped `key_id`, never a raw Transit version or key name. | Avoids topology leakage and preserves Kubernetes key-rotation invariants. |
-| AAD and annotations | Requires additional authenticated data (AAD) metadata and rejects non-required AAD modes. | Binds ciphertext to provider, cluster, OpenBao instance, key lineage, and key version. |
-| Socket handling | Unsafe paths fail closed; only verified-dead Unix sockets are removed. | Prevents accidental or malicious socket path replacement. |
-| Recovery docs | Disaster recovery, rotation, and troubleshooting are first-class docs. | KMS failures can block API server startup, so operators need runbooks before incidents. |
+| KMS API | KMS v2 only | KMS v1 and v2 |
+| Status | Reads cached health and the active `key_id`; background probes have bounded freshness | Reads key metadata and performs an encrypt/decrypt health check |
+| Encrypt | Takes `key_id`, AAD, and an explicit Transit `key_version` from one active snapshot | Encrypts with implicit latest, then reads the latest version for `key_id` |
+| Identity | A scoped hash includes key lineage and version identity | The Transit version number identifies the key |
+| Ciphertext context | Required additional authenticated data (AAD) binds the configured provider, cluster, instance, lineage, and version | The Transit request does not supply AAD |
+| Local socket | Refuses unsafe paths and live or uncertain listeners; removes only verified stale sockets | An optional force flag removes an existing socket path |
 
-## Shared Operating Lessons
+Upstream source: [KMS v2 service](https://github.com/FalcoSuessgott/vault-kubernetes-kms/blob/a4ce7ca04aa211fefa6610dd2d695b89f9c65a32/pkg/plugin/plugin_v2.go),
+[Transit client](https://github.com/FalcoSuessgott/vault-kubernetes-kms/blob/a4ce7ca04aa211fefa6610dd2d695b89f9c65a32/pkg/vault/transit.go),
+and [socket handling](https://github.com/FalcoSuessgott/vault-kubernetes-kms/blob/a4ce7ca04aa211fefa6610dd2d695b89f9c65a32/pkg/socket/socket.go).
 
-Where the projects align, the alignment is intentional:
+An explicit version keeps encryption and its reported identity consistent
+when Transit rotates during a request. Required AAD is this project's
+additional binding contract; KMS v2 does not require every plugin to use it.
+Hashed identifiers avoid directly exposing configured names, but do not make
+public identity inputs secret.
 
-- a Transit-backed KMS plugin is a practical model for Kubernetes encryption at rest,
-- the plugin must run on every control-plane node that hosts `kube-apiserver`,
-- the API server talks to the plugin over a local Unix domain socket,
-- the remote Transit service belongs outside the protected API-server dependency path,
-- deployment manifests must be designed for early control-plane boot.
+## Authentication and startup
 
-`bao-kms-provider` builds from those shared lessons while narrowing the implementation around OpenBao, KMS v2, provider auth without TokenReview, explicit key-version handling, AAD-backed decrypt validation, and documented release evidence.
+The compared provider supports token, AppRole, userpass, file certificate,
+file JWT, and native SPIFFE JWT-SVID authentication. Its
+[JWT source](https://github.com/FalcoSuessgott/vault-kubernetes-kms/blob/a4ce7ca04aa211fefa6610dd2d695b89f9c65a32/pkg/vault/jwt.go)
+can request a JWT-SVID from the SPIFFE Workload API.
+
+`bao-kms-provider` supports file JWTs and native OAuth client credentials.
+PKCS#11 certificate authentication is limited to releases that publish and
+qualify the corresponding artifact. Native SPIFFE JWT-SVID acquisition is
+not implemented here. The SPIFFE certificate source is a different integration
+and remains unsupported.
+
+JWT authentication in either implementation can avoid TokenReview against
+the protected Kubernetes API server. The issuer, OpenBao, and the path that
+renews host credentials must remain available independently of that server.
+
+Our systemd deployment lets the provider start without kubelet or the
+container runtime. Its unit orders process execution, not provider readiness.
+The API server can start while the provider bootstraps and must retry.
+Static pods add kubelet, the runtime, and a preloaded image to the provider's
+dependencies. See [Startup](/docs/architecture/overview/#startup).
+
+## Recovery and migration
+
+Our registry preserves accepted identities and rotation decisions across
+restarts. It supplies monotonicity checks and historical identity validation,
+but adds recovery state. The compared provider has no equivalent local
+identity registry.
+
+After rotation, our state and checkpoint are not disposable caches. Preserve
+them with compatible identity configuration, OpenBao key history, and etcd
+backups. The checkpoint detects inconsistent restores; it cannot prevent a
+privileged administrator from replacing both files. Follow
+[Disaster recovery](/docs/operate/disaster-recovery/).
+
+The providers' key IDs, annotations, and AAD contracts differ. Replacing the
+binary against the same Transit key does not establish ciphertext
+compatibility. A migration must retain the old decrypt path while resources
+are rewritten through the new provider. Verify readback after an API server
+restart and keep old keys and backups until the migration is complete. See
+[Encryption configuration](/docs/reference/encryption-config/#migration-files).
+
+Both projects have automated tests and release signing. Those controls do
+not establish support for an untested combination or prove equivalent
+recovery behavior. Use the selected release's evidence for operational claims.

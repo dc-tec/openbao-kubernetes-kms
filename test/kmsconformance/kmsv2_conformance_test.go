@@ -3,6 +3,7 @@ package kmsconformance_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -236,7 +237,10 @@ func startKMSV2Server(t *testing.T) (kmsapi.KeyManagementServiceClient, *fakes.K
 	t.Cleanup(func() {
 		grpcServer.Stop()
 		select {
-		case <-serveDone:
+		case err := <-serveDone:
+			if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+				t.Errorf("gRPC Serve returned: %v", err)
+			}
 		case <-time.After(time.Second):
 			t.Fatal("gRPC server did not stop")
 		}

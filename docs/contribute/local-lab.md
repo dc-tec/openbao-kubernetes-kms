@@ -22,6 +22,7 @@ replace the end-to-end release gates.
 - kubectl
 - OpenTofu
 - OpenSSL
+- curl
 
 ## Start the lab
 
@@ -39,6 +40,24 @@ provider image. It configures OpenBao through the OpenTofu module in
 [Run as a static pod](/docs/get-started/static-pod/). Finally it enables KMS
 encryption on `kube-apiserver` and checks that a new Secret reads back and is
 stored in etcd with the `k8s:enc:kms:v2:` prefix.
+
+To exercise native OAuth 2.0 client credentials with a Keycloak issuer instead
+of a JWT file:
+
+```sh
+make dev-env-reset
+make dev-env-up AUTH=oauth2
+```
+
+Keycloak runs in Compose with a realm built from
+`deploy/config/keycloak-client.json`, and OpenBao validates its tokens through
+OpenID Connect discovery. The provider obtains tokens itself; this mode does not
+install a JWT refresh helper. The issuer runs outside the Kind cluster so token
+acquisition does not depend on the API server that the provider protects.
+
+Resetting the lab deletes its cluster and generated state. Use a fresh lab when
+changing authentication modes. See `test/dev-env/README.md` for issuer outage
+commands and the behavior of an existing OpenBao token.
 
 To exercise PKCS#11 certificate auth with SoftHSM instead of JWT:
 

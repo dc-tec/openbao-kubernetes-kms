@@ -140,7 +140,7 @@ func assertPKCS11SignTimesOut(t *testing.T, signer crypto.Signer, release func()
 		// Release and drain before provider cleanup so a regression fails without
 		// stranding a signing goroutine or closing an in-use PKCS#11 context.
 		release()
-		<-done
-		t.Fatal("signing waited indefinitely for a pooled session")
+		err := <-done
+		t.Fatalf("signing waited indefinitely for a pooled session: %v", err)
 	}
 }

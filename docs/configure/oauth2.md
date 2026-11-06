@@ -4,6 +4,7 @@ description: "Obtain JWT access tokens directly from an independent OAuth author
 eyebrow: Configure · Authentication
 weight: 15
 verifiedBy:
+  - .ci/versions.yaml
   - internal/oauth2
   - internal/auth/oauth2.go
   - test/e2e/oauth2_test.go
@@ -45,13 +46,14 @@ Keycloak service accounts can issue JWT access tokens through this grant.
 Other OAuth providers can use the same integration when they meet this contract.
 Protocol tests exercise both client authentication methods with an HTTPS test
 issuer. OpenBao integration tests exercise signature validation and Transit.
-The [Kind OAuth lane](/contribute/e2e-framework/) uses Keycloak `26.6.3`, OpenBao
-`2.6.0`, and the generated provider static pod. It checks both authentication
-methods, Kubernetes Secret encryption in etcd, credential rotation without a
-provider restart, issuer outages, and cold provider recovery while the protected
-API server is stopped. Images are pinned by digest in `.ci/versions.yaml`.
-This qualifies the tested Keycloak flow; other providers and issuer deployment
-topologies require their own validation.
+The maintained [Kind OAuth lane](/contribute/e2e-framework/) uses the selected
+OpenBao, Kubernetes, and Keycloak images pinned by digest in `.ci/versions.yaml`
+and the generated provider static pod. It checks both authentication methods,
+Kubernetes Secret encryption in etcd, credential rotation without a provider
+restart, issuer outages, and cold provider recovery while the protected API
+server is stopped. Results apply to the exact candidate and pinned versions
+tested. Other providers and issuer deployment topologies require their own
+validation.
 
 For the maintained Keycloak client setup, see
 [Provision a Keycloak client](/docs/configure/keycloak/).

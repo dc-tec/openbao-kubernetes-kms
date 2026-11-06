@@ -105,4 +105,71 @@ sig_b64="$(printf '%s' "$signing_input" | openssl dgst -sha256 -sign "$jwt_key" 
 printf '%s.%s\n' "$signing_input" "$sig_b64" > "$jwt_file"
 chmod 0600 "$jwt_file"
 
+if [ "$DEV_ENV_AUTH" = "oauth2" ]; then
+	keycloak_dir="$STATE_DIR/keycloak"
+	keycloak_key="$keycloak_dir/tls/private-key.pem"
+	keycloak_chain="$keycloak_dir/tls/full-chain.pem"
+	if [ ! -s "$keycloak_key" ] || [ ! -s "$keycloak_chain" ]; then
+		san_cfg="$(mktemp)"
+		cat > "$san_cfg" <<'EOF'
+[req]
+distinguished_name = dn
+req_extensions = v3_req
+[dn]
+[v3_req]
+subjectAltName = @alt_names
+extendedKeyUsage = serverAuth
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+[alt_names]
+DNS.1 = keycloak
+DNS.2 = localhost
+IP.1 = 127.0.0.1
+EOF
+		openssl req -new -newkey rsa:2048 -nodes -subj "/CN=keycloak" \
+			-keyout "$keycloak_key" -out "$keycloak_dir/tls/server.csr" \
+			-config "$san_cfg" -reqexts v3_req >/dev/null 2>&1
+		openssl x509 -req -in "$keycloak_dir/tls/server.csr" -days 825 -sha256 \
+			-CA "$openbao_ca_crt" -CAkey "$openbao_ca_key" -CAcreateserial \
+			-out "$keycloak_dir/tls/server.pem" -extfile "$san_cfg" -extensions v3_req >/dev/null 2>&1
+		cat "$keycloak_dir/tls/server.pem" "$openbao_ca_crt" > "$keycloak_chain"
+		rm -f "$keycloak_dir/tls/server.csr" "$san_cfg"
+		chmod 0600 "$keycloak_key"
+		chmod 0644 "$keycloak_dir/tls/server.pem" "$keycloak_chain"
+	fi
+
+	client_secret_file="$STATE_DIR/oauth2/client-secret"
+	if [ ! -s "$client_secret_file" ]; then
+		(umask 077 && openssl rand -hex 32 > "$client_secret_file")
+	fi
+	admin_env="$keycloak_dir/admin.env"
+	if [ ! -s "$admin_env" ]; then
+		(umask 077 && printf 'KC_BOOTSTRAP_ADMIN_USERNAME=admin\nKC_BOOTSTRAP_ADMIN_PASSWORD=%s\n' \
+			"$(openssl rand -hex 16)" > "$admin_env")
+	fi
+
+	# Import the shipped client profile unchanged, adding only the fixture ID and
+	# secret, so the lab exercises the documented Keycloak settings.
+	client_json="$(awk -v id="$KEYCLOAK_CLIENT_UUID" -v secret_file="$client_secret_file" '
+		BEGIN { getline secret < secret_file; close(secret_file) }
+		NR == 1 { printf "{\"id\":\"%s\",\"secret\":\"%s\",\n", id, secret; next }
+		{ print }
+	' "$REPO_ROOT/deploy/config/keycloak-client.json")"
+	(umask 077 && cat > "$keycloak_dir/realm.json" <<EOF
+{
+  "realm": "kms-dev",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "clients": [$client_json],
+  "users": [{
+    "id": "$KEYCLOAK_SUBJECT",
+    "username": "service-account-$KEYCLOAK_CLIENT_ID",
+    "enabled": true,
+    "serviceAccountClientId": "$KEYCLOAK_CLIENT_ID"
+  }]
+}
+EOF
+	)
+fi
+
 printf '%s\n' "generated dev-env material under $STATE_DIR"
