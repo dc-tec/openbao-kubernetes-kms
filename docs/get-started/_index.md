@@ -29,11 +29,12 @@ evaluation. Do not protect production control planes with it.
 
 ## What you need
 
-- A Kubernetes `1.34` or `1.35` cluster whose control-plane nodes you can
-  administer. See [Reference: Compatibility](/docs/reference/compatibility/)
-  for the tested matrix.
-- An OpenBao `2.6` cluster reachable over HTTPS from every control-plane node,
-  and an administrator token for it.
+- A Kubernetes cluster whose control-plane nodes you can administer. Select
+  an exact version from your provider release's
+  [tested matrix](/docs/reference/compatibility/).
+- An OpenBao cluster reachable over HTTPS from every control-plane node,
+  and an administrator token for it. Select an OpenBao version from the same
+  tested matrix.
 - A JWT issuer for the provider's host credential that keeps working when the
   protected API server is down.
 - On your workstation: the `bao` CLI, `curl`, and `cosign`. An authenticated

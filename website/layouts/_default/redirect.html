@@ -1,10 +1,5 @@
 {{- $targetPath := .Params.redirectTo -}}
-{{- /* The published release retains the original documentation layout. */ -}}
-{{- if eq .Site.Version.Name hugo.Sites.Default.Version.Name -}}
-  {{- with .Site.GetPage (path.Join "/docs" .Path) -}}
-    {{- $targetPath = .Path -}}
-  {{- end -}}
-{{- end -}}
+{{- /* Redirect ledgers name canonical destinations within the selected version. */ -}}
 {{- $targetSite := .Site -}}
 {{- with .Params.targetVersion -}}
   {{- range hugo.Sites -}}{{- if eq .Version.Name $.Params.targetVersion -}}{{- $targetSite = . -}}{{- end -}}{{- end -}}

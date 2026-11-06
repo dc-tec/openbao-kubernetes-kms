@@ -1,185 +1,247 @@
 ---
-title: "Compatibility"
-description: "Tested Kubernetes, OpenBao, OS, deployment mode, Transit key type, and compatibility rules for bao-kms-provider."
-weight: 80
+title: Compatibility
+description: "The tested Kubernetes, OpenBao, auth, and deployment matrix, the Transit features the provider needs, and the compatibility promises between releases."
+eyebrow: Reference · Lifecycle
+weight: 70
+verifiedBy:
+  - .ci/versions.yaml
+  - internal/config/validation.go
+  - internal/keyregistry
 ---
 
-This matrix lists the versions and deployment shapes currently tested for
-`bao-kms-provider`.
+A release covers only what its release notes and this page list as tested.
+Everything else might work but is outside the tested matrix.
 
-## Tested Preview Matrix
+## Preview.3 fresh-installation boundary
 
-The preview matrix is intentionally narrow. A tagged release covers only the
-versions, artifact families, and deployment models listed in its release notes
-and in this matrix.
+`0.1.0-preview.3` requires a fresh disposable installation with a new Transit key
+and provider identity. In-place upgrades from earlier previews are unsupported.
+The provider rejects the older registry schema without rewriting its state or
+checkpoint. Keep an existing preview installation on its matching artifacts;
+do not erase its registry, checkpoint, or key material to bypass the check.
 
-The initial preview matrix is:
+The new registry schema binds the configuration identity fingerprint, including
+the Transit key name and mount path. Earlier state did not record these values,
+so their original configuration cannot be verified retrospectively. There is no
+automatic adoption or migration command. KMS `key_id` derivation, annotations,
+and AAD bytes remain unchanged.
 
-- Kubernetes `1.34` and `1.35` release lines, with Kind node-image digests
-  recorded in `.ci/versions.yaml`,
-- Kubernetes KMS v2,
-- OpenBao `2.6.0`,
-- OpenBao Transit,
-- JSON Web Token (JWT) auth in default release artifacts,
-- certificate auth backed by a PKCS#11 hardware or software token only when the
-  selected release includes matching opt-in artifacts and marks that path as
-  tested,
-- SPIFFE/SPIRE workload identity is not a supported preview user configuration,
-- Linux control-plane nodes with filesystem Unix domain sockets.
+Qualification verifies that a preview.2 upgrade attempt is rejected, its state
+is preserved, and returning to preview.2 can still read its existing data.
+It does not qualify an upgrade to preview.3 or a downgrade of preview.3 state.
 
-## Kubernetes
+## Preview.3 clock handling
 
-| Version | Status |
-|---|---|
-| `< 1.29` | Not targeted. KMS v2 is the only implemented Kubernetes KMS API. |
-| `1.29.x` through `1.33.x` | May work with KMS v2, but is not part of the tested preview matrix. |
-| `1.34.3` | Tested Kind target pinned by node-image digest in `.ci/versions.yaml`. |
-| `1.35.0` | Tested Kind target pinned by node-image digest in `.ci/versions.yaml`. |
-| Other `1.34.x` or `1.35.x` patches | Candidate within the tested minor lines; covered only when listed by a release. |
-| `1.36.x` | Intended next validation line once a digest-pinned Kind node image is available. Not tested yet. |
+Pending rotation now waits the full activation delay after each restart or after
+recovering an unconfirmed stable-observation save. Within the current state
+schema, retained keys and observation counts are preserved. New local event timestamps
+preserve ordering across backward clock corrections. OpenBao creation metadata
+and key IDs retain their existing meaning. Older binaries still use persisted
+wall time for activation, so downgrades do not retain the new delay guarantee.
 
-KMS v1 is not part of the primary implementation.
+Token leases and cached status cannot regain validity after an observed expiry
+through a backward clock correction. Forward corrections can require earlier
+authentication or a fresh probe. Retry and circuit-breaker cooldowns use
+process-local elapsed time. OAuth access tokens must satisfy both their relative
+endpoint lifetime and the absolute JWT expiry claim.
 
-## OpenBao
+## File JWT configuration upgrades
 
-| Version | Status |
-|---|---|
-| `2.6.0` | Current tested target. |
-| Other `2.6.x` | Compatibility candidate; not claimed for this release until tested and pinned. |
-| `2.5.x` | Not targeted for the current release line. |
+Existing file JWT configurations can omit `auth.jwt.source` when `jwtFile` is
+set and no `oauth2` section is present. The provider retains file authentication
+for these configurations. Empty source values and mixed source settings fail
+validation. OAuth authentication never falls back to a file.
 
-The design requires OpenBao Transit features:
+## Preview.3 qualification scope
 
-- a symmetric encryption key type such as `aes256-gcm96`,
-- Transit encrypt and decrypt,
-- explicit encrypt `key_version`,
-- Transit `associated_data` for AEAD key types,
-- key metadata including versions and restrictions,
-- `min_encryption_version`,
-- `min_decryption_version`,
-- `disable_upsert`,
-- JWT auth, or TLS certificate auth for cert-auth builds.
+[Preview.3](https://github.com/dc-tec/openbao-kubernetes-kms/releases/tag/0.1.0-preview.3)
+was published on 20 October 2026. The signed tag points to release merge
+`cc11e671`.
 
-Certificate auth variants additionally require:
+[Candidate qualification](https://github.com/dc-tec/openbao-kubernetes-kms/actions/runs/39501251953)
+passed all 13 jobs for source `62997d4`, whose tree matches the release merge.
+The separate [tagged release checks](https://github.com/dc-tec/openbao-kubernetes-kms/actions/runs/39506082325)
+passed all 15 jobs for the exact tag. They validate the selected release
+artifacts through security scans, integration suites, independent rebuilds,
+installation checks, signatures, SBOMs, and provenance. Candidate qualification
+and tagged artifact checks cover different inputs and scopes.
 
-- OpenBao TLS certificate auth method,
-- an OpenBao listener that requests client certificates,
-- role constraints bound to the provider certificate identity,
-- a PKCS#11 module for `certauth_pkcs11` builds.
+The qualified candidate covers all eight combinations of OpenBao `2.7.0` and
+`2.6.3` with Kubernetes `1.34.11`, `1.35.8`, `1.36.4`, and `1.37.0`. Exact
+images are pinned in `.ci/versions.yaml`. The tagged release workflow checks
+both OpenBao versions and the four Kubernetes lanes with the primary OpenBao
+version. Those tagged checks do not repeat every cross-pair.
 
-## Operating Systems
+The separate Provider Qualification workflow also passed live generated-kit
+acceptance with three API servers, OAuth on all four Kubernetes lanes with the
+primary OpenBao version, both OpenBao suites, server upgrade, and a 30-minute
+soak. These results qualify that candidate and its pinned versions. They do
+not qualify an adopter's platform.
 
-Targeted:
+Tagged installation jobs cover selected archives and native packages,
+including `init`, `node-setup.sh`, ownership, and reinstallation. The jobs run
+on Linux; Linux `arm64` checks use QEMU. Linux and macOS CLI builds for `amd64`
+and `arm64` are distribution targets, not native execution qualification on
+every OS and architecture. The provider service runs only on Linux.
 
-- Linux control-plane nodes,
-- filesystem Unix domain sockets,
-- systemd or kubelet-managed static pod runtime.
+## Published preview.3 matrix
 
-Not targeted for the current release line:
-
-- Windows control-plane nodes,
-- abstract Unix sockets,
-- non-Linux socket semantics.
-
-## Deployment Modes
-
-| Mode | Current status |
-|---|---|
-| systemd | Targeted. |
-| Static pod | Targeted. |
-| DaemonSet | Not recommended for protecting the same cluster's API server. |
-| Sidecar with `kube-apiserver` | Not targeted. |
-
-See [Deployment: Choosing A Model](/docs/deployment/choosing-a-model/) for the model selection rationale.
-
-## Transit Key Types
-
-| Key type | Status |
-|---|---|
-| `aes256-gcm96` | Supported and recommended default. |
-| Other AEAD Transit key types | Not supported. |
-| Derived or convergent keys | Not supported for the Kubernetes KMS path. |
-
-## Transit Profile Findings
-
-Transit profile findings are fail-closed. When metadata shows a blocking
-profile issue, the provider marks readiness and KMS Status unhealthy instead of
-encrypting with settings outside the validated contract.
-
-Findings are classified by impact:
-
-- `cryptographic_safety`: settings that weaken or change the validated
-  encryption and additional authenticated data (AAD) contract, such as an
-  unsupported key type, exportable key material, plaintext backup, derived
-  mode, or convergent encryption.
-- `api_server_availability`: settings that can strand API server reads or
-  writes, such as key deletion, unsupported encrypt/decrypt operations, or
-  version restrictions that block active or historical versions.
-
-Fail-closed behavior protects the cryptographic contract. It does not guarantee
-API server write availability while OpenBao is misconfigured, sealed,
-unreachable, or changed to an unsafe Transit profile. Use `verify-key`,
-`doctor`, readiness, and KMS Status as preflight and monitoring signals before
-changing API server encryption settings.
-
-## Auth Methods
-
-| Auth method | Build | Status |
+| Component | Release scope | Not covered |
 |---|---|---|
-| JWT | default release artifacts | Supported preview path. |
-| Certificate with PKCS#11 source | `certauth_pkcs11` opt-in host artifact | Opt-in preview path only when the selected release publishes the PKCS#11 artifact and marks it as tested. |
-| Certificate with SPIFFE source | `certauth_spiffe` local-only artifact | Not a supported preview user configuration. |
-| OpenBao Kubernetes auth | any | Not supported because TokenReview depends on the protected API server. |
+| Kubernetes | `1.34.11`, `1.35.8`, `1.36.4`, and `1.37.0` | Unlisted versions and patches |
+| Kubernetes KMS API | v2 | KMS v1 |
+| OpenBao | `2.6.3` and `2.7.0` | Unlisted versions and patches |
+| Transit key type | `aes256-gcm96` | Other key types, external keys, derived or convergent keys |
+| Host | Linux control-plane nodes with filesystem Unix sockets | Windows provider services and abstract Unix sockets |
+| Deployment | systemd and kubelet static pod | DaemonSet in the protected cluster and sidecar to `kube-apiserver` |
+| CLI artifacts | Linux and macOS `amd64` and `arm64` build and distribution targets | Native execution on every OS and architecture; running `serve` outside Linux |
 
-## Compatibility Promises
+This is an evaluation preview with best-effort support. Production availability,
+performance guarantees, a service-level objective, and long-term support are
+outside this scope.
 
-After the first stable release, these surfaces remain backward compatible within a major version:
+## Historical preview.2 matrix
 
-- `key_id` derivation for existing epochs,
-- Unix-second Transit version creation-time normalization used by `key_id`,
-- annotation schema,
-- AAD canonicalization,
-- configuration field meanings for identity-bearing values,
-- decrypt support for historical `key_id` values,
-- CLI JSON report shape for report-style commands.
+The following matrix describes only `0.1.0-preview.2`. It is historical release
+information, not the installation prerequisite for preview.3.
 
-## CI Version Policy
+| Component | Tested | Not covered |
+|---|---|---|
+| Kubernetes | `1.34.3` and `1.35.0`, pinned in the release tag | Other `1.34.x` and `1.35.x` patches unless a release lists them; `1.29` to `1.33` might work with KMS v2; below `1.29` is not targeted |
+| Kubernetes KMS API | v2 | KMS v1 is not implemented |
+| OpenBao | `2.6.0` | Other `2.6.x` until tested and pinned; `2.5.x` |
+| Transit key type | `aes256-gcm96` | Other AEAD types, derived or convergent keys |
+| Host | Linux control-plane nodes with filesystem Unix sockets | Windows, abstract Unix sockets |
+| Deployment | systemd and kubelet static pod | DaemonSet in the protected cluster, sidecar to `kube-apiserver` |
 
-CI does not use floating `latest` inputs for the tested compatibility matrix.
+## Auth methods
 
-The implementation uses a central version manifest at `.ci/versions.yaml` for:
+| Method | Build | Status |
+|---|---|---|
+| JWT | Default release artifacts | Supported. |
+| Certificate, PKCS#11 source | `bao-kms-provider-certauth-pkcs11` host artifacts | Supported only when the selected release publishes the artifact and marks the path as tested. |
+| Certificate, SPIFFE source | Local verification builds | Not supported; configuration validation rejects it. |
+| OpenBao Kubernetes auth | Any | Not supported: TokenReview depends on the protected API server. |
 
-- OpenBao image tag and digest,
-- Kubernetes exact patch versions,
-- Kind node image digest,
-- release matrix rows,
-- intended next validation lines and future candidate versions.
+Certificate auth also needs an OpenBao listener that requests client
+certificates, a cert auth role bound to the provider identity, and a PKCS#11
+module on the host.
 
-For the full CI and supply-chain controls see [Development: CI And Supply Chain](/docs/development/ci-supply-chain/).
+## Required OpenBao features
 
-## Breaking Changes
+The provider relies on Transit encrypt and decrypt with an explicit
+`key_version`, `associated_data`, key metadata with version creation times,
+`min_encryption_version`, `min_decryption_version`, `disable_upsert`, and JWT
+or TLS certificate auth.
 
-Breaking changes require:
+It fails closed when Transit metadata falls outside the validated profile. Each
+finding has an impact class:
 
-- a written design decision,
-- a migration guide,
-- a release note,
-- updated test fixtures,
-- an explicit compatibility section in the release notes.
+- `cryptographic_safety`: the key type, exportability, plaintext backup, or
+  derived or convergent mode would change the validated encryption contract.
+- `api_server_availability`: deletion, unsupported operations, or version
+  restrictions would strand reads or writes of active or historical versions.
 
-Examples of breaking changes:
+Failing closed protects the cryptographic contract but stops API server writes
+until OpenBao is fixed. Check `verify-key`, `doctor`, `/ready`, and KMS Status
+before changing API server encryption.
 
-- changing `key_id` derivation,
-- changing AAD canonicalization,
-- dropping a historical annotation version,
-- changing the default AAD mode,
-- changing provider-name handling,
-- removing decrypt support for retained historical `key_id` values.
+## Compatibility promises
 
-## Source References
+After the first stable release, these stay backward compatible within a major
+version:
 
-- [Kubernetes KMS provider documentation](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
-- [OpenBao Transit API](https://openbao.org/api-docs/secret/transit/)
-- [OpenBao JWT/OIDC auth API](https://openbao.org/api-docs/auth/jwt/)
-- [OpenBao TLS certificates auth method](https://openbao.org/docs/auth/cert/)
-- [SPIFFE Workload API](https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_api/)
+- `key_id` derivation for existing epochs, including the Unix-second
+  normalization of Transit version creation times,
+- the annotation schema and AAD canonicalization,
+- the meaning of identity-bearing configuration values,
+- decryption of historical `key_id` values,
+- the JSON report shape of report-style CLI commands.
+
+Until then, preview releases can break these surfaces. Release notes describe
+the impact and whether migration is supported or a fresh installation is required; see
+[Release and support lifecycle](/docs/reference/release-lifecycle/#versioning).
+
+## Operator retirement
+
+`retire-versions --apply` ends local decryption for the versions you select and
+changes nothing else: `key_id` derivation, annotations, AAD, the active key,
+and other historical identities stay the same.
+
+`restore-versions --apply` can restore selected removed historical records while
+matching Transit versions remain decryptable. It advances the current state
+chain; automatic observation still cannot restore removed records. Both commands
+require the provider to be stopped and the current reviewed state hash.
+
+Retirement adds `removed` records to the state file, which older binaries
+reject. Upgrade every provider before retiring versions, and afterwards never
+downgrade to such a binary or erase the records. The state directory must be
+owned by the provider's OS user, and retirement must run as that user. See
+[Operate: Rotation](/docs/operate/rotation/#retire-old-versions).
+
+## Breaking changes
+
+### Preview.3 CLI exit-code corrections
+
+Invalid command usage now returns the documented exit code `2`, and an
+unreadable or malformed file passed to `config` returns `3`. These cases
+previously returned the unclassified error code `1`. Unknown help topics
+and completion subcommands also return `2`. Update scripts that matched the
+previous codes. Diagnostic failures remain `4` and runtime failures remain `5`.
+
+### Preview.3 configuration cross-checks
+
+Configuration validation now rejects a probe interval greater than or equal to
+the status staleness window, a renewal increment less than or equal to the
+token refresh lead time, and duplicate fixed health and metrics endpoints.
+These checks apply to the effective configuration after file, environment,
+and flag overrides. Defaults satisfy all three checks.
+
+Empty listener addresses still disable their listeners, and port `0` still
+requests an available port. Endpoint comparisons do not resolve DNS names or
+detect every wildcard overlap; other bind conflicts remain runtime errors.
+No key identity, encryption format, or persisted state changes are required.
+
+### Preview.3 Transit key-name validation
+
+Configuration and its JSON Schema now enforce the name pattern used by the
+OpenBao 2.6 Transit key-metadata endpoint. Names start and end with an ASCII
+letter, digit, or underscore; interior characters can also be dots or hyphens.
+Previously accepted names outside this pattern now fail configuration
+validation, including `.` and `..`, whitespace, and URL delimiters.
+
+Valid names, key IDs, AAD, annotations, and state formats are unchanged. The
+provider does not rewrite names. Treat a name change as an identity change;
+do not rename an existing configuration to bypass validation without checking
+the backend key and existing encrypted data.
+
+### Preview.3 static-pod JWT mount correction
+
+New static-pod scaffolds place file JWTs in
+`/var/lib/openbao-kms/credentials/identity.jwt` and mount the directory read-only
+so atomic replacement is visible. Existing file mounts need a one-time
+[manifest and credential-path migration](/docs/operate/upgrade/#migrate-a-static-pod-jwt-file-mount).
+The generator rejects JWT directories that overlap provider state or socket
+directories. Existing deployments are not changed automatically. Systemd
+paths and the encryption format are unchanged.
+
+### Preview.3 rotation corrections
+
+Pending versions now decrypt as soon as their metadata is validated and saved,
+though they still cannot encrypt before promotion. An unknown `key_id` can
+trigger a metadata read, bounded by the request timeout and
+`status.probeInterval`, which never counts toward promotion. State transitions
+keep pending identities alongside active and retired ones.
+
+These rotation corrections retain `key_id` derivation, AAD bytes, and
+annotations. The separate state-binding change requires a fresh preview.3
+installation. Confirm all nodes report the same active `key_id` before the
+next rotation. Older binaries do not implement all current rotation guarantees.
+
+### What counts as breaking
+
+Changing `key_id` derivation, AAD canonicalization, the default AAD mode, or
+provider-name handling, or dropping an annotation version or decrypt support
+for retained historical `key_id` values, is breaking. A breaking change needs a
+written design decision, a migration guide, updated test fixtures, and a
+compatibility section in the release notes.

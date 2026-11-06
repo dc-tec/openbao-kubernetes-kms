@@ -8,18 +8,29 @@ DEV_ENV_PROVIDER_IMAGE ?= $(if $(filter pkcs11,$(DEV_ENV_AUTH)),$(IMAGE_REPOSITO
 DEV_ENV_OPENBAO_IMAGE ?= $(E2E_OPENBAO_IMAGE)
 DEV_ENV_PROMETHEUS_IMAGE ?= docker.io/prom/prometheus:v2.55.1
 DEV_ENV_GRAFANA_IMAGE ?= docker.io/grafana/grafana:11.3.0
+DEV_ENV_KEYCLOAK_IMAGE ?= $(E2E_KEYCLOAK_IMAGE)
 DEV_ENV_COMPOSE_PROJECT ?= openbao-kms-dev-env
-DEV_ENV_COMPOSE = DEV_ENV_OPENBAO_IMAGE="$(DEV_ENV_OPENBAO_IMAGE)" \
+DEV_ENV_OPENBAO_PORT ?= 18200
+DEV_ENV_KEYCLOAK_PORT ?= 18443
+DEV_ENV_PROMETHEUS_PORT ?= 19090
+DEV_ENV_GRAFANA_PORT ?= 18300
+DEV_ENV_PORT_ENV = DEV_ENV_OPENBAO_PORT="$(DEV_ENV_OPENBAO_PORT)" \
+	DEV_ENV_KEYCLOAK_PORT="$(DEV_ENV_KEYCLOAK_PORT)" \
+	DEV_ENV_PROMETHEUS_PORT="$(DEV_ENV_PROMETHEUS_PORT)" \
+	DEV_ENV_GRAFANA_PORT="$(DEV_ENV_GRAFANA_PORT)"
+DEV_ENV_COMPOSE = $(DEV_ENV_PORT_ENV) DEV_ENV_OPENBAO_IMAGE="$(DEV_ENV_OPENBAO_IMAGE)" \
 	DEV_ENV_PROMETHEUS_IMAGE="$(DEV_ENV_PROMETHEUS_IMAGE)" \
 	DEV_ENV_GRAFANA_IMAGE="$(DEV_ENV_GRAFANA_IMAGE)" \
+	DEV_ENV_KEYCLOAK_IMAGE="$(DEV_ENV_KEYCLOAK_IMAGE)" \
+	COMPOSE_PROFILES="$(if $(filter oauth2,$(DEV_ENV_AUTH)),oauth2,)" \
 	docker compose -f "$(DEV_ENV_DIR)/compose.yaml" --project-name "$(DEV_ENV_COMPOSE_PROJECT)"
-DEV_ENV_SCRIPT_ENV = DEV_ENV_KIND_CLUSTER="$(DEV_ENV_KIND_CLUSTER)" \
+DEV_ENV_SCRIPT_ENV = $(DEV_ENV_PORT_ENV) DEV_ENV_KIND_CLUSTER="$(DEV_ENV_KIND_CLUSTER)" \
 	DEV_ENV_PROVIDER_IMAGE="$(DEV_ENV_PROVIDER_IMAGE)" \
 	DEV_ENV_AUTH="$(DEV_ENV_AUTH)" \
 	DEV_ENV_COMPOSE_PROJECT="$(DEV_ENV_COMPOSE_PROJECT)"
 
 .PHONY: dev-env-up
-dev-env-up: dev-env-generate dev-env-kind dev-env-compose-up dev-env-openbao dev-env-build dev-env-pkcs11-material dev-env-tofu dev-env-stage dev-env-enable-kms dev-env-verify ## Create the local Kind/OpenBao KMS dev environment.
+dev-env-up: dev-env-generate dev-env-kind dev-env-compose-up dev-env-openbao dev-env-keycloak dev-env-build dev-env-pkcs11-material dev-env-tofu dev-env-stage dev-env-enable-kms dev-env-verify ## Create the local Kind/OpenBao KMS dev environment.
 
 .PHONY: dev-env-generate
 dev-env-generate: ## Generate local ignored dev-env identity material.
@@ -30,12 +41,16 @@ dev-env-kind: ## Create the Kind cluster used by the dev environment.
 	@$(DEV_ENV_SCRIPT_ENV) "$(DEV_ENV_DIR)/scripts/create-kind.sh"
 
 .PHONY: dev-env-compose-up
-dev-env-compose-up: ## Start OpenBao, Prometheus, and Grafana for the dev environment.
+dev-env-compose-up: ## Start OpenBao, Prometheus, and Grafana, plus Keycloak when AUTH=oauth2.
 	@$(DEV_ENV_COMPOSE) up -d
 
 .PHONY: dev-env-openbao
 dev-env-openbao: ## Initialize, unseal, and wait for local OpenBao readiness.
 	@$(DEV_ENV_SCRIPT_ENV) "$(DEV_ENV_DIR)/scripts/init-openbao.sh"
+
+.PHONY: dev-env-keycloak
+dev-env-keycloak: ## Wait for the Keycloak issuer and check a client credentials token when AUTH=oauth2.
+	@$(DEV_ENV_SCRIPT_ENV) "$(DEV_ENV_DIR)/scripts/wait-keycloak.sh"
 
 .PHONY: dev-env-tofu
 dev-env-tofu: ## Apply OpenBao dev-env configuration with OpenTofu.
@@ -68,7 +83,7 @@ dev-env-verify: ## Verify upstream Kubernetes KMS v2 encryption and raw etcd env
 
 .PHONY: dev-env-down
 dev-env-down: ## Stop Compose services and delete the Kind cluster, keeping generated state.
-	@$(DEV_ENV_COMPOSE) down --remove-orphans
+	@$(DEV_ENV_COMPOSE) --profile oauth2 down --remove-orphans
 	@kind delete cluster --name "$(DEV_ENV_KIND_CLUSTER)" >/dev/null 2>&1 || true
 
 .PHONY: dev-env-reset
@@ -81,4 +96,4 @@ dev-env-logs: ## Tail dev environment Compose logs.
 
 .PHONY: dev-env-grafana
 dev-env-grafana: ## Print the local Grafana URL for the dev environment.
-	@printf '%s\n' 'Grafana: http://127.0.0.1:18300  user: admin  password: admin'
+	@printf '%s\n' 'Grafana: http://127.0.0.1:$(DEV_ENV_GRAFANA_PORT)  user: admin  password: admin'

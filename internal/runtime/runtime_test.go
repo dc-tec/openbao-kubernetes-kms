@@ -189,7 +189,10 @@ func TestRunReadyReturns503AfterStartedButReadinessProbeStale(t *testing.T) {
 
 	cancel()
 	select {
-	case <-runErr:
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run returned: %v", err)
+		}
 	case <-time.After(shutdownDeadline + time.Second):
 		t.Fatal("Run did not return within shutdown deadline")
 	}
