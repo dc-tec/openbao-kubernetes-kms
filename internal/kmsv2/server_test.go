@@ -422,6 +422,7 @@ func TestConcurrencyLimitsReserveDecryptAndStatusCapacity(t *testing.T) {
 
 	transit.SetBlockEncrypt(true)
 	blockedCtx, cancelBlocked := context.WithCancel(context.Background())
+	defer cancelBlocked()
 	blockedDone := make(chan error, 1)
 	go func() {
 		_, blockedErr := server.Encrypt(blockedCtx, &kmsapi.EncryptRequest{
@@ -430,6 +431,7 @@ func TestConcurrencyLimitsReserveDecryptAndStatusCapacity(t *testing.T) {
 		blockedDone <- blockedErr
 	}()
 	waitForInFlight(t, server, 0, 1, 0)
+	waitForTransitCalls(t, transit, 2, 0)
 
 	_, err = server.Encrypt(context.Background(), &kmsapi.EncryptRequest{
 		Plaintext: []byte("rejected plaintext"),
@@ -489,6 +491,7 @@ func TestDecryptConcurrencyLimitRejectsExcessRequests(t *testing.T) {
 
 	transit.SetBlockDecrypt(true)
 	blockedCtx, cancelBlocked := context.WithCancel(context.Background())
+	defer cancelBlocked()
 	blockedDone := make(chan error, 1)
 	go func() {
 		_, blockedErr := server.Decrypt(blockedCtx, &kmsapi.DecryptRequest{
@@ -499,6 +502,7 @@ func TestDecryptConcurrencyLimitRejectsExcessRequests(t *testing.T) {
 		blockedDone <- blockedErr
 	}()
 	waitForInFlight(t, server, 0, 0, 1)
+	waitForTransitCalls(t, transit, 1, 1)
 
 	_, err = server.Decrypt(context.Background(), &kmsapi.DecryptRequest{
 		Ciphertext:  encrypted.GetCiphertext(),
@@ -841,6 +845,28 @@ func waitForInFlight(
 				wantStatus,
 				wantEncrypt,
 				wantDecrypt,
+			)
+		case <-ticker.C:
+		}
+	}
+}
+
+func waitForTransitCalls(t *testing.T, transit *fakes.KMSTransit, wantEncrypt, wantDecrypt int) {
+	t.Helper()
+	deadline := time.NewTimer(time.Second)
+	ticker := time.NewTicker(time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	for {
+		encrypt, decrypt := transit.EncryptCalls(), transit.DecryptCalls()
+		if encrypt == wantEncrypt && decrypt == wantDecrypt {
+			return
+		}
+		select {
+		case <-deadline.C:
+			t.Fatalf(
+				"Transit call count did not converge: got encrypt=%d decrypt=%d, want encrypt=%d decrypt=%d",
+				encrypt, decrypt, wantEncrypt, wantDecrypt,
 			)
 		case <-ticker.C:
 		}
