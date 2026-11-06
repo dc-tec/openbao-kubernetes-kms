@@ -403,24 +403,18 @@ jobs:
             IMAGE="${{ needs.prepare.outputs.image }}"
 
       - name: Generate image SBOM (primary)
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: ./.github/actions/image-sbom
         with:
           image: ${{ needs.prepare.outputs.image }}@${{ needs.build.outputs.image_digest }}
-          format: spdx-json
           output-file: dist/primary/sbom-bao-kms-provider-image.spdx.json
-          upload-artifact: "false"
-          upload-release-assets: "false"
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate image SBOM (rebuild)
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: ./.github/actions/image-sbom
         with:
           image: ${{ needs.prepare.outputs.image }}@${{ needs.rebuild.outputs.image_digest }}
-          format: spdx-json
           output-file: dist/rebuild/sbom-bao-kms-provider-image.spdx.json
-          upload-artifact: "false"
-          upload-release-assets: "false"
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN }}
 
