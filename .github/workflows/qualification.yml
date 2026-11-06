@@ -53,13 +53,13 @@ jobs:
             echo "Provider source: ${GITHUB_SHA}"
             docker image inspect --format '{{.Id}} {{json .RepoTags}}' "${E2E_PROVIDER_IMAGE}" "${E2E_PROVIDER_CERTAUTH_PKCS11_IMAGE}"
           } >> "${GITHUB_STEP_SUMMARY}"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qualification-provider
           path: artifacts/qualification/provider.tar
           retention-days: 7
           compression-level: 1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qualification-pkcs11
           path: artifacts/qualification/provider-pkcs11.tar
@@ -93,7 +93,7 @@ jobs:
           docker load -i artifacts/qualification/provider-pkcs11.tar
       - name: Run provider suite
         run: make test-e2e-release-preview-openbao
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: results-openbao-${{ matrix.openbao_version }}
@@ -134,7 +134,7 @@ jobs:
           make test-e2e-provider-baseline
           go run ./hack/tools/e2e_release_gate -group kind -ginkgo "${GITHUB_WORKSPACE}/bin/ginkgo" -lane kind-smoke
           go run ./hack/tools/e2e_release_gate -group kind -ginkgo "${GITHUB_WORKSPACE}/bin/ginkgo" -lane kind-upgrade-rollback
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: results-kind-${{ matrix.kubernetes_line }}-openbao-${{ matrix.openbao_version }}
@@ -163,7 +163,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/e2e/qualification
           make test-e2e-kind-kit-acceptance 2>&1 | tee artifacts/e2e/qualification/kit-acceptance.log
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: results-generated-kit
@@ -192,7 +192,7 @@ jobs:
           mkdir -p artifacts/e2e/qualification
           make test-e2e-provider-openbao-upgrade 2>&1 | tee artifacts/e2e/qualification/server-upgrade.log
           E2E_SOAK_DURATION=30m make test-e2e-provider-load-soak-openbao-ci 2>&1 | tee artifacts/e2e/qualification/soak.log
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: results-server-upgrade-soak
