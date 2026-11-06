@@ -1,0 +1,85 @@
+name: SBOM Check
+
+on:
+  pull_request:
+    paths:
+      - .github/actions/image-sbom/**
+      - .github/workflows/release.yml
+      - .github/workflows/sbom-check.yml
+      - hack/ci/normalize-spdx-json.sh
+      - hack/ci/verify-byte-reproducibility.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sbom:
+    name: Image SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build provider image
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
+          echo "source_date_epoch=${source_date_epoch}" >> "${GITHUB_OUTPUT}"
+          docker build --platform linux/amd64 \
+            --build-arg "COMMIT=${GITHUB_SHA}" \
+            --build-arg "SOURCE_DATE_EPOCH=${source_date_epoch}" \
+            --tag bao-kms-provider:sbom-check .
+          mkdir -p dist/primary dist/rebuild
+
+      - name: Generate image SBOM (primary)
+        uses: ./.github/actions/image-sbom
+        with:
+          image: bao-kms-provider:sbom-check
+          output-file: dist/primary/sbom-bao-kms-provider-image.spdx.json
+
+      - name: Generate image SBOM (repeat)
+        uses: ./.github/actions/image-sbom
+        with:
+          image: bao-kms-provider:sbom-check
+          output-file: dist/rebuild/sbom-bao-kms-provider-image.spdx.json
+
+      - name: Validate and normalize SPDX documents
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.build.outputs.source_date_epoch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for document in dist/{primary,rebuild}/sbom-bao-kms-provider-image.spdx.json; do
+            jq --exit-status '
+              (.spdxVersion | startswith("SPDX-")) and
+              .SPDXID == "SPDXRef-DOCUMENT" and
+              .dataLicense == "CC0-1.0" and
+              (.packages | length > 0)
+            ' "${document}"
+          done
+          bash hack/ci/normalize-spdx-json.sh \
+            dist/primary/sbom-bao-kms-provider-image.spdx.json \
+            dist/rebuild/sbom-bao-kms-provider-image.spdx.json
+
+      - name: Verify normalized SBOM reproducibility
+        env:
+          REPRO_REQUIRED_FILES: sbom-bao-kms-provider-image.spdx.json
+        run: bash hack/ci/verify-byte-reproducibility.sh
+
+      - name: Upload SBOM validation artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-sbom-validation
+          path: |
+            dist/primary/*.spdx.json
+            dist/rebuild/*.spdx.json
+          if-no-files-found: ignore
+          retention-days: 7
