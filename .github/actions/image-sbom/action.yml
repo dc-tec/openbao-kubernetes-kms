@@ -1,0 +1,32 @@
+name: Generate image SBOM
+description: Generate the release image SPDX document without uploading it.
+
+inputs:
+  image:
+    description: Image to scan.
+    required: true
+  output-file:
+    description: SPDX JSON output path.
+    required: true
+  registry-username:
+    description: Registry username for private release images.
+    required: false
+    default: ""
+  registry-password:
+    description: Registry password for private release images.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Generate SPDX JSON
+      uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      with:
+        image: ${{ inputs.image }}
+        format: spdx-json
+        output-file: ${{ inputs.output-file }}
+        upload-artifact: "false"
+        upload-release-assets: "false"
+        registry-username: ${{ inputs.registry-username }}
+        registry-password: ${{ inputs.registry-password }}
