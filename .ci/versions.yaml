@@ -49,12 +49,12 @@ toolchain:
     uploadArtifact: 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
   goDependencies:
     cobra: "1.10.2"
-    ginkgo: "2.33.0"
+    ginkgo: "2.34.0"
     grpc: "1.83.2"
     k8sKMS: "0.37.1"
     gomega: "1.44.0"
     mapstructure: "2.5.0"
-    pflag: "1.0.10"
+    pflag: "1.1.0"
     prometheusClientGolang: "1.23.2"
     viper: "1.21.0"
   testFrameworks:
