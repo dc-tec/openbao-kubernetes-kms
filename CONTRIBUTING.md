@@ -25,7 +25,7 @@ operational behavior.
 - Project/repository: `openbao-kubernetes-kms`
 - Go module: `github.com/dc-tec/openbao-kubernetes-kms`
 - Binary: `bao-kms-provider`
-- Go toolchain: `1.27.3`
+- Go toolchain: `1.27.4`
 - CLI/config framework: Viper
 - Local task runner: Makefile
 - Version policy: `.ci/versions.yaml`
