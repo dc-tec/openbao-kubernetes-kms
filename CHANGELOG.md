@@ -100,6 +100,13 @@ Older binaries do not provide all current pending-key decrypt guarantees. See
 [the fresh-installation boundary](docs/reference/compatibility.md#preview3-fresh-installation-boundary)
 and [rotation corrections](docs/reference/compatibility.md#unreleased-rotation-corrections).
 
+## [0.1.1-preview.3](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.3...0.1.1-preview.3) (2026-11-11)
+
+
+### Bug Fixes
+
+* **security:** build with Go 1.27.4 ([#161](https://github.com/dc-tec/openbao-kubernetes-kms/issues/161)) ([ad35192](https://github.com/dc-tec/openbao-kubernetes-kms/commit/ad351922eaaf2297fc1476ad4a76a2e8680c50b2))
+
 ## [0.1.0-preview.3](https://github.com/dc-tec/openbao-kubernetes-kms/compare/0.1.0-preview.2...0.1.0-preview.3) (2026-10-20)
 
 
