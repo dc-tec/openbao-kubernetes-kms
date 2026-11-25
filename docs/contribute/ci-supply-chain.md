@@ -9,6 +9,7 @@ verifiedBy:
   - .github/workflows/release.yml
   - .github/workflows/release-tag.yml
   - .github/workflows/release-please.yml
+  - .github/workflows/action-rehearsal.yml
 ---
 
 The repository commits `vendor/`, and CI and release jobs run with
@@ -69,6 +70,45 @@ of public CI because it restarts VMs and API servers and stops OpenBao on
 purpose.
 
 ## Releases
+
+### Non-publishing action rehearsal
+
+`Action rehearsal` tests the candidate App-token action 3.4.0 and Cosign
+installer 4.1.3 separately from release workflows. It does not create tags,
+release PRs, releases, packages, attestations, or registry writes.
+
+The App lane uses the existing `OPENBAO_KMS_RELEASE_PR_APP_ID` and
+`OPENBAO_KMS_RELEASE_PR_PRIVATE_KEY` configuration. It requests only
+`contents: read` for `dc-tec/openbao-kubernetes-kms`; metadata access is
+inherent. It checks the installation repository list, reads a repository
+file, and requires a read-only secrets-list request to be denied. It never
+attempts a repository write. A local post hook runs after the candidate
+action revokes its token, requires HTTP 401, records a sanitized receipt in
+the job log and summary, and removes the temporary token file.
+
+The secret-bearing lane runs only on the owner-authored `ci/action-rehearsal`
+branch in this repository, or an owner-dispatched run with `run_app_token`
+enabled. Fork and Dependabot runs do not receive the App key. A missing or
+incompatible installation fails the lane; it is not a reason to provision an
+App, add credentials, or widen permissions. Inspect both the scope receipt
+and the final post-action receipt before claiming token qualification.
+
+The installer lane requests the existing Cosign 3.0.4 target through the
+candidate installer's checksum-verified 3.1.4 bootstrap. Its log records the
+bootstrap download and verification. A temporary local key signs a synthetic
+blob without signing-service configuration or transparency-log upload.
+Verification must accept that blob and reject a modified blob. Artifacts
+contain only public test inputs, signature, public key, binary hash, version,
+and result. Temporary private keys are removed. This test does not qualify
+the production keyless/OIDC signing path or change the supported matrix.
+
+Run the credential-free probe tests locally with:
+
+```sh
+node --test .github/actions/token-revocation-probe/probe.test.cjs
+```
+
+### Release workflows
 
 Three workflows split the release:
 
